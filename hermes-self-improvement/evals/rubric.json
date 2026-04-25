@@ -1,0 +1,56 @@
+{
+  "version": "proposal-eval-v0.1",
+  "purpose": "Score Hermes self-improvement proposals for manual review, not unattended application.",
+  "score_range": [0, 100],
+  "allowed_recommendations": [
+    "report_only",
+    "human_review",
+    "review_for_possible_low_risk_apply"
+  ],
+  "allowed_risks": ["low", "medium", "high"],
+  "allowed_confidence": ["low", "medium", "high"],
+  "hard_constraints": {
+    "auto_apply": false,
+    "never_reconstruct_secrets": true,
+    "never_directly_patch_skills_or_memory": true,
+    "require_human_review_for_semantic_skill_changes": true,
+    "require_human_review_for_memory_reclassification_or_deletion": true
+  },
+  "dimensions": {
+    "evidence_strength": {
+      "weight": 30,
+      "high": "Repeated pattern across multiple events, sessions, or tools with concrete examples.",
+      "medium": "Two or more related events in one analysis window, or a clear known recurring failure.",
+      "low": "Single event, speculative inference, or missing examples."
+    },
+    "reuse_value": {
+      "weight": 20,
+      "high": "Improves a workflow likely to recur across future sessions.",
+      "medium": "Useful for a known project or repeated maintenance task.",
+      "low": "One-off fix with little durable value."
+    },
+    "operational_safety": {
+      "weight": 25,
+      "high": "Low blast radius, reversible, no semantic behavior change, no secret exposure.",
+      "medium": "Requires review because it changes guidance, prompts, or routing behavior.",
+      "low": "Could rename/merge/delete skills, alter memory meaning, expose secrets, or change unattended behavior."
+    },
+    "specificity": {
+      "weight": 15,
+      "high": "Proposal names the target, evidence, failure mode, and a bounded next action.",
+      "medium": "Proposal has a target and reason but lacks exact evidence or verification.",
+      "low": "Vague, generic, or not directly actionable."
+    },
+    "verification_plan": {
+      "weight": 10,
+      "high": "Includes a clear test, dry-run, or report verification step.",
+      "medium": "Verification is possible but not spelled out.",
+      "low": "No obvious way to verify safely."
+    }
+  },
+  "recommendation_policy": {
+    "report_only": "Use for low evidence, high risk, one-off, or ambiguous proposals.",
+    "human_review": "Use when evidence is useful but the change may alter semantics, routing, memory, or cron behavior.",
+    "review_for_possible_low_risk_apply": "Use only for low-risk, reversible cleanup candidates with concrete evidence. This is still not auto-apply permission."
+  }
+}

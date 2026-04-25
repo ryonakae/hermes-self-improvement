@@ -1,0 +1,32 @@
+{
+  "enabled": true,
+  "preview_chars": 1000,
+  "retention_days": 30,
+  "data_dir": "/Users/ryo.nakae/.hermes/reports/self-improvement/state",
+  "report_dir": "/Users/ryo.nakae/.hermes/reports/self-improvement/daily",
+  "llm_scorer": {
+    "provider": "auto",
+    "model": null,
+    "timeout": 60,
+    "max_tokens": 1800
+  },
+  "gepa_scorer": {
+    "enabled": false,
+    "mode": "candidate_comparison",
+    "timeout": 120,
+    "max_iterations": 0
+  },
+  "observe_hooks": [
+    "pre_tool_call",
+    "post_tool_call",
+    "pre_llm_call",
+    "post_llm_call",
+    "pre_api_request",
+    "post_api_request",
+    "on_session_start",
+    "on_session_end",
+    "on_session_finalize",
+    "on_session_reset",
+    "subagent_stop"
+  ]
+}

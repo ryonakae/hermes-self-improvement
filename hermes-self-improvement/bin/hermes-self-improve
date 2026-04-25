@@ -1,0 +1,9 @@
+#!/usr/bin/env python3
+"""Standalone CLI wrapper for the hermes-self-improvement plugin."""
+from __future__ import annotations
+
+import runpy
+from pathlib import Path
+
+PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
+runpy.run_path(str(PLUGIN_INIT), run_name="__main__")

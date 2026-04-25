@@ -1,0 +1,5 @@
+name: live-context-injector
+version: 0.1.0
+description: Injects Ryo live context digest into Hermes conversations.
+provides_hooks:
+  - pre_llm_call
