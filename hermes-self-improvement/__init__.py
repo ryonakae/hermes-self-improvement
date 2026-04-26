@@ -201,12 +201,63 @@ def _load_events(path: Path, since: datetime | None = None, limit: int | None = 
     return events
 
 
+def _prune_events(
+    path: Path,
+    *,
+    retention_days: int = DEFAULT_RETENTION_DAYS,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    """Prune old telemetry rows from the JSONL event log.
+
+    Rows with unparseable JSON are dropped. Rows with missing or unparseable
+    timestamps are retained because they may be historical events from older
+    plugin versions and are safer to inspect manually than to silently delete.
+    """
+    stats = {"kept": 0, "pruned": 0, "malformed": 0}
+    if retention_days <= 0 or not path.exists():
+        return stats
+    now_dt = (now or datetime.now(UTC)).astimezone(UTC)
+    cutoff = now_dt - timedelta(days=retention_days)
+    kept: list[dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except Exception:
+                    stats["malformed"] += 1
+                    continue
+                if not isinstance(ev, dict):
+                    stats["malformed"] += 1
+                    continue
+                dt = _parse_dt(ev.get("ts"))
+                if dt is not None and dt < cutoff:
+                    stats["pruned"] += 1
+                    continue
+                kept.append(ev)
+    except Exception:
+        return stats
+    stats["kept"] = len(kept)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as f:
+        for ev in kept:
+            f.write(json.dumps(ev, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+    tmp_path.replace(path)
+    return stats
+
+
 class RuntimeObserver:
     def __init__(self, config: dict[str, Any]):
         self.config = config
         self.enabled = bool(config.get("enabled", True))
         self.preview_chars = int(config.get("preview_chars", DEFAULT_PREVIEW_CHARS))
+        self.retention_days = int(config.get("retention_days", DEFAULT_RETENTION_DAYS))
         self.path = _event_path(config)
+        self._pruned_this_process = False
+        self.last_prune_stats: dict[str, int] = {"kept": 0, "pruned": 0, "malformed": 0}
 
     def hooks(self) -> dict[str, Any]:
         enabled_hooks = set(self.config.get("observe_hooks") or [])
@@ -227,6 +278,9 @@ class RuntimeObserver:
         return hook
 
     def record(self, event_name: str, payload: dict[str, Any]) -> None:
+        if not self._pruned_this_process:
+            self.last_prune_stats = _prune_events(self.path, retention_days=self.retention_days)
+            self._pruned_this_process = True
         ev: dict[str, Any] = {
             "ts": _now(),
             "plugin": PLUGIN_NAME,
@@ -354,6 +408,11 @@ def classify_tool_result(tool_name: str, result_text: str) -> tuple[str, str]:
         elif "exit_code" in parsed and parsed.get("exit_code") not in (0, "0", None):
             status = "error"
             kind = "terminal_nonzero_exit" if tool_name == "terminal" else "nonzero_exit"
+        elif parsed.get("status") in {"error", "failed", "timeout"}:
+            status = "error" if parsed.get("status") != "timeout" else "warning"
+            kind = _classify_error_text(str(parsed.get("message") or parsed.get("output") or parsed.get("status") or ""))
+        elif _is_structured_success_result(tool_name, parsed):
+            return "ok", ""
     if status == "ok" and any(marker in lowered for marker in ["operation not permitted", "permission denied"]):
         status, kind = "error", "permission_denied"
     if status == "ok" and any(marker in lowered for marker in ["no such file or directory", "file not found", "not found"]):
@@ -362,6 +421,21 @@ def classify_tool_result(tool_name: str, result_text: str) -> tuple[str, str]:
     if status == "ok" and any(marker in lowered for marker in ["traceback", "exception", "timed out", "timeout"]):
         status, kind = "warning", _classify_error_text(text)
     return status, kind
+
+
+def _is_structured_success_result(tool_name: str, parsed: dict[str, Any]) -> bool:
+    """Return True for tool result schemas whose text fields are content, not errors."""
+    if parsed.get("success") is True:
+        return True
+    if tool_name == "read_file" and ("content" in parsed or "total_lines" in parsed):
+        return True
+    if tool_name == "search_files" and ("matches" in parsed or "files" in parsed or "total_count" in parsed):
+        return True
+    if tool_name in {"skill_view", "skills_list"} and parsed.get("success") is not False:
+        return True
+    if tool_name == "patch" and parsed.get("success") is True:
+        return True
+    return False
 
 
 def _classify_error_text(text: str) -> str:
@@ -852,6 +926,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "plugin": PLUGIN_NAME,
             "enabled": bool(config.get("enabled", True)),
             "event_path": str(path),
+            "retention_days": int(config.get("retention_days", DEFAULT_RETENTION_DAYS)),
             "event_count_sample": len(events),
             "last_event_ts": events[-1].get("ts") if events else None,
         }
@@ -894,6 +969,7 @@ def _handle_slash(raw_args: str = "") -> str:
         f"{PLUGIN_NAME} status\n"
         f"- enabled: {bool(config.get('enabled', True))}\n"
         f"- event_path: `{path}`\n"
+        f"- retention_days: {int(config.get('retention_days', DEFAULT_RETENTION_DAYS))}\n"
         f"- recent sample events: {len(events)}\n"
         f"- last_event_ts: {events[-1].get('ts') if events else 'none'}"
     )
