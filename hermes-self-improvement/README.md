@@ -28,6 +28,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve run --since-hours 24 --json --scorer llm
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve run --mode dry_run_plan --since-hours 24 --json --scorer compare
+~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
 ```
 
 開発中は direct module 実行でも確認できる。

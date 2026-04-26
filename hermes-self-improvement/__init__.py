@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover - standalone tests
         return Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser()
 
 PLUGIN_NAME = "hermes-self-improvement"
+PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
 
 DEFAULT_PREVIEW_CHARS = 1000
@@ -43,7 +44,7 @@ DEFAULT_MODE_POLICY = {
         },
     },
     "dry_run_plan": {
-        "commands": ["status", "analyze", "report", "run", "generate_apply_plan"],
+        "commands": ["status", "analyze", "report", "run", "generate-apply-plan"],
         "capabilities": {
             "write_apply_plan": True,
             "write_apply_attempt": False,
@@ -115,6 +116,7 @@ def _load_config(path: Path) -> dict[str, Any]:
         "retention_days": DEFAULT_RETENTION_DAYS,
         "data_dir": str(get_hermes_home() / "reports" / "self-improvement" / "state"),
         "report_dir": str(get_hermes_home() / "reports" / "self-improvement" / "daily"),
+        "reports_dir": str(get_hermes_home() / "reports" / "self-improvement"),
         "execution_mode": DEFAULT_EXECUTION_MODE,
         "mode_policy": DEFAULT_MODE_POLICY,
         "llm_scorer": {
@@ -199,6 +201,15 @@ def validate_mode_action(
     return {"allowed": True, "reason": "allowed"}
 
 
+def _required_capability_for_command(command: str) -> str | None:
+    return {
+        "generate-apply-plan": "write_apply_plan",
+        "apply-low-risk": "mutate_skills",
+        "apply-approved": "write_ledger",
+        "approve": "write_apply_attempt",
+    }.get(command)
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -273,6 +284,10 @@ def _event_path(config: dict[str, Any]) -> Path:
 
 def _report_dir(config: dict[str, Any]) -> Path:
     return Path(config.get("report_dir") or (get_hermes_home() / "reports" / "self-improvement" / "daily"))
+
+
+def _reports_dir(config: dict[str, Any]) -> Path:
+    return Path(config.get("reports_dir") or (get_hermes_home() / "reports" / "self-improvement"))
 
 
 def _append_jsonl(path: Path, event: dict[str, Any]) -> None:
@@ -1312,6 +1327,64 @@ def _format_score_breakdown(raw: Any) -> str:
     return "; ".join(parts)
 
 
+def build_apply_plan(
+    *,
+    proposals: list[dict[str, Any]],
+    summary: dict[str, Any],
+    execution_mode: str,
+    created_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Build a dry-run apply plan artifact without mutating skills or memory."""
+    ts = (created_at or datetime.now(UTC)).astimezone(UTC)
+    plan_seed = _stable_json({
+        "created_at": ts.isoformat(),
+        "execution_mode": execution_mode,
+        "proposal_ids": [p.get("id") for p in proposals],
+    })
+    plan_id = f"apply-plan-{ts.strftime('%Y%m%dT%H%M%SZ')}-{_sha256_text(plan_seed)[:8]}"
+    items: list[dict[str, Any]] = []
+    for idx, proposal in enumerate(proposals, 1):
+        items.append({
+            "item_id": f"item-{idx}",
+            "proposal_id": proposal.get("id"),
+            "title": proposal.get("title"),
+            "target": proposal.get("target"),
+            "action": proposal.get("action"),
+            "risk": proposal.get("risk"),
+            "confidence": proposal.get("confidence"),
+            "score": proposal.get("score"),
+            "recommendation": proposal.get("recommendation"),
+            "scorer": proposal.get("scorer"),
+            "change_type": "unknown_or_unclassified",
+            "eligible_for_unattended": False,
+            "requires_approval": True,
+            "mutation": None,
+            "deferral_reason": "no_concrete_mutation_plan_yet",
+        })
+    return {
+        "schema_name": "self_improvement_apply_plan",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "plan_id": plan_id,
+        "created_at": ts.isoformat(),
+        "execution_mode": execution_mode,
+        "summary": summary,
+        "items": items,
+    }
+
+
+def write_apply_plan(plan: dict[str, Any], config: dict[str, Any]) -> Path:
+    created_dt = _parse_dt(plan.get("created_at")) or datetime.now(UTC)
+    date_part = created_dt.astimezone(UTC).strftime("%Y-%m-%d")
+    stamp = created_dt.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    plan_id = str(plan.get("plan_id") or f"apply-plan-{stamp}")
+    out_dir = _reports_dir(config) / "apply-plans" / date_part
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{stamp}-{plan_id}.json"
+    path.write_text(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return path
+
+
 def run_pipeline(
     config: dict[str, Any],
     since_hours: int = 24,
@@ -1376,13 +1449,24 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_gepa_eval.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_gepa_eval)
     p_gepa_eval.set_defaults(func=_handle_cli)
+    p_apply_plan = sub.add_parser("generate-apply-plan", help="Generate a dry-run apply plan artifact")
+    p_apply_plan.add_argument("--since-hours", type=int, default=24)
+    p_apply_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
+    p_apply_plan.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_apply_plan)
+    p_apply_plan.set_defaults(func=_handle_cli)
 
 
 def _handle_cli(args: argparse.Namespace) -> None:
     config = _load_config(Path(__file__).with_name("config.json"))
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
     execution_mode = resolve_execution_mode(config, getattr(args, "mode", None))
-    mode_decision = validate_mode_action(execution_mode, cmd, config=config)
+    mode_decision = validate_mode_action(
+        execution_mode,
+        cmd,
+        required_capability=_required_capability_for_command(cmd),
+        config=config,
+    )
     if not mode_decision.get("allowed"):
         print(json.dumps({
             "error": "execution_mode_denied",
@@ -1411,6 +1495,27 @@ def _handle_cli(args: argparse.Namespace) -> None:
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
             print(_render_gepa_eval(payload))
+        return
+    if cmd == "generate-apply-plan":
+        out = run_pipeline(
+            config,
+            since_hours=int(getattr(args, "since_hours", 24)),
+            write_report=False,
+            scorer=getattr(args, "scorer", "heuristic"),
+        )
+        plan = build_apply_plan(
+            proposals=out.get("proposals") or [],
+            summary=out.get("summary") or {},
+            execution_mode=execution_mode,
+        )
+        path = write_apply_plan(plan, config)
+        payload = {"apply_plan": plan, "apply_plan_path": str(path)}
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(f"Apply plan written: {path}")
+            print(f"Plan id: {plan.get('plan_id')}")
+            print(f"Items: {len(plan.get('items') or [])}")
         return
     write_report = cmd in {"report", "run"}
     scorer = getattr(args, "scorer", "heuristic")

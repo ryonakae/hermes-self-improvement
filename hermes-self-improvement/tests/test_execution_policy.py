@@ -50,7 +50,7 @@ def test_policy_allows_report_commands_in_report_only_mode():
 def test_policy_requires_capability_when_provided():
     mod = load_plugin_module()
 
-    decision = mod.validate_mode_action("dry_run_plan", "generate_apply_plan", required_capability="write_apply_plan")
+    decision = mod.validate_mode_action("dry_run_plan", "generate-apply-plan", required_capability="write_apply_plan")
 
     assert decision == {"allowed": True, "reason": "allowed"}
 

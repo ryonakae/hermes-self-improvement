@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
+
+
+def load_plugin_module():
+    spec = importlib.util.spec_from_file_location("hermes_self_improvement_apply_plan_under_test", PLUGIN_INIT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def sample_proposals():
+    return [
+        {
+            "id": "proposal-1",
+            "title": "Review terminal timeout handling",
+            "target": "skill_or_prompt",
+            "action": "document_background_or_long_timeout_pattern",
+            "risk": "low",
+            "confidence": "medium",
+            "score": 74,
+            "recommendation": "review_for_possible_low_risk_apply",
+            "scorer": "heuristic-v0.1",
+            "auto_apply": False,
+        }
+    ]
+
+
+def test_build_apply_plan_includes_versioned_metadata_and_safe_default_items(tmp_path):
+    mod = load_plugin_module()
+    created_at = datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc)
+
+    plan = mod.build_apply_plan(
+        proposals=sample_proposals(),
+        summary={"event_count": 10},
+        execution_mode="dry_run_plan",
+        created_at=created_at,
+    )
+
+    assert plan["schema_name"] == "self_improvement_apply_plan"
+    assert plan["schema_version"] == "1.0"
+    assert plan["created_by"] == {"plugin": "hermes-self-improvement", "plugin_version": "0.1.0"}
+    assert plan["execution_mode"] == "dry_run_plan"
+    assert plan["plan_id"].startswith("apply-plan-")
+    assert plan["summary"] == {"event_count": 10}
+    assert len(plan["items"]) == 1
+    item = plan["items"][0]
+    assert item["item_id"] == "item-1"
+    assert item["proposal_id"] == "proposal-1"
+    assert item["change_type"] == "unknown_or_unclassified"
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert item["mutation"] is None
+
+
+def test_write_apply_plan_uses_configurable_reports_dir_and_date_partition(tmp_path):
+    mod = load_plugin_module()
+    created_at = datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc)
+    plan = mod.build_apply_plan(
+        proposals=sample_proposals(),
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=created_at,
+    )
+
+    path = mod.write_apply_plan(plan, {"reports_dir": str(tmp_path)})
+
+    assert path.parent == tmp_path / "apply-plans" / "2026-04-26"
+    assert path.name.endswith(f"-{plan['plan_id']}.json")
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert written["plan_id"] == plan["plan_id"]
+    assert written["schema_name"] == "self_improvement_apply_plan"
+
+
+def test_generate_apply_plan_command_is_allowed_only_in_dry_run_plan_mode():
+    mod = load_plugin_module()
+
+    assert mod.validate_mode_action("dry_run_plan", "generate-apply-plan", required_capability="write_apply_plan") == {
+        "allowed": True,
+        "reason": "allowed",
+    }
+    denied = mod.validate_mode_action("report_only", "generate-apply-plan", required_capability="write_apply_plan")
+    assert denied["allowed"] is False
+
+
+def test_cli_accepts_generate_apply_plan_command():
+    mod = load_plugin_module()
+    import argparse
+    parser = argparse.ArgumentParser()
+    mod._setup_cli(parser)
+
+    args = parser.parse_args(["generate-apply-plan", "--mode", "dry_run_plan", "--since-hours", "1", "--json"])
+
+    assert args.self_improvement_cmd == "generate-apply-plan"
+    assert args.mode == "dry_run_plan"
+    assert args.since_hours == 1
+    assert args.as_json is True
