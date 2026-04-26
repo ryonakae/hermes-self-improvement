@@ -134,6 +134,39 @@ def test_dspy_program_does_not_overrate_unknown_error_clusters():
     assert payload["score_breakdown"]["specificity"]["level"] != "high"
 
 
+def test_dspy_program_does_not_overrate_low_evidence_not_found_clusters():
+    program = load_module(DSPY_PROGRAM, "hermes_self_improvement_dspy_program_not_found_calibration")
+    rubric = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_not_found_rubric").load_rubric()
+
+    payload = program.ProposalScoringProgram().forward(
+        proposal={
+            "id": "proposal-low-evidence-browser-not-found",
+            "risk": "low",
+            "confidence": "low",
+            "title": "Review recurring browser_navigate not_found failures",
+            "target": "browser_skills",
+            "action": "review_existing_skill_or_add_pitfall",
+            "reason": "Observed 1 browser_navigate not_found warning/error event in the analysis window.",
+            "tool_name": "browser_navigate",
+            "error_kind": "not_found",
+            "auto_apply": False,
+        },
+        findings=[
+            {"kind": "tool_failure_cluster", "count": 31, "tool_name": "terminal", "error_kind": "terminal_nonzero_exit"},
+            {"kind": "tool_failure_cluster", "count": 19, "tool_name": "terminal", "error_kind": "permission_denied"},
+            {"kind": "tool_failure_cluster", "count": 1, "tool_name": "browser_navigate", "error_kind": "not_found"},
+        ],
+        rubric=rubric,
+    )
+
+    assert payload["score"] <= 55
+    assert payload["recommendation"] == "report_only"
+    assert payload["score_breakdown"]["evidence_strength"]["level"] == "low"
+    assert payload["score_breakdown"]["reuse_value"]["level"] == "low"
+    assert payload["score_breakdown"]["specificity"]["level"] != "high"
+
+
+
 def test_dspy_program_requires_concrete_remediation_for_high_reuse_value():
     program = load_module(DSPY_PROGRAM, "hermes_self_improvement_dspy_program_generic_reuse_calibration")
     rubric = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_generic_reuse_rubric").load_rubric()

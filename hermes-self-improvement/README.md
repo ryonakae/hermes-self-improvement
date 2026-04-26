@@ -82,7 +82,7 @@ bin/hermes-self-improve analyze --since-hours 24 --json --scorer gepa
 - `score_proposals(..., scorer="compare")` は LLM scorer と GEPA scorer を両方実行し、proposal ごとに `llm_score`, `gepa_score`, `score_delta`, `scorer_disagreements` を付ける。
 - disagreement は `score_gap`（20点以上）, `recommendation_mismatch`, `risk_mismatch`, `confidence_mismatch` を記録する。
 - disagreement がある proposal は `human_review` に倒し、score は安全側として LLM/GEPA の低い方を採用する。
-- GEPA offline scorer は `unknown_error` や `review_existing_skill_or_add_pitfall` のような generic recurring failure を過大評価しないよう calibration している。具体的な remediation、examples、verification plan が弱い場合は score / reuse_value / specificity を抑える。
+- GEPA offline scorer は `unknown_error`、低証拠の `not_found`、`review_existing_skill_or_add_pitfall` のような generic recurring failure を過大評価しないよう calibration している。proposal の `tool_name` / `error_kind` に一致する finding だけで evidence を数え、具体的な remediation、examples、verification plan が弱い場合は score / reuse_value / specificity を抑える。
 - `report --scorer compare` は compact な `scorer_compare` 行を出す。custom skill maintenance cron ではこの compare report を優先して、人間レビュー候補を見つける。
 
 ## Data

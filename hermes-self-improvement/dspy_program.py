@@ -97,11 +97,12 @@ def _score_breakdown(
     confidence: str,
 ) -> dict[str, dict[str, Any]]:
     dimensions = rubric.get("dimensions") if isinstance(rubric.get("dimensions"), dict) else {}
-    evidence_count = _evidence_count(findings)
+    relevant_findings = _relevant_findings(proposal, findings)
+    evidence_count = _evidence_count(relevant_findings)
     text = " ".join(str(proposal.get(key) or "") for key in ("title", "reason", "action", "target")).lower()
-    has_examples = any(finding.get("examples") for finding in findings if isinstance(finding, dict))
+    has_examples = any(finding.get("examples") for finding in relevant_findings if isinstance(finding, dict))
 
-    error_kind = _error_kind(proposal, findings)
+    error_kind = _error_kind(proposal, relevant_findings)
     is_unknown_error = error_kind == "unknown_error"
     generic_review = _is_generic_review_proposal(proposal)
     concrete_remediation = _has_concrete_remediation(proposal)
@@ -142,6 +143,26 @@ def _score_breakdown(
         }
         for name, level in levels.items()
     }
+
+
+def _relevant_findings(proposal: dict[str, Any], findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    proposal_tool = str(proposal.get("tool_name") or "").lower()
+    proposal_error = str(proposal.get("error_kind") or "").lower()
+    if not proposal_tool and not proposal_error:
+        return findings
+
+    matched: list[dict[str, Any]] = []
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        finding_tool = str(finding.get("tool_name") or "").lower()
+        finding_error = str(finding.get("error_kind") or "").lower()
+        tool_matches = not proposal_tool or proposal_tool == finding_tool
+        error_matches = not proposal_error or proposal_error == finding_error
+        if tool_matches and error_matches:
+            matched.append(finding)
+    return matched or findings
+
 
 
 def _dimension_weight(dimensions: dict[str, Any], name: str) -> int:
