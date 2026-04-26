@@ -35,6 +35,25 @@ def sample_proposals():
     ]
 
 
+def sample_pitfall_proposal():
+    return {
+        "id": "proposal-2",
+        "title": "Document Safehouse permission-denied workflow",
+        "target": "file_workflow_skills",
+        "action": "add_safehouse_permission_denied_pitfall",
+        "risk": "low",
+        "confidence": "high",
+        "score": 86,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "scorer": "compare-v0.1",
+        "auto_apply": False,
+        "count": 19,
+        "tool_name": "terminal",
+        "error_kind": "permission_denied",
+        "reason": "Observed repeated Safehouse permission-denied events.",
+    }
+
+
 def test_build_apply_plan_includes_versioned_metadata_and_safe_default_items(tmp_path):
     mod = load_plugin_module()
     created_at = datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc)
@@ -57,9 +76,82 @@ def test_build_apply_plan_includes_versioned_metadata_and_safe_default_items(tmp
     assert item["item_id"] == "item-1"
     assert item["proposal_id"] == "proposal-1"
     assert item["change_type"] == "unknown_or_unclassified"
+    assert item["target_kind"] == "skill_or_prompt"
+    assert item["target_path"] is None
+    assert item["before_hash"] is None
+    assert item["proposal_hash"]
+    assert item["item_hash"]
+    assert item["scorer_disagreements"] == []
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
+    assert item["eligibility"] == {
+        "status": "not_eligible",
+        "reasons": ["change_type_unknown", "target_path_missing", "mutation_plan_missing"],
+    }
+    assert item["evidence"] == {
+        "tool_name": None,
+        "error_kind": None,
+        "count": None,
+        "reason": None,
+    }
+    assert item["proposed_change_summary"] == "Review terminal timeout handling"
+    assert item["ledger_preview"]["would_create_pending_ledger"] is False
     assert item["mutation"] is None
+
+
+def test_build_apply_plan_classifies_pitfall_proposals_but_keeps_them_ineligible_without_target_metadata():
+    mod = load_plugin_module()
+    created_at = datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc)
+
+    plan = mod.build_apply_plan(
+        proposals=[sample_pitfall_proposal()],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=created_at,
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "pitfall_addition_existing_section"
+    assert item["target_kind"] == "file_workflow_skills"
+    assert item["target_path"] is None
+    assert item["before_hash"] is None
+    assert item["evidence"] == {
+        "tool_name": "terminal",
+        "error_kind": "permission_denied",
+        "count": 19,
+        "reason": "Observed repeated Safehouse permission-denied events.",
+    }
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert item["eligibility"] == {
+        "status": "not_eligible",
+        "reasons": ["target_path_missing", "mutation_plan_missing"],
+    }
+    assert item["ledger_preview"] == {
+        "ledger_schema_name": "self_improvement_apply_ledger",
+        "ledger_schema_version": "1.0",
+        "would_create_pending_ledger": False,
+        "pending_status": "pending",
+        "rollback_data": "not_available_until_mutation_plan_exists",
+    }
+
+
+def test_build_apply_plan_records_scorer_disagreement_as_auto_apply_blocker():
+    mod = load_plugin_module()
+    proposal = sample_pitfall_proposal()
+    proposal["scorer_disagreements"] = ["score_gap"]
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["scorer_disagreements"] == ["score_gap"]
+    assert item["eligible_for_unattended"] is False
+    assert "scorer_disagreement" in item["eligibility"]["reasons"]
 
 
 def test_write_apply_plan_uses_configurable_reports_dir_and_date_partition(tmp_path):
