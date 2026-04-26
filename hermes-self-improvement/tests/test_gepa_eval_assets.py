@@ -106,6 +106,76 @@ def test_dspy_program_returns_rubric_dimension_breakdown():
     assert "evidence_strength=high" in payload["rationale"]
 
 
+def test_dspy_program_does_not_overrate_unknown_error_clusters():
+    program = load_module(DSPY_PROGRAM, "hermes_self_improvement_dspy_program_unknown_error_calibration")
+    rubric = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_unknown_error_rubric").load_rubric()
+
+    payload = program.ProposalScoringProgram().forward(
+        proposal={
+            "id": "proposal-unknown-error",
+            "risk": "medium",
+            "confidence": "low",
+            "title": "Review recurring execute_code unknown_error failures",
+            "target": "skill_or_prompt",
+            "action": "review_existing_skill_or_add_pitfall",
+            "reason": "Observed 2 execute_code unknown_error warning/error events in the analysis window.",
+            "error_kind": "unknown_error",
+            "tool_name": "execute_code",
+            "auto_apply": False,
+        },
+        findings=[{"kind": "tool_failure_cluster", "count": 2, "tool_name": "execute_code", "error_kind": "unknown_error"}],
+        rubric=rubric,
+    )
+
+    assert payload["score"] <= 60
+    assert payload["recommendation"] == "report_only"
+    assert payload["confidence"] == "low"
+    assert payload["score_breakdown"]["evidence_strength"]["level"] != "high"
+    assert payload["score_breakdown"]["specificity"]["level"] != "high"
+
+
+def test_dspy_program_requires_concrete_remediation_for_high_reuse_value():
+    program = load_module(DSPY_PROGRAM, "hermes_self_improvement_dspy_program_generic_reuse_calibration")
+    rubric = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_generic_reuse_rubric").load_rubric()
+
+    generic = program.ProposalScoringProgram().forward(
+        proposal={
+            "id": "proposal-generic-recurring",
+            "risk": "medium",
+            "confidence": "medium",
+            "title": "Review recurring terminal failures",
+            "target": "skill_or_prompt",
+            "action": "review_existing_skill_or_add_pitfall",
+            "reason": "Observed 4 terminal warning/error events in the analysis window.",
+            "tool_name": "terminal",
+            "error_kind": "unknown_error",
+            "auto_apply": False,
+        },
+        findings=[{"kind": "tool_failure_cluster", "count": 4, "tool_name": "terminal", "error_kind": "unknown_error"}],
+        rubric=rubric,
+    )
+    concrete = program.ProposalScoringProgram().forward(
+        proposal={
+            "id": "proposal-concrete-patch",
+            "risk": "medium",
+            "confidence": "medium",
+            "title": "Tighten patch tool argument validation guidance",
+            "target": "file_workflow_skills",
+            "action": "clarify_patch_requires_path_for_replace_mode",
+            "reason": "Observed 7 patch argument/validation failures. Patch replace mode needs an explicit path; patch mode needs a V4A patch payload. Verify with pytest.",
+            "tool_name": "patch",
+            "error_kind": "schema_or_validation",
+            "auto_apply": False,
+        },
+        findings=[{"kind": "tool_failure_cluster", "count": 7, "tool_name": "patch", "error_kind": "schema_or_validation", "examples": [{"result_preview": "path is required"}]}],
+        rubric=rubric,
+    )
+
+    assert generic["score_breakdown"]["reuse_value"]["level"] != "high"
+    assert concrete["score"] > generic["score"]
+    assert concrete["score_breakdown"]["reuse_value"]["level"] == "high"
+
+
 def test_build_gepa_payload_includes_eval_assets_and_program_name():
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_payload")
 

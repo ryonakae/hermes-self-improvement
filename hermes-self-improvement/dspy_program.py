@@ -101,16 +101,30 @@ def _score_breakdown(
     text = " ".join(str(proposal.get(key) or "") for key in ("title", "reason", "action", "target")).lower()
     has_examples = any(finding.get("examples") for finding in findings if isinstance(finding, dict))
 
-    evidence_level = "high" if evidence_count >= 4 and has_examples else "medium" if evidence_count >= 2 else "low"
-    reuse_level = "high" if evidence_count >= 4 or (evidence_count >= 2 and any(word in text for word in ("recurring", "repeated", "workflow", "skill", "safehouse"))) else "medium" if evidence_count >= 2 else "low"
+    error_kind = _error_kind(proposal, findings)
+    is_unknown_error = error_kind == "unknown_error"
+    generic_review = _is_generic_review_proposal(proposal)
+    concrete_remediation = _has_concrete_remediation(proposal)
+
+    evidence_level = "high" if evidence_count >= 4 and has_examples and not is_unknown_error else "medium" if evidence_count >= 2 else "low"
+    reuse_level = (
+        "high"
+        if concrete_remediation and (evidence_count >= 4 or (evidence_count >= 2 and any(word in text for word in ("workflow", "skill", "safehouse"))))
+        else "medium" if evidence_count >= 2 and not generic_review else "low"
+    )
     if risk == "high" or proposal.get("auto_apply"):
         safety_level = "low"
     elif risk == "low":
         safety_level = "high"
     else:
         safety_level = "medium"
-    specificity_level = "high" if _has_specific_target(proposal, findings) else "medium" if proposal.get("target") or proposal.get("action") else "low"
-    verification_level = "high" if any(word in text for word in ("test", "verify", "dry-run", "report", "eval")) else "medium" if evidence_count >= 2 else "low"
+    if is_unknown_error and generic_review:
+        specificity_level = "low"
+    elif _has_specific_target(proposal, findings) and concrete_remediation:
+        specificity_level = "high"
+    else:
+        specificity_level = "medium" if proposal.get("target") or proposal.get("action") else "low"
+    verification_level = "high" if any(word in text for word in ("test", "verify", "dry-run", "report", "eval")) else "medium" if evidence_count >= 2 and not is_unknown_error else "low"
 
     levels = {
         "evidence_strength": evidence_level,
@@ -158,6 +172,49 @@ def _has_specific_target(proposal: dict[str, Any], findings: list[dict[str, Any]
     if proposal.get("target") and proposal.get("action"):
         return True
     return any(bool(f.get("tool_name") or f.get("error_kind")) for f in findings if isinstance(f, dict))
+
+
+def _error_kind(proposal: dict[str, Any], findings: list[dict[str, Any]]) -> str:
+    if proposal.get("error_kind"):
+        return str(proposal.get("error_kind") or "").lower()
+    for finding in findings:
+        if isinstance(finding, dict) and finding.get("error_kind"):
+            return str(finding.get("error_kind") or "").lower()
+    return ""
+
+
+def _is_generic_review_proposal(proposal: dict[str, Any]) -> bool:
+    action = str(proposal.get("action") or "").lower()
+    target = str(proposal.get("target") or "").lower()
+    title = str(proposal.get("title") or "").lower()
+    return (
+        action in {"review_existing_skill_or_add_pitfall", "review_memory_candidate"}
+        or target in {"skill_or_prompt", "memory"}
+        or title.startswith("review recurring")
+    )
+
+
+def _has_concrete_remediation(proposal: dict[str, Any]) -> bool:
+    action = str(proposal.get("action") or "").lower()
+    text = " ".join(str(proposal.get(key) or "") for key in ("title", "reason", "target", "action")).lower()
+    if action and action not in {"review_existing_skill_or_add_pitfall", "review_memory_candidate"}:
+        return True
+    concrete_terms = (
+        "requires",
+        "fallback",
+        "namespace",
+        "safehouse",
+        "permission",
+        "timeout",
+        "background",
+        "path",
+        "payload",
+        "validation",
+        "verify",
+        "pytest",
+        "compile",
+    )
+    return any(term in text for term in concrete_terms)
 
 
 def _coerce_choice(value: Any, allowed: set[str], default: str) -> str:
