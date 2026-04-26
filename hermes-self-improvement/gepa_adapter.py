@@ -147,6 +147,81 @@ def _score_with_offline_program(
     }
 
 
+def evaluate_offline_program(*, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Run bundled proposal eval cases against the offline GEPA scorer."""
+    cfg = config or {"gepa_scorer": {"enabled": True, "max_iterations": 0}}
+    rubric = load_rubric()
+    cases = load_eval_cases()
+    results: list[dict[str, Any]] = []
+    for case in cases:
+        expected = case.get("expected") if isinstance(case.get("expected"), dict) else {}
+        scoring = score_with_gepa(
+            proposals=[case.get("proposal") or {}],
+            findings=case.get("findings") if isinstance(case.get("findings"), list) else [],
+            config=cfg,
+        )
+        scores = scoring.get("scores") if isinstance(scoring, dict) else []
+        score = scores[0] if scores and isinstance(scores[0], dict) else {}
+        checks = _check_eval_case(score=score, expected=expected)
+        passed = all(check["passed"] for check in checks)
+        results.append(
+            {
+                "id": case.get("id"),
+                "description": case.get("description"),
+                "passed": passed,
+                "score": score,
+                "checks": checks,
+            }
+        )
+    passed_count = sum(1 for item in results if item["passed"])
+    failed_count = len(results) - passed_count
+    return {
+        "adapter_version": ADAPTER_VERSION,
+        "mode": "offline_program_eval_regression",
+        "rubric_version": rubric.get("version"),
+        "case_count": len(results),
+        "passed_count": passed_count,
+        "failed_count": failed_count,
+        "all_passed": failed_count == 0,
+        "cases": results,
+    }
+
+
+def _check_eval_case(*, score: dict[str, Any], expected: dict[str, Any]) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    numeric_score = _coerce_int(score.get("score"), default=-1)
+    if "score_min" in expected:
+        minimum = _coerce_int(expected.get("score_min"), default=0)
+        checks.append({"name": "score_min", "passed": numeric_score >= minimum, "actual": numeric_score, "expected": minimum})
+    if "score_max" in expected:
+        maximum = _coerce_int(expected.get("score_max"), default=100)
+        checks.append({"name": "score_max", "passed": numeric_score <= maximum, "actual": numeric_score, "expected": maximum})
+    for field in ("recommendation", "risk", "auto_apply"):
+        if field in expected:
+            checks.append({"name": field, "passed": score.get(field) == expected.get(field), "actual": score.get(field), "expected": expected.get(field)})
+    if "confidence_min" in expected:
+        checks.append(
+            {
+                "name": "confidence_min",
+                "passed": _confidence_rank(score.get("confidence")) >= _confidence_rank(expected.get("confidence_min")),
+                "actual": score.get("confidence"),
+                "expected": expected.get("confidence_min"),
+            }
+        )
+    return checks
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _confidence_rank(value: Any) -> int:
+    return {"low": 0, "medium": 1, "high": 2}.get(str(value or "").lower(), -1)
+
+
 def _load_dspy_program_module() -> Any:
     path = PLUGIN_DIR / "dspy_program.py"
     spec = importlib.util.spec_from_file_location("hermes_self_improvement_dspy_program_runtime", path)

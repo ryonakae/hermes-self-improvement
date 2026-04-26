@@ -74,3 +74,19 @@ def test_default_config_enables_safe_offline_gepa_scoring():
     assert gepa_config["enabled"] is True
     assert gepa_config["mode"] == "offline_program_eval"
     assert gepa_config["max_iterations"] == 0
+
+
+def test_evaluate_offline_program_reports_eval_case_results():
+    adapter = load_adapter()
+
+    result = adapter.evaluate_offline_program(config={"gepa_scorer": {"enabled": True, "max_iterations": 0}})
+
+    assert result["adapter_version"] == "gepa-v0.1"
+    assert result["rubric_version"] == "proposal-eval-v0.1"
+    assert result["case_count"] >= 4
+    assert result["passed_count"] + result["failed_count"] == result["case_count"]
+    assert result["all_passed"] is True
+    case_ids = {case["id"] for case in result["cases"]}
+    assert "repeated-tool-failure-human-review" in case_ids
+    assert "dangerous-auto-apply-denied" in case_ids
+    assert all("score" in case and "passed" in case and "checks" in case for case in result["cases"])

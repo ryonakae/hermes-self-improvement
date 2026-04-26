@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -959,16 +960,49 @@ def _call_gepa_scorer(
     findings: list[dict[str, Any]],
     config: dict[str, Any],
 ) -> dict[str, Any]:
-    import importlib.util
-
     adapter_path = Path(__file__).with_name("gepa_adapter.py")
     spec = importlib.util.spec_from_file_location("hermes_self_improvement_gepa_adapter", adapter_path)
     if spec is None or spec.loader is None:
-        raise RuntimeError("GEPA adapter could not be loaded")
+        raise RuntimeError(f"Unable to load GEPA adapter: {adapter_path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module.score_with_gepa(proposals=proposals, findings=findings, config=config)
+
+
+def _call_gepa_eval(*, config: dict[str, Any]) -> dict[str, Any]:
+    adapter_path = Path(__file__).with_name("gepa_adapter.py")
+    spec = importlib.util.spec_from_file_location("hermes_self_improvement_gepa_adapter_eval", adapter_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load GEPA adapter: {adapter_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.evaluate_offline_program(config=config)
+
+
+def _render_gepa_eval(payload: dict[str, Any]) -> str:
+    lines = [
+        "# GEPA offline scorer regression",
+        "",
+        f"- adapter: `{payload.get('adapter_version')}`",
+        f"- mode: `{payload.get('mode')}`",
+        f"- rubric: `{payload.get('rubric_version')}`",
+        f"- cases: {payload.get('passed_count')}/{payload.get('case_count')} passed",
+        f"- all_passed: {payload.get('all_passed')}",
+        "",
+    ]
+    for case in payload.get("cases") or []:
+        status = "PASS" if case.get("passed") else "FAIL"
+        score = case.get("score") if isinstance(case.get("score"), dict) else {}
+        lines.append(f"## {status} {case.get('id')}")
+        lines.append(f"- score: {score.get('score')}")
+        lines.append(f"- recommendation: `{score.get('recommendation')}`")
+        lines.append(f"- risk: `{score.get('risk')}`")
+        lines.append(f"- confidence: `{score.get('confidence')}`")
+        lines.append(f"- auto_apply: {score.get('auto_apply')}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def render_report(result: AnalysisResult, scored: list[dict[str, Any]]) -> str:
@@ -1082,6 +1116,9 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_run.add_argument("--scorer", choices=["heuristic", "llm", "gepa"], default="heuristic")
     p_run.add_argument("--json", action="store_true", dest="as_json")
     p_run.set_defaults(func=_handle_cli)
+    p_gepa_eval = sub.add_parser("gepa-eval", help="Run bundled offline GEPA scorer regression cases")
+    p_gepa_eval.add_argument("--json", action="store_true", dest="as_json")
+    p_gepa_eval.set_defaults(func=_handle_cli)
 
 
 def _handle_cli(args: argparse.Namespace) -> None:
@@ -1099,6 +1136,13 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "last_event_ts": events[-1].get("ts") if events else None,
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    if cmd == "gepa-eval":
+        payload = _call_gepa_eval(config=config)
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(_render_gepa_eval(payload))
         return
     write_report = cmd in {"report", "run"}
     scorer = getattr(args, "scorer", "heuristic")
