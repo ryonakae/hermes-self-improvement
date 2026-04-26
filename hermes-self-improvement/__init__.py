@@ -824,11 +824,29 @@ def _merge_external_scores(
         else:
             p2["recommendation"] = "report_only"
         p2[rationale_key] = _redact_text(str(scored_item.get("rationale") or ""), max_chars=600)
+        if isinstance(scored_item.get("score_breakdown"), dict):
+            p2["score_breakdown"] = _sanitize_score_breakdown(scored_item["score_breakdown"])
         p2["scorer"] = scorer_label
         # Safety gate: external scoring never grants unattended apply permission.
         p2["auto_apply"] = False
         merged.append(p2)
     return sorted(merged, key=lambda item: item.get("score", 0), reverse=True)
+
+
+def _sanitize_score_breakdown(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    sanitized: dict[str, dict[str, Any]] = {}
+    for name, value in raw.items():
+        if not isinstance(value, dict):
+            continue
+        item: dict[str, Any] = {}
+        if value.get("level") in {"low", "medium", "high"}:
+            item["level"] = value["level"]
+        item["points"] = _coerce_int(value.get("points"), default=0)
+        item["weight"] = _coerce_int(value.get("weight"), default=0)
+        if value.get("reason") is not None:
+            item["reason"] = _redact_text(str(value.get("reason") or ""), max_chars=240)
+        sanitized[str(name)] = item
+    return sanitized
 
 
 def _merge_llm_scores(
@@ -1057,6 +1075,11 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]]) -> str:
             f"- risk: `{p.get('risk')}`",
             f"- score: {p.get('score')}",
             f"- recommendation: `{p.get('recommendation')}`",
+        ])
+        breakdown = _format_score_breakdown(p.get("score_breakdown"))
+        if breakdown:
+            lines.append(f"- score_breakdown: {breakdown}")
+        lines.extend([
             f"- reason: {p.get('reason')}",
             "",
         ])
@@ -1067,6 +1090,21 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]]) -> str:
         "- plugin hook は観測専用で、skill / memory の変更は行いません。",
     ])
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _format_score_breakdown(raw: Any) -> str:
+    if not isinstance(raw, dict):
+        return ""
+    parts: list[str] = []
+    for name in ("evidence_strength", "reuse_value", "operational_safety", "specificity", "verification_plan"):
+        item = raw.get(name)
+        if not isinstance(item, dict):
+            continue
+        level = item.get("level") or "unknown"
+        points = item.get("points")
+        weight = item.get("weight")
+        parts.append(f"{name}={level} {points}/{weight}")
+    return "; ".join(parts)
 
 
 def run_pipeline(

@@ -74,6 +74,38 @@ def test_dspy_program_can_score_without_importing_dspy_runtime():
     assert payload["rationale"]
 
 
+def test_dspy_program_returns_rubric_dimension_breakdown():
+    program = load_module(DSPY_PROGRAM, "hermes_self_improvement_dspy_program_breakdown")
+    rubric = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_breakdown_rubric").load_rubric()
+
+    payload = program.ProposalScoringProgram().forward(
+        proposal={
+            "id": "proposal-breakdown",
+            "risk": "medium",
+            "confidence": "medium",
+            "title": "Fix recurring skill lookup misses",
+            "reason": "Observed 4 skill_view not_found events with concrete examples.",
+            "auto_apply": False,
+        },
+        findings=[{"kind": "tool_failure_cluster", "count": 4, "tool_name": "skill_view", "examples": [{"result_preview": "Skill not found"}]}],
+        rubric=rubric,
+    )
+
+    breakdown = payload["score_breakdown"]
+    assert set(breakdown) == {
+        "evidence_strength",
+        "reuse_value",
+        "operational_safety",
+        "specificity",
+        "verification_plan",
+    }
+    assert breakdown["evidence_strength"]["level"] == "high"
+    assert breakdown["evidence_strength"]["points"] > 0
+    assert breakdown["operational_safety"]["level"] == "medium"
+    assert payload["score"] == sum(item["points"] for item in breakdown.values())
+    assert "evidence_strength=high" in payload["rationale"]
+
+
 def test_build_gepa_payload_includes_eval_assets_and_program_name():
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_payload")
 

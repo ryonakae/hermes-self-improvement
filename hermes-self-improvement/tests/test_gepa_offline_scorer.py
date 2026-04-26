@@ -90,3 +90,4 @@ def test_evaluate_offline_program_reports_eval_case_results():
     assert "repeated-tool-failure-human-review" in case_ids
     assert "dangerous-auto-apply-denied" in case_ids
     assert all("score" in case and "passed" in case and "checks" in case for case in result["cases"])
+    assert all("score_breakdown" in case["score"] for case in result["cases"])

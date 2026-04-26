@@ -68,6 +68,40 @@ def test_gepa_scorer_applies_candidate_comparison_scores(monkeypatch):
     assert scored[0]["auto_apply"] is False
 
 
+def test_gepa_scorer_preserves_score_breakdown(monkeypatch):
+    mod = load_plugin_module()
+
+    def fake_gepa_json(*, proposals, findings, config):
+        return {
+            "scores": [
+                {
+                    "id": "proposal-1",
+                    "score": 73,
+                    "recommendation": "human_review",
+                    "risk": "medium",
+                    "confidence": "medium",
+                    "rationale": "Rubric baseline: evidence_strength=high.",
+                    "score_breakdown": {
+                        "evidence_strength": {"level": "high", "points": 30, "weight": 30, "reason": "repeated evidence"},
+                        "operational_safety": {"level": "medium", "points": 16, "weight": 25, "reason": "review required"},
+                    },
+                }
+            ]
+        }
+
+    monkeypatch.setattr(mod, "_call_gepa_scorer", fake_gepa_json)
+
+    scored = mod.score_proposals(
+        sample_proposals(),
+        findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}],
+        scorer="gepa",
+        config={"gepa_scorer": {"enabled": True}},
+    )
+
+    assert scored[0]["score_breakdown"]["evidence_strength"]["level"] == "high"
+    assert scored[0]["score_breakdown"]["operational_safety"]["points"] == 16
+
+
 def test_gepa_scorer_falls_back_to_heuristic_when_optional_dependency_missing(monkeypatch):
     mod = load_plugin_module()
 

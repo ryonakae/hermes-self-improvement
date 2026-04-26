@@ -38,6 +38,7 @@ plugin runtime では `/self-improvement status|analyze|report` の slash comman
 
 - `score_proposals(..., scorer="gepa")` は `gepa_adapter.py` を通す。`gepa_scorer.enabled=true` かつ `max_iterations=0` の既定構成では、`dspy_program.py` の dependency-free `ProposalBatchScoringProgram` を使って offline advisory score を返す。
 - `bin/hermes-self-improve gepa-eval --json` runs bundled eval cases against the offline scorer and reports pass/fail regression checks for score range, recommendation, risk, confidence, and `auto_apply`.
+- Offline GEPA scores include `score_breakdown` for rubric dimensions: `evidence_strength`, `reuse_value`, `operational_safety`, `specificity`, and `verification_plan`. Markdown reports show a compact `level points/weight` summary for each available dimension.
 - 初期版の目的は本番 skill を変異させることではなく、candidate comparison / rubric 評価 / regression check の入口を CLI に用意すること。
 - GEPA optimizer 本体はまだ未設定。`max_iterations > 0` の optimizer run は、DSPy/GEPA の存在確認後も project-specific metric / invocation が実装されるまで fail closed する。
 - safety gate として、GEPA scorer も `auto_apply` を常に `false` にする。cron の既定 scorer は当面 `llm` のままにする。

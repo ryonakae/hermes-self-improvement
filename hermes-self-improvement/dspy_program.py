@@ -21,7 +21,7 @@ class ProposalScoringSignature:
     """
 
     input_fields = ["proposal", "findings", "rubric"]
-    output_fields = ["id", "score", "recommendation", "risk", "confidence", "rationale", "auto_apply"]
+    output_fields = ["id", "score", "recommendation", "risk", "confidence", "rationale", "auto_apply", "score_breakdown"]
 
 
 class ProposalScoringProgram:
@@ -45,27 +45,12 @@ class ProposalScoringProgram:
         risk = _coerce_choice(proposal.get("risk"), ALLOWED_RISKS, "medium")
         confidence = _coerce_choice(proposal.get("confidence"), ALLOWED_CONFIDENCE, "low")
         evidence_count = _evidence_count(findings)
-
-        score = 45
-        if confidence == "medium":
-            score += 12
-        elif confidence == "high":
-            score += 20
-        if risk == "low":
-            score += 10
-        elif risk == "high":
-            score -= 25
-        if evidence_count >= 2:
-            score += 8
-        if evidence_count >= 4:
-            score += 7
-        if proposal.get("auto_apply"):
-            score -= 20
-
-        score = max(0, min(100, score))
+        breakdown = _score_breakdown(proposal=proposal, findings=findings, rubric=rubric, risk=risk, confidence=confidence)
+        score = max(0, min(100, sum(item["points"] for item in breakdown.values())))
         recommendation = _recommendation_for(score=score, risk=risk, auto_apply_requested=bool(proposal.get("auto_apply")))
         hard_constraints = rubric.get("hard_constraints") if isinstance(rubric.get("hard_constraints"), dict) else {}
         auto_apply_allowed = bool(hard_constraints.get("auto_apply", False))
+        dimension_summary = ", ".join(f"{name}={item['level']}" for name, item in breakdown.items())
 
         return {
             "id": pid,
@@ -73,9 +58,10 @@ class ProposalScoringProgram:
             "recommendation": recommendation,
             "risk": risk,
             "confidence": confidence,
+            "score_breakdown": breakdown,
             "rationale": (
-                f"Deterministic baseline: risk={risk}, confidence={confidence}, "
-                f"evidence_count={evidence_count}. External scoring remains advisory."
+                f"Rubric baseline: {dimension_summary}; evidence_count={evidence_count}. "
+                "External scoring remains advisory."
             ),
             "auto_apply": False if not auto_apply_allowed else False,
         }
@@ -100,6 +86,78 @@ class ProposalBatchScoringProgram:
                 for proposal in proposals
             ]
         }
+
+
+def _score_breakdown(
+    *,
+    proposal: dict[str, Any],
+    findings: list[dict[str, Any]],
+    rubric: dict[str, Any],
+    risk: str,
+    confidence: str,
+) -> dict[str, dict[str, Any]]:
+    dimensions = rubric.get("dimensions") if isinstance(rubric.get("dimensions"), dict) else {}
+    evidence_count = _evidence_count(findings)
+    text = " ".join(str(proposal.get(key) or "") for key in ("title", "reason", "action", "target")).lower()
+    has_examples = any(finding.get("examples") for finding in findings if isinstance(finding, dict))
+
+    evidence_level = "high" if evidence_count >= 4 and has_examples else "medium" if evidence_count >= 2 else "low"
+    reuse_level = "high" if evidence_count >= 4 or (evidence_count >= 2 and any(word in text for word in ("recurring", "repeated", "workflow", "skill", "safehouse"))) else "medium" if evidence_count >= 2 else "low"
+    if risk == "high" or proposal.get("auto_apply"):
+        safety_level = "low"
+    elif risk == "low":
+        safety_level = "high"
+    else:
+        safety_level = "medium"
+    specificity_level = "high" if _has_specific_target(proposal, findings) else "medium" if proposal.get("target") or proposal.get("action") else "low"
+    verification_level = "high" if any(word in text for word in ("test", "verify", "dry-run", "report", "eval")) else "medium" if evidence_count >= 2 else "low"
+
+    levels = {
+        "evidence_strength": evidence_level,
+        "reuse_value": reuse_level,
+        "operational_safety": safety_level,
+        "specificity": specificity_level,
+        "verification_plan": verification_level,
+    }
+    return {
+        name: {
+            "level": level,
+            "points": _points_for_level(_dimension_weight(dimensions, name), level),
+            "weight": _dimension_weight(dimensions, name),
+            "reason": _dimension_reason(name=name, level=level, evidence_count=evidence_count, risk=risk),
+        }
+        for name, level in levels.items()
+    }
+
+
+def _dimension_weight(dimensions: dict[str, Any], name: str) -> int:
+    item = dimensions.get(name) if isinstance(dimensions.get(name), dict) else {}
+    try:
+        return int(item.get("weight") or 0)
+    except Exception:
+        return 0
+
+
+def _points_for_level(weight: int, level: str) -> int:
+    if level == "high":
+        return weight
+    if level == "medium":
+        return round(weight * 0.65)
+    return round(weight * 0.25)
+
+
+def _dimension_reason(*, name: str, level: str, evidence_count: int, risk: str) -> str:
+    if name == "evidence_strength":
+        return f"{level} evidence from {evidence_count} related events."
+    if name == "operational_safety":
+        return f"{level} safety because proposal risk is {risk}; scoring remains advisory."
+    return f"{level} {name.replace('_', ' ')} by deterministic rubric baseline."
+
+
+def _has_specific_target(proposal: dict[str, Any], findings: list[dict[str, Any]]) -> bool:
+    if proposal.get("target") and proposal.get("action"):
+        return True
+    return any(bool(f.get("tool_name") or f.get("error_kind")) for f in findings if isinstance(f, dict))
 
 
 def _coerce_choice(value: Any, allowed: set[str], default: str) -> str:
