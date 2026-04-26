@@ -1480,14 +1480,73 @@ def _eligibility_for_apply_item(
     }
 
 
-def _ledger_preview_for_item(eligible: bool) -> dict[str, Any]:
+def _apply_append_to_existing_section(content: str, mutation: dict[str, Any]) -> str | None:
+    heading = str(mutation.get("section_heading") or mutation.get("section") or "").strip()
+    text = str(mutation.get("text") or "").rstrip()
+    if not heading or not text:
+        return None
+    lines = content.splitlines(keepends=True)
+    heading_idx = None
+    for idx, line in enumerate(lines):
+        if line.strip() == heading:
+            heading_idx = idx
+            break
+    if heading_idx is None:
+        return None
+    insert_idx = len(lines)
+    for idx in range(heading_idx + 1, len(lines)):
+        stripped = lines[idx].strip()
+        if stripped.startswith("## "):
+            insert_idx = idx
+            break
+    insert_text = text + "\n"
+    if insert_idx > 0 and lines[insert_idx - 1] and not lines[insert_idx - 1].endswith("\n"):
+        insert_text = "\n" + insert_text
+    return "".join(lines[:insert_idx] + [insert_text] + lines[insert_idx:])
+
+
+def _preview_content(text: str, max_chars: int = 4000) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "\n...<truncated>"
+
+
+def _rollback_preview_for_item(
+    *,
+    target_path: str | None,
+    target_content: str | None,
+    before_hash: str | None,
+    mutation: dict[str, Any] | None,
+    eligible: bool,
+) -> dict[str, Any] | None:
+    if not eligible or not target_path or target_content is None or not mutation:
+        return None
+    after_content = None
+    if mutation.get("type") == "append_to_existing_section":
+        after_content = _apply_append_to_existing_section(target_content, mutation)
+    if after_content is None:
+        return None
     return {
+        "rollback_strategy": "restore_full_file_from_before_content",
+        "target_path": target_path,
+        "before_hash": before_hash,
+        "after_hash": _sha256_text(after_content),
+        "before_snippet": _preview_content(target_content),
+        "after_snippet": _preview_content(after_content),
+    }
+
+
+def _ledger_preview_for_item(eligible: bool, rollback_preview: dict[str, Any] | None = None) -> dict[str, Any]:
+    preview = {
         "ledger_schema_name": "self_improvement_apply_ledger",
         "ledger_schema_version": "1.0",
         "would_create_pending_ledger": bool(eligible),
         "pending_status": "pending",
-        "rollback_data": "available_after_pending_ledger" if eligible else "not_available_until_mutation_plan_exists",
+        "rollback_data": "inline_rollback_preview_available" if rollback_preview else "not_available_until_mutation_plan_exists",
     }
+    if rollback_preview:
+        preview["rollback_preview_hash"] = _sha256_text(_stable_json(rollback_preview))
+    return preview
 
 
 def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1510,6 +1569,13 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         scorer_disagreements=scorer_disagreements,
     )
     eligible_for_unattended = eligibility["status"] == "eligible"
+    rollback_preview = _rollback_preview_for_item(
+        target_path=target_path,
+        target_content=target_meta.get("content"),
+        before_hash=before_hash,
+        mutation=mutation,
+        eligible=eligible_for_unattended,
+    )
     item: dict[str, Any] = {
         "item_id": f"item-{idx}",
         "proposal_id": proposal.get("id"),
@@ -1538,7 +1604,8 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
             "reason": proposal.get("reason"),
         },
         "proposed_change_summary": proposal.get("title") or proposal.get("action"),
-        "ledger_preview": _ledger_preview_for_item(eligible_for_unattended),
+        "ledger_preview": _ledger_preview_for_item(eligible_for_unattended, rollback_preview),
+        "rollback_preview": rollback_preview,
         "mutation": mutation,
         "deferral_reason": "no_concrete_mutation_plan_yet" if mutation is None else None,
     }
