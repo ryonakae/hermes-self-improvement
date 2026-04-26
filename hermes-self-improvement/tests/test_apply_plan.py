@@ -204,6 +204,53 @@ def test_build_apply_plan_plans_pitfall_mutation_for_existing_pitfalls_section(t
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
 
 
+def test_build_apply_plan_resolves_explicit_custom_skill_hint_inside_configured_roots(tmp_path):
+    mod = load_plugin_module()
+    skill_root = tmp_path / "hermes-custom"
+    skill_dir = skill_root / "safehouse-skill"
+    skill_dir.mkdir(parents=True)
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("# Safehouse\n\n## Pitfalls\n- Existing note\n", encoding="utf-8")
+    proposal = sample_pitfall_proposal()
+    proposal["target_skill"] = "safehouse-skill"
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"custom_skill_roots": [str(skill_root)]},
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["target_path"] == str(skill_file)
+    assert item["target_exists"] is True
+    assert item["before_hash"] == hashlib.sha256(skill_file.read_bytes()).hexdigest()
+    assert item["mutation"]["section_heading"] == "## Pitfalls"
+    assert item["eligible_for_unattended"] is True
+
+
+def test_build_apply_plan_refuses_unsafe_custom_skill_hint(tmp_path):
+    mod = load_plugin_module()
+    skill_root = tmp_path / "hermes-custom"
+    skill_root.mkdir()
+    proposal = sample_pitfall_proposal()
+    proposal["target_skill"] = "../outside"
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"custom_skill_roots": [str(skill_root)]},
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["target_path"] is None
+    assert item["eligible_for_unattended"] is False
+    assert "target_path_missing" in item["eligibility"]["reasons"]
+
+
 def test_build_apply_plan_fails_closed_when_pitfall_section_is_missing(tmp_path):
     mod = load_plugin_module()
     target = tmp_path / "SKILL.md"

@@ -117,6 +117,7 @@ def _load_config(path: Path) -> dict[str, Any]:
         "data_dir": str(get_hermes_home() / "reports" / "self-improvement" / "state"),
         "report_dir": str(get_hermes_home() / "reports" / "self-improvement" / "daily"),
         "reports_dir": str(get_hermes_home() / "reports" / "self-improvement"),
+        "custom_skill_roots": [str(get_hermes_home() / "skills" / "hermes-custom")],
         "execution_mode": DEFAULT_EXECUTION_MODE,
         "mode_policy": DEFAULT_MODE_POLICY,
         "llm_scorer": {
@@ -1340,12 +1341,58 @@ def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
     return "unknown_or_unclassified"
 
 
-def _target_path_for_proposal(proposal: dict[str, Any]) -> str | None:
+def _safe_relative_name(value: Any) -> str | None:
+    if not value:
+        return None
+    name = str(value).strip()
+    if not name or name.startswith(("/", "~")):
+        return None
+    parts = Path(name).parts
+    if any(part in {"", ".", ".."} for part in parts):
+        return None
+    return name
+
+
+def _path_inside_root(candidate: Path, root: Path) -> bool:
+    try:
+        candidate.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _custom_skill_roots(config: dict[str, Any] | None) -> list[Path]:
+    roots = (config or {}).get("custom_skill_roots")
+    if roots is None:
+        roots = [get_hermes_home() / "skills" / "hermes-custom"]
+    if isinstance(roots, (str, Path)):
+        roots = [roots]
+    if not isinstance(roots, list):
+        return []
+    return [Path(str(root)).expanduser() for root in roots if root]
+
+
+def _custom_skill_path_for_proposal(proposal: dict[str, Any], config: dict[str, Any] | None) -> str | None:
+    skill_name = None
+    for key in ("target_skill", "skill_name", "skill"):
+        skill_name = _safe_relative_name(proposal.get(key))
+        if skill_name:
+            break
+    if not skill_name:
+        return None
+    for root in _custom_skill_roots(config):
+        candidate = root / skill_name / "SKILL.md"
+        if _path_inside_root(candidate, root):
+            return str(candidate)
+    return None
+
+
+def _target_path_for_proposal(proposal: dict[str, Any], config: dict[str, Any] | None = None) -> str | None:
     for key in ("target_path", "path", "file_path", "skill_path"):
         value = proposal.get(key)
         if value:
             return str(Path(str(value)).expanduser())
-    return None
+    return _custom_skill_path_for_proposal(proposal, config)
 
 
 def _target_metadata(target_path: str | None) -> dict[str, Any]:
@@ -1443,9 +1490,9 @@ def _ledger_preview_for_item(eligible: bool) -> dict[str, Any]:
     }
 
 
-def _build_apply_plan_item(idx: int, proposal: dict[str, Any]) -> dict[str, Any]:
+def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
     change_type = _classify_apply_change_type(proposal)
-    target_path = _target_path_for_proposal(proposal)
+    target_path = _target_path_for_proposal(proposal, config)
     target_meta = _target_metadata(target_path)
     before_hash = proposal.get("before_hash") or target_meta["before_hash"]
     mutation, mutation_blockers = _plan_mutation_for_item(
@@ -1504,6 +1551,7 @@ def build_apply_plan(
     proposals: list[dict[str, Any]],
     summary: dict[str, Any],
     execution_mode: str,
+    config: dict[str, Any] | None = None,
     created_at: datetime | None = None,
 ) -> dict[str, Any]:
     """Build a dry-run apply plan artifact without mutating skills or memory."""
@@ -1514,7 +1562,7 @@ def build_apply_plan(
         "proposal_ids": [p.get("id") for p in proposals],
     })
     plan_id = f"apply-plan-{ts.strftime('%Y%m%dT%H%M%SZ')}-{_sha256_text(plan_seed)[:8]}"
-    items = [_build_apply_plan_item(idx, proposal) for idx, proposal in enumerate(proposals, 1)]
+    items = [_build_apply_plan_item(idx, proposal, config) for idx, proposal in enumerate(proposals, 1)]
     return {
         "schema_name": "self_improvement_apply_plan",
         "schema_version": "1.0",
@@ -1661,6 +1709,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             proposals=out.get("proposals") or [],
             summary=out.get("summary") or {},
             execution_mode=execution_mode,
+            config=config,
         )
         path = write_apply_plan(plan, config)
         payload = {"apply_plan": plan, "apply_plan_path": str(path)}
