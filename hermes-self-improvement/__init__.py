@@ -743,6 +743,10 @@ def score_proposals(
             return _merge_gepa_scores(proposals, heuristic, gepa_payload)
         except Exception as exc:
             return _fallback_with_scorer_error(heuristic, "gepa_scorer_error", exc)
+    if scorer_name == "compare":
+        llm_scored = score_proposals(proposals, findings, scorer="llm", config=config)
+        gepa_scored = score_proposals(proposals, findings, scorer="gepa", config=config)
+        return _compare_scorer_results(proposals, heuristic, llm_scored, gepa_scored)
     return heuristic
 
 
@@ -877,6 +881,83 @@ def _merge_gepa_scores(
         rationale_key="gepa_rationale",
         error_key="gepa_scorer_error",
     )
+
+
+def _compare_scorer_results(
+    proposals: list[dict[str, Any]],
+    heuristic: list[dict[str, Any]],
+    llm_scored: list[dict[str, Any]],
+    gepa_scored: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    heuristic_by_id = {str(item.get("id") or ""): item for item in heuristic}
+    llm_by_id = {str(item.get("id") or ""): item for item in llm_scored}
+    gepa_by_id = {str(item.get("id") or ""): item for item in gepa_scored}
+    merged: list[dict[str, Any]] = []
+    for proposal in proposals:
+        pid = str(proposal.get("id") or "")
+        h = dict(heuristic_by_id.get(pid) or proposal)
+        llm = llm_by_id.get(pid) or {}
+        gepa = gepa_by_id.get(pid) or {}
+        llm_score = _coerce_int(llm.get("score"), default=h.get("score", 0))
+        gepa_score = _coerce_int(gepa.get("score"), default=h.get("score", 0))
+        delta = abs(llm_score - gepa_score)
+        disagreements: list[str] = []
+        if delta >= 20:
+            disagreements.append("score_gap")
+        if llm.get("recommendation") != gepa.get("recommendation"):
+            disagreements.append("recommendation_mismatch")
+        if llm.get("risk") != gepa.get("risk"):
+            disagreements.append("risk_mismatch")
+        if llm.get("confidence") != gepa.get("confidence"):
+            disagreements.append("confidence_mismatch")
+
+        p2 = dict(h)
+        p2["scorer"] = "compare-v0.1"
+        p2["llm_score"] = llm_score
+        p2["gepa_score"] = gepa_score
+        p2["score_delta"] = delta
+        p2["scorer_disagreements"] = disagreements
+        p2["llm_recommendation"] = llm.get("recommendation")
+        p2["gepa_recommendation"] = gepa.get("recommendation")
+        p2["llm_risk"] = llm.get("risk")
+        p2["gepa_risk"] = gepa.get("risk")
+        p2["score"] = min(llm_score, gepa_score)
+        p2["recommendation"] = "human_review" if disagreements else (gepa.get("recommendation") or llm.get("recommendation") or h.get("recommendation"))
+        p2["risk"] = _max_risk(llm.get("risk"), gepa.get("risk"), h.get("risk"))
+        p2["confidence"] = _min_confidence(llm.get("confidence"), gepa.get("confidence"), h.get("confidence"))
+        if llm.get("llm_scorer_error"):
+            p2["llm_scorer_error"] = llm.get("llm_scorer_error")
+        if gepa.get("gepa_scorer_error"):
+            p2["gepa_scorer_error"] = gepa.get("gepa_scorer_error")
+        if isinstance(gepa.get("score_breakdown"), dict):
+            p2["score_breakdown"] = gepa["score_breakdown"]
+        p2["auto_apply"] = False
+        merged.append(p2)
+    return sorted(
+        merged,
+        key=lambda item: (
+            len(item.get("scorer_disagreements") or []),
+            item.get("score_delta", 0),
+            item.get("score", 0),
+        ),
+        reverse=True,
+    )
+
+
+def _max_risk(*values: Any) -> str:
+    order = {"low": 1, "medium": 2, "high": 3}
+    valid = [str(v) for v in values if v in order]
+    if not valid:
+        return "medium"
+    return max(valid, key=lambda v: order[v])
+
+
+def _min_confidence(*values: Any) -> str:
+    order = {"low": 1, "medium": 2, "high": 3}
+    valid = [str(v) for v in values if v in order]
+    if not valid:
+        return "low"
+    return min(valid, key=lambda v: order[v])
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
@@ -1076,6 +1157,11 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]]) -> str:
             f"- score: {p.get('score')}",
             f"- recommendation: `{p.get('recommendation')}`",
         ])
+        if p.get("scorer"):
+            lines.append(f"- scorer: `{p.get('scorer')}`")
+        compare = _format_scorer_compare(p)
+        if compare:
+            lines.append(f"- scorer_compare: {compare}")
         breakdown = _format_score_breakdown(p.get("score_breakdown"))
         if breakdown:
             lines.append(f"- score_breakdown: {breakdown}")
@@ -1090,6 +1176,20 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]]) -> str:
         "- plugin hook は観測専用で、skill / memory の変更は行いません。",
     ])
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _format_scorer_compare(p: dict[str, Any]) -> str:
+    if p.get("scorer") != "compare-v0.1":
+        return ""
+    parts = [
+        f"llm={p.get('llm_score')}",
+        f"gepa={p.get('gepa_score')}",
+        f"delta={p.get('score_delta')}",
+    ]
+    disagreements = p.get("scorer_disagreements")
+    if isinstance(disagreements, list) and disagreements:
+        parts.append("disagreements=" + ", ".join(str(item) for item in disagreements))
+    return " ".join(parts)
 
 
 def _format_score_breakdown(raw: Any) -> str:
@@ -1141,17 +1241,17 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_status.set_defaults(func=_handle_cli)
     p_analyze = sub.add_parser("analyze", help="Analyze observations")
     p_analyze.add_argument("--since-hours", type=int, default=24)
-    p_analyze.add_argument("--scorer", choices=["heuristic", "llm", "gepa"], default="heuristic")
+    p_analyze.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
     p_analyze.add_argument("--json", action="store_true", dest="as_json")
     p_analyze.set_defaults(func=_handle_cli)
     p_report = sub.add_parser("report", help="Analyze and write Markdown report")
     p_report.add_argument("--since-hours", type=int, default=24)
-    p_report.add_argument("--scorer", choices=["heuristic", "llm", "gepa"], default="heuristic")
+    p_report.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
     p_report.add_argument("--json", action="store_true", dest="as_json")
     p_report.set_defaults(func=_handle_cli)
     p_run = sub.add_parser("run", help="Analyze, score proposals, and write report")
     p_run.add_argument("--since-hours", type=int, default=24)
-    p_run.add_argument("--scorer", choices=["heuristic", "llm", "gepa"], default="heuristic")
+    p_run.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
     p_run.add_argument("--json", action="store_true", dest="as_json")
     p_run.set_defaults(func=_handle_cli)
     p_gepa_eval = sub.add_parser("gepa-eval", help="Run bundled offline GEPA scorer regression cases")
@@ -1206,11 +1306,12 @@ def _handle_slash(raw_args: str = "") -> str:
     if text.startswith("analyze") or text.startswith("report") or text.startswith("run"):
         use_llm = "--scorer llm" in text or "llm" in text.split()
         use_gepa = "--scorer gepa" in text or "gepa" in text.split()
+        use_compare = "--scorer compare" in text or "compare" in text.split()
         out = run_pipeline(
             config,
             since_hours=24,
             write_report=text.startswith(("report", "run")),
-            scorer="gepa" if use_gepa else "llm" if use_llm else "heuristic",
+            scorer="compare" if use_compare else "gepa" if use_gepa else "llm" if use_llm else "heuristic",
         )
         return out["report"][:3500]
     path = _event_path(config)

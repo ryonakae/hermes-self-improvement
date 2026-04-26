@@ -9,7 +9,8 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 - 無人 cron で自動適用できる変更は、将来的にも low-risk に限定する。
 - 採点は既定では heuristic。`--scorer llm` を指定すると Hermes の auxiliary LLM 経路で proposal を採点する。失敗時は heuristic にフォールバックする。
 - `--scorer gepa` は GEPA/DSPy 評価経路を通す。既定では dependency-free の offline program eval として実行し、score は `gepa-v0.1` になる。GEPA optimizer 本体はまだ手動実験用で、project-specific metric / invocation が無い場合は閉じておく。
-- LLM / GEPA scorer はどちらも advisory only。`auto_apply` は常に `false` として扱い、無人 cron の自動適用許可には使わない。
+- `--scorer compare` は LLM と GEPA の両方で proposal を採点し、score delta / recommendation / risk / confidence の disagreement を report に出す。
+- LLM / GEPA / compare scorer は advisory only。`auto_apply` は常に `false` として扱い、無人 cron の自動適用許可には使わない。
 
 ## CLI
 
@@ -20,6 +21,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer llm --json
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer gepa --json
+~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve gepa-eval --json
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve run --since-hours 24 --json --scorer llm
@@ -32,7 +34,7 @@ python3 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/__init__.py sta
 python3 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/__init__.py run --since-hours 24
 ```
 
-plugin runtime では `/self-improvement status|analyze|report` の slash command も登録する。`/self-improvement report llm` または `/self-improvement report --scorer llm` で LLM scorer、`/self-improvement report gepa` で GEPA scorer path を使う。
+plugin runtime では `/self-improvement status|analyze|report` の slash command も登録する。`/self-improvement report llm` または `/self-improvement report --scorer llm` で LLM scorer、`/self-improvement report gepa` で GEPA scorer path、`/self-improvement report compare` で LLM/GEPA disagreement review を使う。
 
 ## GEPA scorer
 
@@ -74,6 +76,13 @@ bin/hermes-self-improve analyze --since-hours 24 --json --scorer gepa
 - LLM 出力が壊れている、provider が使えない、timeout した場合は `llm_scorer_error` を付けて heuristic score を返す。
 - safety gate として、LLM scorer は `auto_apply` を常に `false` にする。cron 側も LLM score だけを根拠に skill / memory を自動変更しない。
 - provider 設定は `config.json` の `llm_scorer` で管理する。既定は Hermes auxiliary client の `auto` 経路。
+
+## LLM / GEPA compare scorer
+
+- `score_proposals(..., scorer="compare")` は LLM scorer と GEPA scorer を両方実行し、proposal ごとに `llm_score`, `gepa_score`, `score_delta`, `scorer_disagreements` を付ける。
+- disagreement は `score_gap`（20点以上）, `recommendation_mismatch`, `risk_mismatch`, `confidence_mismatch` を記録する。
+- disagreement がある proposal は `human_review` に倒し、score は安全側として LLM/GEPA の低い方を採用する。
+- `report --scorer compare` は compact な `scorer_compare` 行を出す。custom skill maintenance cron ではこの compare report を優先して、人間レビュー候補を見つける。
 
 ## Data
 
