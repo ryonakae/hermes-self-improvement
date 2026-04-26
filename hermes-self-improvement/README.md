@@ -12,7 +12,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 - `--scorer compare` は LLM と GEPA の両方で proposal を採点し、score delta / recommendation / risk / confidence の disagreement を report に出す。
 - LLM / GEPA / compare scorer は advisory only。`auto_apply` は常に `false` として扱い、無人 cron の自動適用許可には使わない。
 - `execution_mode` は cron prompt ではなく plugin CLI/config/policy で解決・検証する。初期 default は `report_only`。有効 mode は `report_only`, `dry_run_plan`, `apply_low_risk`, `apply_approved` で、未定義 command/capability は deny-by-default。
-- `generate-apply-plan` は versioned JSON artifact を生成するだけで、まだ mutation しない。item には `change_type`, `target_path`, `before_hash`, `proposal_hash`, `item_hash`, `eligibility`, `ledger_preview`, `scorer_disagreements` を入れ、target / mutation plan が無い候補は fail closed にする。
+- `generate-apply-plan` は versioned JSON artifact を生成するだけで、まだ mutation しない。item には `change_type`, `target_path`, `target_exists`, `before_hash`, `proposal_hash`, `item_hash`, `eligibility`, `ledger_preview`, `scorer_disagreements` を入れ、target が存在しない候補や mutation plan が無い候補は fail closed にする。
 
 ## CLI
 

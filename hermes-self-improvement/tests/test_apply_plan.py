@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
@@ -152,6 +153,52 @@ def test_build_apply_plan_records_scorer_disagreement_as_auto_apply_blocker():
     assert item["scorer_disagreements"] == ["score_gap"]
     assert item["eligible_for_unattended"] is False
     assert "scorer_disagreement" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_resolves_existing_target_path_and_before_hash(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\n## Pitfalls\n- Existing note\n", encoding="utf-8")
+    proposal = sample_pitfall_proposal()
+    proposal["target_path"] = str(target)
+    proposal["mutation"] = {"type": "append_to_existing_section", "section": "Pitfalls", "text": "- New note"}
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["target_path"] == str(target)
+    assert item["target_exists"] is True
+    assert item["before_hash"] == hashlib.sha256(target.read_bytes()).hexdigest()
+    assert item["eligible_for_unattended"] is True
+    assert item["requires_approval"] is False
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert item["ledger_preview"]["would_create_pending_ledger"] is True
+
+
+def test_build_apply_plan_fails_closed_when_target_path_does_not_exist(tmp_path):
+    mod = load_plugin_module()
+    missing = tmp_path / "missing.md"
+    proposal = sample_pitfall_proposal()
+    proposal["target_path"] = str(missing)
+    proposal["mutation"] = {"type": "append_to_existing_section", "section": "Pitfalls", "text": "- New note"}
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["target_exists"] is False
+    assert item["before_hash"] is None
+    assert item["eligible_for_unattended"] is False
+    assert "target_not_found" in item["eligibility"]["reasons"]
 
 
 def test_write_apply_plan_uses_configurable_reports_dir_and_date_partition(tmp_path):

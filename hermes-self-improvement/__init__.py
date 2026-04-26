@@ -1344,14 +1344,24 @@ def _target_path_for_proposal(proposal: dict[str, Any]) -> str | None:
     for key in ("target_path", "path", "file_path", "skill_path"):
         value = proposal.get(key)
         if value:
-            return str(value)
+            return str(Path(str(value)).expanduser())
     return None
+
+
+def _target_metadata(target_path: str | None) -> dict[str, Any]:
+    if not target_path:
+        return {"target_exists": None, "before_hash": None}
+    path = Path(target_path).expanduser()
+    if not path.is_file():
+        return {"target_exists": False, "before_hash": None}
+    return {"target_exists": True, "before_hash": _sha256_text(path.read_text(encoding="utf-8", errors="replace"))}
 
 
 def _eligibility_for_apply_item(
     *,
     change_type: str,
     target_path: str | None,
+    target_exists: bool | None,
     mutation: dict[str, Any] | None,
     scorer_disagreements: list[str],
 ) -> dict[str, Any]:
@@ -1360,6 +1370,8 @@ def _eligibility_for_apply_item(
         reasons.append("change_type_unknown")
     if not target_path:
         reasons.append("target_path_missing")
+    elif target_exists is False:
+        reasons.append("target_not_found")
     if mutation is None:
         reasons.append("mutation_plan_missing")
     if scorer_disagreements:
@@ -1383,12 +1395,14 @@ def _ledger_preview_for_item(eligible: bool) -> dict[str, Any]:
 def _build_apply_plan_item(idx: int, proposal: dict[str, Any]) -> dict[str, Any]:
     change_type = _classify_apply_change_type(proposal)
     target_path = _target_path_for_proposal(proposal)
-    before_hash = proposal.get("before_hash")
+    target_meta = _target_metadata(target_path)
+    before_hash = proposal.get("before_hash") or target_meta["before_hash"]
     mutation = proposal.get("mutation") if isinstance(proposal.get("mutation"), dict) else None
     scorer_disagreements = list(proposal.get("scorer_disagreements") or [])
     eligibility = _eligibility_for_apply_item(
         change_type=change_type,
         target_path=target_path,
+        target_exists=target_meta["target_exists"],
         mutation=mutation,
         scorer_disagreements=scorer_disagreements,
     )
@@ -1401,6 +1415,7 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any]) -> dict[str, Any]
         "target": proposal.get("target"),
         "target_kind": proposal.get("target"),
         "target_path": target_path,
+        "target_exists": target_meta["target_exists"],
         "before_hash": before_hash,
         "action": proposal.get("action"),
         "risk": proposal.get("risk"),
