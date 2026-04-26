@@ -1350,11 +1350,60 @@ def _target_path_for_proposal(proposal: dict[str, Any]) -> str | None:
 
 def _target_metadata(target_path: str | None) -> dict[str, Any]:
     if not target_path:
-        return {"target_exists": None, "before_hash": None}
+        return {"target_exists": None, "before_hash": None, "content": None}
     path = Path(target_path).expanduser()
     if not path.is_file():
-        return {"target_exists": False, "before_hash": None}
-    return {"target_exists": True, "before_hash": _sha256_text(path.read_text(encoding="utf-8", errors="replace"))}
+        return {"target_exists": False, "before_hash": None, "content": None}
+    content = path.read_text(encoding="utf-8", errors="replace")
+    return {"target_exists": True, "before_hash": _sha256_text(content), "content": content}
+
+
+_PITFALL_SECTION_HEADINGS = (
+    "## Pitfalls",
+    "## 注意",
+    "## 注意点",
+    "## よくある失敗",
+    "## 落とし穴",
+)
+
+
+def _find_existing_section_heading(content: str | None, headings: tuple[str, ...]) -> str | None:
+    if not content:
+        return None
+    lines = content.splitlines()
+    for line in lines:
+        stripped = line.strip()
+        if stripped in headings:
+            return stripped
+    return None
+
+
+def _proposal_mutation_text(proposal: dict[str, Any]) -> str:
+    reason = str(proposal.get("reason") or proposal.get("title") or proposal.get("action") or "Review this recurring issue.").strip()
+    return f"- {reason}"
+
+
+def _plan_mutation_for_item(
+    *,
+    change_type: str,
+    proposal: dict[str, Any],
+    target_content: str | None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    explicit = proposal.get("mutation")
+    if isinstance(explicit, dict):
+        return explicit, []
+    if change_type != "pitfall_addition_existing_section":
+        return None, []
+    if target_content is None:
+        return None, []
+    heading = _find_existing_section_heading(target_content, _PITFALL_SECTION_HEADINGS)
+    if not heading:
+        return None, ["existing_section_missing"]
+    return {
+        "type": "append_to_existing_section",
+        "section_heading": heading,
+        "text": _proposal_mutation_text(proposal),
+    }, []
 
 
 def _eligibility_for_apply_item(
@@ -1363,6 +1412,7 @@ def _eligibility_for_apply_item(
     target_path: str | None,
     target_exists: bool | None,
     mutation: dict[str, Any] | None,
+    mutation_blockers: list[str],
     scorer_disagreements: list[str],
 ) -> dict[str, Any]:
     reasons: list[str] = []
@@ -1372,6 +1422,7 @@ def _eligibility_for_apply_item(
         reasons.append("target_path_missing")
     elif target_exists is False:
         reasons.append("target_not_found")
+    reasons.extend(mutation_blockers)
     if mutation is None:
         reasons.append("mutation_plan_missing")
     if scorer_disagreements:
@@ -1397,13 +1448,18 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any]) -> dict[str, Any]
     target_path = _target_path_for_proposal(proposal)
     target_meta = _target_metadata(target_path)
     before_hash = proposal.get("before_hash") or target_meta["before_hash"]
-    mutation = proposal.get("mutation") if isinstance(proposal.get("mutation"), dict) else None
+    mutation, mutation_blockers = _plan_mutation_for_item(
+        change_type=change_type,
+        proposal=proposal,
+        target_content=target_meta.get("content"),
+    )
     scorer_disagreements = list(proposal.get("scorer_disagreements") or [])
     eligibility = _eligibility_for_apply_item(
         change_type=change_type,
         target_path=target_path,
         target_exists=target_meta["target_exists"],
         mutation=mutation,
+        mutation_blockers=mutation_blockers,
         scorer_disagreements=scorer_disagreements,
     )
     eligible_for_unattended = eligibility["status"] == "eligible"

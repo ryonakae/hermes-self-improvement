@@ -180,6 +180,50 @@ def test_build_apply_plan_resolves_existing_target_path_and_before_hash(tmp_path
     assert item["ledger_preview"]["would_create_pending_ledger"] is True
 
 
+def test_build_apply_plan_plans_pitfall_mutation_for_existing_pitfalls_section(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\n## Pitfalls\n- Existing note\n", encoding="utf-8")
+    proposal = sample_pitfall_proposal()
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["mutation"] == {
+        "type": "append_to_existing_section",
+        "section_heading": "## Pitfalls",
+        "text": "- Observed repeated Safehouse permission-denied events.",
+    }
+    assert item["eligible_for_unattended"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+
+
+def test_build_apply_plan_fails_closed_when_pitfall_section_is_missing(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\n## Usage\n- Existing note\n", encoding="utf-8")
+    proposal = sample_pitfall_proposal()
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["mutation"] is None
+    assert item["eligible_for_unattended"] is False
+    assert "existing_section_missing" in item["eligibility"]["reasons"]
+
+
 def test_build_apply_plan_fails_closed_when_target_path_does_not_exist(tmp_path):
     mod = load_plugin_module()
     missing = tmp_path / "missing.md"
