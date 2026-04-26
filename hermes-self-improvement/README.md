@@ -8,7 +8,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 - 問題抽出・候補生成・採点・レポート作成は CLI command から明示的に実行する。
 - 無人 cron で自動適用できる変更は、将来的にも low-risk に限定する。
 - 採点は既定では heuristic。`--scorer llm` を指定すると Hermes の auxiliary LLM 経路で proposal を採点する。失敗時は heuristic にフォールバックする。
-- `--scorer gepa` は optional GEPA adapter を通す手動検証用。現段階では candidate comparison / rubric 評価の入口だけを置き、DSPy/GEPA 依存や project-specific metric が無い場合は heuristic にフォールバックする。
+- `--scorer gepa` は GEPA/DSPy 評価経路を通す。既定では dependency-free の offline program eval として実行し、score は `gepa-v0.1` になる。GEPA optimizer 本体はまだ手動実験用で、project-specific metric / invocation が無い場合は閉じておく。
 - LLM / GEPA scorer はどちらも advisory only。`auto_apply` は常に `false` として扱い、無人 cron の自動適用許可には使わない。
 
 ## CLI
@@ -35,8 +35,9 @@ plugin runtime では `/self-improvement status|analyze|report` の slash comman
 
 ## GEPA scorer
 
-- `score_proposals(..., scorer="gepa")` は optional `gepa_adapter.py` を通す。DSPy / GEPA が入っていない、または project-specific optimizer invocation が未設定の場合は `gepa_scorer_error` を付けて heuristic score に戻す。
+- `score_proposals(..., scorer="gepa")` は `gepa_adapter.py` を通す。`gepa_scorer.enabled=true` かつ `max_iterations=0` の既定構成では、`dspy_program.py` の dependency-free `ProposalBatchScoringProgram` を使って offline advisory score を返す。
 - 初期版の目的は本番 skill を変異させることではなく、candidate comparison / rubric 評価 / regression check の入口を CLI に用意すること。
+- GEPA optimizer 本体はまだ未設定。`max_iterations > 0` の optimizer run は、DSPy/GEPA の存在確認後も project-specific metric / invocation が実装されるまで fail closed する。
 - safety gate として、GEPA scorer も `auto_apply` を常に `false` にする。cron の既定 scorer は当面 `llm` のままにする。
 
 GEPA 手動検証用の評価資産:
@@ -53,7 +54,7 @@ GEPA 手動検証用の評価資産:
 - DSPy program scaffold: `dspy_program.py`
   - `ProposalScoringProgram`
   - `ProposalBatchScoringProgram`
-  - DSPy 未インストールでも import / test できる dependency-free baseline。将来 GEPA optimizer をつなぐときも同じ input/output schema を使う。
+  - DSPy 未インストールでも import / test できる dependency-free baseline。`--scorer gepa` の既定構成では、この offline program eval を使って `gepa-v0.1` score を返す。将来 GEPA optimizer をつなぐときも同じ input/output schema を使う。
 
 評価資産だけを確認する例:
 

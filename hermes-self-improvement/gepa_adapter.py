@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import importlib.util
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -79,33 +81,78 @@ def score_with_gepa(
     findings: list[dict[str, Any]],
     config: dict[str, Any],
 ) -> dict[str, Any]:
-    """Score proposals with an optional GEPA/DSPy candidate-comparison adapter.
+    """Score proposals with the GEPA/DSPy evaluation path.
 
-    This adapter deliberately stays conservative. It verifies that DSPy exposes a
-    GEPA optimizer, prepares a stable evaluation payload, and then fails closed
-    until a concrete project-specific GEPA metric/program is configured. The
-    caller catches the exception and falls back to heuristic scoring.
+    With ``max_iterations <= 0`` this runs the dependency-free DSPy-compatible
+    proposal scoring scaffold against the current rubric/eval payload. That gives
+    cron and manual reports a real advisory scorer without requiring DSPy or a
+    live optimizer. Positive ``max_iterations`` remains reserved for explicit
+    manual GEPA optimizer experiments.
     """
     gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
     if not bool(gepa_config.get("enabled", False)):
         raise RuntimeError("GEPA scorer is disabled; set gepa_scorer.enabled=true for manual experiments")
 
+    max_iterations = int(gepa_config.get("max_iterations") or 0)
+    if max_iterations <= 0:
+        return _score_with_offline_program(proposals=proposals, findings=findings, config=config)
+
     try:
         import dspy  # type: ignore
     except ModuleNotFoundError as exc:  # pragma: no cover - depends on host env
-        raise ModuleNotFoundError("No module named 'dspy' (optional GEPA scorer dependency)") from exc
+        raise ModuleNotFoundError("No module named 'dspy' (optional GEPA optimizer dependency)") from exc
 
     if not (hasattr(dspy, "GEPA") or hasattr(dspy, "gepa")):
         raise RuntimeError("DSPy is installed, but GEPA optimizer is not available")
 
-    max_iterations = int(gepa_config.get("max_iterations") or 0)
-    if max_iterations <= 0:
-        raise RuntimeError("GEPA scorer is available but not configured for optimization runs; set gepa_scorer.max_iterations > 0")
-
-    # A full GEPA run needs a task-specific DSPy optimizer loop. The evaluation
-    # assets and dependency-free program scaffold are now part of the stable
-    # payload contract, but an enabled optimization run still remains manual-only
-    # until a concrete DSPy/GEPA invocation is wired and validated.
+    # A full optimizer run needs a task-specific metric and validated GEPA
+    # invocation. Keep it closed until that loop is implemented and tested.
     payload = build_gepa_payload(proposals=proposals, findings=findings, config=config)
     _ = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
-    raise RuntimeError("GEPA scorer adapter has eval cases, rubric, and DSPy program scaffold, but optimizer invocation is not configured yet")
+    raise RuntimeError("GEPA optimizer invocation is not configured yet; use max_iterations=0 for offline program evaluation")
+
+
+def _score_with_offline_program(
+    *,
+    proposals: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Run the dependency-free DSPy-compatible scoring scaffold locally."""
+    payload = build_gepa_payload(proposals=proposals, findings=findings, config=config)
+    program_module = _load_dspy_program_module()
+    batch = program_module.ProposalBatchScoringProgram()
+    scored = batch.forward(
+        proposals=proposals,
+        findings=findings,
+        rubric=payload["rubric"],
+    )
+    scores = scored.get("scores") if isinstance(scored, dict) else []
+    for score in scores:
+        if not isinstance(score, dict):
+            continue
+        rationale = str(score.get("rationale") or "")
+        if "offline" not in rationale.lower():
+            score["rationale"] = f"Offline DSPy-compatible program evaluation. {rationale}".strip()
+        score["auto_apply"] = False
+    return {
+        "adapter_version": ADAPTER_VERSION,
+        "mode": "offline_program_eval",
+        "optimizer": "not_configured",
+        "program": PROGRAM_NAME,
+        "scores": scores,
+        "rubric_version": payload["rubric"].get("version"),
+        "eval_case_count": len(payload["eval_cases"]),
+        "safety": payload["safety"],
+    }
+
+
+def _load_dspy_program_module() -> Any:
+    path = PLUGIN_DIR / "dspy_program.py"
+    spec = importlib.util.spec_from_file_location("hermes_self_improvement_dspy_program_runtime", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load DSPy program scaffold: {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module

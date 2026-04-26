@@ -11,8 +11,8 @@
     "max_tokens": 1800
   },
   "gepa_scorer": {
-    "enabled": false,
-    "mode": "candidate_comparison",
+    "enabled": true,
+    "mode": "offline_program_eval",
     "timeout": 120,
     "max_iterations": 0
   },
