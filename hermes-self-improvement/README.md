@@ -11,6 +11,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 - `--scorer gepa` は GEPA/DSPy 評価経路を通す。既定では dependency-free の offline program eval として実行し、score は `gepa-v0.1` になる。GEPA optimizer 本体はまだ手動実験用で、project-specific metric / invocation が無い場合は閉じておく。
 - `--scorer compare` は LLM と GEPA の両方で proposal を採点し、score delta / recommendation / risk / confidence の disagreement を report に出す。
 - LLM / GEPA / compare scorer は advisory only。`auto_apply` は常に `false` として扱い、無人 cron の自動適用許可には使わない。
+- `execution_mode` は cron prompt ではなく plugin CLI/config/policy で解決・検証する。初期 default は `report_only`。有効 mode は `report_only`, `dry_run_plan`, `apply_low_risk`, `apply_approved` で、未定義 command/capability は deny-by-default。
 
 ## CLI
 
@@ -18,6 +19,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 
 ```bash
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve status
+~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve status --mode dry_run_plan
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer llm --json
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer gepa --json
@@ -25,6 +27,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve gepa-eval --json
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve run --since-hours 24 --json --scorer llm
+~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve run --mode dry_run_plan --since-hours 24 --json --scorer compare
 ```
 
 開発中は direct module 実行でも確認できる。

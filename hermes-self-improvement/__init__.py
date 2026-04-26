@@ -23,6 +23,56 @@ UTC = timezone.utc
 
 DEFAULT_PREVIEW_CHARS = 1000
 DEFAULT_RETENTION_DAYS = 30
+DEFAULT_EXECUTION_MODE = "report_only"
+VALID_EXECUTION_MODES = {
+    "report_only",
+    "dry_run_plan",
+    "apply_low_risk",
+    "apply_approved",
+}
+RESERVED_EXECUTION_MODES = {"full_auto_with_policy"}
+DEFAULT_MODE_POLICY = {
+    "report_only": {
+        "commands": ["status", "analyze", "report", "run", "gepa-eval"],
+        "capabilities": {
+            "write_apply_plan": False,
+            "write_apply_attempt": False,
+            "write_ledger": False,
+            "mutate_skills": False,
+            "mutate_memory": False,
+        },
+    },
+    "dry_run_plan": {
+        "commands": ["status", "analyze", "report", "run", "generate_apply_plan"],
+        "capabilities": {
+            "write_apply_plan": True,
+            "write_apply_attempt": False,
+            "write_ledger": False,
+            "mutate_skills": False,
+            "mutate_memory": False,
+        },
+    },
+    "apply_low_risk": {
+        "commands": ["status", "apply-low-risk"],
+        "capabilities": {
+            "write_apply_plan": False,
+            "write_apply_attempt": True,
+            "write_ledger": True,
+            "mutate_skills": True,
+            "mutate_memory": False,
+        },
+    },
+    "apply_approved": {
+        "commands": ["status", "approve", "apply-approved"],
+        "capabilities": {
+            "write_apply_plan": False,
+            "write_apply_attempt": True,
+            "write_ledger": True,
+            "mutate_skills": True,
+            "mutate_memory": True,
+        },
+    },
+}
 SENSITIVE_ARG_KEYS = {
     "api_key", "token", "password", "secret", "authorization", "cookie",
     "credentials", "encryption_key", "key", "access_token", "refresh_token",
@@ -65,6 +115,8 @@ def _load_config(path: Path) -> dict[str, Any]:
         "retention_days": DEFAULT_RETENTION_DAYS,
         "data_dir": str(get_hermes_home() / "reports" / "self-improvement" / "state"),
         "report_dir": str(get_hermes_home() / "reports" / "self-improvement" / "daily"),
+        "execution_mode": DEFAULT_EXECUTION_MODE,
+        "mode_policy": DEFAULT_MODE_POLICY,
         "llm_scorer": {
             "provider": "auto",
             "model": None,
@@ -92,6 +144,59 @@ def _load_config(path: Path) -> dict[str, Any]:
     except Exception:
         pass
     return defaults
+
+
+def resolve_execution_mode(config: dict[str, Any], cli_mode: str | None = None) -> str:
+    """Resolve the effective execution mode with fail-safe defaults.
+
+    CLI-provided mode wins over plugin/local config. Unknown values are returned
+    as-is so policy validation can fail closed and report the specific problem.
+    """
+    requested = cli_mode or config.get("execution_mode") or DEFAULT_EXECUTION_MODE
+    return str(requested or DEFAULT_EXECUTION_MODE)
+
+
+def _mode_policy_from_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    policy = (config or {}).get("mode_policy")
+    if isinstance(policy, dict):
+        merged = {name: dict(value) for name, value in DEFAULT_MODE_POLICY.items()}
+        for mode, mode_policy in policy.items():
+            if isinstance(mode_policy, dict):
+                base = dict(merged.get(mode, {}))
+                base.update(mode_policy)
+                merged[str(mode)] = base
+        return merged
+    return DEFAULT_MODE_POLICY
+
+
+def validate_mode_action(
+    execution_mode: str,
+    command: str,
+    *,
+    required_capability: str | None = None,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return whether a command/capability is allowed by the effective mode.
+
+    The policy is deny-by-default: unknown modes, commands, and capabilities are
+    rejected until explicitly allowed by the effective mode policy.
+    """
+    mode = str(execution_mode or DEFAULT_EXECUTION_MODE)
+    policy = _mode_policy_from_config(config)
+    if mode not in policy or mode not in VALID_EXECUTION_MODES:
+        return {"allowed": False, "reason": "unknown_execution_mode"}
+
+    mode_policy = policy.get(mode) or {}
+    commands = set(mode_policy.get("commands") or [])
+    if command not in commands:
+        return {"allowed": False, "reason": "command_not_allowed"}
+
+    if required_capability:
+        capabilities = mode_policy.get("capabilities") or {}
+        if capabilities.get(required_capability) is not True:
+            return {"allowed": False, "reason": "capability_not_allowed"}
+
+    return {"allowed": True, "reason": "allowed"}
 
 
 def _now() -> str:
@@ -1235,33 +1340,57 @@ def run_pipeline(
     return out
 
 
+def _add_mode_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--mode",
+        choices=sorted(VALID_EXECUTION_MODES),
+        default=None,
+        help="Execution mode enforced by the plugin policy validator",
+    )
+
+
 def _setup_cli(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="self_improvement_cmd")
     p_status = sub.add_parser("status", help="Show observer status")
+    _add_mode_argument(p_status)
     p_status.set_defaults(func=_handle_cli)
     p_analyze = sub.add_parser("analyze", help="Analyze observations")
     p_analyze.add_argument("--since-hours", type=int, default=24)
     p_analyze.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
     p_analyze.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_analyze)
     p_analyze.set_defaults(func=_handle_cli)
     p_report = sub.add_parser("report", help="Analyze and write Markdown report")
     p_report.add_argument("--since-hours", type=int, default=24)
     p_report.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
     p_report.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_report)
     p_report.set_defaults(func=_handle_cli)
     p_run = sub.add_parser("run", help="Analyze, score proposals, and write report")
     p_run.add_argument("--since-hours", type=int, default=24)
     p_run.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
     p_run.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_run)
     p_run.set_defaults(func=_handle_cli)
     p_gepa_eval = sub.add_parser("gepa-eval", help="Run bundled offline GEPA scorer regression cases")
     p_gepa_eval.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_gepa_eval)
     p_gepa_eval.set_defaults(func=_handle_cli)
 
 
 def _handle_cli(args: argparse.Namespace) -> None:
     config = _load_config(Path(__file__).with_name("config.json"))
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
+    execution_mode = resolve_execution_mode(config, getattr(args, "mode", None))
+    mode_decision = validate_mode_action(execution_mode, cmd, config=config)
+    if not mode_decision.get("allowed"):
+        print(json.dumps({
+            "error": "execution_mode_denied",
+            "execution_mode": execution_mode,
+            "command": cmd,
+            "reason": mode_decision.get("reason"),
+        }, ensure_ascii=False, indent=2))
+        raise SystemExit(2)
     if cmd == "status":
         path = _event_path(config)
         events = _load_events(path, limit=1000)
@@ -1269,6 +1398,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "plugin": PLUGIN_NAME,
             "enabled": bool(config.get("enabled", True)),
             "event_path": str(path),
+            "execution_mode": execution_mode,
             "retention_days": int(config.get("retention_days", DEFAULT_RETENTION_DAYS)),
             "event_count_sample": len(events),
             "last_event_ts": events[-1].get("ts") if events else None,
