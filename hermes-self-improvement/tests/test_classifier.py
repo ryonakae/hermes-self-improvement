@@ -59,3 +59,17 @@ def test_terminal_nonzero_exit_still_classifies_as_error():
     result = json.dumps({"exit_code": 2, "output": "command failed"})
 
     assert mod.classify_tool_result("terminal", result) == ("error", "terminal_nonzero_exit")
+
+
+def test_truncated_success_preview_is_not_failed_by_content_words():
+    mod = load_plugin_module()
+    result = '{"success": true, "diff": "--- a/file\\n+++ b/file\\n@@ timeout not found permission denied'
+
+    assert mod.classify_tool_result("patch", result) == ("ok", "")
+
+
+def test_truncated_search_files_preview_is_not_failed_by_content_words():
+    mod = load_plugin_module()
+    result = '{"total_count": 12, "matches": [{"content": "permission denied timeout not found'
+
+    assert mod.classify_tool_result("search_files", result) == ("ok", "")

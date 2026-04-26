@@ -79,3 +79,4 @@ bin/hermes-self-improve analyze --since-hours 24 --json --scorer gepa
 イベント本文や引数は全文保存せず、redacted preview と hash を保存する。
 `pre_tool_call` は `session_id` / `tool_call_id` が揃った行だけ保存する。古い partial 行は分析時に除外し、レポートのメタ情報に除外件数を出す。
 `retention_days`（既定30日）より古いイベントは runtime observer の初回記録前に prune する。JSON として壊れた行は削除し、timestamp が無い/読めない古い行は手動確認の余地を残すため保持する。
+分析時には historical `post_tool_call` の `result_preview` を再分類する。古い classifier で error 扱いされた成功 payload や、truncated JSON preview の `success: true` / `total_count` / `content` などは report 上で成功扱いに戻し、元の JSONL は書き換えない。

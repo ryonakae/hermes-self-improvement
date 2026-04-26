@@ -385,9 +385,37 @@ def _is_partial_pre_tool_event(ev: dict[str, Any]) -> bool:
     )
 
 
-def _analysis_events(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
-    filtered = [ev for ev in events if not _is_partial_pre_tool_event(ev)]
-    return filtered, len(events) - len(filtered)
+def _analysis_events(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, int]:
+    filtered = [dict(ev) for ev in events if not _is_partial_pre_tool_event(ev)]
+    reclassified = _reclassify_historical_tool_results(filtered)
+    return filtered, len(events) - len(filtered), reclassified
+
+
+def _reclassify_historical_tool_results(events: list[dict[str, Any]]) -> int:
+    """Refresh post_tool_call status/error_kind from stored previews.
+
+    Older telemetry rows may have been classified by raw text search, so successful
+    structured results that merely mentioned words like "timeout" were stored as
+    failures. Reclassify during analysis so reports improve immediately without
+    rewriting the source JSONL.
+    """
+    changed = 0
+    for ev in events:
+        if ev.get("event") != "post_tool_call":
+            continue
+        tool_name = str(ev.get("tool_name") or "")
+        result_preview = ev.get("result_preview")
+        if not tool_name or not isinstance(result_preview, str) or not result_preview:
+            continue
+        status, error_kind = classify_tool_result(tool_name, result_preview)
+        old_status = ev.get("status") or "ok"
+        old_error_kind = ev.get("error_kind") or ""
+        if status != old_status or error_kind != old_error_kind:
+            ev["status"] = status
+            ev["error_kind"] = error_kind
+            ev["analysis_reclassified"] = True
+            changed += 1
+    return changed
 
 
 def classify_tool_result(tool_name: str, result_text: str) -> tuple[str, str]:
@@ -400,6 +428,8 @@ def classify_tool_result(tool_name: str, result_text: str) -> tuple[str, str]:
         parsed = json.loads(text)
     except Exception:
         parsed = None
+    if parsed is None and _looks_like_structured_success_preview(tool_name, text):
+        return "ok", ""
     if isinstance(parsed, dict):
         if parsed.get("error") or parsed.get("success") is False:
             status = "error"
@@ -438,6 +468,34 @@ def _is_structured_success_result(tool_name: str, parsed: dict[str, Any]) -> boo
     return False
 
 
+def _looks_like_structured_success_preview(tool_name: str, text: str) -> bool:
+    """Best-effort success detection for truncated JSON previews.
+
+    `result_preview` may be truncated before it becomes valid JSON. The prefix is
+    still useful: if it clearly looks like one of our success schemas, treat text
+    fields as content instead of scanning them for error-looking words.
+    """
+    stripped = (text or "").lstrip()
+    lowered = stripped.lower()
+    if lowered.startswith('{"success": true'):
+        return True
+    if tool_name == "read_file" and (
+        lowered.startswith('{"content":')
+        or lowered.startswith('{"total_lines":')
+        or '"content"' in lowered[:120]
+    ):
+        return True
+    if tool_name == "search_files" and (
+        lowered.startswith('{"total_count":')
+        or lowered.startswith('{"matches":')
+        or lowered.startswith('{"files":')
+    ):
+        return True
+    if tool_name in {"skill_view", "skills_list"} and lowered.startswith('{"success": true'):
+        return True
+    return False
+
+
 def _classify_error_text(text: str) -> str:
     lowered = (text or "").lower()
     if "operation not permitted" in lowered or "permission denied" in lowered:
@@ -468,7 +526,7 @@ class AnalysisResult:
 
 
 def analyze_events(events: list[dict[str, Any]], since: datetime, until: datetime) -> AnalysisResult:
-    events, filtered_partial_event_count = _analysis_events(events)
+    events, filtered_partial_event_count, reclassified_tool_result_count = _analysis_events(events)
     by_event = Counter(ev.get("event") or "unknown" for ev in events)
     tool_calls = [ev for ev in events if ev.get("event") == "post_tool_call"]
     tool_errors = [ev for ev in tool_calls if ev.get("status") in {"error", "warning"}]
@@ -507,6 +565,7 @@ def analyze_events(events: list[dict[str, Any]], since: datetime, until: datetim
         "tool_errors_by_tool": dict(errors_by_tool),
         "tool_errors_by_kind": dict(errors_by_kind),
         "filtered_partial_event_count": filtered_partial_event_count,
+        "reclassified_tool_result_count": reclassified_tool_result_count,
     }
     return AnalysisResult(since=since, until=until, events=events, summary=summary, findings=findings, proposals=proposals)
 
@@ -818,6 +877,8 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]]) -> str:
     ]
     if s.get("filtered_partial_event_count"):
         lines.append(f"- 分析除外: partial `pre_tool_call` {s['filtered_partial_event_count']}件")
+    if s.get("reclassified_tool_result_count"):
+        lines.append(f"- 分析時再分類: tool result {s['reclassified_tool_result_count']}件")
     lines.extend([
         "",
         "## 観測サマリー",
