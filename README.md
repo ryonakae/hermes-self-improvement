@@ -178,7 +178,7 @@ Mutation-capable tools も CLI と同じ confirmation と expected hash を要�
 - `gepa`: `hermes_self_improvement/gepa_adapter.py` 経由の offline DSPy-compatible scorer
 - `compare`: LLM と GEPA の disagreement を report に出す
 
-現在の `--scorer gepa` は本物の optimizer run ではありません。`max_iterations > 0` の optimizer 実行は project-specific metric / invocation がないため fail closed します。
+現在の `--scorer gepa` は offline baseline で、本物の optimizer run ではありません。これは次の重点実装として見直し済みです。計画は `.hermes/plans/2026-04-28_012243-dspy-gepa-integration.md` にあります。方針は、DSPy を optional dependency として追加し、実 DSPy module / GEPA compile / compiled artifact scoring を入れることです。ただし scorer は advisory のままで、GEPA の点数だけで `auto_apply` は許可しません。
 
 ## ディレクトリ
 
