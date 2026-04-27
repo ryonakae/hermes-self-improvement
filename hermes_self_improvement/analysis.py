@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover - package import path
-    from .observer import _analysis_events
+    from .observer import _analysis_events, _sha256_text
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from observer import _analysis_events
+    from observer import _analysis_events, _sha256_text
 
 @dataclass
 class AnalysisResult:
@@ -141,6 +142,48 @@ def _explicit_candidate_findings(events: list[dict[str, Any]]) -> tuple[list[dic
             continue
         findings.append(finding)
     return findings, dropped
+
+
+def _dedupe_repeated_nonempty_lines(content: str) -> tuple[str, int]:
+    seen: set[str] = set()
+    output: list[str] = []
+    duplicate_count = 0
+    for line in content.splitlines(keepends=True):
+        key = line.strip()
+        if key and not key.startswith("#"):
+            if key in seen:
+                duplicate_count += 1
+                continue
+            seen.add(key)
+        output.append(line)
+    return "".join(output), duplicate_count
+
+
+def scan_memory_compression_candidates(memory_paths: list[str | Path], *, created_at: datetime | None = None) -> list[dict[str, Any]]:
+    """Return dry-run candidate events for simple memory compression opportunities."""
+    ts = (created_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    events: list[dict[str, Any]] = []
+    for path_value in memory_paths:
+        path = Path(path_value).expanduser()
+        if not path.is_file():
+            continue
+        before = path.read_text(encoding="utf-8", errors="replace")
+        after, duplicate_count = _dedupe_repeated_nonempty_lines(before)
+        if duplicate_count <= 0 or after == before:
+            continue
+        events.append({
+            "ts": ts.isoformat(),
+            "event": "self_improvement_candidate",
+            "candidate_kind": "memory_compression_candidate",
+            "target_path": str(path),
+            "before_hash": _sha256_text(before),
+            "after_text": after,
+            "reason": f"Detected {duplicate_count} duplicate non-empty memory lines that can be compressed after approval.",
+            "count": duplicate_count,
+            "duplicate_line_count": duplicate_count,
+            "auto_apply": False,
+        })
+    return events
 
 
 def propose_from_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:

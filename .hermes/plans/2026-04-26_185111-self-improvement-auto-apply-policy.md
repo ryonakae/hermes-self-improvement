@@ -391,11 +391,12 @@ Completed:
 - read-only `retention-report` preview for old apply-plan / ledger / apply-attempt / approval artifacts, with category filtering and malformed artifact details; guarded `retention-prune` can delete expired candidates only in `apply_approved` mode with `--confirm-prune` and matching `expected_artifact_list_hash`;
 - approval-gated `skill_create` / `skill_delete` / `skill_rename` / `skill_merge` lifecycle mutations: create requires a missing target and rollback deletes the created file; delete requires an existing target and rollback restores the full before snapshot; rename requires source exists / destination missing and rollback renames destination back to source; merge replaces destination, deletes source, and records multi-target rollback data for both files. All use `apply-approved` and never qualify for low-risk unattended apply;
 - approval-gated `memory_delete`: requires an existing target under configured `memory_roots`, uses `delete_file`, and restores the full before snapshot on rollback. Root escapes and non-memory targets fail closed;
-- high-level proposal generation for explicit `memory_compression_candidate` and `skill_lifecycle_candidate` findings, including `self_improvement_candidate` events: produces approval-required `memory_compress` / skill lifecycle proposals with `auto_apply=false`, leaving mutation authority to apply-plan + approval gate.
+- high-level proposal generation for explicit `memory_compression_candidate` and `skill_lifecycle_candidate` findings, including `self_improvement_candidate` events: produces approval-required `memory_compress` / skill lifecycle proposals with `auto_apply=false`, leaving mutation authority to apply-plan + approval gate;
+- dry-run memory compression scanning: `scan_memory_compression_candidates()` emits `self_improvement_candidate` events for simple duplicate-line memory compression opportunities without mutating files.
 
 Remaining:
 
-- later: detector/scanner work that emits concrete `self_improvement_candidate` events for memory compression / skill lifecycle changes; keep explicit confirmation, expected hashes, approval artifacts, and rollback ledger requirements mandatory.
+- later: richer detector/scanner work for skill lifecycle and semantic memory compression candidates; keep explicit confirmation, expected hashes, approval artifacts, and rollback ledger requirements mandatory.
 
 Implemented tool parity surface:
 
@@ -412,7 +413,7 @@ Implemented tool parity surface:
 
 Next implementation slice:
 
-- next: add detector/scanner work that emits concrete `self_improvement_candidate` events for memory compression / skill lifecycle changes. Retention artifact cleanup now has a guarded prune path, large rewrite / memory compression have an approval-gated whole-file replacement substrate, skill create / delete / rename / merge have approval-gated lifecycle mutations, memory deletion has an approval-gated root-bound delete path, and explicit high-level findings/events can now become approval-required proposals;
+- next: add richer detector/scanner work for skill lifecycle and semantic memory compression candidates. Retention artifact cleanup now has a guarded prune path, large rewrite / memory compression have an approval-gated whole-file replacement substrate, skill create / delete / rename / merge have approval-gated lifecycle mutations, memory deletion has an approval-gated root-bound delete path, explicit high-level findings/events can become approval-required proposals, and simple duplicate-line memory compression can emit dry-run candidate events;
 - keep tool handlers aligned with CLI policy gates as new commands are added;
 - if retention cleanup moves beyond preview, design explicit confirmation / expected artifact list / hash guards first.
 

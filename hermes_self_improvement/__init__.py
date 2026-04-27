@@ -216,6 +216,7 @@ try:  # pragma: no cover - package import path
         _risk_rank,
         analyze_events,
         propose_from_findings,
+        scan_memory_compression_candidates,
     )
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import (
@@ -227,6 +228,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _risk_rank,
         analyze_events,
         propose_from_findings,
+        scan_memory_compression_candidates,
     )
 
 try:  # pragma: no cover - package import path

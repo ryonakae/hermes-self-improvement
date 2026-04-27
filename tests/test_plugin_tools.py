@@ -200,6 +200,7 @@ def test_apply_approved_tool_returns_preview_without_mutation(tmp_path):
         item_id=plan["items"][0]["item_id"],
         config=config,
         created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24 * 365,
     )
 
     raw = mod._handle_self_improvement_apply_approved_tool({

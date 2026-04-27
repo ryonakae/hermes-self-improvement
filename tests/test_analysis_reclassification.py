@@ -213,3 +213,62 @@ def test_analyze_events_drops_malformed_explicit_candidate_event():
     assert result.summary["dropped_explicit_candidate_count"] == 1
     assert result.findings == []
     assert result.proposals == []
+
+
+
+def test_scan_memory_compression_candidates_emits_event_for_duplicate_lines(tmp_path):
+    mod = load_plugin_module()
+    memory_file = tmp_path / "memories" / "MEMORY.md"
+    before = "# Memory\n\nAlpha\nBeta\nAlpha\n\nGamma\nBeta\n"
+    expected_after = "# Memory\n\nAlpha\nBeta\n\nGamma\n"
+    memory_file.parent.mkdir(parents=True)
+    memory_file.write_text(before, encoding="utf-8")
+
+    events = mod.scan_memory_compression_candidates([str(memory_file)])
+
+    assert len(events) == 1
+    event = events[0]
+    assert event["event"] == "self_improvement_candidate"
+    assert event["candidate_kind"] == "memory_compression_candidate"
+    assert event["target_path"] == str(memory_file)
+    assert event["before_hash"] == mod._sha256_text(before)
+    assert event["after_text"] == expected_after
+    assert event["duplicate_line_count"] == 2
+    assert event["auto_apply"] is False
+
+
+def test_scan_memory_compression_candidates_skips_files_without_duplicates(tmp_path):
+    mod = load_plugin_module()
+    memory_file = tmp_path / "memories" / "MEMORY.md"
+    memory_file.parent.mkdir(parents=True)
+    memory_file.write_text("# Memory\n\nAlpha\nBeta\n", encoding="utf-8")
+
+    events = mod.scan_memory_compression_candidates([str(memory_file)])
+
+    assert events == []
+
+
+def test_scan_memory_compression_candidates_skips_missing_files(tmp_path):
+    mod = load_plugin_module()
+
+    events = mod.scan_memory_compression_candidates([str(tmp_path / "missing.md")])
+
+    assert events == []
+
+
+
+def test_memory_compression_scanner_events_flow_into_analysis_proposals(tmp_path):
+    mod = load_plugin_module()
+    now = datetime(2026, 4, 28, 23, 0, tzinfo=timezone.utc)
+    memory_file = tmp_path / "memories" / "MEMORY.md"
+    memory_file.parent.mkdir(parents=True)
+    memory_file.write_text("# Memory\n\nAlpha\nAlpha\n", encoding="utf-8")
+
+    events = mod.scan_memory_compression_candidates([str(memory_file)], created_at=now)
+    result = mod.analyze_events(events, now, now)
+
+    assert result.summary["explicit_candidate_count"] == 1
+    assert result.findings[0]["kind"] == "memory_compression_candidate"
+    assert result.proposals[0]["change_type"] == "memory_compress"
+    assert result.proposals[0]["target_path"] == str(memory_file)
+    assert result.proposals[0]["auto_apply"] is False
