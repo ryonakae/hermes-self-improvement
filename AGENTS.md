@@ -113,7 +113,7 @@ root 直下に `tools.py` は置きません。Hermes core の `tools.registry` 
 - `hermes_self_improvement/cli.py`: CLI parser と pipeline orchestration
 - `hermes_self_improvement/config.py`: execution mode と deny-by-default policy
 - `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry、retention
-- `hermes_self_improvement/analysis.py`: event aggregation と proposal generation
+- `hermes_self_improvement/analysis.py`: event aggregation と proposal generation。explicit `memory_compression_candidate` / `skill_lifecycle_candidate` finding は approval-required proposal に変換するが、`auto_apply=false` のままにする。
 - `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
 - `hermes_self_improvement/ledger.py`: apply attempt、ledger、rollback

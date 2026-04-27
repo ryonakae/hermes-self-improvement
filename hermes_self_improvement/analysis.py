@@ -87,15 +87,76 @@ def _compact_event(ev: dict[str, Any]) -> dict[str, Any]:
 def propose_from_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     proposals: list[dict[str, Any]] = []
     for f in findings:
-        tool = f.get("tool_name") or "unknown"
-        error_kind = f.get("error_kind") or "unknown"
-        severity = f.get("severity") or "low"
-        count = f.get("count") or 0
-        risk = "medium" if severity in {"medium", "high"} else "low"
-        proposal = _proposal_template_for_finding(f, tool=tool, error_kind=error_kind, risk=risk, count=count)
+        special = _proposal_for_explicit_candidate(f)
+        if special is None and f.get("kind") in {"memory_compression_candidate", "skill_lifecycle_candidate"}:
+            continue
+        if special is not None:
+            proposal = special
+        else:
+            tool = f.get("tool_name") or "unknown"
+            error_kind = f.get("error_kind") or "unknown"
+            severity = f.get("severity") or "low"
+            count = f.get("count") or 0
+            risk = "medium" if severity in {"medium", "high"} else "low"
+            proposal = _proposal_template_for_finding(f, tool=tool, error_kind=error_kind, risk=risk, count=count)
         proposal["id"] = f"proposal-{len(proposals)+1}"
         proposals.append(proposal)
     return _merge_duplicate_proposals(proposals)
+
+
+_APPROVAL_REQUIRED_SKILL_LIFECYCLE_ACTIONS = {"skill_create", "skill_delete", "skill_rename", "skill_merge"}
+
+
+def _proposal_for_explicit_candidate(finding: dict[str, Any]) -> dict[str, Any] | None:
+    kind = finding.get("kind")
+    if kind == "memory_compression_candidate":
+        after_text = finding.get("after_text") or finding.get("new_content") or finding.get("replacement_content")
+        target_path = finding.get("target_path") or finding.get("path") or finding.get("file_path")
+        if not isinstance(after_text, str) or not after_text or not target_path:
+            return None
+        return {
+            "target": "memory",
+            "action": "memory_compress",
+            "change_type": "memory_compress",
+            "risk": "high",
+            "confidence": finding.get("confidence") or "medium",
+            "title": finding.get("title") or "Compress memory file after approval",
+            "reason": finding.get("reason") or "Memory file has redundant entries that can be compressed.",
+            "evidence_kind": kind,
+            "target_path": str(target_path),
+            "before_hash": finding.get("before_hash"),
+            "after_text": after_text,
+            "recommendation": "approval_required",
+            "count": finding.get("count") or 0,
+            "auto_apply": False,
+        }
+    if kind == "skill_lifecycle_candidate":
+        action = str(finding.get("action") or finding.get("change_type") or "")
+        if action not in _APPROVAL_REQUIRED_SKILL_LIFECYCLE_ACTIONS:
+            return None
+        target_path = finding.get("target_path") or finding.get("path") or finding.get("file_path") or finding.get("skill_path")
+        if not target_path:
+            return None
+        proposal = {
+            "target": "skill",
+            "action": action,
+            "change_type": action,
+            "risk": "high",
+            "confidence": finding.get("confidence") or "medium",
+            "title": finding.get("title") or f"Apply {action} after approval",
+            "reason": finding.get("reason") or f"Explicit {action} candidate requires human approval.",
+            "evidence_kind": kind,
+            "target_path": str(target_path),
+            "before_hash": finding.get("before_hash"),
+            "recommendation": "approval_required",
+            "count": finding.get("count") or 0,
+            "auto_apply": False,
+        }
+        for key in ("destination_path", "source_path", "after_text", "new_content", "replacement_content"):
+            if finding.get(key) is not None:
+                proposal[key] = finding.get(key)
+        return proposal
+    return None
 
 
 def _merge_duplicate_proposals(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
