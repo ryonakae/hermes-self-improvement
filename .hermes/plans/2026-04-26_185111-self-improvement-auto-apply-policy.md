@@ -396,7 +396,7 @@ Completed:
 
 Remaining:
 
-- immediate priority change from 2026-04-28: implement real DSPy / GEPA integration before adding more candidate scanners. See `.hermes/plans/2026-04-28_012243-dspy-gepa-integration.md`.
+- immediate priority change from 2026-04-28: implement real DSPy / GEPA integration before adding more candidate scanners, and treat DSPy/GEPA as a required dependency for the evaluator path rather than an optional extra. See `.hermes/plans/2026-04-28_012243-dspy-gepa-integration.md`.
 - later: richer detector/scanner work for skill rename/merge and semantic memory compression candidates; keep explicit confirmation, expected hashes, approval artifacts, and rollback ledger requirements mandatory.
 
 Implemented tool parity surface:
@@ -414,7 +414,7 @@ Implemented tool parity surface:
 
 Next implementation slice:
 
-- next: implement real DSPy / GEPA integration as the plugin's scorer centerpiece. Follow `.hermes/plans/2026-04-28_012243-dspy-gepa-integration.md`: add optional DSPy dependency metadata, split offline baseline from real DSPy program evaluation, add a GEPA feedback metric, add explicit `gepa-optimize` CLI/artifacts, then wire compiled GEPA artifacts into `--scorer gepa` while keeping all scorer output advisory and `auto_apply=false`;
+- next: implement real DSPy / GEPA integration as the plugin's scorer centerpiece. Follow `.hermes/plans/2026-04-28_012243-dspy-gepa-integration.md`: add required DSPy dependency metadata, remove dependency-free offline baseline from runtime scoring behavior, add real DSPy program evaluation, add a GEPA feedback metric, add explicit `gepa-optimize` CLI/artifacts, then wire compiled GEPA artifacts into `--scorer gepa`; make GEPA/LLM comparison the default decision input for `report` / `run` / `generate-apply-plan` while keeping `analyze` lightweight, keep scorer output advisory and `auto_apply=false`, block unattended apply on material scorer disagreement using policy-configurable change-type thresholds, and model evaluator self-improvement as candidate generation plus approval-gated `evaluator_promote` that updates runtime `active-evaluator.json` rather than silently replacing the active scorer or frequently rewriting repo config;
 - after that: add richer detector/scanner work for skill rename/merge and semantic memory compression candidates. Retention artifact cleanup now has a guarded prune path, large rewrite / memory compression have an approval-gated whole-file replacement substrate, skill create / delete / rename / merge have approval-gated lifecycle mutations, memory deletion has an approval-gated root-bound delete path, explicit high-level findings/events can become approval-required proposals, and simple duplicate-line memory compression plus explicitly deprecated/obsolete skill deletion can emit dry-run candidate events;
 - keep tool handlers aligned with CLI policy gates as new commands are added;
 - if retention cleanup moves beyond preview, design explicit confirmation / expected artifact list / hash guards first.

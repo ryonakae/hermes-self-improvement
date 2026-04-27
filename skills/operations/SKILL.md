@@ -12,8 +12,11 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 
 - Hermes 本体や upstream-managed code を直接編集しない。plugin 内で解決する。
 - Runtime hook は観測専用にする。hook 内で LLM、GEPA optimizer、skill patch、memory edit、重い集計を実行しない。
-- 問題抽出、proposal 生成、採点、report、apply-plan は CLI / cron / offline evaluator から明示的に実行する。
-- LLM / GEPA scoring は advisory only。`auto_apply` は常に false 扱いにし、無人変更の許可として使わない。
+- 問題抽出、proposal 生成、採点、report、apply-plan は CLI / cron / explicit evaluator command から明示的に実行する。
+- DSPy/GEPA は `hermes-self-improvement` plugin の evaluator path では必須依存として扱う。ただし hook / plugin discovery path では lazy import を維持し、Hermes runtime 全体の必須依存にはしない。
+- Runtime scorer の `--scorer gepa` は real DSPy / GEPA path を使い、dependency-free offline baseline に黙って fallback しない。deterministic scaffold は必要なら tests / fixtures / private helper に閉じる。
+- LLM / GEPA scoring は advisory only。`auto_apply` は常に false 扱いにし、無人変更の許可として使わない。GEPA/LLM comparison を self-improvement decision の default input とし、score / recommendation / risk / confidence / target / rationale の material disagreement は human review / approval-required に倒して unattended apply を block する。material 判定は change type ごとの policy config で扱い、risk / recommendation disagreement は常に block、memory / lifecycle / destructive / broad change は厳しめ、typo / pitfall / validation addition は score / confidence threshold だけ少し緩めてもよい。`report` / `run` / `generate-apply-plan` は compare default、軽量 `analyze` は heuristic default でよい。
+- Evaluator 自体も自己改善対象にする。GEPA/LLM disagreement、human approval/rejection、rollback/failure ledger、regression eval cases から candidate evaluator を生成・評価してよいが、active evaluator への昇格は既存 approval artifact model に乗せた approval-gated `evaluator_promote` とし、candidate hash / active-before pointer/hash / regression result hash / rollback pointer を束縛して silent replacement を禁止する。
 - `execution_mode` と capability gate は prompt ではなく plugin CLI / config / policy code で検証する。
 - 変更前に `git status --short` と対象 diff を確認し、無関係な変更を巻き戻さない。
 

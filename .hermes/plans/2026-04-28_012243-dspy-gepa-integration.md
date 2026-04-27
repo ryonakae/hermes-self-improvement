@@ -4,7 +4,7 @@
 
 **Goal:** Make real DSPy / GEPA optimization a first-class feature of `hermes-self-improvement`, not just an offline scorer scaffold.
 
-**Architecture:** Keep hook/runtime observation lightweight. Add optional DSPy dependency and a real DSPy module + GEPA compile path under explicit CLI/config control. GEPA output remains advisory for auto-apply safety: it may improve scoring, ranking, confidence, and proposal text, but it must never grant unattended mutation permission by itself.
+**Architecture:** Keep hook/runtime observation lightweight. Make DSPy/GEPA a required runtime dependency for this plugin's self-improvement evaluator path, while still lazy-importing it so hooks stay cheap and safe. Add a real DSPy module + GEPA compile path under explicit CLI/config control. GEPA output remains advisory for auto-apply safety: it may improve scoring, ranking, confidence, and proposal text, but it must never grant unattended mutation permission by itself.
 
 **Tech Stack:** Python, DSPy `GEPA`, existing `hermes_self_improvement` scoring pipeline, repo-tracked eval cases, JSON artifacts under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/`.
 
@@ -86,17 +86,42 @@ bin/hermes-self-improve gepa-optimize \
   --max-full-evals 2 \
   --json
 
-# Use latest compiled GEPA artifact for scoring
+# Decision paths use compare by default
+bin/hermes-self-improve report --since-hours 24 --json
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
+
+# Observation/classification can stay cheap
+bin/hermes-self-improve analyze --since-hours 24 --json
+
+# Explicit GEPA scorer still available for targeted scorer inspection
 bin/hermes-self-improve report --since-hours 24 --scorer gepa --json
 ```
 
-`--scorer compare` should compare LLM scoring with the active GEPA scorer. If GEPA is unavailable, the comparison must show `gepa_scorer_error` clearly.
+`--scorer compare` should compare LLM scoring with the active GEPA scorer. GEPA/LLM comparison is the default decision input for self-improvement apply planning. If GEPA is unavailable, the comparison must show `gepa_scorer_error` clearly. If GEPA and LLM materially disagree, the proposal must be routed to human review / approval-required handling and must not qualify for unattended apply. Materiality is change-type aware: heavier classes use stricter thresholds than typo / pitfall / validation additions, with risk and recommendation disagreement always blocking unattended apply.
 
 ## Dependency strategy
 
-### Task 1: Add optional package metadata
+Decision from Q1: use **A**. The `hermes-self-improvement` plugin installed environment requires DSPy/GEPA as a normal dependency, while hook/plugin discovery paths must lazy-import DSPy so lightweight observation stays cheap and safe. Do not make DSPy a Hermes-runtime-wide dependency.
 
-**Objective:** Make DSPy installable as an optional dependency without forcing every plugin load to import it.
+Decision from Q2: use **B**. Remove the dependency-free offline baseline from runtime scoring behavior. `--scorer gepa` should require DSPy and should never silently fall back to a deterministic scaffold. Keep any deterministic baseline only as test fixture/helper code, not as a user-facing scorer mode.
+
+Decision from Q3: use **B**. LLM and GEPA scorers should be compared by default for self-improvement decisions. Any material disagreement in score, recommendation, risk, confidence, target, or rationale should route the item to human review / approval-required handling and must block unattended apply.
+
+Decision from Q4: use **C**. Material disagreement thresholds should vary by change type. Memory, skill lifecycle, large rewrite, trigger changes, deletion, merge, rename, and compression use strict thresholds. Low-risk typo / pitfall / validation additions may use slightly looser score/confidence thresholds, but risk or recommendation disagreement still blocks unattended apply. The initial implementation should expose this as policy config rather than hard-coding one global threshold.
+
+Decision from Q5: use **C**. `report` should default to GEPA/LLM `compare`, and `generate-apply-plan` should require or default to `compare` because it feeds self-improvement decisions. Lightweight `analyze` can remain heuristic because it is observation/classification, not a mutation-planning decision. In short: decision paths use compare; observation paths can stay cheap.
+
+Boundary correction: optimizer scheduling is not a plugin responsibility. The plugin provides explicit `gepa-optimize` / eval / report commands, artifacts, config, and policy gates. Whether those commands run manually, from cron, or from another operator workflow belongs to cron/job configuration outside the plugin.
+
+Evaluator self-improvement goal: the proposal evaluator itself should improve over time. GEPA/LLM comparison, historical proposal outcomes, human approvals/rejections, rollback/failure ledgers, and regression eval cases should feed future evaluator training/evaluation. The plugin may generate candidate evaluator versions and evaluation reports, but active evaluator promotion must be explicit, versioned, auditable, approval-gated, and fail-closed; a candidate evaluator must not silently replace the active scorer just because it was newly optimized.
+
+Decision from Q6: use **C**. Active evaluator promotion should reuse the existing approval artifact model. Evaluator promotion is a high-impact self-improvement change, so it should be represented as an approval-required operation with candidate id/path, active-before pointer/hash, candidate hash, regression result hash, expiry, and rollback pointer/config data.
+
+Decision from Q7: use **C**. Repo-tracked `config.json` may define defaults, but the active evaluator pointer should live as runtime state under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/gepa/active-evaluator.json`. Promotion updates this pointer through the approval-gated `evaluator_promote` path, with hash-bound rollback data. Do not frequently rewrite repo-tracked config just to change the active evaluator.
+
+### Task 1: Add package metadata with required DSPy / GEPA dependency
+
+**Objective:** Make DSPy / GEPA an explicit required dependency for `hermes-self-improvement` installations, while still avoiding top-level imports so hook/plugin discovery remains lightweight.
 
 **Files:**
 
@@ -107,12 +132,22 @@ bin/hermes-self-improve report --since-hours 24 --scorer gepa --json
 **Implementation notes:**
 
 - Add project metadata if none exists.
-- Add optional extra, likely:
+- Add DSPy as a normal project dependency, not only an extra:
+
+```toml
+[project]
+dependencies = [
+  "dspy>=3.1,<4",
+]
+```
+
+- Optional provider extras may still exist for convenience, but the core evaluator assumes `dspy` is installed:
 
 ```toml
 [project.optional-dependencies]
-gepa = [
-  "dspy>=3.1,<4",
+providers = [
+  "openai>=2",
+  "anthropic>=0.90",
 ]
 ```
 
@@ -120,7 +155,7 @@ gepa = [
 - Add installation docs:
 
 ```bash
-python3 -m pip install -e '.[gepa]'
+python3 -m pip install -e .
 ```
 
 **Tests / verification:**
@@ -134,11 +169,11 @@ print(importlib.util.find_spec('dspy') is not None)
 PY
 ```
 
-Expected before installation: package still loads and tests pass, `dspy` may be absent.
+Expected before installation: plugin hook/import paths still avoid importing `dspy`, but the package metadata makes `dspy` required for a complete installed evaluator environment. In this current Hermes runtime, the built-in `dspy` skill exists, but the Python package check currently reports `dspy.spec=False`; implementing this task should make `importlib.util.find_spec('dspy') is not None` true after installation.
 
 ### Task 2: Split offline baseline from real DSPy program
 
-**Objective:** Keep the deterministic baseline, but add a real DSPy implementation when the dependency exists.
+**Objective:** Remove the deterministic baseline from runtime scorer behavior and replace it with a real DSPy implementation. Deterministic scoring may remain only in tests/fixtures to keep unit tests offline and stable.
 
 **Files:**
 
@@ -149,10 +184,11 @@ Expected before installation: package still loads and tests pass, `dspy` may be 
 
 **Design:**
 
-- Keep dependency-free classes as `OfflineProposalScoringProgram` / `OfflineProposalBatchScoringProgram` or equivalent.
+- Move dependency-free deterministic scoring out of runtime scorer code into test fixtures/helpers, or keep it behind private test-only helpers if needed.
 - Add lazy helpers:
 
 ```python
+def require_dspy() -> Any: ...
 def dspy_available() -> bool: ...
 def build_dspy_program(*, lm_config: dict[str, Any] | None = None) -> Any: ...
 ```
@@ -223,7 +259,7 @@ Implementation should follow current DSPy GEPA docs, but hide API differences be
 
 ### Task 5: Implement explicit optimizer command
 
-**Objective:** Add an operator-controlled command for real GEPA compile runs.
+**Objective:** Add an operator-controlled command for real GEPA compile runs. Scheduling this command is outside plugin scope; cron or operator workflows may invoke it, but the plugin only owns the command, artifacts, config validation, budget handling, and safety/policy gates.
 
 **Files:**
 
@@ -291,16 +327,116 @@ bin/hermes-self-improve gepa-optimize \
 
 1. If config points to a compiled program artifact and DSPy is installed, load it and score proposals.
 2. Else if config requests live DSPy program eval and DSPy is installed, run the unoptimized DSPy program.
-3. Else run the deterministic offline baseline if allowed.
-4. If the user explicitly requested compiled/live DSPy and it is unavailable, return a clear `gepa_scorer_error` or fail for explicit optimizer commands.
+3. Else return a clear `gepa_scorer_error` / fail closed; do not run a runtime offline baseline fallback.
+4. If DSPy is missing from the active runtime, report that the plugin installation is incomplete for GEPA scoring.
 
 **Payload fields:**
 
-- `mode`: `compiled_program_eval`, `dspy_program_eval`, or `offline_program_eval`
+- `mode`: `compiled_program_eval` or `dspy_program_eval`
 - `optimizer`: `gepa` or `not_configured`
 - `compiled_program_id` when used
 - `dspy_version` when available
 - `scores[]` with sanitized fields
+
+### Task 6.5: Add change-type-aware GEPA/LLM disagreement policy
+
+**Objective:** Make scorer disagreement handling explicit, configurable, and safe for apply planning.
+
+**Files:**
+
+- Modify: `hermes_self_improvement/config.py`
+- Modify: `hermes_self_improvement/scoring.py`
+- Modify: `hermes_self_improvement/apply_plan.py`
+- Test: new or existing scoring / apply-plan policy tests
+
+**Initial policy shape:**
+
+```json
+{
+  "scorer_comparison_policy": {
+    "default": {
+      "block_on_risk_disagreement": true,
+      "block_on_recommendation_disagreement": true,
+      "score_delta_block_threshold": 15,
+      "confidence_rank_delta_block_threshold": 1
+    },
+    "strict_change_types": [
+      "memory_compress",
+      "memory_delete",
+      "skill_create",
+      "skill_delete",
+      "skill_rename",
+      "skill_merge",
+      "skill_trigger_change",
+      "skill_large_rewrite",
+      "config_policy_expansion"
+    ],
+    "strict": {
+      "score_delta_block_threshold": 5,
+      "confidence_rank_delta_block_threshold": 1
+    },
+    "low_risk_prose": {
+      "change_types": ["typo_fix", "pitfall_addition_existing_section", "validation_addition_existing_section"],
+      "score_delta_block_threshold": 20,
+      "confidence_rank_delta_block_threshold": 2
+    }
+  }
+}
+```
+
+**Rules:**
+
+- Risk or recommendation disagreement always blocks unattended apply.
+- Strict change types use stricter score/confidence thresholds and should normally require approval gates anyway.
+- Low-risk prose changes may tolerate wider score/confidence deltas, but only if target hash, rollback data, confidence floor, risk, and all other policy gates pass.
+- Unknown change types use strict / approval-required handling.
+
+### Task 6.6: Set scorer defaults by command risk
+
+**Objective:** Make GEPA/LLM comparison the default for decision-producing commands without making lightweight observation unnecessarily expensive.
+
+**Files:**
+
+- Modify: `hermes_self_improvement/cli.py`
+- Modify: `hermes_self_improvement/config.py`
+- Modify: `hermes_self_improvement/scoring.py` if default resolution lives there
+- Test: CLI default scorer tests for `analyze`, `report`, and `generate-apply-plan`
+
+**Rules:**
+
+- `analyze`: default scorer can remain `heuristic` because it is observation/classification.
+- `report`: default scorer should be `compare` unless the operator explicitly passes `--scorer`.
+- `run`: default scorer should be `compare` when it emits decision/recommendation output.
+- `generate-apply-plan`: default or required scorer should be `compare`; if GEPA/LLM comparison cannot run, the apply plan should surface a clear scorer error and avoid marking items as unattended-eligible.
+- Explicit `--scorer heuristic`, `--scorer llm`, or `--scorer gepa` may still exist for debugging, but apply planning should treat non-compare scorer input as insufficient for unattended apply unless policy explicitly narrows the command to report-only output.
+
+### Task 6.7: Add evaluator self-improvement and promotion model
+
+**Objective:** Let the evaluator improve over time without allowing unreviewed scorer drift to affect apply decisions silently.
+
+**Design:**
+
+- Treat optimized evaluators as versioned candidates, not immediate replacements.
+- Generate evaluator candidates from:
+  - curated eval cases;
+  - GEPA/LLM disagreement reports;
+  - historical human approvals / rejections;
+  - rollback and failed-apply ledgers;
+  - false-positive / false-negative review notes when available.
+- Evaluate each candidate against a pinned regression suite before it can become active.
+- Store candidate reports with schema metadata, input case hashes, scorer config, before/after metrics, and safety notes.
+- Promotion to active evaluator must be explicit, auditable, hash-bound, and approval-gated through the existing approval artifact model. The first implementation should add an approval-required operation such as `evaluator_promote` rather than hand-editing active config directly.
+- Repo-tracked `config.json` defines defaults only. The mutable active evaluator pointer should live under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/gepa/active-evaluator.json` as runtime state.
+- The approval artifact should bind candidate id/path, candidate hash, active-before pointer path/hash/content, regression result hash, approved evaluator operation, expiry, and rollback pointer data.
+- Never let a newly optimized evaluator silently replace the active scorer in the same run that produced it.
+
+**Safety rules:**
+
+- Candidate evaluator generation can be automated, but active promotion is a separate approval-gated operation.
+- If evaluator candidates disagree with the active evaluator on strict change types, route to review rather than treating candidate output as authority.
+- Regression suite failures block promotion.
+- Promotion approvals expire according to policy and become invalid if candidate hash, active-before pointer/hash, or regression result hash changes.
+- Promotion artifacts must record which evaluator pointer was active before and after, and how to roll back `${HERMES_HOME:-~/.hermes}/reports/self-improvement/gepa/active-evaluator.json`.
 
 ### Task 7: Add plugin tool parity for optimizer reports, not mutation
 
@@ -338,15 +474,17 @@ bin/hermes-self-improve gepa-optimize \
 
 **Docs should say:**
 
-- DSPy/GEPA is optional but first-class.
-- Without `[gepa]`, `--scorer gepa` can run offline baseline only if configured to allow fallback.
-- Real optimizer compile requires explicit command, budget, train/val data, and provider config.
+- DSPy/GEPA is a required dependency for the full self-improvement evaluator path, not a nice-to-have optional feature.
+- Hook/plugin discovery still lazy-imports DSPy so lightweight observation and safety gates do not depend on optimizer startup cost.
+- `--scorer gepa` should prefer compiled/live DSPy modes and report clearly if the required dependency is missing from the active runtime.
 - GEPA remains advisory and cannot authorize auto-apply.
+- GEPA/LLM comparison is the default decision input. `report`, `run`, and `generate-apply-plan` should default to compare for decision-producing output, while lightweight `analyze` may remain heuristic. Disagreement blocks unattended apply and routes the proposal to human review or approval gates.
+- Disagreement materiality is policy-configurable by change type. Risk/recommendation disagreement always blocks unattended apply; score/confidence thresholds can be looser for low-risk prose additions and stricter for memory / lifecycle / destructive / broad changes.
 
 ## Suggested implementation order
 
 1. Commit this plan.
-2. Add packaging / optional dependency metadata.
+2. Add packaging / required dependency metadata.
 3. Refactor naming so `offline_program_eval` is clearly not the real optimizer.
 4. Add tests for dependency detection and clearer error modes.
 5. Add real DSPy module behind lazy import.
@@ -358,13 +496,15 @@ bin/hermes-self-improve gepa-optimize \
 
 ## Acceptance criteria
 
-- `python3 -m pytest tests -q` passes without DSPy installed.
-- `bin/hermes-self-improve gepa-eval --json` still works without DSPy and labels itself as offline baseline.
-- Installing `.[gepa]` makes `dspy` importable without changing hook import behavior.
+- `python3 -m pytest tests -q` passes in the repository test environment, with unit tests avoiding live LLM/network by using fakes or dependency injection.
+- Hook/plugin discovery import paths do not import DSPy eagerly.
+- `python3 -m pip install -e .` installs `dspy` as a required project dependency.
+- `bin/hermes-self-improve gepa-eval --json` uses real DSPy when evaluating the user-facing GEPA path; deterministic behavior is confined to fake-DSPy tests / fixtures.
 - A fake-DSPy test proves `gepa-optimize` calls `dspy.GEPA(...).compile(student, trainset=..., valset=...)` with metric and budget.
 - A real-DSPy optional smoke can run when provider credentials are configured.
 - GEPA scorer payloads always force `auto_apply=false`.
-- `compare` reports GEPA/LLM disagreement without making mutation decisions.
+- `report` / `run` / `generate-apply-plan` default to GEPA/LLM compare for decision-producing output, while `analyze` can remain heuristic by default.
+- `compare` reports GEPA/LLM disagreement and blocks unattended apply / routes to human review or approval gates, using policy-configurable change-type thresholds.
 
 ## Risks
 
@@ -377,9 +517,9 @@ bin/hermes-self-improve gepa-optimize \
 
 Start with dependency and mode clarity, not a full optimizer run:
 
-1. Add `pyproject.toml` with optional `gepa` extra.
-2. Rename docs/fields so the current path is explicitly `offline_baseline`, not “GEPA optimizer”.
-3. Add `gepa-deps` / `gepa status` style detection in CLI or `gepa-eval` output.
+1. Add `pyproject.toml` with `dspy>=3.1,<4` as a required dependency.
+2. Remove/rename runtime fields so the current dependency-free path cannot masquerade as “GEPA optimizer”; keep deterministic scoring only in tests/fixtures if needed.
+3. Add `gepa-deps` / `gepa status` style detection in CLI or `gepa-eval` output, and fail explicitly when the active runtime lacks the required `dspy` package for compiled/live modes.
 4. Add tests that default import paths work without DSPy.
 5. Commit.
 
