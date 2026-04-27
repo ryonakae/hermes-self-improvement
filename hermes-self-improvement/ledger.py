@@ -124,6 +124,38 @@ def _current_file_hash(path_text: str | None) -> str | None:
     return _sha256_text(path.read_text(encoding="utf-8", errors="replace"))
 
 
+def _planned_diff_for_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    rollback = item.get("rollback_preview")
+    if not isinstance(rollback, dict):
+        return None
+    return {
+        "format": "rollback_preview_snippets",
+        "target_path": item.get("target_path"),
+        "change_type": item.get("change_type"),
+        "before_hash": rollback.get("before_hash") or item.get("before_hash"),
+        "after_hash": rollback.get("after_hash"),
+        "before_snippet": rollback.get("before_snippet"),
+        "after_snippet": rollback.get("after_snippet"),
+        "mutation": item.get("mutation"),
+    }
+
+
+def _validation_plan_for_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    rollback = item.get("rollback_preview")
+    ledger_preview = item.get("ledger_preview") if isinstance(item.get("ledger_preview"), dict) else {}
+    if not isinstance(rollback, dict):
+        return None
+    return {
+        "status": "planned",
+        "target_path": item.get("target_path"),
+        "checks": [
+            {"type": "target_hash_matches_before", "expected_hash": item.get("before_hash")},
+            {"type": "target_hash_matches_after", "expected_hash": rollback.get("after_hash")},
+            {"type": "rollback_preview_hash_matches", "expected_hash": ledger_preview.get("rollback_preview_hash")},
+        ],
+    }
+
+
 def build_apply_attempt(
     *,
     plan: dict[str, Any] | None,
@@ -249,6 +281,8 @@ def apply_low_risk_skeleton(
     )
     pending_ledger_path: Path | None = None
     if status == "would_apply_low_risk":
+        attempt["planned_diff"] = _planned_diff_for_item(item)
+        attempt["validation_plan"] = _validation_plan_for_item(item)
         pending_ledger = build_pending_ledger(plan=plan, item=item, created_at=created_at, dry_run=True)
         pending_ledger_path = write_pending_ledger(pending_ledger, config)
         attempt["pending_ledger_path"] = str(pending_ledger_path)

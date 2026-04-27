@@ -290,7 +290,7 @@ Suggested slice order:
 
 ### Phase 4 — Low-risk executor
 
-Implementation progress as of 2026-04-27: `apply-low-risk <plan-id> <item-id>` now has a non-mutating skeleton. It loads an explicit apply plan item, checks eligibility and target hash, writes `would_apply_low_risk`, `stale_plan`, or `rejected` apply-attempt artifacts, and leaves target files unchanged. `would_apply_low_risk` attempts now also create a pending ledger and record its path/hash on the same apply-attempt; stale or rejected attempts do not create ledgers.
+Implementation progress as of 2026-04-27: `apply-low-risk <plan-id> <item-id>` now has a non-mutating skeleton. It loads an explicit apply plan item, checks eligibility and target hash, writes `would_apply_low_risk`, `stale_plan`, or `rejected` apply-attempt artifacts, and leaves target files unchanged. `would_apply_low_risk` attempts now also create a pending ledger, record its path/hash on the same apply-attempt, and include `planned_diff` plus `validation_plan` so the eventual mutating step can be reviewed before it writes the target file. Stale or rejected attempts do not create ledgers or planned diffs.
 
 Decision from Q15: the first `apply-low-risk` implementation should only support typo fixes, validation step additions, and pitfall additions. Stale path / stale command corrections remain eligible in the broader policy, but should be deferred to a later implementation phase after the planner, ledger, hash checks, and evidence model are proven.
 

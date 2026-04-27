@@ -73,6 +73,21 @@ def test_apply_low_risk_skeleton_records_would_apply_attempt_without_mutating_ta
     assert attempt["current_target_hash"] == item["before_hash"]
     assert attempt["reasons"] == []
     assert attempt["events"][0]["status"] == "would_apply_low_risk"
+    planned_diff = attempt["planned_diff"]
+    assert planned_diff["format"] == "rollback_preview_snippets"
+    assert planned_diff["target_path"] == str(target)
+    assert planned_diff["before_hash"] == item["before_hash"]
+    assert planned_diff["after_hash"] == item["rollback_preview"]["after_hash"]
+    assert "- Existing note" in planned_diff["before_snippet"]
+    assert "Observed repeated Safehouse permission-denied events." in planned_diff["after_snippet"]
+    validation_plan = attempt["validation_plan"]
+    assert validation_plan["status"] == "planned"
+    assert validation_plan["target_path"] == str(target)
+    assert validation_plan["checks"] == [
+        {"type": "target_hash_matches_before", "expected_hash": item["before_hash"]},
+        {"type": "target_hash_matches_after", "expected_hash": item["rollback_preview"]["after_hash"]},
+        {"type": "rollback_preview_hash_matches", "expected_hash": item["ledger_preview"]["rollback_preview_hash"]},
+    ]
     assert Path(result["apply_attempt_path"]).is_file()
     assert attempt["pending_ledger_path"]
     assert attempt["pending_ledger_hash"]
@@ -110,6 +125,8 @@ def test_apply_low_risk_skeleton_records_stale_plan_without_mutating_target(tmp_
     assert attempt["current_target_hash"] != item["before_hash"]
     assert "pending_ledger_path" not in attempt
     assert "pending_ledger_hash" not in attempt
+    assert "planned_diff" not in attempt
+    assert "validation_plan" not in attempt
     assert Path(result["apply_attempt_path"]).is_file()
 
 
@@ -136,6 +153,8 @@ def test_apply_low_risk_skeleton_records_rejected_for_ineligible_item(tmp_path):
     assert attempt["target_changed"] is False
     assert "pending_ledger_path" not in attempt
     assert "pending_ledger_hash" not in attempt
+    assert "planned_diff" not in attempt
+    assert "validation_plan" not in attempt
 
 
 def test_cli_accepts_apply_low_risk_command_shape():
