@@ -108,7 +108,7 @@ Rollback must fail closed for stale targets, missing rollback snapshots, before-
 
 ## Report integration
 
-Daily/manual `run` and `report` output may include concise `Apply ledger summary`, `Approval gate summary`, and `Retention summary` sections. These sections are read-only summaries built from existing ledger, approval, and retention preview artifacts. They must not mutate targets, create approvals, apply changes, rollback changes, or delete/prune artifacts. If no relevant artifacts or cleanup candidates exist, the sections should be omitted to avoid noise.
+Daily/manual `run` and `report` output may include concise `Apply ledger summary`, `Approval gate summary`, and `Retention summary` sections. These sections are read-only summaries built from existing ledger, approval, and retention preview artifacts. `approval-report --include-previews` may additionally aggregate non-mutating `apply-approved` preview status (`would_apply_approved` / `rejected`) for each approval. They must not mutate targets, create approvals, apply changes, rollback changes, or delete/prune artifacts. If no relevant artifacts or cleanup candidates exist, the sections should be omitted to avoid noise.
 
 ## Stale path / command fix eligibility
 

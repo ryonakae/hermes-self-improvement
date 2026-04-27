@@ -147,8 +147,12 @@ def _expected_payload_hash(payload: dict[str, Any], hash_key: str) -> str:
     return _sha256_text(_stable_json({k: v for k, v in payload.items() if k not in {hash_key, "_approval_path"}}))
 
 
-def _approval_summary(approval: dict[str, Any], validation: dict[str, Any]) -> dict[str, Any]:
-    return {
+def _approval_summary(
+    approval: dict[str, Any],
+    validation: dict[str, Any],
+    preview: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    summary = {
         "approval_id": approval.get("approval_id"),
         "approval_path": approval.get("_approval_path") or validation.get("approval_path"),
         "created_at": approval.get("created_at"),
@@ -165,6 +169,15 @@ def _approval_summary(approval: dict[str, Any], validation: dict[str, Any]) -> d
         "score": approval.get("score"),
         "approver_source": approval.get("approver_source"),
     }
+    if isinstance(preview, dict):
+        summary.update({
+            "apply_preview_status": preview.get("current_status"),
+            "apply_preview_reasons": preview.get("reasons") or [],
+            "target_hash_matches_before": preview.get("target_hash_matches_before"),
+            "mutation_enabled": preview.get("mutation_enabled", False),
+            "mutation_status": preview.get("mutation_status"),
+        })
+    return summary
 
 
 def validate_approval_artifact(
@@ -324,19 +337,22 @@ def build_approval_report_payload(
     status: str = "all",
     limit: int = 20,
     now: datetime | None = None,
+    include_previews: bool = False,
 ) -> dict[str, Any]:
     selected: list[dict[str, Any]] = []
+    ts = (now or datetime.now(UTC)).astimezone(UTC)
     for path in _approval_files(config):
         approval = _load_approval_file(path)
         if approval is None:
             continue
         approval_id = str(approval.get("approval_id") or "")
-        validation = validate_approval_artifact(approval_id=approval_id, config=config, now=now)
+        validation = validate_approval_artifact(approval_id=approval_id, config=config, now=ts)
         validation_status = str(validation.get("current_status") or "unknown")
         current_status = str(approval.get("current_status") or "unknown")
         if status != "all" and status not in {validation_status, current_status}:
             continue
-        selected.append(_approval_summary(approval, validation))
+        preview = preview_apply_approved(approval_id=approval_id, config=config, now=ts) if include_previews else None
+        selected.append(_approval_summary(approval, validation, preview))
         if len(selected) >= limit:
             break
     return {
@@ -345,6 +361,7 @@ def build_approval_report_payload(
         "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
         "status_filter": status,
         "limit": limit,
+        "include_previews": bool(include_previews),
         "approval_count": len(selected),
         "approvals": selected,
         "target_changed": False,
@@ -376,6 +393,12 @@ def render_approval_report(payload: dict[str, Any]) -> str:
         ])
         if approval.get("reasons"):
             lines.append("- reasons: " + ", ".join(approval.get("reasons") or []))
+        if approval.get("apply_preview_status"):
+            lines.append(f"- apply_preview: `{approval.get('apply_preview_status')}`")
+            if approval.get("apply_preview_reasons"):
+                lines.append("- apply_preview_reasons: " + ", ".join(approval.get("apply_preview_reasons") or []))
+            if approval.get("target_hash_matches_before") is not None:
+                lines.append(f"- target_hash_matches_before: {approval.get('target_hash_matches_before')}")
         if approval.get("approval_path"):
             lines.append(f"- approval_path: `{approval.get('approval_path')}`")
         lines.append("")

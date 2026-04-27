@@ -58,6 +58,7 @@ SELF_IMPROVEMENT_APPROVAL_REPORT_SCHEMA = {
             "config_path": CONFIG_PATH_PROPERTY,
             "status": {"type": "string", "enum": ["all", "approved", "rejected", "valid"], "default": "all"},
             "limit": {"type": "integer", "default": 20},
+            "include_previews": {"type": "boolean", "default": False, "description": "Include non-mutating apply-approved preview status for each approval."},
         },
     },
 }

@@ -675,6 +675,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_approval_report = sub.add_parser("approval-report", help="Summarize approval artifacts and validation status")
     p_approval_report.add_argument("--status", choices=["all", "approved", "rejected", "valid"], default="all")
     p_approval_report.add_argument("--limit", type=int, default=20)
+    p_approval_report.add_argument("--include-previews", action="store_true", help="Include non-mutating apply-approved preview status for each approval")
     p_approval_report.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_approval_report)
     p_approval_report.set_defaults(func=_handle_cli)
@@ -776,6 +777,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             config=config,
             status=str(getattr(args, "status", "all")),
             limit=int(getattr(args, "limit", 20)),
+            include_previews=bool(getattr(args, "include_previews", False)),
         )
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))

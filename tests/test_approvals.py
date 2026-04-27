@@ -298,6 +298,62 @@ def test_approval_report_payload_includes_validation_status(tmp_path):
     assert result["approval"]["approval_id"] in rendered
 
 
+def test_approval_report_can_include_apply_approved_preview_status(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+    target = Path(item["target_path"])
+    before = target.read_text(encoding="utf-8")
+
+    payload = mod.build_approval_report_payload(
+        config=config,
+        status="all",
+        limit=20,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        include_previews=True,
+    )
+    rendered = mod.render_approval_report(payload)
+
+    assert payload["include_previews"] is True
+    assert payload["approvals"][0]["apply_preview_status"] == "would_apply_approved"
+    assert payload["approvals"][0]["apply_preview_reasons"] == []
+    assert payload["approvals"][0]["target_hash_matches_before"] is True
+    assert "apply_preview: `would_apply_approved`" in rendered
+    assert target.read_text(encoding="utf-8") == before
+
+
+def test_approval_report_preview_surfaces_stale_target_without_mutating(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+    target = Path(item["target_path"])
+    target.write_text("# Skill\n\nUse teh browser very carefully.\n", encoding="utf-8")
+    changed = target.read_text(encoding="utf-8")
+
+    payload = mod.build_approval_report_payload(
+        config=config,
+        status="all",
+        limit=20,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        include_previews=True,
+    )
+
+    assert payload["approvals"][0]["apply_preview_status"] == "rejected"
+    assert "target_hash_mismatch" in payload["approvals"][0]["apply_preview_reasons"]
+    assert payload["approvals"][0]["target_hash_matches_before"] is False
+    assert target.read_text(encoding="utf-8") == changed
+
+
 def test_cli_accepts_approval_report_command_shape():
     mod = load_plugin_module()
     parser = __import__("argparse").ArgumentParser()
@@ -311,6 +367,7 @@ def test_cli_accepts_approval_report_command_shape():
         "valid",
         "--limit",
         "5",
+        "--include-previews",
         "--json",
     ])
 
@@ -318,6 +375,7 @@ def test_cli_accepts_approval_report_command_shape():
     assert args.mode == "report_only"
     assert args.status == "valid"
     assert args.limit == 5
+    assert args.include_previews is True
     assert args.as_json is True
 
 

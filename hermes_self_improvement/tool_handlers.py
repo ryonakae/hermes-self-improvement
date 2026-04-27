@@ -150,6 +150,7 @@ def _handle_self_improvement_approval_report_tool(args: dict[str, Any] | None = 
         config=config,
         status=str(args.get("status") or "all"),
         limit=_coerce_int(args.get("limit"), 20, 1, 100),
+        include_previews=bool(args.get("include_previews", False)),
     ))
 
 
