@@ -93,6 +93,156 @@ def write_pending_ledger(ledger: dict[str, Any], config: dict[str, Any]) -> Path
     return path
 
 
+def _find_ledger_path(ledger_id: str, config: dict[str, Any]) -> Path | None:
+    root = _reports_dir(config) / "ledgers"
+    if not root.exists():
+        return None
+    for path in sorted(root.glob(f"**/*{ledger_id}.json")):
+        if path.is_file():
+            return path
+    return None
+
+
+def _load_ledger_by_id(ledger_id: str, config: dict[str, Any]) -> tuple[dict[str, Any], Path]:
+    path = _find_ledger_path(ledger_id, config)
+    if path is None:
+        raise FileNotFoundError(f"ledger_not_found:{ledger_id}")
+    return json.loads(path.read_text(encoding="utf-8")), path
+
+
+def _write_ledger_at_path(ledger: dict[str, Any], path: Path) -> None:
+    path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+
+
+def _build_rollback_result(
+    *,
+    ledger: dict[str, Any] | None,
+    ledger_id: str,
+    status: str,
+    reasons: list[str],
+    current_target_hash: str | None = None,
+    created_at: datetime | None = None,
+) -> dict[str, Any]:
+    ts = (created_at or datetime.now(UTC)).astimezone(UTC)
+    result: dict[str, Any] = {
+        "schema_name": "self_improvement_rollback_result",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "created_at": ts.isoformat(),
+        "ledger_id": ledger_id,
+        "ledger_hash": ledger.get("ledger_hash") if ledger else None,
+        "current_status": status,
+        "target_changed": False,
+        "target_path": ledger.get("target_path") if ledger else None,
+        "target_before_hash": ledger.get("target_before_hash") if ledger else None,
+        "target_applied_hash": ledger.get("target_after_hash") if ledger else None,
+        "current_target_hash": current_target_hash,
+        "reasons": reasons,
+        "events": [
+            {
+                "status": status,
+                "ts": ts.isoformat(),
+                "target_changed": False,
+                "message": "Rollback-low-risk checked the ledger and did not modify target files.",
+            }
+        ],
+    }
+    result["rollback_hash"] = _sha256_text(_stable_json({k: v for k, v in result.items() if k != "rollback_hash"}))
+    return result
+
+
+def rollback_low_risk(
+    *,
+    ledger_id: str,
+    config: dict[str, Any],
+    created_at: datetime | None = None,
+    confirm_rollback: bool = False,
+    expected_ledger_hash: str | None = None,
+) -> dict[str, Any]:
+    try:
+        ledger, ledger_path = _load_ledger_by_id(ledger_id, config)
+    except FileNotFoundError:
+        result = _build_rollback_result(
+            ledger=None,
+            ledger_id=ledger_id,
+            status="rejected",
+            reasons=["ledger_not_found"],
+            created_at=created_at,
+        )
+        return {"rollback_result": result, "target_changed": False}
+
+    current_hash = _current_file_hash(ledger.get("target_path"))
+    reasons: list[str] = []
+    status = "would_rollback_low_risk"
+    if ledger.get("current_status") != "applied":
+        reasons.append("ledger_not_applied")
+        status = "rejected"
+    if current_hash != ledger.get("target_after_hash"):
+        reasons.append("target_hash_mismatch")
+        status = "stale_target"
+    rollback_data = ledger.get("rollback_data") if isinstance(ledger.get("rollback_data"), dict) else {}
+    before_snapshot = rollback_data.get("before_snippet")
+    if not isinstance(before_snapshot, str) or "...<truncated>" in before_snapshot:
+        reasons.append("rollback_before_snapshot_unavailable")
+        status = "rejected" if status != "stale_target" else status
+    if confirm_rollback and expected_ledger_hash != ledger.get("ledger_hash"):
+        reasons.append("ledger_hash_confirmation_mismatch")
+        status = "rejected" if status != "stale_target" else status
+
+    result = _build_rollback_result(
+        ledger=ledger,
+        ledger_id=ledger_id,
+        status=status,
+        reasons=reasons,
+        current_target_hash=current_hash,
+        created_at=created_at,
+    )
+    result["confirmation"] = {"required": True, "confirmed": bool(confirm_rollback)}
+    if expected_ledger_hash is not None:
+        result["confirmation"]["expected_ledger_hash"] = expected_ledger_hash
+
+    target_changed = False
+    if status == "would_rollback_low_risk" and confirm_rollback:
+        target_path = Path(str(ledger.get("target_path"))).expanduser()
+        target_path.write_text(before_snapshot, encoding="utf-8")
+        target_changed = True
+        after_hash = _current_file_hash(str(target_path))
+        validation_result = {
+            "status": "passed",
+            "target_hash_matches_before_snapshot": after_hash == ledger.get("target_before_hash"),
+            "target_hash_matched_applied_before_rollback": current_hash == ledger.get("target_after_hash"),
+        }
+        if not all(value is True for key, value in validation_result.items() if key != "status"):
+            validation_result["status"] = "failed"
+        result.update({
+            "current_status": "rolled_back",
+            "target_changed": True,
+            "target_after_hash": after_hash,
+            "validation_result": validation_result,
+        })
+        result["events"][0].update({
+            "status": "rolled_back",
+            "target_changed": True,
+            "message": "Rollback-low-risk restored the before snapshot after explicit confirmation and validation.",
+        })
+        _mark_hash(result, "rollback_hash")
+        ledger["current_status"] = "rolled_back"
+        ledger["rollback_result"] = validation_result
+        ledger["events"].append({
+            "status": "rolled_back",
+            "ts": result.get("created_at"),
+            "message": "Target file restored from rollback before snapshot.",
+            "target_hash": after_hash,
+        })
+        _mark_hash(ledger, "ledger_hash")
+        _write_ledger_at_path(ledger, ledger_path)
+    return {
+        "rollback_result": result,
+        "ledger_path": str(ledger_path),
+        "target_changed": target_changed,
+    }
+
+
 def _find_apply_plan_path(plan_id: str, config: dict[str, Any]) -> Path | None:
     root = _reports_dir(config) / "apply-plans"
     if not root.exists():

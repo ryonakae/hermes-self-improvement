@@ -91,3 +91,12 @@ def test_cli_accepts_mode_flag_for_run_command():
     args = parser.parse_args(["run", "--mode", "dry_run_plan"])
 
     assert args.mode == "dry_run_plan"
+
+def test_policy_allows_rollback_low_risk_only_in_apply_low_risk_mode():
+    mod = load_plugin_module()
+
+    allowed = mod.validate_mode_action("apply_low_risk", "rollback-low-risk", required_capability="mutate_skills")
+    denied = mod.validate_mode_action("dry_run_plan", "rollback-low-risk", required_capability="mutate_skills")
+
+    assert allowed == {"allowed": True, "reason": "allowed"}
+    assert denied["allowed"] is False

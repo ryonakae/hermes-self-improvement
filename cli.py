@@ -19,7 +19,7 @@ try:  # pragma: no cover - package import path
         resolve_execution_mode,
         validate_mode_action,
     )
-    from .ledger import apply_low_risk_skeleton
+    from .ledger import apply_low_risk_skeleton, rollback_low_risk
     from .observer import _event_path, _load_events, _report_dir
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
@@ -33,7 +33,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         resolve_execution_mode,
         validate_mode_action,
     )
-    from ledger import apply_low_risk_skeleton
+    from ledger import apply_low_risk_skeleton, rollback_low_risk
     from observer import _event_path, _load_events, _report_dir
     from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 
@@ -264,6 +264,13 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_apply_low_risk.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_apply_low_risk)
     p_apply_low_risk.set_defaults(func=_handle_cli)
+    p_rollback_low_risk = sub.add_parser("rollback-low-risk", help="Check or explicitly rollback one applied low-risk ledger")
+    p_rollback_low_risk.add_argument("ledger_id")
+    p_rollback_low_risk.add_argument("--confirm-rollback", action="store_true", help="Actually restore the target from ledger rollback data")
+    p_rollback_low_risk.add_argument("--expected-ledger-hash", default=None, help="Required confirmation hash for --confirm-rollback")
+    p_rollback_low_risk.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_rollback_low_risk)
+    p_rollback_low_risk.set_defaults(func=_handle_cli)
 
 
 def _handle_cli(args: argparse.Namespace) -> None:
@@ -343,6 +350,22 @@ def _handle_cli(args: argparse.Namespace) -> None:
             print(f"Status: {attempt.get('current_status')}")
             if attempt.get("reasons"):
                 print("Reasons: " + ", ".join(attempt.get("reasons") or []))
+        return
+    if cmd == "rollback-low-risk":
+        payload = rollback_low_risk(
+            ledger_id=str(getattr(args, "ledger_id")),
+            config=config,
+            confirm_rollback=bool(getattr(args, "confirm_rollback", False)),
+            expected_ledger_hash=getattr(args, "expected_ledger_hash", None),
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            rollback = payload.get("rollback_result") or {}
+            print(f"Rollback ledger: {payload.get('ledger_path')}")
+            print(f"Status: {rollback.get('current_status')}")
+            if rollback.get("reasons"):
+                print("Reasons: " + ", ".join(rollback.get("reasons") or []))
         return
     write_report = cmd in {"report", "run"}
     scorer = getattr(args, "scorer", "heuristic")

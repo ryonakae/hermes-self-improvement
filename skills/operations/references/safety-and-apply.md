@@ -89,6 +89,16 @@ If no matching existing section is present for section additions, fail closed wi
 
 `stale_plan`, `rejected`, and confirmation-hash mismatch attempts should not create ledgers or planned diffs beyond the safe preview metadata.
 
+`rollback-low-risk <ledger-id>` currently:
+
+- loads an explicit applied ledger
+- checks ledger status, ledger hash confirmation, current target hash, and rollback snapshot availability
+- without confirmation, records `would_rollback_low_risk` and leaves the target unchanged
+- with `--confirm-rollback --expected-ledger-hash <ledger_hash>`, restores the target from the ledger before snapshot only if the current target hash still matches the applied hash
+- appends a `rolled_back` event to the same ledger and recomputes `ledger_hash` on success
+
+Rollback must fail closed for stale targets, missing/truncated rollback snapshots, non-applied ledgers, and ledger-hash confirmation mismatch.
+
 ## Verification commands
 
 For mode-policy or apply-plan changes, run:

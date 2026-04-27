@@ -44,7 +44,7 @@ DEFAULT_MODE_POLICY = {
         },
     },
     "apply_low_risk": {
-        "commands": ["status", "apply-low-risk"],
+        "commands": ["status", "apply-low-risk", "rollback-low-risk"],
         "capabilities": {
             "write_apply_plan": False,
             "write_apply_attempt": True,
@@ -163,6 +163,7 @@ def _required_capability_for_command(command: str) -> str | None:
     return {
         "generate-apply-plan": "write_apply_plan",
         "apply-low-risk": "mutate_skills",
+        "rollback-low-risk": "mutate_skills",
         "apply-approved": "write_ledger",
         "approve": "write_apply_attempt",
     }.get(command)

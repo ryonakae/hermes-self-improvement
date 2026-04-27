@@ -47,6 +47,7 @@ bin/hermes-self-improve report --since-hours 24 --scorer llm
 bin/hermes-self-improve run --since-hours 24 --json --scorer compare
 bin/hermes-self-improve gepa-eval --json
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 ```
 
 開発時の基本検証:
@@ -106,7 +107,7 @@ bin/hermes-self-improve gepa-eval --json
 
 - `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval` だけを許可する既定 mode。
 - `dry_run_plan`: `generate-apply-plan` を許可するが、target file は変更しない。
-- `apply_low_risk`: 低リスク item の preview / attempt 記録を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>` があり、hash・rollback preview・validation が通る場合だけ。
+- `apply_low_risk`: 低リスク item の preview / attempt / rollback 記録を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>`、rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` があり、hash・rollback preview・validation が通る場合だけ。
 - `apply_approved`: 承認済み変更用の予約的 mode。まだ通常運用では使わない。
 
 ## 開発方針

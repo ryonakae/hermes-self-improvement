@@ -363,3 +363,26 @@ def test_cli_accepts_apply_low_risk_command_shape():
     assert args.confirm_apply is True
     assert args.expected_item_hash == "hash-1"
     assert args.as_json is True
+
+def test_cli_accepts_rollback_low_risk_command_shape():
+    mod = load_plugin_module()
+    parser = argparse.ArgumentParser()
+    mod._setup_cli(parser)
+
+    args = parser.parse_args([
+        "rollback-low-risk",
+        "ledger-1",
+        "--mode",
+        "apply_low_risk",
+        "--confirm-rollback",
+        "--expected-ledger-hash",
+        "hash-1",
+        "--json",
+    ])
+
+    assert args.self_improvement_cmd == "rollback-low-risk"
+    assert args.ledger_id == "ledger-1"
+    assert args.mode == "apply_low_risk"
+    assert args.confirm_rollback is True
+    assert args.expected_ledger_hash == "hash-1"
+    assert args.as_json is True
