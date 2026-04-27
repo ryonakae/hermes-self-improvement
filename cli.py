@@ -256,9 +256,11 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_apply_plan.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_apply_plan)
     p_apply_plan.set_defaults(func=_handle_cli)
-    p_apply_low_risk = sub.add_parser("apply-low-risk", help="Check one low-risk apply-plan item without mutating targets yet")
+    p_apply_low_risk = sub.add_parser("apply-low-risk", help="Check or explicitly apply one low-risk apply-plan item")
     p_apply_low_risk.add_argument("plan_id")
     p_apply_low_risk.add_argument("item_id")
+    p_apply_low_risk.add_argument("--confirm-apply", action="store_true", help="Actually mutate the target after all guarded checks pass")
+    p_apply_low_risk.add_argument("--expected-item-hash", default=None, help="Required confirmation hash for --confirm-apply")
     p_apply_low_risk.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_apply_low_risk)
     p_apply_low_risk.set_defaults(func=_handle_cli)
@@ -330,6 +332,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
             plan_id=str(getattr(args, "plan_id")),
             item_id=str(getattr(args, "item_id")),
             config=config,
+            confirm_apply=bool(getattr(args, "confirm_apply", False)),
+            expected_item_hash=getattr(args, "expected_item_hash", None),
         )
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))

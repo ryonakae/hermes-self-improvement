@@ -24,7 +24,7 @@
 - LLM / GEPA の点数だけを根拠に unattended apply を許可しない。
 - secret や本文全文を復元・保存しない。
 
-現時点の apply 系処理はかなり保守的です。`generate-apply-plan` は dry-run artifact を作るだけで、`apply-low-risk` も target file を変更しない skeleton です。
+現時点の apply 系処理はかなり保守的です。`generate-apply-plan` は dry-run artifact を作るだけです。`apply-low-risk` は既定では preview / attempt / ledger artifact だけを記録し、`--confirm-apply --expected-item-hash <item_hash>` が明示された場合に限って、低リスク eligible item を guarded mutation と validation 後に適用します。
 
 ## DSPy / GEPA とは
 
@@ -106,7 +106,7 @@ bin/hermes-self-improve gepa-eval --json
 
 - `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval` だけを許可する既定 mode。
 - `dry_run_plan`: `generate-apply-plan` を許可するが、target file は変更しない。
-- `apply_low_risk`: 低リスク適用用の将来 mode。現状の `apply-low-risk` は非破壊 skeleton。
+- `apply_low_risk`: 低リスク item の preview / attempt 記録を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>` があり、hash・rollback preview・validation が通る場合だけ。
 - `apply_approved`: 承認済み変更用の予約的 mode。まだ通常運用では使わない。
 
 ## 開発方針

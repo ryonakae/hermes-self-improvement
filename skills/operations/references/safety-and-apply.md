@@ -15,7 +15,7 @@ Default mode is `report_only`.
 
 - `report_only`: allows read/report commands such as `status`, `analyze`, `report`, `run`, and `gepa-eval`.
 - `dry_run_plan`: allows `generate-apply-plan` and `write_apply_plan`; it must not mutate target files.
-- `apply_low_risk`: reserved for low-risk apply flows. The current `apply-low-risk` path is still non-mutating.
+- `apply_low_risk`: allows low-risk preview / attempt recording. Actual mutation requires explicit `--confirm-apply --expected-item-hash <item_hash>` confirmation and must pass guarded validation.
 - `apply_approved`: reserved for explicit approval flows.
 - `full_auto_with_policy`: keep reserved until policy, ledger, approval, and rollback enforcement are mature.
 
@@ -85,10 +85,11 @@ If no existing section is present, fail closed with `existing_section_missing` r
 - checks eligibility and target hash
 - writes an apply-attempt artifact
 - records `planned_diff` and `validation_plan` for `would_apply_low_risk`
-- leaves target files unchanged
-- writes a pending ledger only for `would_apply_low_risk`
+- without confirmation, leaves target files unchanged and writes a dry-run pending ledger
+- with `--confirm-apply --expected-item-hash <item_hash>`, mutates only the planned target after item-hash confirmation, before-hash validation, rollback-preview after-hash validation, and post-write hash validation
+- writes an applied ledger only for confirmed successful guarded mutation
 
-`stale_plan` and `rejected` attempts should not create ledgers or planned diffs.
+`stale_plan`, `rejected`, and confirmation-hash mismatch attempts should not create ledgers or planned diffs beyond the safe preview metadata.
 
 ## Verification commands
 

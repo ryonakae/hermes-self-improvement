@@ -157,15 +157,100 @@ def test_apply_low_risk_skeleton_records_rejected_for_ineligible_item(tmp_path):
     assert "validation_plan" not in attempt
 
 
+def test_apply_low_risk_requires_explicit_confirmation_before_mutating_target(tmp_path):
+    mod, plan, item, _plan_path, target, original = write_eligible_plan(tmp_path)
+
+    result = mod.apply_low_risk_skeleton(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config={"reports_dir": str(tmp_path / "reports")},
+        created_at=datetime(2026, 4, 26, 16, 30, tzinfo=timezone.utc),
+    )
+
+    assert target.read_text(encoding="utf-8") == original
+    attempt = result["apply_attempt"]
+    assert attempt["current_status"] == "would_apply_low_risk"
+    assert attempt["target_changed"] is False
+    assert attempt["confirmation"] == {"required": True, "confirmed": False}
+
+
+def test_apply_low_risk_confirmed_mutates_target_and_records_applied_ledger(tmp_path):
+    mod, plan, item, _plan_path, target, original = write_eligible_plan(tmp_path)
+
+    result = mod.apply_low_risk_skeleton(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config={"reports_dir": str(tmp_path / "reports")},
+        created_at=datetime(2026, 4, 26, 16, 30, tzinfo=timezone.utc),
+        confirm_apply=True,
+        expected_item_hash=item["item_hash"],
+    )
+
+    mutated = target.read_text(encoding="utf-8")
+    assert mutated != original
+    assert "- Existing note" in mutated
+    assert "Observed repeated sandbox permission-denied events." in mutated
+    attempt = result["apply_attempt"]
+    assert attempt["current_status"] == "applied_low_risk"
+    assert attempt["target_changed"] is True
+    assert attempt["confirmation"] == {"required": True, "confirmed": True, "expected_item_hash": item["item_hash"]}
+    assert attempt["target_after_hash"] == item["rollback_preview"]["after_hash"]
+    assert attempt["validation_result"] == {
+        "status": "passed",
+        "target_hash_matches_after": True,
+        "target_hash_matches_before": True,
+        "rollback_preview_hash_matches": True,
+    }
+    ledger_path = Path(attempt["ledger_path"])
+    assert ledger_path.is_file()
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert ledger["current_status"] == "applied"
+    assert ledger["dry_run"] is False
+    assert ledger["target_after_hash"] == item["rollback_preview"]["after_hash"]
+    assert ledger["validation_result"]["status"] == "passed"
+
+
+def test_apply_low_risk_confirmed_rejects_item_hash_mismatch_without_mutating_target(tmp_path):
+    mod, plan, item, _plan_path, target, original = write_eligible_plan(tmp_path)
+
+    result = mod.apply_low_risk_skeleton(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config={"reports_dir": str(tmp_path / "reports")},
+        created_at=datetime(2026, 4, 26, 16, 30, tzinfo=timezone.utc),
+        confirm_apply=True,
+        expected_item_hash="wrong-hash",
+    )
+
+    assert target.read_text(encoding="utf-8") == original
+    attempt = result["apply_attempt"]
+    assert attempt["current_status"] == "rejected"
+    assert attempt["target_changed"] is False
+    assert "item_hash_confirmation_mismatch" in attempt["reasons"]
+    assert "ledger_path" not in attempt
+
+
 def test_cli_accepts_apply_low_risk_command_shape():
     mod = load_plugin_module()
     parser = argparse.ArgumentParser()
     mod._setup_cli(parser)
 
-    args = parser.parse_args(["apply-low-risk", "apply-plan-1", "item-1", "--mode", "apply_low_risk", "--json"])
+    args = parser.parse_args([
+        "apply-low-risk",
+        "apply-plan-1",
+        "item-1",
+        "--mode",
+        "apply_low_risk",
+        "--confirm-apply",
+        "--expected-item-hash",
+        "hash-1",
+        "--json",
+    ])
 
     assert args.self_improvement_cmd == "apply-low-risk"
     assert args.plan_id == "apply-plan-1"
     assert args.item_id == "item-1"
     assert args.mode == "apply_low_risk"
+    assert args.confirm_apply is True
+    assert args.expected_item_hash == "hash-1"
     assert args.as_json is True

@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover - package import path
+    from .apply_plan import _apply_append_to_existing_section
     from .observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
+    from apply_plan import _apply_append_to_existing_section
     from observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -156,6 +158,34 @@ def _validation_plan_for_item(item: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _validation_result_for_item(*, item: dict[str, Any], before_hash: str | None, after_hash: str | None) -> dict[str, Any]:
+    rollback = item.get("rollback_preview") if isinstance(item.get("rollback_preview"), dict) else {}
+    ledger_preview = item.get("ledger_preview") if isinstance(item.get("ledger_preview"), dict) else {}
+    rollback_hash = _sha256_text(_stable_json(rollback)) if rollback else None
+    result = {
+        "status": "passed",
+        "target_hash_matches_after": after_hash == rollback.get("after_hash"),
+        "target_hash_matches_before": before_hash == item.get("before_hash"),
+        "rollback_preview_hash_matches": rollback_hash == ledger_preview.get("rollback_preview_hash"),
+    }
+    if not all(value is True for key, value in result.items() if key != "status"):
+        result["status"] = "failed"
+    return result
+
+
+def _content_after_item_mutation(item: dict[str, Any], before_content: str) -> str | None:
+    mutation = item.get("mutation")
+    if not isinstance(mutation, dict):
+        return None
+    if mutation.get("type") == "append_to_existing_section":
+        return _apply_append_to_existing_section(before_content, mutation)
+    return None
+
+
+def _mark_hash(payload: dict[str, Any], hash_key: str) -> None:
+    payload[hash_key] = _sha256_text(_stable_json({k: v for k, v in payload.items() if k != hash_key}))
+
+
 def build_apply_attempt(
     *,
     plan: dict[str, Any] | None,
@@ -227,6 +257,8 @@ def apply_low_risk_skeleton(
     item_id: str,
     config: dict[str, Any],
     created_at: datetime | None = None,
+    confirm_apply: bool = False,
+    expected_item_hash: str | None = None,
 ) -> dict[str, Any]:
     try:
         plan, plan_path = _load_apply_plan_by_id(plan_id, config)
@@ -268,6 +300,9 @@ def apply_low_risk_skeleton(
     if not item.get("rollback_preview"):
         reasons.append("rollback_preview_missing")
         status = "rejected" if status != "stale_plan" else status
+    if confirm_apply and expected_item_hash != item.get("item_hash"):
+        reasons.append("item_hash_confirmation_mismatch")
+        status = "rejected" if status != "stale_plan" else status
 
     attempt = build_apply_attempt(
         plan=plan,
@@ -280,24 +315,76 @@ def apply_low_risk_skeleton(
         created_at=created_at,
     )
     pending_ledger_path: Path | None = None
+    ledger_path: Path | None = None
+    target_changed = False
     if status == "would_apply_low_risk":
         attempt["planned_diff"] = _planned_diff_for_item(item)
         attempt["validation_plan"] = _validation_plan_for_item(item)
-        pending_ledger = build_pending_ledger(plan=plan, item=item, created_at=created_at, dry_run=True)
-        pending_ledger_path = write_pending_ledger(pending_ledger, config)
-        attempt["pending_ledger_path"] = str(pending_ledger_path)
-        attempt["pending_ledger_hash"] = pending_ledger.get("ledger_hash")
-        attempt["events"][0]["pending_ledger_path"] = str(pending_ledger_path)
-        attempt["events"][0]["pending_ledger_hash"] = pending_ledger.get("ledger_hash")
-        attempt["attempt_hash"] = _sha256_text(_stable_json({k: v for k, v in attempt.items() if k != "attempt_hash"}))
+        attempt["confirmation"] = {"required": True, "confirmed": bool(confirm_apply)}
+        if expected_item_hash is not None:
+            attempt["confirmation"]["expected_item_hash"] = expected_item_hash
+
+        if confirm_apply:
+            target_path = Path(str(item.get("target_path"))).expanduser()
+            before_content = target_path.read_text(encoding="utf-8", errors="replace")
+            after_content = _content_after_item_mutation(item, before_content)
+            if after_content is None:
+                attempt["current_status"] = "rejected"
+                attempt["reasons"] = [*attempt.get("reasons", []), "mutation_not_supported"]
+                attempt["events"][0]["status"] = "rejected"
+            else:
+                after_hash = _sha256_text(after_content)
+                expected_after_hash = (item.get("rollback_preview") or {}).get("after_hash")
+                if after_hash != expected_after_hash:
+                    attempt["current_status"] = "rejected"
+                    attempt["reasons"] = [*attempt.get("reasons", []), "planned_after_hash_mismatch"]
+                    attempt["events"][0]["status"] = "rejected"
+                else:
+                    target_path.write_text(after_content, encoding="utf-8")
+                    target_changed = True
+                    validation_result = _validation_result_for_item(item=item, before_hash=current_hash, after_hash=_current_file_hash(str(target_path)))
+                    attempt["current_status"] = "applied_low_risk"
+                    attempt["target_changed"] = True
+                    attempt["target_after_hash"] = after_hash
+                    attempt["validation_result"] = validation_result
+                    attempt["events"][0].update({
+                        "status": "applied_low_risk",
+                        "target_changed": True,
+                        "message": "Apply-low-risk confirmed item hash, mutated target, and validated target hash.",
+                    })
+                    ledger = build_pending_ledger(plan=plan, item=item, created_at=created_at, dry_run=False)
+                    ledger["current_status"] = "applied"
+                    ledger["validation_result"] = validation_result
+                    ledger["events"].append({
+                        "status": "applied",
+                        "ts": attempt.get("created_at"),
+                        "dry_run": False,
+                        "message": "Target file changed after explicit low-risk confirmation and validation.",
+                    })
+                    _mark_hash(ledger, "ledger_hash")
+                    ledger_path = write_pending_ledger(ledger, config)
+                    attempt["ledger_path"] = str(ledger_path)
+                    attempt["ledger_hash"] = ledger.get("ledger_hash")
+                    attempt["events"][0]["ledger_path"] = str(ledger_path)
+                    attempt["events"][0]["ledger_hash"] = ledger.get("ledger_hash")
+        else:
+            pending_ledger = build_pending_ledger(plan=plan, item=item, created_at=created_at, dry_run=True)
+            pending_ledger_path = write_pending_ledger(pending_ledger, config)
+            attempt["pending_ledger_path"] = str(pending_ledger_path)
+            attempt["pending_ledger_hash"] = pending_ledger.get("ledger_hash")
+            attempt["events"][0]["pending_ledger_path"] = str(pending_ledger_path)
+            attempt["events"][0]["pending_ledger_hash"] = pending_ledger.get("ledger_hash")
+        _mark_hash(attempt, "attempt_hash")
     path = write_apply_attempt(attempt, config)
     result = {
         "apply_attempt": attempt,
         "apply_attempt_path": str(path),
         "apply_plan_path": str(plan_path),
-        "target_changed": False,
+        "target_changed": target_changed,
     }
     if pending_ledger_path is not None:
         result["pending_ledger_path"] = str(pending_ledger_path)
+    if ledger_path is not None:
+        result["ledger_path"] = str(ledger_path)
     return result
 

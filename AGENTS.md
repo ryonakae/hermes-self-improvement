@@ -99,7 +99,7 @@ Runtime artifact の既定保存先:
 - hook は観測専用です。hook 内で LLM、GEPA optimizer、skill patch、memory edit、重い集計を実行しないでください。
 - `execution_mode` は prompt ではなく `config.py` / CLI policy で検証します。未知 mode / 未許可 command / 足りない capability は拒否します。
 - `generate-apply-plan` は artifact 生成のみで、target file を変更しません。
-- 現在の `apply-low-risk` は skeleton です。eligibility と hash を確認し、apply-attempt / pending ledger を書けますが、target file は変更しません。
+- `apply-low-risk` は既定では preview / apply-attempt / pending ledger だけを書きます。target file の実変更は `--confirm-apply --expected-item-hash <item_hash>` があり、eligibility・before hash・rollback preview・post-write validation が通る場合だけです。
 - 作業前に `git status --short` と該当 diff を確認し、無関係な変更を巻き戻さないでください。
 - README は人間向けの入口、AGENTS.md はエージェント向けの最短作業入口として分けます。長い設計経緯は README か repo-tracked plan/docs に寄せてください。
 
