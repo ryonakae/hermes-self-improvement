@@ -1,151 +1,152 @@
 # hermes-self-improvement
 
-`hermes-self-improvement` は、Hermes の利用中に起きた tool call・hook・セッション終了などのイベントを観測し、skill / memory / prompt / tool-use workflow をどう改善できるかを後から分析するための Hermes user plugin です。
+`hermes-self-improvement` は、Hermes の実行ログから「skill、memory、prompt、tool の使い方をどこで直すべきか」を見つける user plugin です。
 
-重要なのは、この plugin は会話中に勝手に skill や memory を書き換えないことです。runtime hook は観測だけを行い、分析・proposal 生成・採点・レポート作成は CLI から明示的に実行します。
+hook は観測だけをします。skill や memory を会話中に勝手に書き換えません。分析、採点、apply plan、承認、実適用は CLI または plugin tool から明示して実行します。
 
-## 何をする plugin か
+## できること
 
-この plugin は、次の流れで Hermes の自己改善候補を扱います。
+- Hermes runtime の hook event を JSONL に記録する
+- tool error や warning から改善候補を作る
+- proposal を heuristic / LLM / GEPA-compatible scorer で採点する
+- report、apply plan、ledger、approval、retention preview を artifact として残す
+- 低リスクな text replacement を、hash と validation 付きで適用する
+- approval 済み item を、approval hash と target hash 付きで適用する
+- 古い self-improvement artifact を preview し、確認済み list hash が一致した場合だけ prune する
 
-1. Hermes runtime の hook からイベントを収集する。
-2. tool error / warning などを集計し、繰り返し起きている問題候補を見つける。
-3. skill 追記、運用ルール見直し、memory 方針確認などの proposal を作る。
-4. heuristic / LLM / GEPA 系 scorer で proposal を採点する。
-5. Markdown report や JSON artifact として、人間が確認できる形に出す。
-
-観測データは、全文ではなく redacted preview と hash を保存します。credential らしき値や sensitive path は保存前に伏せる設計です。
+保存する event は redacted preview と hash が中心です。secret らしき値や sensitive path は保存前に伏せます。
 
 ## しないこと
 
-- hook 内で LLM を呼ばない。
-- hook 内で GEPA optimizer を回さない。
-- 会話中や cron から skill / memory を無条件に変更しない。
-- LLM / GEPA の点数だけを根拠に unattended apply を許可しない。
-- secret や本文全文を復元・保存しない。
+- hook 内で LLM や GEPA optimizer を呼ばない
+- scorer の点数だけで unattended mutation を許可しない
+- cron から confirmation 付き mutation を走らせない
+- target repo の commit を作らない
+- secret や本文全文を復元して保存しない
 
-現時点の apply 系処理はかなり保守的です。`generate-apply-plan` は dry-run artifact を作るだけです。`apply-low-risk` は既定では preview / attempt / ledger artifact だけを記録し、`--confirm-apply --expected-item-hash <item_hash>` が明示された場合に限って、低リスク eligible item を guarded mutation と validation 後に適用します。
+mutation は preview-first です。実ファイル変更には mode、confirmation flag、expected hash が必要です。
 
-## DSPy / GEPA とは
+## 使い方
 
-DSPy は、LLM を使う処理を「プロンプト文字列の寄せ集め」ではなく、入出力 schema と評価指標を持つ program として組み立てるための Python framework です。
-
-GEPA は DSPy 周辺で使われる optimizer / evaluation approach で、LLM program の候補を評価しながら改善するための仕組みです。この plugin では、将来 proposal scorer を GEPA で最適化できるように `hermes_self_improvement/dspy_program.py` と `hermes_self_improvement/gepa_adapter.py` に契約を置いています。
-
-ただし、現在の `--scorer gepa` は本物の optimizer run ではありません。既定では dependency-free の offline scorer を使い、`evals/rubric.json` と `evals/proposal_eval_cases.jsonl` に基づいて proposal を advisory に採点します。`max_iterations > 0` の optimizer 実行は、project-specific metric / invocation が未実装なので fail closed します。
-
-## 主要コマンド
-
-通常は同梱 wrapper を使います。現行 Hermes の top-level plugin CLI discovery では `hermes self-improvement ...` として安定して呼べるとは限らないためです。
+現行環境では `hermes self-improvement ...` が常に使えるとは限りません。通常は同梱 wrapper を使います。
 
 ```bash
 cd /path/to/hermes-self-improvement
 
 bin/hermes-self-improve status
-bin/hermes-self-improve analyze --since-hours 24
-bin/hermes-self-improve report --since-hours 24 --scorer llm
+bin/hermes-self-improve analyze --since-hours 24 --json
+bin/hermes-self-improve report --since-hours 24 --scorer compare
 bin/hermes-self-improve run --since-hours 24 --json --scorer compare
-bin/hermes-self-improve gepa-eval --json
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
-bin/hermes-self-improve ledger-report --status applied --json
-bin/hermes-self-improve approval-report --status all --json
-bin/hermes-self-improve retention-report --mode report_only --json
-bin/hermes-self-improve retention-prune --mode apply_approved --json
-bin/hermes-self-improve retention-prune --mode apply_approved --confirm-prune --expected-artifact-list-hash <artifact_list_hash> --json
-bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
-bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
-bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --confirm-approved-apply --expected-approval-hash <approval_hash> --expected-target-hash <current_hash> --json
-bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 ```
 
-開発時の基本検証:
+apply plan と review 系です。
 
 ```bash
-cd /path/to/hermes-self-improvement
-PY=${PYTHON:-python3}
-$PY -m py_compile __init__.py hermes_self_improvement/*.py
-$PY -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve gepa-eval --json
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve ledger-report --mode report_only --status all --json
+bin/hermes-self-improve approval-report --mode report_only --status all --include-previews --json
+bin/hermes-self-improve retention-report --mode report_only --json
 ```
 
-## Scorer の種類
+実変更を伴う command は、preview を見てから hash を渡します。
 
-- `heuristic`: 既定。依存なしの deterministic scorer。
-- `llm`: Hermes auxiliary LLM 経路で proposal を採点する。失敗時は heuristic にフォールバックする。
-- `gepa`: `hermes_self_improvement/gepa_adapter.py` 経由。既定では offline DSPy-compatible scorer を実行する。
-- `compare`: LLM と GEPA の採点を比較し、disagreement を report に出す。
+```bash
+# low-risk item の preview または pending ledger 作成
+bin/hermes-self-improve apply-low-risk <plan-id> <item-id> --mode apply_low_risk --json
 
-どの scorer でも `auto_apply` は常に `false` として扱います。採点は優先順位付けであり、変更許可ではありません。
+# low-risk item の実適用
+bin/hermes-self-improve apply-low-risk <plan-id> <item-id> \
+  --mode apply_low_risk \
+  --confirm-apply \
+  --expected-item-hash <item_hash> \
+  --json
 
-## ディレクトリ構成
+# low-risk rollback の preview
+bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 
-Hermes が discovery する `plugin.yaml` と root `__init__.py` は plugin root に残し、実装は Python package `hermes_self_improvement/` に集約しています。これは公式 docs の最小構成を、大きくなった plugin 向けに整理した形です。
+# low-risk rollback の実行
+bin/hermes-self-improve rollback-low-risk <ledger-id> \
+  --mode apply_low_risk \
+  --confirm-rollback \
+  --expected-ledger-hash <ledger_hash> \
+  --json
 
+# approval artifact 作成
+bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
 
-- `plugin.yaml`: Hermes plugin manifest。
-- `__init__.py`: plugin registration、hook / CLI / slash command / tool 登録、互換 export。
-- `hermes_self_improvement/schemas.py`: plugin tool schema。
-- `hermes_self_improvement/tool_handlers.py`: CLI と同じ core function / policy gate を使う tool handler。root 直下の `tools.py` は Hermes core `tools.registry` を shadow するため使わない。
-- `hermes_self_improvement/config.py`: default config、execution mode、policy gate。
-- `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry、retention。
-- `hermes_self_improvement/analysis.py`: telemetry aggregation、finding 抽出、proposal 生成。
-- `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer。
-- `hermes_self_improvement/dspy_program.py`: DSPy-compatible な proposal scoring contract と offline baseline。
-- `hermes_self_improvement/gepa_adapter.py`: GEPA scorer payload、offline eval、optimizer fail-closed 境界。
-- `hermes_self_improvement/apply_plan.py`: dry-run apply plan と低リスク mutation plan の生成。
-- `hermes_self_improvement/ledger.py`: pending ledger / apply attempt artifact。
-- `hermes_self_improvement/approvals.py`: approval artifact generation / validation / report helpers。
-- `hermes_self_improvement/cli.py`: CLI parser、report rendering、pipeline orchestration。
-- `bin/hermes-self-improve`: standalone wrapper CLI。
-- `evals/`: GEPA offline scorer の rubric と regression cases。
-- `skills/operations/SKILL.md`: plugin に同梱する運用 skill。
-- `skills/operations/references/`: bundled skill から必要時だけ読む詳細メモ。
-- `tests/`: pytest test suite。
+# approved item の preview
+bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
 
-## データの保存先
+# approved item の実適用
+bin/hermes-self-improve apply-approved <approval-id> \
+  --mode apply_approved \
+  --confirm-approved-apply \
+  --expected-approval-hash <approval_hash> \
+  --expected-target-hash <current_hash> \
+  --json
 
-既定では Hermes home 配下に保存します。`HERMES_HOME` が未設定なら通常は `~/.hermes` です。
+# retention prune preview
+bin/hermes-self-improve retention-prune --mode apply_approved --json
 
-- events: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/state/events.jsonl`
-- daily reports: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/daily/latest.md`
-- apply plans: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/apply-plans/YYYY-MM-DD/`
-- ledgers: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/ledgers/YYYY-MM-DD/`
-- apply attempts: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/apply-attempts/YYYY-MM-DD/`
-- approvals: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/approvals/YYYY-MM-DD/`
+# retention prune 実行
+bin/hermes-self-improve retention-prune \
+  --mode apply_approved \
+  --confirm-prune \
+  --expected-artifact-list-hash <artifact_list_hash> \
+  --json
+```
 
-`config.json` / `config.local.json` / `HERMES_SELF_IMPROVE_CONFIG` / `--config` で `data_dir`, `report_dir`, `gepa_scorer`, `llm_scorer`, `observe_hooks` などを上書きできます。
+## Execution modes
 
-## Stale path / command fixes
+Policy は `hermes_self_improvement/config.py` で検証します。prompt だけでは解除できません。
 
-`stale_path_fix` / `stale_command_fix` は `replace_text_once` の dry-run mutation plan だけを生成します。対象にできるのは、古い参照と canonical replacement が明示され、target 内の古い参照が1回だけで、replacement が小さな1行文字列、かつ README / config / 実ファイル / active memory / observed success など信頼できる別ソースで確認済みの場合だけです。古い path / command が失敗しただけ、または LLM guess だけでは `canonical_replacement_unverified` として拒否します。
+| mode | 主な用途 | mutation |
+| --- | --- | --- |
+| `report_only` | status、analyze、report、ledger/approval/retention report | なし |
+| `dry_run_plan` | apply plan artifact の生成 | target file は変更しない |
+| `apply_low_risk` | low-risk item の preview、apply、rollback | confirmation と expected hash が必要 |
+| `apply_approved` | approval、approved apply、retention prune | confirmation と expected hash が必要 |
 
-## Config / policy precedence
+未知 mode、未許可 command、足りない capability は deny-by-default です。`allow_policy_expansion: true` を入れない限り、local config は default policy より権限を広げられません。
 
-Runtime config is loaded fail-closed with this precedence, from low to high:
+## Apply の安全境界
 
-1. built-in defaults
-2. repository `config.json`
-3. repository-local `config.local.json`
-4. `HERMES_SELF_IMPROVE_CONFIG`
-5. explicit CLI / tool `--config` / `config_path`
+### Low-risk apply
 
-Explicit env / CLI config paths must exist and contain a JSON object; missing or invalid explicit paths fail closed instead of silently falling back. `config_sources` records the files that were actually loaded.
+`apply-low-risk` は、既定では preview / attempt / pending ledger を作るだけです。実適用には次が必要です。
 
-`mode_policy` overrides are restrictive by default. Without `allow_policy_expansion: true`, custom policy can narrow commands/capabilities but cannot add new commands or turn a default-denied capability into an allowed one. Use policy expansion only for deliberate local experiments and keep normal cron/report usage on the default restrictive policy.
+- `--mode apply_low_risk`
+- `--confirm-apply`
+- `--expected-item-hash <item_hash>`
+- target hash、rollback preview、post-write validation の成功
 
-## Execution mode
+対象は狭い `replace_text_once` 系です。protected context、曖昧な target、複数一致、scorer disagreement、未検証 canonical replacement は拒否します。
 
-`execution_mode` は cron prompt ではなく plugin CLI / config / policy で検証します。未知の mode、許可されていない command、足りない capability は deny-by-default です。
+### Approved apply
 
-- `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval`, `ledger-report`, `approval-report`, `validate-approval`, `retention-report` を許可する既定 mode。
-- `dry_run_plan`: `generate-apply-plan` と read-only の `ledger-report` / `approval-report` / `validate-approval` / `retention-report` を許可するが、target file は変更しない。
-- `apply_low_risk`: 低リスク item の preview / attempt / rollback 記録と read-only の `ledger-report` / `approval-report` / `validate-approval` / `retention-report` を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>`、rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` があり、hash・rollback preview・validation が通る場合だけ。
-- `apply_approved`: approval artifact 作成用の `approve`、read-only の `approval-report` / `validate-approval` / `retention-report`、非破壊 preview の `apply-approved` を許可する。`approval-report --include-previews` は各 approval の `apply-approved` preview status を集約するだけで target file は変更しない。`apply-approved --expected-approval-hash <approval_hash> --expected-target-hash <current_hash>` は operator が見ている approval と target 状態を束縛し、不一致なら fail-closed で `expected_approval_hash_mismatch` / `expected_target_hash_mismatch` を返す。valid preview では非永続の `approved_apply_attempt_preview` と `approved_apply_ledger_preview` も返して、必要 confirmation・expected hashes・rollback preview hash・validation plan を監査できる。実適用は `--confirm-approved-apply --expected-approval-hash <approval_hash> --expected-target-hash <current_hash>` が揃い、approval hash / expiry / plan / item / target hash / rollback preview hash / rollback before snapshot / post-write validation が通る場合だけ。成功時は approved apply attempt と applied ledger を書き、target repo の commit は作らない。
+`apply-approved` は、既定では approval と target の検証、planned diff、rollback preview を返します。実適用には次が必要です。
+
+- `--mode apply_approved`
+- `--confirm-approved-apply`
+- `--expected-approval-hash <approval_hash>`
+- `--expected-target-hash <current_hash>`
+- approval expiry、plan/item drift、rollback preview hash、before snapshot、post-write validation の成功
+
+`replace_entire_file` は approval-gated path だけで使います。`skill_large_rewrite` と `memory_compress` の土台ですが、low-risk unattended apply には入れません。
+
+### Retention prune
+
+`retention-report` は read-only preview です。`retention-prune` も既定では削除候補と `artifact_list_hash` を返すだけです。実削除には次が必要です。
+
+- `--mode apply_approved`
+- `--confirm-prune`
+- `--expected-artifact-list-hash <artifact_list_hash>`
+
+削除対象は `apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` の expired candidates だけです。malformed artifact は報告しますが削除しません。
 
 ## Plugin tools
 
-`plugin.yaml` は次の agent-native tools を宣言します。いずれも `hermes_self_improvement/tool_handlers.py` の handler から CLI と同じ core function を呼び、`validate_mode_action(...)` / `_required_capability_for_command(...)` による policy gate を通します。wrapper CLI への shell out はしません。
+`plugin.yaml` は agent-native tools を登録します。tool handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を通します。
 
 - `self_improvement_status`
 - `self_improvement_generate_apply_plan`
@@ -159,46 +160,76 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
 
-`self_improvement_apply_approved` は既定では validation-only / preview-only で、valid preview には attempt / ledger の非永続 preview metadata が含まれます。実 mutation は `confirm_approved_apply=true` と `expected_approval_hash` / `expected_target_hash` が揃う場合だけです。approval-gated の `replace_entire_file` mutation は `skill_large_rewrite` / `memory_compress` の土台として使えますが、低リスク unattended apply には入りません。`retention-prune` / `self_improvement_retention_prune` は既定では prune preview だけを返し、実削除は `--confirm-prune --expected-artifact-list-hash <artifact_list_hash>` / `confirm_prune=true` と一致 hash がある場合だけです。
+Mutation-capable tools も CLI と同じ confirmation と expected hash を要求します。
 
-Mutation-capable tools は CLI と同じく fail-closed です。`self_improvement_apply_low_risk` の実変更には `mode="apply_low_risk"`, `confirm_apply=true`, `expected_item_hash` が必要です。`self_improvement_rollback_low_risk` の実 rollback には `mode="apply_low_risk"`, `confirm_rollback=true`, `expected_ledger_hash` が必要です。条件が揃わない場合は preview / rejected artifact に留め、target file は変更しません。
+## Scorers
 
-## Report integration
+- `heuristic`: 依存なしの deterministic scorer
+- `llm`: Hermes auxiliary LLM 経路。失敗時は heuristic に戻す
+- `gepa`: `hermes_self_improvement/gepa_adapter.py` 経由の offline DSPy-compatible scorer
+- `compare`: LLM と GEPA の disagreement を report に出す
 
-`run` / `report` now include concise operational summaries when artifacts exist:
+現在の `--scorer gepa` は本物の optimizer run ではありません。`max_iterations > 0` の optimizer 実行は project-specific metric / invocation がないため fail closed します。
 
-- `Apply ledger summary` lists recent low-risk ledgers across statuses for review;
-- `Approval gate summary` lists recent approval artifacts and whether current validation is still valid;
-- `Retention summary` lists expired artifact candidates and malformed files from the read-only retention preview.
+## ディレクトリ
 
-The integration is read-only. It does not create, approve, apply, rollback, remove, or prune artifacts. Empty artifact sets stay quiet so routine reports do not gain noisy empty sections.
+- `plugin.yaml`: Hermes plugin manifest
+- `__init__.py`: root の thin plugin entrypoint
+- `hermes_self_improvement/`: 実装 package
+- `hermes_self_improvement/cli.py`: CLI parser と pipeline orchestration
+- `hermes_self_improvement/config.py`: execution mode と policy gate
+- `hermes_self_improvement/observer.py`: hook observer、redaction、retention
+- `hermes_self_improvement/analysis.py`: event aggregation と proposal generation
+- `hermes_self_improvement/scoring.py`: scorer 実装
+- `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
+- `hermes_self_improvement/ledger.py`: apply attempt、ledger、rollback
+- `hermes_self_improvement/approvals.py`: approval artifact、validation、approved apply
+- `hermes_self_improvement/tool_handlers.py`: plugin tools。root 直下の `tools.py` は置かない
+- `evals/`: offline scorer の rubric と regression cases
+- `skills/operations/`: bundled operational skill
+- `tests/`: pytest suite
 
-## Retention report
+## Artifact の保存先
 
-`retention-report` / `self_improvement_retention_report` は read-only preview です。`retention-prune` / `self_improvement_retention_prune` は同じ candidate list の hash を operator-visible にし、確認済み hash が一致した場合だけ expired candidates を削除します。`apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` の artifact を集計し、`retention_days` より古い候補、malformed JSON、カテゴリ別件数を報告します。`--category <apply-plans|ledgers|apply-attempts|approvals>` / tool `category` で対象カテゴリを絞り込めます。ファイルの削除・移動・圧縮・prune は行いません。実 cleanup を追加する場合も、まず preview と expected artifact list / hash による明示 confirmation を別 slice で設計します。
+既定では `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存します。
 
-## Cron / scheduled execution
+- `state/events.jsonl`: observed events
+- `daily/latest.md`: daily report
+- `apply-plans/YYYY-MM-DD/`: dry-run apply plans
+- `ledgers/YYYY-MM-DD/`: apply ledgers
+- `apply-attempts/YYYY-MM-DD/`: apply attempt artifacts
+- `approvals/YYYY-MM-DD/`: approval artifacts
 
-Cron / scheduled execution is a runtime concern, not a plugin-internal scheduler. This plugin does not implement a scheduler and scheduled jobs should invoke the safe CLI or tools in a fresh session with a self-contained prompt. Do not create recursive cron jobs from a cron-run session.
+`config.json`, `config.local.json`, `HERMES_SELF_IMPROVE_CONFIG`, `--config` で保存先や scorer 設定を上書きできます。precedence は defaults < `config.json` < `config.local.json` < env < CLI です。
 
-Recommended scheduled jobs are non-mutating by default:
+## 開発
 
 ```bash
 cd /path/to/hermes-self-improvement
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
-bin/hermes-self-improve ledger-report --mode report_only --status applied --json
-bin/hermes-self-improve approval-report --mode report_only --status all --json
-bin/hermes-self-improve retention-report --mode report_only --json
-bin/hermes-self-improve retention-prune --mode apply_approved --json
-bin/hermes-self-improve retention-prune --mode apply_approved --confirm-prune --expected-artifact-list-hash <artifact_list_hash> --json
+PY=${PYTHON:-python3}
+$PY -m py_compile __init__.py hermes_self_improvement/*.py
+$PY -m pytest tests -q
+bin/hermes-self-improve status
+bin/hermes-self-improve gepa-eval --json
 ```
 
-Cron prompts must not run `apply-low-risk --confirm-apply`, must not run `rollback-low-risk --confirm-rollback`, and must not pass expected hashes for mutation. If a future scheduled review finds a candidate, it should report the plan path, item hash, ledger hash, risk, evidence, and validation status for a human or separate explicit workflow.
+plugin registration、tool schema、bundled skill discovery を触ったら plugin manager loading も確認します。
 
-## 開発方針
+```bash
+$PY - <<'PY'
+from hermes_cli.plugins import discover_plugins, get_plugin_manager
+import json
 
-- Hermes 本体や upstream-managed code は触らず、この plugin 内で完結させる。
-- hook は軽く保つ。重い処理は CLI / cron / offline evaluator に逃がす。
-- safety gate は prompt ではなく code と tests で守る。
-- 新しい mutation / apply 挙動は TDD で fail-closed を先に固定する。
-- plugin discovery や `__init__.py` を触ったら、unit test だけでなく plugin manager loading も確認する。
+discover_plugins(force=True)
+info = [p for p in get_plugin_manager().list_plugins() if p['name'] == 'hermes-self-improvement']
+print(json.dumps(info, ensure_ascii=False, indent=2))
+PY
+```
+
+開発時の原則です。
+
+- hook は軽く保つ
+- safety gate は code と tests で守る
+- 新しい mutation は TDD で fail-closed を先に固定する
+- destructive / broad mutation は approval-gated path から始める
+- target repo の commit は plugin では作らない
