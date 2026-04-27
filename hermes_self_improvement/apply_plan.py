@@ -17,6 +17,9 @@ PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
 
 def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
+    explicit = str(proposal.get("change_type") or "").strip()
+    if explicit:
+        return explicit
     action = str(proposal.get("action") or "").lower()
     title = str(proposal.get("title") or "").lower()
     haystack = f"{action} {title}"
@@ -30,6 +33,10 @@ def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
         return "stale_path_fix"
     if "stale_command" in haystack or ("stale" in haystack and "command" in haystack):
         return "stale_command_fix"
+    if "large_rewrite" in haystack or "large rewrite" in haystack:
+        return "skill_large_rewrite"
+    if "memory_compress" in haystack or "memory compression" in haystack or "compress_memory" in haystack:
+        return "memory_compress"
     return "unknown_or_unclassified"
 
 
@@ -257,6 +264,25 @@ def _plan_stale_reference_fix_mutation(proposal: dict[str, Any], target_content:
     return {"type": "replace_text_once", "old_text": old_text, "new_text": new_text}, []
 
 
+def _plan_replace_entire_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
+    if target_content is None:
+        return None, []
+    after_text = proposal.get("after_text")
+    if after_text is None:
+        after_text = proposal.get("new_content")
+    if after_text is None:
+        after_text = proposal.get("replacement_content")
+    if not isinstance(after_text, str) or after_text == "":
+        return None, ["replacement_content_missing"]
+    if after_text == target_content:
+        return None, ["replacement_content_unchanged"]
+    return {
+        "type": "replace_entire_file",
+        "after_text": after_text,
+        "after_hash": _sha256_text(after_text),
+    }, []
+
+
 def _plan_mutation_for_item(
     *,
     change_type: str,
@@ -270,6 +296,8 @@ def _plan_mutation_for_item(
         return _plan_typo_fix_mutation(proposal, target_content)
     if change_type in {"stale_path_fix", "stale_command_fix"}:
         return _plan_stale_reference_fix_mutation(proposal, target_content)
+    if change_type in _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES:
+        return _plan_replace_entire_file_mutation(proposal, target_content)
     heading_sets = {
         "pitfall_addition_existing_section": _PITFALL_SECTION_HEADINGS,
         "validation_addition_existing_section": _VALIDATION_SECTION_HEADINGS,
@@ -287,6 +315,16 @@ def _plan_mutation_for_item(
         "section_heading": heading,
         "text": _proposal_mutation_text(proposal),
     }, []
+
+
+_APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES = {"skill_large_rewrite", "memory_compress"}
+_LOW_RISK_UNATTENDED_CHANGE_TYPES = {
+    "pitfall_addition_existing_section",
+    "validation_addition_existing_section",
+    "typo_fix",
+    "stale_path_fix",
+    "stale_command_fix",
+}
 
 
 def _eligibility_for_apply_item(
@@ -349,6 +387,16 @@ def _apply_replace_text_once(content: str, mutation: dict[str, Any]) -> str | No
     return content.replace(old_text, new_text, 1)
 
 
+def _apply_replace_entire_file(content: str, mutation: dict[str, Any]) -> str | None:
+    after_text = mutation.get("after_text")
+    if not isinstance(after_text, str) or after_text == content:
+        return None
+    expected_hash = mutation.get("after_hash")
+    if expected_hash and _sha256_text(after_text) != expected_hash:
+        return None
+    return after_text
+
+
 def _preview_content(text: str, max_chars: int = 4000) -> str:
     if len(text) <= max_chars:
         return text
@@ -379,6 +427,8 @@ def _rollback_patch_for_mutation(mutation: dict[str, Any]) -> dict[str, Any] | N
             "old_text": new_text,
             "new_text": old_text,
         }
+    if mutation_type == "replace_entire_file":
+        return {"type": "replace_entire_file", "restore_from": "before_snapshot"}
     return None
 
 
@@ -397,6 +447,8 @@ def _rollback_preview_for_item(
         after_content = _apply_append_to_existing_section(target_content, mutation)
     elif mutation.get("type") == "replace_text_once":
         after_content = _apply_replace_text_once(target_content, mutation)
+    elif mutation.get("type") == "replace_entire_file":
+        after_content = _apply_replace_entire_file(target_content, mutation)
     if after_content is None:
         return None
     rollback_patch = _rollback_patch_for_mutation(mutation)
@@ -444,13 +496,14 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         mutation_blockers=mutation_blockers,
         scorer_disagreements=scorer_disagreements,
     )
-    eligible_for_unattended = eligibility["status"] == "eligible"
+    approval_only = change_type in _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES
+    eligible_for_unattended = eligibility["status"] == "eligible" and change_type in _LOW_RISK_UNATTENDED_CHANGE_TYPES
     rollback_preview = _rollback_preview_for_item(
         target_path=target_path,
         target_content=target_meta.get("content"),
         before_hash=before_hash,
         mutation=mutation,
-        eligible=eligible_for_unattended,
+        eligible=eligibility["status"] == "eligible" and (eligible_for_unattended or approval_only),
     )
     item: dict[str, Any] = {
         "item_id": f"item-{idx}",

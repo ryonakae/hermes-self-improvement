@@ -159,7 +159,7 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
 
-`self_improvement_apply_approved` は既定では validation-only / preview-only で、valid preview には attempt / ledger の非永続 preview metadata が含まれます。実 mutation は `confirm_approved_apply=true` と `expected_approval_hash` / `expected_target_hash` が揃う場合だけです。`retention-prune` / `self_improvement_retention_prune` は既定では prune preview だけを返し、実削除は `--confirm-prune --expected-artifact-list-hash <artifact_list_hash>` / `confirm_prune=true` と一致 hash がある場合だけです。
+`self_improvement_apply_approved` は既定では validation-only / preview-only で、valid preview には attempt / ledger の非永続 preview metadata が含まれます。実 mutation は `confirm_approved_apply=true` と `expected_approval_hash` / `expected_target_hash` が揃う場合だけです。approval-gated の `replace_entire_file` mutation は `skill_large_rewrite` / `memory_compress` の土台として使えますが、低リスク unattended apply には入りません。`retention-prune` / `self_improvement_retention_prune` は既定では prune preview だけを返し、実削除は `--confirm-prune --expected-artifact-list-hash <artifact_list_hash>` / `confirm_prune=true` と一致 hash がある場合だけです。
 
 Mutation-capable tools は CLI と同じく fail-closed です。`self_improvement_apply_low_risk` の実変更には `mode="apply_low_risk"`, `confirm_apply=true`, `expected_item_hash` が必要です。`self_improvement_rollback_low_risk` の実 rollback には `mode="apply_low_risk"`, `confirm_rollback=true`, `expected_ledger_hash` が必要です。条件が揃わない場合は preview / rejected artifact に留め、target file は変更しません。
 

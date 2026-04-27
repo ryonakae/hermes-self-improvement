@@ -880,3 +880,57 @@ def test_apply_approved_rejects_missing_rollback_before_snapshot_before_mutating
     assert "rollback_before_snapshot_unavailable" in result["reasons"]
     assert result["target_changed"] is False
     assert target.read_text(encoding="utf-8") == before
+
+
+def test_apply_approved_confirmed_supports_large_rewrite_replace_entire_file(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    before = "# Skill\n\nOld long guidance.\n"
+    after = "# Skill\n\nCompressed and rewritten guidance.\n"
+    target.write_text(before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-large-rewrite",
+        "title": "Rewrite skill guidance after approval",
+        "target": "file_workflow_skills",
+        "target_path": str(target),
+        "action": "skill_large_rewrite",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 72,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+        "after_text": after,
+    }
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 27, 18, 0, tzinfo=timezone.utc),
+    )
+    config = {"reports_dir": str(tmp_path / "reports")}
+    mod.write_apply_plan(plan, config)
+    item = plan["items"][0]
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 27, 19, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    result = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 27, 20, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert result["current_status"] == "applied_approved"
+    assert result["target_changed"] is True
+    assert target.read_text(encoding="utf-8") == after
+    ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
+    assert ledger["change_type"] == "skill_large_rewrite"
+    assert ledger["rollback_data"]["before_snapshot"] == before
+    assert ledger["target_after_hash"] == mod._sha256_text(after)

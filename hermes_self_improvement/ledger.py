@@ -7,10 +7,10 @@ from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover - package import path
-    from .apply_plan import _apply_append_to_existing_section, _apply_replace_text_once
+    from .apply_plan import _apply_append_to_existing_section, _apply_replace_entire_file, _apply_replace_text_once
     from .observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from apply_plan import _apply_append_to_existing_section, _apply_replace_text_once
+    from apply_plan import _apply_append_to_existing_section, _apply_replace_entire_file, _apply_replace_text_once
     from observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -346,6 +346,8 @@ def _content_after_item_mutation(item: dict[str, Any], before_content: str) -> s
         return _apply_append_to_existing_section(before_content, mutation)
     if mutation.get("type") == "replace_text_once":
         return _apply_replace_text_once(before_content, mutation)
+    if mutation.get("type") == "replace_entire_file":
+        return _apply_replace_entire_file(before_content, mutation)
     return None
 
 

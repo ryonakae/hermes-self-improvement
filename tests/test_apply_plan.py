@@ -701,3 +701,72 @@ def test_build_apply_plan_rejects_stale_fix_from_untrusted_verification_source(t
     item = plan["items"][0]
     assert item["mutation"] is None
     assert "canonical_replacement_unverified" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_supports_approval_required_large_rewrite_replace_entire_file(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    before = "# Skill\n\nOld long guidance.\n"
+    after = "# Skill\n\nCompressed and rewritten guidance.\n"
+    target.write_text(before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-large-rewrite",
+        "title": "Rewrite skill guidance after approval",
+        "target": "file_workflow_skills",
+        "target_path": str(target),
+        "action": "skill_large_rewrite",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 72,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+        "after_text": after,
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 27, 18, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "skill_large_rewrite"
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert item["mutation"]["type"] == "replace_entire_file"
+    assert item["mutation"]["after_hash"] == mod._sha256_text(after)
+    assert item["rollback_preview"]["before_snapshot"] == before
+    assert item["rollback_preview"]["after_hash"] == mod._sha256_text(after)
+    assert item["rollback_preview"]["rollback_patch"]["type"] == "replace_entire_file"
+    assert item["ledger_preview"]["rollback_preview_hash"]
+
+
+def test_build_apply_plan_rejects_large_rewrite_without_after_text(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\nOld guidance.\n", encoding="utf-8")
+    proposal = {
+        "id": "proposal-large-rewrite-missing",
+        "title": "Rewrite skill guidance after approval",
+        "target": "file_workflow_skills",
+        "target_path": str(target),
+        "action": "skill_large_rewrite",
+        "risk": "high",
+        "recommendation": "approval_required",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 27, 18, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "skill_large_rewrite"
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert item["mutation"] is None
+    assert "replacement_content_missing" in item["eligibility"]["reasons"]
