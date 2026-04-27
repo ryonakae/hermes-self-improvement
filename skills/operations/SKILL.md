@@ -47,6 +47,7 @@ bin/hermes-self-improve report --since-hours 24 --scorer llm
 bin/hermes-self-improve run --since-hours 24 --json --scorer compare
 bin/hermes-self-improve gepa-eval --json
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 ```
 
 Top-level `hermes self-improvement ...` は Hermes version / plugin discovery 状態により露出しないことがある。運用では wrapper CLI を優先し、CLI discovery の挙動を変える作業では plugin manager と user-facing CLI の両方を確認する。
