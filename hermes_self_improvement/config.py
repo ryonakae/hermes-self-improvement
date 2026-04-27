@@ -26,7 +26,7 @@ VALID_EXECUTION_MODES = {
 RESERVED_EXECUTION_MODES = {"full_auto_with_policy"}
 DEFAULT_MODE_POLICY = {
     "report_only": {
-        "commands": ["status", "analyze", "report", "run", "gepa-eval", "ledger-report", "approval-report", "validate-approval", "retention-report"],
+        "commands": ["status", "analyze", "report", "run", "gepa-eval", "gepa-optimize", "ledger-report", "approval-report", "validate-approval", "retention-report"],
         "capabilities": {
             "write_apply_plan": False,
             "write_apply_attempt": False,

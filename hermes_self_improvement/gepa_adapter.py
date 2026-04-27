@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import importlib
 import importlib.util
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,36 @@ EVAL_DIR = PLUGIN_DIR / "evals"
 RUBRIC_PATH = EVAL_DIR / "rubric.json"
 EVAL_CASES_PATH = EVAL_DIR / "proposal_eval_cases.jsonl"
 PROGRAM_NAME = "ProposalScoringProgram"
+UTC = timezone.utc
+
+
+def _stable_json(data: Any) -> str:
+    return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _reports_dir(config: dict[str, Any]) -> Path:
+    raw = config.get("reports_dir") or str(Path.home() / ".hermes" / "reports" / "self-improvement")
+    return Path(str(raw)).expanduser()
+
+
+def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
+    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    allowed_keys = {
+        "enabled",
+        "mode",
+        "llm_source",
+        "compiled_program_path",
+        "reflection_model",
+        "task_model",
+        "max_full_evals",
+        "num_threads",
+        "track_stats",
+    }
+    return {key: gepa_config.get(key) for key in sorted(allowed_keys) if key in gepa_config}
 
 
 RUBRIC = {
@@ -107,6 +139,118 @@ def convert_eval_cases_to_dspy_examples(cases: list[dict[str, Any]], *, dspy_mod
         except Exception as exc:
             rejected.append({"index": index, "id": case.get("id") if isinstance(case, dict) else None, "reason": str(exc)})
     return {"examples": examples, "rejected": rejected}
+
+
+def _load_dspy_metric_module() -> Any:
+    try:
+        from . import gepa_metric  # type: ignore
+        return gepa_metric
+    except Exception:
+        path = PACKAGE_DIR / "gepa_metric.py"
+        spec = importlib.util.spec_from_file_location("hermes_self_improvement_gepa_metric_runtime", path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Unable to load GEPA metric: {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+
+
+def optimize_gepa(
+    *,
+    config: dict[str, Any],
+    trainset_path: str | Path | None = None,
+    valset_path: str | Path | None = None,
+    max_full_evals: int | None = None,
+    dspy_module: Any | None = None,
+) -> dict[str, Any]:
+    """Run an explicit GEPA compile operation and write a report artifact.
+
+    This command writes only self-improvement evaluator artifacts. It does not
+    mutate skills, memories, apply plans, or the active evaluator pointer.
+    """
+    ts = datetime.now(UTC)
+    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    budget = int(max_full_evals if max_full_evals is not None else gepa_config.get("max_full_evals", 0) or 0)
+    if budget <= 0:
+        raise RuntimeError("gepa-optimize requires --max-full-evals greater than 0")
+
+    dspy = dspy_module or require_dspy()
+    if not hasattr(dspy, "GEPA"):
+        raise RuntimeError("DSPy is installed, but dspy.GEPA is not available")
+
+    rubric = load_rubric()
+    train_cases = load_eval_cases(Path(trainset_path).expanduser() if trainset_path else EVAL_CASES_PATH)
+    val_cases = load_eval_cases(Path(valset_path).expanduser() if valset_path else EVAL_CASES_PATH)
+    train_converted = convert_eval_cases_to_dspy_examples(train_cases, dspy_module=dspy, rubric=rubric)
+    val_converted = convert_eval_cases_to_dspy_examples(val_cases, dspy_module=dspy, rubric=rubric)
+    if train_converted["rejected"] or val_converted["rejected"]:
+        raise RuntimeError("gepa-optimize rejected malformed eval cases; fix train/val data before compiling")
+    trainset = train_converted["examples"]
+    valset = val_converted["examples"]
+    if not trainset:
+        raise RuntimeError("gepa-optimize requires a non-empty trainset")
+    if not valset:
+        raise RuntimeError("gepa-optimize requires a non-empty valset")
+
+    program_module = _load_dspy_program_module()
+    student = program_module.build_dspy_program(lm_config=gepa_config, dspy_module=dspy)
+    metric_module = _load_dspy_metric_module()
+    metric = getattr(metric_module, "gepa_feedback_metric")
+
+    optimizer_kwargs = {
+        "metric": metric,
+        "max_full_evals": budget,
+        "track_stats": bool(gepa_config.get("track_stats", True)),
+    }
+    if gepa_config.get("num_threads") is not None:
+        optimizer_kwargs["num_threads"] = int(gepa_config.get("num_threads") or 1)
+    optimizer = dspy.GEPA(**optimizer_kwargs)
+    compiled = optimizer.compile(student, trainset=trainset, valset=valset)
+
+    artifact_id = ts.strftime("%Y%m%dT%H%M%SZ") + "-gepa-compile"
+    program_path = None
+    programs_dir = _reports_dir(config) / "gepa" / "programs"
+    programs_dir.mkdir(parents=True, exist_ok=True)
+    candidate_path = programs_dir / f"{artifact_id}.json"
+    saved_program = False
+    save_fn = getattr(compiled, "save", None)
+    if callable(save_fn):
+        try:
+            save_fn(str(candidate_path))
+            saved_program = candidate_path.exists()
+        except Exception:
+            saved_program = False
+    if not saved_program:
+        candidate_path.write_text(_stable_json({"repr": repr(compiled), "program": PROGRAM_NAME}) + "\n", encoding="utf-8")
+    program_path = str(candidate_path)
+
+    train_hash = _sha256_text(_stable_json(train_cases))
+    val_hash = _sha256_text(_stable_json(val_cases))
+    payload = {
+        "schema_name": "self_improvement_gepa_compile",
+        "schema_version": "1.0",
+        "created_at": ts.isoformat(),
+        "created_by": {"plugin": "hermes-self-improvement", "adapter_version": ADAPTER_VERSION},
+        "mode": "gepa_optimize",
+        "current_status": "compiled",
+        "dspy_version": str(getattr(dspy, "__version__", "unknown")),
+        "config_summary": _redact_config_summary(config),
+        "optimizer": {"name": "dspy.GEPA", "max_full_evals": budget, "track_stats": bool(gepa_config.get("track_stats", True))},
+        "trainset": {"path": str(Path(trainset_path).expanduser() if trainset_path else EVAL_CASES_PATH), "case_count": len(trainset), "case_hash": train_hash},
+        "valset": {"path": str(Path(valset_path).expanduser() if valset_path else EVAL_CASES_PATH), "case_count": len(valset), "case_hash": val_hash},
+        "compiled_program_path": program_path,
+        "compiled_program_hash": _sha256_text(candidate_path.read_text(encoding="utf-8")),
+        "safety": {"advisory_only": True, "active_evaluator_promoted": False, "requires_approval_for_promotion": True},
+        "stats": getattr(optimizer, "stats", None),
+    }
+    out_dir = _reports_dir(config) / "gepa" / ts.strftime("%Y-%m-%d")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{artifact_id}.json"
+    out_path.write_text(_stable_json(payload) + "\n", encoding="utf-8")
+    payload["artifact_path"] = str(out_path)
+    payload["artifact_hash"] = _sha256_text(out_path.read_text(encoding="utf-8"))
+    return payload
 
 
 def build_gepa_payload(

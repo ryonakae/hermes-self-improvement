@@ -46,15 +46,30 @@ PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
 
 
-def _call_gepa_eval(*, config: dict[str, Any]) -> dict[str, Any]:
+def _load_gepa_adapter_module(name: str = "hermes_self_improvement_gepa_adapter_cli") -> Any:
     adapter_path = Path(__file__).with_name("gepa_adapter.py")
-    spec = importlib.util.spec_from_file_location("hermes_self_improvement_gepa_adapter_eval", adapter_path)
+    spec = importlib.util.spec_from_file_location(name, adapter_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load GEPA adapter: {adapter_path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
+    return module
+
+
+def _call_gepa_eval(*, config: dict[str, Any]) -> dict[str, Any]:
+    module = _load_gepa_adapter_module("hermes_self_improvement_gepa_adapter_eval")
     return module.evaluate_offline_program(config=config)
+
+
+def _call_gepa_optimize(*, config: dict[str, Any], trainset: str | None, valset: str | None, max_full_evals: int | None) -> dict[str, Any]:
+    module = _load_gepa_adapter_module("hermes_self_improvement_gepa_adapter_optimize")
+    return module.optimize_gepa(
+        config=config,
+        trainset_path=trainset,
+        valset_path=valset,
+        max_full_evals=max_full_evals,
+    )
 
 
 def _render_gepa_eval(payload: dict[str, Any]) -> str:
@@ -782,6 +797,13 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_gepa_eval.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_gepa_eval)
     p_gepa_eval.set_defaults(func=_handle_cli)
+    p_gepa_optimize = sub.add_parser("gepa-optimize", help="Run an explicit GEPA optimizer compile and write report artifacts")
+    p_gepa_optimize.add_argument("--trainset", default=None, help="JSONL trainset path; defaults to bundled proposal eval cases")
+    p_gepa_optimize.add_argument("--valset", default=None, help="JSONL validation set path; defaults to bundled proposal eval cases")
+    p_gepa_optimize.add_argument("--max-full-evals", type=int, default=None, help="Required positive GEPA full-evaluation budget")
+    p_gepa_optimize.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_gepa_optimize)
+    p_gepa_optimize.set_defaults(func=_handle_cli)
     p_ledger_report = sub.add_parser("ledger-report", help="Summarize low-risk apply ledgers for human review")
     p_ledger_report.add_argument("--status", choices=["all", "pending", "applied", "rolled_back", "failed", "rejected"], default="applied")
     p_ledger_report.add_argument("--limit", type=int, default=20)
@@ -890,6 +912,21 @@ def _handle_cli(args: argparse.Namespace) -> None:
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
             print(_render_gepa_eval(payload))
+        return
+    if cmd == "gepa-optimize":
+        payload = _call_gepa_optimize(
+            config=config,
+            trainset=getattr(args, "trainset", None),
+            valset=getattr(args, "valset", None),
+            max_full_evals=getattr(args, "max_full_evals", None),
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(f"GEPA compile status: {payload.get('current_status')}")
+            print(f"Artifact: {payload.get('artifact_path')}")
+            print(f"Compiled program: {payload.get('compiled_program_path')}")
+            print("Active evaluator promoted: false")
         return
     if cmd == "ledger-report":
         payload = build_ledger_report_payload(
