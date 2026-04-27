@@ -33,6 +33,10 @@ def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
         return "stale_path_fix"
     if "stale_command" in haystack or ("stale" in haystack and "command" in haystack):
         return "stale_command_fix"
+    if "skill_create" in haystack or "skill create" in haystack or "create skill" in haystack:
+        return "skill_create"
+    if "skill_delete" in haystack or "skill delete" in haystack or "delete skill" in haystack:
+        return "skill_delete"
     if "large_rewrite" in haystack or "large rewrite" in haystack:
         return "skill_large_rewrite"
     if "memory_compress" in haystack or "memory compression" in haystack or "compress_memory" in haystack:
@@ -264,14 +268,19 @@ def _plan_stale_reference_fix_mutation(proposal: dict[str, Any], target_content:
     return {"type": "replace_text_once", "old_text": old_text, "new_text": new_text}, []
 
 
-def _plan_replace_entire_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
-    if target_content is None:
-        return None, []
+def _replacement_content_from_proposal(proposal: dict[str, Any]) -> Any:
     after_text = proposal.get("after_text")
     if after_text is None:
         after_text = proposal.get("new_content")
     if after_text is None:
         after_text = proposal.get("replacement_content")
+    return after_text
+
+
+def _plan_replace_entire_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
+    if target_content is None:
+        return None, []
+    after_text = _replacement_content_from_proposal(proposal)
     if not isinstance(after_text, str) or after_text == "":
         return None, ["replacement_content_missing"]
     if after_text == target_content:
@@ -281,6 +290,25 @@ def _plan_replace_entire_file_mutation(proposal: dict[str, Any], target_content:
         "after_text": after_text,
         "after_hash": _sha256_text(after_text),
     }, []
+
+
+def _plan_create_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
+    if target_content is not None:
+        return None, ["target_already_exists"]
+    after_text = _replacement_content_from_proposal(proposal)
+    if not isinstance(after_text, str) or after_text == "":
+        return None, ["replacement_content_missing"]
+    return {
+        "type": "create_file",
+        "after_text": after_text,
+        "after_hash": _sha256_text(after_text),
+    }, []
+
+
+def _plan_delete_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
+    if target_content is None:
+        return None, ["target_not_found"]
+    return {"type": "delete_file"}, []
 
 
 def _plan_mutation_for_item(
@@ -296,6 +324,10 @@ def _plan_mutation_for_item(
         return _plan_typo_fix_mutation(proposal, target_content)
     if change_type in {"stale_path_fix", "stale_command_fix"}:
         return _plan_stale_reference_fix_mutation(proposal, target_content)
+    if change_type == "skill_create":
+        return _plan_create_file_mutation(proposal, target_content)
+    if change_type == "skill_delete":
+        return _plan_delete_file_mutation(proposal, target_content)
     if change_type in _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES:
         return _plan_replace_entire_file_mutation(proposal, target_content)
     heading_sets = {
@@ -318,6 +350,8 @@ def _plan_mutation_for_item(
 
 
 _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES = {"skill_large_rewrite", "memory_compress"}
+_APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES = {"skill_create", "skill_delete"}
+_APPROVAL_REQUIRED_CHANGE_TYPES = _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES | _APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES
 _LOW_RISK_UNATTENDED_CHANGE_TYPES = {
     "pitfall_addition_existing_section",
     "validation_addition_existing_section",
@@ -341,7 +375,7 @@ def _eligibility_for_apply_item(
         reasons.append("change_type_unknown")
     if not target_path:
         reasons.append("target_path_missing")
-    elif target_exists is False:
+    elif target_exists is False and change_type != "skill_create":
         reasons.append("target_not_found")
     reasons.extend(mutation_blockers)
     if mutation is None:
@@ -397,6 +431,24 @@ def _apply_replace_entire_file(content: str, mutation: dict[str, Any]) -> str | 
     return after_text
 
 
+def _apply_create_file(content: str | None, mutation: dict[str, Any]) -> str | None:
+    if content is not None:
+        return None
+    after_text = mutation.get("after_text")
+    if not isinstance(after_text, str) or after_text == "":
+        return None
+    expected_hash = mutation.get("after_hash")
+    if expected_hash and _sha256_text(after_text) != expected_hash:
+        return None
+    return after_text
+
+
+def _apply_delete_file(content: str | None, mutation: dict[str, Any]) -> str | None:
+    if content is None:
+        return None
+    return ""
+
+
 def _preview_content(text: str, max_chars: int = 4000) -> str:
     if len(text) <= max_chars:
         return text
@@ -429,6 +481,10 @@ def _rollback_patch_for_mutation(mutation: dict[str, Any]) -> dict[str, Any] | N
         }
     if mutation_type == "replace_entire_file":
         return {"type": "replace_entire_file", "restore_from": "before_snapshot"}
+    if mutation_type == "create_file":
+        return {"type": "delete_file"}
+    if mutation_type == "delete_file":
+        return {"type": "create_file", "restore_from": "before_snapshot"}
     return None
 
 
@@ -440,28 +496,47 @@ def _rollback_preview_for_item(
     mutation: dict[str, Any] | None,
     eligible: bool,
 ) -> dict[str, Any] | None:
-    if not eligible or not target_path or target_content is None or not mutation:
+    if not eligible or not target_path or not mutation:
+        return None
+    mutation_type = mutation.get("type")
+    if mutation_type != "create_file" and target_content is None:
         return None
     after_content = None
-    if mutation.get("type") == "append_to_existing_section":
-        after_content = _apply_append_to_existing_section(target_content, mutation)
-    elif mutation.get("type") == "replace_text_once":
-        after_content = _apply_replace_text_once(target_content, mutation)
-    elif mutation.get("type") == "replace_entire_file":
-        after_content = _apply_replace_entire_file(target_content, mutation)
+    after_hash = None
+    rollback_strategy = "restore_full_file_from_before_content"
+    before_snippet = _preview_content(target_content) if target_content is not None else ""
+    after_snippet = ""
+    if mutation_type == "append_to_existing_section":
+        after_content = _apply_append_to_existing_section(target_content or "", mutation)
+    elif mutation_type == "replace_text_once":
+        after_content = _apply_replace_text_once(target_content or "", mutation)
+    elif mutation_type == "replace_entire_file":
+        after_content = _apply_replace_entire_file(target_content or "", mutation)
+    elif mutation_type == "create_file":
+        after_content = _apply_create_file(target_content, mutation)
+        rollback_strategy = "delete_created_file"
+    elif mutation_type == "delete_file":
+        if target_content is not None:
+            after_content = ""
+            after_hash = None
     if after_content is None:
         return None
+    if mutation_type != "delete_file":
+        after_hash = _sha256_text(after_content)
+        after_snippet = _preview_content(after_content)
     rollback_patch = _rollback_patch_for_mutation(mutation)
-    return {
-        "rollback_strategy": "restore_full_file_from_before_content",
+    preview = {
+        "rollback_strategy": rollback_strategy,
         "target_path": target_path,
         "before_hash": before_hash,
-        "after_hash": _sha256_text(after_content),
-        "before_snippet": _preview_content(target_content),
-        "after_snippet": _preview_content(after_content),
-        "before_snapshot": target_content,
+        "after_hash": after_hash,
+        "before_snippet": before_snippet,
+        "after_snippet": after_snippet,
         "rollback_patch": rollback_patch,
     }
+    if target_content is not None:
+        preview["before_snapshot"] = target_content
+    return preview
 
 
 def _ledger_preview_for_item(eligible: bool, rollback_preview: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -496,7 +571,7 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         mutation_blockers=mutation_blockers,
         scorer_disagreements=scorer_disagreements,
     )
-    approval_only = change_type in _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES
+    approval_only = change_type in _APPROVAL_REQUIRED_CHANGE_TYPES
     eligible_for_unattended = eligibility["status"] == "eligible" and change_type in _LOW_RISK_UNATTENDED_CHANGE_TYPES
     rollback_preview = _rollback_preview_for_item(
         target_path=target_path,

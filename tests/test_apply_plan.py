@@ -770,3 +770,111 @@ def test_build_apply_plan_rejects_large_rewrite_without_after_text(tmp_path):
     assert item["requires_approval"] is True
     assert item["mutation"] is None
     assert "replacement_content_missing" in item["eligibility"]["reasons"]
+
+
+
+def test_build_apply_plan_supports_approval_required_skill_create_file(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "new-skill" / "SKILL.md"
+    new_content = "---\nname: new-skill\ndescription: New skill.\n---\n\n# New skill\n"
+    proposal = {
+        "id": "proposal-skill-create",
+        "title": "Create a new skill after approval",
+        "target": "skill",
+        "target_path": str(target),
+        "action": "skill_create",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 70,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+        "new_content": new_content,
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 28, 10, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "skill_create"
+    assert item["target_exists"] is False
+    assert item["before_hash"] is None
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert item["mutation"]["type"] == "create_file"
+    assert item["mutation"]["after_hash"] == mod._sha256_text(new_content)
+    assert item["rollback_preview"]["rollback_strategy"] == "delete_created_file"
+    assert item["rollback_preview"]["before_hash"] is None
+    assert item["rollback_preview"]["after_hash"] == mod._sha256_text(new_content)
+    assert item["rollback_preview"]["rollback_patch"]["type"] == "delete_file"
+    assert item["ledger_preview"]["rollback_preview_hash"]
+
+
+def test_build_apply_plan_rejects_skill_create_when_target_exists(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "existing-skill" / "SKILL.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("# Existing\n", encoding="utf-8")
+    proposal = {
+        "id": "proposal-skill-create-existing",
+        "title": "Create a new skill after approval",
+        "target_path": str(target),
+        "action": "skill_create",
+        "risk": "high",
+        "new_content": "# New\n",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 28, 10, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "skill_create"
+    assert item["mutation"] is None
+    assert "target_already_exists" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_supports_approval_required_skill_delete_file(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "old-skill" / "SKILL.md"
+    before = "---\nname: old-skill\ndescription: Old skill.\n---\n\n# Old skill\n"
+    target.parent.mkdir(parents=True)
+    target.write_text(before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-skill-delete",
+        "title": "Delete obsolete skill after approval",
+        "target": "skill",
+        "target_path": str(target),
+        "action": "skill_delete",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 68,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 28, 10, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "skill_delete"
+    assert item["target_exists"] is True
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert item["mutation"]["type"] == "delete_file"
+    assert item["rollback_preview"]["rollback_strategy"] == "restore_full_file_from_before_content"
+    assert item["rollback_preview"]["before_snapshot"] == before
+    assert item["rollback_preview"]["after_hash"] is None
+    assert item["rollback_preview"]["rollback_patch"]["type"] == "create_file"

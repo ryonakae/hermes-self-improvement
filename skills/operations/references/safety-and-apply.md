@@ -6,7 +6,8 @@ Use this reference when changing execution modes, policy gates, apply-plan gener
 
 - Runtime hooks observe only; they do not mutate skills or memory.
 - LLM / GEPA / compare scorers are advisory only and always force `auto_apply: false`.
-- Semantic skill changes, memory reclassification/deletion, rename/merge/delete, broad rewrites, and trigger meaning changes require human review.
+- Semantic skill changes, memory reclassification/deletion, rename/merge, broad rewrites, and trigger meaning changes require human review.
+- `skill_create` and `skill_delete` are implemented only through approval-gated apply. They must not enter unattended low-risk apply.
 - Natural-language cron prompts are not a policy enforcement channel. Enforce permissions in plugin CLI/config/policy code.
 
 ## Execution modes
@@ -92,16 +93,17 @@ If no matching existing section is present for section additions, fail closed wi
 
 `ledger-report` is read-only and summarizes ledger `review_summary`, `applied_diff`, `validation_result`, and `git_metadata` so applied vs deferred changes can be reviewed without reopening each JSON artifact.
 
-`approve <plan-id> <item-id>` creates a single-item approval artifact under `approvals/YYYY-MM-DD/` in `apply_approved` mode. The approval binds `plan_hash`, `item_hash`, approved change type, target path, approver source, and expiry. It does not mutate targets. `approval-report` is read-only and validates approval artifacts against their own `approval_hash`, expiry, current plan hash, current item hash, change type, and target path. `apply-approved <approval-id>` is now validation-only / preview-only: it re-runs approval validation, checks current target hash against the approved item before hash, and returns planned diff / validation plan / rollback preview with `target_changed: false`. Valid previews also include non-persistent approved apply attempt / ledger previews so reviewers can inspect required confirmation, expected hashes, rollback preview hash, and validation plan. Actual approved mutation is guarded by `--confirm-approved-apply --expected-approval-hash --expected-target-hash`; it writes an approved apply attempt and applied ledger only after approval, target, rollback preview hash, rollback before snapshot, and post-write validation pass.
+`approve <plan-id> <item-id>` creates a single-item approval artifact under `approvals/YYYY-MM-DD/` in `apply_approved` mode. The approval binds `plan_hash`, `item_hash`, approved change type, target path, approver source, and expiry. It does not mutate targets. `approval-report` is read-only and validates approval artifacts against their own `approval_hash`, expiry, current plan hash, current item hash, change type, and target path. `apply-approved <approval-id>` defaults to validation / preview: it re-runs approval validation, checks current target hash against the approved item before hash, and returns planned diff / validation plan / rollback preview with `target_changed: false`. Valid previews also include non-persistent approved apply attempt / ledger previews so reviewers can inspect required confirmation, expected hashes, rollback preview hash, and validation plan. Actual approved mutation is guarded by `--confirm-approved-apply --expected-approval-hash --expected-target-hash`; it writes an approved apply attempt and applied ledger only after approval, target, rollback preview hash, rollback data, and post-write validation pass. `skill_create` uses `create_file` with rollback strategy `delete_created_file`; `skill_delete` uses `delete_file` with full before snapshot rollback.
 
 `stale_plan`, `rejected`, and confirmation-hash mismatch attempts should not create ledgers or planned diffs beyond the safe preview metadata.
 
 `rollback-low-risk <ledger-id>` currently:
 
 - loads an explicit applied ledger
-- checks ledger status, ledger hash confirmation, current target hash, `before_snapshot` availability, and before-snapshot hash integrity
+- checks ledger status, ledger hash confirmation, current target hash, rollback data availability, and before-snapshot hash integrity when a before snapshot is required
 - without confirmation, records `would_rollback_low_risk` and leaves the target unchanged
-- with `--confirm-rollback --expected-ledger-hash <ledger_hash>`, restores the target from the ledger `before_snapshot` only if the current target hash still matches the applied hash
+- with `--confirm-rollback --expected-ledger-hash <ledger_hash>`, restores the target from the ledger rollback data only if the current target hash still matches the applied hash
+- supports `delete_created_file` rollback for approved `skill_create` ledgers and before-snapshot restore for approved `skill_delete` ledgers
 - appends a `rolled_back` event to the same ledger and recomputes `ledger_hash` on success
 
 Rollback must fail closed for stale targets, missing rollback snapshots, before-snapshot hash mismatch, non-applied ledgers, and ledger-hash confirmation mismatch.
@@ -158,6 +160,6 @@ Implementation note: do not place a handler module named `tools.py` at the plugi
 
 ## Retention report
 
-`retention-report` is read-only. It scans `apply-plans/`, `ledgers/`, `apply-attempts/`, and `approvals/` under the configured reports directory, reports artifacts older than `retention_days`, and surfaces malformed JSON. `--category` / tool `category` can narrow the preview to one artifact family. It does not remove, prune, rotate, or compress files. `replace_entire_file` mutations are approval-gated only and are used as the first C/D-class substrate for `skill_large_rewrite` and `memory_compress`; they require full before snapshot rollback data and never qualify for unattended low-risk apply.
+`retention-report` is read-only. It scans `apply-plans/`, `ledgers/`, `apply-attempts/`, and `approvals/` under the configured reports directory, reports artifacts older than `retention_days`, and surfaces malformed JSON. `--category` / tool `category` can narrow the preview to one artifact family. It does not remove, prune, rotate, or compress files. `replace_entire_file` mutations are approval-gated only and are used as the first C/D-class substrate for `skill_large_rewrite` and `memory_compress`; they require full before snapshot rollback data and never qualify for unattended low-risk apply. `create_file` and `delete_file` are approval-gated substrates for `skill_create` and `skill_delete`; create requires a missing target, delete requires an existing target, and both record rollback data before mutation.
 
 `retention-prune` / `self_improvement_retention_prune` is the destructive cleanup path. It defaults to `would_prune` preview and only deletes expired candidates when `confirm_prune=true` / `--confirm-prune` and `expected_artifact_list_hash` matches the preview `artifact_list_hash`. Malformed artifacts are reported but not pruned by this path.

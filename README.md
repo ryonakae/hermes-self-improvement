@@ -12,6 +12,7 @@ hook は観測だけをします。skill や memory を会話中に勝手に書�
 - report、apply plan、ledger、approval、retention preview を artifact として残す
 - 低リスクな text replacement を、hash と validation 付きで適用する
 - approval 済み item を、approval hash と target hash 付きで適用する
+- approval-gated に skill file の作成・削除・全置換を扱う
 - 古い self-improvement artifact を preview し、確認済み list hash が一致した場合だけ prune する
 
 保存する event は redacted preview と hash が中心です。secret らしき値や sensitive path は保存前に伏せます。
@@ -130,9 +131,11 @@ Policy は `hermes_self_improvement/config.py` で検証します。prompt だ�
 - `--confirm-approved-apply`
 - `--expected-approval-hash <approval_hash>`
 - `--expected-target-hash <current_hash>`
-- approval expiry、plan/item drift、rollback preview hash、before snapshot、post-write validation の成功
+- approval expiry、plan/item drift、rollback preview hash、rollback data、post-write validation の成功
 
 `replace_entire_file` は approval-gated path だけで使います。`skill_large_rewrite` と `memory_compress` の土台ですが、low-risk unattended apply には入れません。
+
+`skill_create` は存在しない target にだけ `create_file` mutation を作ります。rollback は作成ファイルの削除です。`skill_delete` は既存 target にだけ `delete_file` mutation を作ります。rollback は before snapshot の復元です。どちらも approval-gated で、low-risk unattended apply には入れません。
 
 ### Retention prune
 

@@ -9,6 +9,7 @@ try:  # pragma: no cover - package import path
     from .ledger import (
         _applied_diff_for_item,
         _content_after_item_mutation,
+        _current_file_content,
         _current_file_hash,
         _find_apply_plan_item,
         _git_metadata_for_target,
@@ -25,6 +26,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from ledger import (
         _applied_diff_for_item,
         _content_after_item_mutation,
+        _current_file_content,
         _current_file_hash,
         _find_apply_plan_item,
         _git_metadata_for_target,
@@ -519,7 +521,7 @@ def preview_apply_approved(
     if expected_approval_hash is not None and approval_hash != expected_approval_hash:
         reasons.append("expected_approval_hash_mismatch")
     current_hash = _current_file_hash(item.get("target_path"))
-    if confirm_approved_apply and not expected_target_hash:
+    if confirm_approved_apply and item.get("before_hash") is not None and not expected_target_hash:
         reasons.append("expected_target_hash_required")
     if expected_target_hash is not None and current_hash != expected_target_hash:
         reasons.append("expected_target_hash_mismatch")
@@ -534,7 +536,11 @@ def preview_apply_approved(
         if expected_rollback_hash and _sha256_text(_stable_json(rollback_preview)) != expected_rollback_hash:
             reasons.append("rollback_preview_hash_mismatch")
         before_snapshot = rollback_preview.get("before_snapshot")
-        if not isinstance(before_snapshot, str):
+        rollback_strategy = str(rollback_preview.get("rollback_strategy") or "")
+        if rollback_strategy == "delete_created_file":
+            if item.get("before_hash") is not None:
+                reasons.append("rollback_created_file_before_hash_unexpected")
+        elif not isinstance(before_snapshot, str):
             reasons.append("rollback_before_snapshot_unavailable")
         elif _sha256_text(before_snapshot) != item.get("before_hash"):
             reasons.append("rollback_before_snapshot_hash_mismatch")
@@ -608,7 +614,9 @@ def preview_apply_approved(
             return payload
 
         target_path = Path(str(item.get("target_path"))).expanduser()
-        before_content = target_path.read_text(encoding="utf-8", errors="replace")
+        mutation = item.get("mutation") if isinstance(item.get("mutation"), dict) else {}
+        mutation_type = mutation.get("type")
+        before_content = _current_file_content(str(target_path))
         after_content = _content_after_item_mutation(item, before_content)
         if after_content is None:
             reasons = ["mutation_not_supported"]
@@ -634,7 +642,7 @@ def preview_apply_approved(
                 "mutation_status": "rejected",
             })
             return payload
-        after_hash = _sha256_text(after_content)
+        after_hash = None if mutation_type == "delete_file" else _sha256_text(after_content)
         expected_after_hash = (item.get("rollback_preview") or {}).get("after_hash")
         if after_hash != expected_after_hash:
             reasons = ["planned_after_hash_mismatch"]
@@ -661,7 +669,11 @@ def preview_apply_approved(
             })
             return payload
 
-        target_path.write_text(after_content, encoding="utf-8")
+        if mutation_type == "delete_file":
+            target_path.unlink()
+        else:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(after_content, encoding="utf-8")
         final_hash = _current_file_hash(str(target_path))
         validation_result = _validation_result_for_item(item=item, before_hash=current_hash, after_hash=final_hash)
         applied_diff = _applied_diff_for_item(item)

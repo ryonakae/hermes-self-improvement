@@ -94,6 +94,7 @@ Mutation の条件です。
 - `apply-approved`: 実変更には `--confirm-approved-apply --expected-approval-hash --expected-target-hash` と approval / target / rollback / post-write validation が必要。
 - `retention-prune`: 実削除には `--confirm-prune --expected-artifact-list-hash` が必要。
 - `replace_entire_file`: `skill_large_rewrite` / `memory_compress` 用の approval-gated mutation。low-risk unattended apply には入れない。
+- `create_file` / `delete_file`: `skill_create` / `skill_delete` 用の approval-gated mutation。create は rollback で作成ファイルを削除し、delete は before snapshot から復元する。
 
 ## Plugin tools
 

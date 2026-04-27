@@ -7,10 +7,22 @@ from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover - package import path
-    from .apply_plan import _apply_append_to_existing_section, _apply_replace_entire_file, _apply_replace_text_once
+    from .apply_plan import (
+        _apply_append_to_existing_section,
+        _apply_create_file,
+        _apply_delete_file,
+        _apply_replace_entire_file,
+        _apply_replace_text_once,
+    )
     from .observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from apply_plan import _apply_append_to_existing_section, _apply_replace_entire_file, _apply_replace_text_once
+    from apply_plan import (
+        _apply_append_to_existing_section,
+        _apply_create_file,
+        _apply_delete_file,
+        _apply_replace_entire_file,
+        _apply_replace_text_once,
+    )
     from observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -182,8 +194,13 @@ def rollback_low_risk(
         reasons.append("target_hash_mismatch")
         status = "stale_target"
     rollback_data = ledger.get("rollback_data") if isinstance(ledger.get("rollback_data"), dict) else {}
+    rollback_strategy = str(rollback_data.get("rollback_strategy") or "")
     before_snapshot = rollback_data.get("before_snapshot")
-    if not isinstance(before_snapshot, str):
+    if rollback_strategy == "delete_created_file":
+        if ledger.get("target_before_hash") is not None:
+            reasons.append("rollback_created_file_before_hash_unexpected")
+            status = "rejected" if status != "stale_target" else status
+    elif not isinstance(before_snapshot, str):
         reasons.append("rollback_before_snapshot_unavailable")
         status = "rejected" if status != "stale_target" else status
     elif _sha256_text(before_snapshot) != ledger.get("target_before_hash"):
@@ -208,14 +225,26 @@ def rollback_low_risk(
     target_changed = False
     if status == "would_rollback_low_risk" and confirm_rollback:
         target_path = Path(str(ledger.get("target_path"))).expanduser()
-        target_path.write_text(before_snapshot, encoding="utf-8")
-        target_changed = True
-        after_hash = _current_file_hash(str(target_path))
-        validation_result = {
-            "status": "passed",
-            "target_hash_matches_before_snapshot": after_hash == ledger.get("target_before_hash"),
-            "target_hash_matched_applied_before_rollback": current_hash == ledger.get("target_after_hash"),
-        }
+        if rollback_strategy == "delete_created_file":
+            if target_path.exists():
+                target_path.unlink()
+            target_changed = True
+            after_hash = _current_file_hash(str(target_path))
+            validation_result = {
+                "status": "passed",
+                "target_deleted": after_hash is None,
+                "target_hash_matched_applied_before_rollback": current_hash == ledger.get("target_after_hash"),
+            }
+        else:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text(before_snapshot, encoding="utf-8")
+            target_changed = True
+            after_hash = _current_file_hash(str(target_path))
+            validation_result = {
+                "status": "passed",
+                "target_hash_matches_before_snapshot": after_hash == ledger.get("target_before_hash"),
+                "target_hash_matched_applied_before_rollback": current_hash == ledger.get("target_after_hash"),
+            }
         if not all(value is True for key, value in validation_result.items() if key != "status"):
             validation_result["status"] = "failed"
         result.update({
@@ -280,6 +309,15 @@ def _current_file_hash(path_text: str | None) -> str | None:
     return _sha256_text(path.read_text(encoding="utf-8", errors="replace"))
 
 
+def _current_file_content(path_text: str | None) -> str | None:
+    if not path_text:
+        return None
+    path = Path(path_text).expanduser()
+    if not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
 def _planned_diff_for_item(item: dict[str, Any]) -> dict[str, Any] | None:
     rollback = item.get("rollback_preview")
     if not isinstance(rollback, dict):
@@ -338,16 +376,26 @@ def _validation_result_for_item(*, item: dict[str, Any], before_hash: str | None
     return result
 
 
-def _content_after_item_mutation(item: dict[str, Any], before_content: str) -> str | None:
+def _content_after_item_mutation(item: dict[str, Any], before_content: str | None) -> str | None:
     mutation = item.get("mutation")
     if not isinstance(mutation, dict):
         return None
     if mutation.get("type") == "append_to_existing_section":
+        if before_content is None:
+            return None
         return _apply_append_to_existing_section(before_content, mutation)
     if mutation.get("type") == "replace_text_once":
+        if before_content is None:
+            return None
         return _apply_replace_text_once(before_content, mutation)
     if mutation.get("type") == "replace_entire_file":
+        if before_content is None:
+            return None
         return _apply_replace_entire_file(before_content, mutation)
+    if mutation.get("type") == "create_file":
+        return _apply_create_file(before_content, mutation)
+    if mutation.get("type") == "delete_file":
+        return _apply_delete_file(before_content, mutation)
     return None
 
 

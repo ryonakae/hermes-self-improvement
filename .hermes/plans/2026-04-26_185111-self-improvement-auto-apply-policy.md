@@ -383,16 +383,17 @@ Completed:
 - interface strategy decision for CLI / wrapper / tools / cron boundaries;
 - plugin tool parity surface via `plugin.yaml` `provides_tools`, `schemas.py`, `plugin_tools.py`, and `register(ctx)` tool registration for status / apply-plan / ledger-report / approval-report / validate-approval / approve / apply-low-risk / rollback-low-risk;
 - Cron / scheduled execution docs that keep scheduling outside the plugin, require fresh self-contained sessions, forbid recursive cron creation, and recommend only dry-run/report commands by default;
-- guarded `apply-approved` core, CLI, and tool path: default validation-only / preview-only behavior, `approval-report --include-previews` aggregation, optional `expected_approval_hash` / `expected_target_hash` binding, non-persistent approved apply attempt / ledger previews, explicit `--confirm-approved-apply` mutation, and approval-gated `replace_entire_file` support for `skill_large_rewrite` / `memory_compress`; applied ledgers are written only after approval / target / rollback preview hash / rollback before snapshot / post-write validation pass;
+- guarded `apply-approved` core, CLI, and tool path: default validation-only / preview-only behavior, `approval-report --include-previews` aggregation, optional `expected_approval_hash` / `expected_target_hash` binding, non-persistent approved apply attempt / ledger previews, explicit `--confirm-approved-apply` mutation, and approval-gated `replace_entire_file` support for `skill_large_rewrite` / `memory_compress`; applied ledgers are written only after approval / target / rollback preview hash / rollback data / post-write validation pass;
 - config / policy source precedence (`config.json`, `config.local.json`, `HERMES_SELF_IMPROVE_CONFIG`, `--config`) plus restrictive-by-default policy expansion guard;
 - stale path / stale command dry-run planner support using `replace_text_once` only when canonical replacement evidence comes from trusted independent sources and the stale reference appears exactly once;
 - read-only report integration that adds concise apply ledger, approval gate, and retention summaries to `run` / `report` output when artifacts or retention candidates exist;
 - package layout refactor with implementation under `hermes_self_improvement/` and root `__init__.py` kept as a thin discovery entrypoint;
-- read-only `retention-report` preview for old apply-plan / ledger / apply-attempt / approval artifacts, with category filtering and malformed artifact details; guarded `retention-prune` can delete expired candidates only in `apply_approved` mode with `--confirm-prune` and matching `expected_artifact_list_hash`.
+- read-only `retention-report` preview for old apply-plan / ledger / apply-attempt / approval artifacts, with category filtering and malformed artifact details; guarded `retention-prune` can delete expired candidates only in `apply_approved` mode with `--confirm-prune` and matching `expected_artifact_list_hash`;
+- approval-gated `skill_create` / `skill_delete` file lifecycle mutations: create requires a missing target and rollback deletes the created file; delete requires an existing target and rollback restores the full before snapshot. Both use `apply-approved` and never qualify for low-risk unattended apply.
 
 Remaining:
 
-- later: approved mutation for broader C/D classes and destructive retention/noise cleanup, if ever enabled, with explicit confirmation and expected artifact hashes.
+- later: skill merge / rename, memory deletion, and higher-level proposal generation for memory compression / skill lifecycle changes; keep explicit confirmation, expected hashes, approval artifacts, and rollback ledger requirements mandatory.
 
 Implemented tool parity surface:
 
@@ -409,7 +410,7 @@ Implemented tool parity surface:
 
 Next implementation slice:
 
-- next: add dedicated dry-run planners for skill create / merge / rename / delete and memory deletion; keep confirmation / expected approval hash / target hash / rollback ledger requirements mandatory. Retention artifact cleanup now has a guarded prune path, and large rewrite / memory compression have an approval-gated whole-file replacement substrate;
+- next: add dedicated dry-run planners for skill merge / rename and memory deletion. Retention artifact cleanup now has a guarded prune path, large rewrite / memory compression have an approval-gated whole-file replacement substrate, and skill create / delete have approval-gated file lifecycle mutations;
 - keep tool handlers aligned with CLI policy gates as new commands are added;
 - if retention cleanup moves beyond preview, design explicit confirmation / expected artifact list / hash guards first.
 
