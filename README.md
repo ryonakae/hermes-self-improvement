@@ -154,6 +154,15 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 
 Mutation-capable tools は CLI と同じく fail-closed です。`self_improvement_apply_low_risk` の実変更には `mode="apply_low_risk"`, `confirm_apply=true`, `expected_item_hash` が必要です。`self_improvement_rollback_low_risk` の実 rollback には `mode="apply_low_risk"`, `confirm_rollback=true`, `expected_ledger_hash` が必要です。条件が揃わない場合は preview / rejected artifact に留め、target file は変更しません。
 
+## Report integration
+
+`run` / `report` now include concise operational summaries when artifacts exist:
+
+- `Apply ledger summary` lists recent low-risk ledgers across statuses for review;
+- `Approval gate summary` lists recent approval artifacts and whether current validation is still valid.
+
+The integration is read-only. It does not create, approve, apply, rollback, or prune artifacts. Empty artifact sets stay quiet so routine reports do not gain noisy empty sections.
+
 ## Cron / scheduled execution
 
 Cron / scheduled execution is a runtime concern, not a plugin-internal scheduler. This plugin does not implement a scheduler and scheduled jobs should invoke the safe CLI or tools in a fresh session with a self-contained prompt. Do not create recursive cron jobs from a cron-run session.

@@ -106,6 +106,10 @@ If no matching existing section is present for section additions, fail closed wi
 
 Rollback must fail closed for stale targets, missing rollback snapshots, before-snapshot hash mismatch, non-applied ledgers, and ledger-hash confirmation mismatch.
 
+## Report integration
+
+Daily/manual `run` and `report` output may include concise `Apply ledger summary` and `Approval gate summary` sections. These sections are read-only summaries built from existing ledger and approval artifacts. They must not mutate targets, create approvals, apply changes, rollback changes, or delete/prune artifacts. If no artifacts exist, the sections should be omitted to avoid noise.
+
 ## Stale path / command fix eligibility
 
 Stale path / command fixes are B-scope only when the canonical replacement is independently verified. The planner may create `replace_text_once` for `stale_path_fix` / `stale_command_fix`, but only with explicit old/new references, exactly one occurrence in the target, small single-line replacement text, and trusted evidence (`active_memory`, README/readme, config/config_file, actual_file/file_exists/repository_file, plugin_manifest, or observed_success).

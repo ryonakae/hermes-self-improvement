@@ -185,7 +185,7 @@ def render_ledger_report(payload: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def render_report(result: AnalysisResult, scored: list[dict[str, Any]]) -> str:
+def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operational_reports: dict[str, Any] | None = None) -> str:
     s = result.summary
     lines = [
         "# Hermes self-improvement report",
@@ -250,6 +250,7 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]]) -> str:
             f"- reason: {p.get('reason')}",
             "",
         ])
+    lines.extend(_render_operational_report_sections(operational_reports))
     lines.extend([
         "## 注意",
         "- 採点は `--scorer heuristic`（既定）、`--scorer llm`、または手動検証用の `--scorer gepa` で切り替えます。LLM / GEPA 採点に失敗した場合は heuristic にフォールバックします。",
@@ -287,6 +288,47 @@ def _format_score_breakdown(raw: Any) -> str:
         parts.append(f"{name}={level} {points}/{weight}")
     return "; ".join(parts)
 
+
+def _build_operational_report_payloads(config: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ledger": build_ledger_report_payload(config=config, status="all", limit=5),
+        "approval": build_approval_report_payload(config=config, status="all", limit=5),
+    }
+
+
+def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list[str]:
+    if not isinstance(payloads, dict):
+        return []
+    lines: list[str] = []
+    ledger_payload = payloads.get("ledger") if isinstance(payloads.get("ledger"), dict) else {}
+    ledgers = ledger_payload.get("ledgers") if isinstance(ledger_payload.get("ledgers"), list) else []
+    if ledgers:
+        lines.extend(["", "## Apply ledger summary"])
+        for ledger in ledgers[:5]:
+            lines.append(
+                f"- {ledger.get('title') or ledger.get('ledger_id')}: "
+                f"status `{ledger.get('current_status')}`, "
+                f"change `{ledger.get('change_type')}`, "
+                f"validation `{ledger.get('validation_status')}`"
+            )
+    approval_payload = payloads.get("approval") if isinstance(payloads.get("approval"), dict) else {}
+    approvals = approval_payload.get("approvals") if isinstance(approval_payload.get("approvals"), list) else []
+    if approvals:
+        lines.extend(["", "## Approval gate summary"])
+        for approval in approvals[:5]:
+            valid = approval.get("validation_status") == "valid"
+            reason_suffix = ""
+            if approval.get("reasons"):
+                reason_suffix = "; reasons: " + ", ".join(str(reason) for reason in approval.get("reasons") or [])
+            lines.append(
+                f"- {approval.get('approval_id')}: "
+                f"valid: {valid}, "
+                f"status `{approval.get('current_status')}`, "
+                f"change `{approval.get('approved_change_type')}`{reason_suffix}"
+            )
+    return lines
+
+
 def run_pipeline(
     config: dict[str, Any],
     since_hours: int = 24,
@@ -305,11 +347,13 @@ def run_pipeline(
         llm_scorer_func=_call_llm_scorer,
         gepa_scorer_func=_call_gepa_scorer,
     )
-    report = render_report(result, scored)
+    operational_reports = _build_operational_report_payloads(config)
+    report = render_report(result, scored, operational_reports=operational_reports)
     out = {
         "summary": result.summary,
         "findings": result.findings,
         "proposals": scored,
+        "operational_reports": operational_reports,
         "report": report,
     }
     if write_report:

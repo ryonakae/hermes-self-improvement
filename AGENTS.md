@@ -86,6 +86,15 @@ bin/hermes-self-improve approval-report --mode report_only --status all --json
 
 cron では `apply-low-risk --confirm-apply` や `rollback-low-risk --confirm-rollback` を実行してはいけません。hash 付きの実 mutation は、人間の明示操作か別の explicit workflow に分離します。
 
+## Report integration
+
+`run` / `report` now include concise operational summaries when artifacts exist:
+
+- `Apply ledger summary` lists recent low-risk ledgers across statuses for review;
+- `Approval gate summary` lists recent approval artifacts and whether current validation is still valid.
+
+The integration is read-only. It does not create, approve, apply, rollback, or prune artifacts. Empty artifact sets stay quiet so routine reports do not gain noisy empty sections.
+
 ## Plugin tools
 
 `plugin.yaml` / `schemas.py` / `plugin_tools.py` で CLI parity の tools を登録しています。`tools.py` という名前は Hermes core `tools.registry` を shadow するため使いません。tool handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を使います。
