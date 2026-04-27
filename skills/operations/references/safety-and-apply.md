@@ -106,6 +106,12 @@ If no matching existing section is present for section additions, fail closed wi
 
 Rollback must fail closed for stale targets, missing rollback snapshots, before-snapshot hash mismatch, non-applied ledgers, and ledger-hash confirmation mismatch.
 
+## Stale path / command fix eligibility
+
+Stale path / command fixes are B-scope only when the canonical replacement is independently verified. The planner may create `replace_text_once` for `stale_path_fix` / `stale_command_fix`, but only with explicit old/new references, exactly one occurrence in the target, small single-line replacement text, and trusted evidence (`active_memory`, README/readme, config/config_file, actual_file/file_exists/repository_file, plugin_manifest, or observed_success).
+
+Do not infer a replacement merely because an old path or command failed. Missing or untrusted evidence must produce `canonical_replacement_unverified` and no mutation.
+
 ## Config and policy source precedence
 
 Config resolution is fail-closed. Precedence is built-in defaults < repo `config.json` < `config.local.json` < `HERMES_SELF_IMPROVE_CONFIG` < explicit CLI/tool `--config` / `config_path`. Explicit env / CLI paths are required to exist and parse as JSON objects; missing explicit config is an operator error. Loaded files are recorded in `config_sources`.

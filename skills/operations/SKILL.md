@@ -65,7 +65,7 @@ Top-level `hermes self-improvement ...` は Hermes version / plugin discovery �
 2. 新しい policy / apply / scorer 挙動は TDD で fail-closed を先に固定してから実装する。
 3. Hook path を触る場合は、redaction・retention・partial event filtering が壊れないか確認する。
 4. Scorer path を触る場合は、advisory-only と `auto_apply: false` を崩さない。
-5. Apply-plan / ledger path を触る場合は、target hash、rollback preview、explicit target resolution、scorer disagreement gate を確認する。
+5. Apply-plan / ledger path を触る場合は、target hash、rollback preview、explicit target resolution、scorer disagreement gate を確認する。stale path / command は canonical replacement が README/config/実ファイル/active memory/observed success などで独立確認できる場合だけ mutation plan を許可する。
 6. `__init__.py` / registration / bundled skill discovery を触ったら、unit test だけでなく plugin manager loading も確認する。
 7. Tool handler を触る場合は、wrapper CLI に shell out せず、CLI と同じ core function と `validate_mode_action(...)` / `_required_capability_for_command(...)` を通す。
 8. Config / policy を触る場合は、defaults < `config.json` < `config.local.json` < `HERMES_SELF_IMPROVE_CONFIG` < `--config` の precedence と、`allow_policy_expansion` なしでは権限拡張できないことを確認する。

@@ -26,6 +26,10 @@ def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
         return "validation_addition_existing_section"
     if "typo" in haystack:
         return "typo_fix"
+    if "stale_path" in haystack or ("stale" in haystack and "path" in haystack):
+        return "stale_path_fix"
+    if "stale_command" in haystack or ("stale" in haystack and "command" in haystack):
+        return "stale_command_fix"
     return "unknown_or_unclassified"
 
 
@@ -186,6 +190,73 @@ def _plan_typo_fix_mutation(proposal: dict[str, Any], target_content: str | None
     return {"type": "replace_text_once", "old_text": old_text, "new_text": new_text}, []
 
 
+_TRUSTED_CANONICAL_REPLACEMENT_SOURCES = {
+    "active_memory",
+    "memory",
+    "README.md",
+    "readme",
+    "config",
+    "config_file",
+    "actual_file",
+    "file_exists",
+    "repository_file",
+    "repo_file",
+    "plugin_manifest",
+    "observed_success",
+}
+
+
+def _canonical_replacement_verified(proposal: dict[str, Any]) -> bool:
+    evidence = proposal.get("canonical_replacement_evidence") or proposal.get("verification_sources") or []
+    if isinstance(evidence, dict):
+        evidence = [evidence]
+    if isinstance(evidence, str):
+        evidence = [evidence]
+    if not isinstance(evidence, list):
+        return False
+    for item in evidence:
+        if isinstance(item, str):
+            if item in _TRUSTED_CANONICAL_REPLACEMENT_SOURCES:
+                return True
+            continue
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source") or item.get("kind") or item.get("type") or "")
+        verified = item.get("verified", item.get("exists", item.get("observed", False))) is True
+        if verified and source in _TRUSTED_CANONICAL_REPLACEMENT_SOURCES:
+            return True
+    return False
+
+
+def _plan_stale_reference_fix_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
+    if target_content is None:
+        return None, []
+    old_text = str(
+        proposal.get("stale_reference")
+        or proposal.get("old_text")
+        or proposal.get("stale_path")
+        or proposal.get("stale_command")
+        or ""
+    )
+    new_text = str(
+        proposal.get("canonical_replacement")
+        or proposal.get("new_text")
+        or proposal.get("current_path")
+        or proposal.get("current_command")
+        or ""
+    )
+    if not old_text or not new_text or old_text == new_text:
+        return None, ["stale_replacement_missing"]
+    if "\n" in old_text or "\n" in new_text or len(old_text) > 240 or len(new_text) > 240:
+        return None, ["stale_replacement_not_small_single_line"]
+    if not _canonical_replacement_verified(proposal):
+        return None, ["canonical_replacement_unverified"]
+    occurrence_count = target_content.count(old_text)
+    if occurrence_count != 1:
+        return None, ["stale_reference_not_unique" if occurrence_count > 1 else "stale_reference_missing"]
+    return {"type": "replace_text_once", "old_text": old_text, "new_text": new_text}, []
+
+
 def _plan_mutation_for_item(
     *,
     change_type: str,
@@ -197,6 +268,8 @@ def _plan_mutation_for_item(
         return explicit, []
     if change_type == "typo_fix":
         return _plan_typo_fix_mutation(proposal, target_content)
+    if change_type in {"stale_path_fix", "stale_command_fix"}:
+        return _plan_stale_reference_fix_mutation(proposal, target_content)
     heading_sets = {
         "pitfall_addition_existing_section": _PITFALL_SECTION_HEADINGS,
         "validation_addition_existing_section": _VALIDATION_SECTION_HEADINGS,

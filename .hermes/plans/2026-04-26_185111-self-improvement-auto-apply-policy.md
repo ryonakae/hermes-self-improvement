@@ -357,6 +357,8 @@ Decision from 2026-04-27: expose the same guarded self-improvement operations th
    - Cron docs may mention `hermes cron create "..."`, but the scheduled task should invoke the plugin CLI / tools rather than embedding scheduler-specific logic into the plugin.
    - Cron-run sessions must not create recursive cron jobs and must not run mutation confirmations (`--confirm-apply`, `--confirm-rollback`) by default.
 
+Stale path / command implementation note: missing old reference alone never implies a correction. `stale_path_fix` and `stale_command_fix` require explicit stale/canonical strings, exactly one target occurrence, small single-line replacement text, and trusted evidence such as active memory, README, config, actual file/repository file, plugin manifest, or observed successful command.
+
 Config precedence implementation note: explicit env/CLI config paths fail closed if missing/invalid; `mode_policy` can only narrow defaults unless `allow_policy_expansion: true` is set.
 
 Cron / scheduled execution implementation note: documentation now recommends `generate-apply-plan --mode dry_run_plan`, `ledger-report --mode report_only`, and `approval-report --mode report_only` only. Actual mutation remains a separate explicit human/operator workflow.
@@ -376,11 +378,11 @@ Completed:
 - plugin tool parity surface via `plugin.yaml` `provides_tools`, `schemas.py`, `plugin_tools.py`, and `register(ctx)` tool registration for status / apply-plan / ledger-report / approval-report / validate-approval / approve / apply-low-risk / rollback-low-risk;
 - Cron / scheduled execution docs that keep scheduling outside the plugin, require fresh self-contained sessions, forbid recursive cron creation, and recommend only dry-run/report commands by default;
 - `apply-approved` validation-only / preview-only core, CLI, and tool path, with actual approved mutation still closed;
-- config / policy source precedence (`config.json`, `config.local.json`, `HERMES_SELF_IMPROVE_CONFIG`, `--config`) plus restrictive-by-default policy expansion guard.
+- config / policy source precedence (`config.json`, `config.local.json`, `HERMES_SELF_IMPROVE_CONFIG`, `--config`) plus restrictive-by-default policy expansion guard;
+- stale path / stale command dry-run planner support using `replace_text_once` only when canonical replacement evidence comes from trusted independent sources and the stale reference appears exactly once.
 
 Remaining:
 
-- add stale path / stale command dry-run planner support only when canonical replacements are independently verified;
 - later: approved mutation for broader C/D classes, retention/noise cleanup, and report integration.
 
 Implemented tool parity surface:
@@ -397,7 +399,8 @@ Implemented tool parity surface:
 
 Next implementation slice:
 
-- or add stale path / stale command dry-run planner support only when canonical replacements are independently verified;
+- later: approved mutation design remains closed until explicit confirmation / expected approval hash / target hash / rollback ledger requirements are specified;
+- or improve report integration / retention cleanup for apply ledgers and approval artifacts;
 - keep tool handlers aligned with CLI policy gates as new commands are added.
 
 ## Tests / validation

@@ -109,6 +109,10 @@ bin/hermes-self-improve gepa-eval --json
 
 `config.json` / `config.local.json` / `HERMES_SELF_IMPROVE_CONFIG` / `--config` で `data_dir`, `report_dir`, `gepa_scorer`, `llm_scorer`, `observe_hooks` などを上書きできます。
 
+## Stale path / command fixes
+
+`stale_path_fix` / `stale_command_fix` は `replace_text_once` の dry-run mutation plan だけを生成します。対象にできるのは、古い参照と canonical replacement が明示され、target 内の古い参照が1回だけで、replacement が小さな1行文字列、かつ README / config / 実ファイル / active memory / observed success など信頼できる別ソースで確認済みの場合だけです。古い path / command が失敗しただけ、または LLM guess だけでは `canonical_replacement_unverified` として拒否します。
+
 ## Config / policy precedence
 
 Runtime config is loaded fail-closed with this precedence, from low to high:

@@ -64,6 +64,10 @@ PY
 
 期待値は plugin が enabled、error が null、hooks が登録されていることです。
 
+## Stale path / command fixes
+
+`stale_path_fix` / `stale_command_fix` は `replace_text_once` の dry-run mutation plan だけを生成します。対象にできるのは、古い参照と canonical replacement が明示され、target 内の古い参照が1回だけで、replacement が小さな1行文字列、かつ README / config / 実ファイル / active memory / observed success など信頼できる別ソースで確認済みの場合だけです。古い path / command が失敗しただけ、または LLM guess だけでは `canonical_replacement_unverified` として拒否します。
+
 ## Config / policy precedence
 
 Config precedence is defaults < `config.json` < `config.local.json` < `HERMES_SELF_IMPROVE_CONFIG` < explicit `--config`. Explicit env / CLI config paths must exist and be valid JSON. `mode_policy` is restrictive by default: without `allow_policy_expansion: true`, custom policy may narrow permissions but cannot add commands or enable capabilities that defaults deny.

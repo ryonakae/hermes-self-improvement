@@ -95,6 +95,46 @@ def sample_typo_proposal():
         "new_text": "the",
     }
 
+
+def sample_stale_path_proposal(old_ref: str, new_ref: str, target: Path) -> dict:
+    return {
+        "id": "proposal-stale-path",
+        "title": "Fix stale path reference",
+        "target": "file_workflow_skills",
+        "action": "stale_path_fix",
+        "risk": "low",
+        "confidence": "high",
+        "score": 90,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "scorer": "heuristic-v0.1",
+        "auto_apply": False,
+        "count": 4,
+        "tool_name": "read_file",
+        "error_kind": "not_found",
+        "reason": "Replace stale path after canonical replacement was independently verified.",
+        "target_path": str(target),
+        "stale_reference": old_ref,
+        "canonical_replacement": new_ref,
+        "canonical_replacement_evidence": [
+            {"source": "actual_file", "path": new_ref, "verified": True},
+            {"source": "README.md", "verified": True},
+        ],
+    }
+
+
+def sample_stale_command_proposal(old_ref: str, new_ref: str, target: Path) -> dict:
+    proposal = sample_stale_path_proposal(old_ref, new_ref, target)
+    proposal["id"] = "proposal-stale-command"
+    proposal["title"] = "Fix stale command reference"
+    proposal["action"] = "stale_command_fix"
+    proposal["tool_name"] = "terminal"
+    proposal["error_kind"] = "command_not_found"
+    proposal["canonical_replacement_evidence"] = [
+        {"source": "README.md", "verified": True},
+        {"source": "observed_success", "verified": True},
+    ]
+    return proposal
+
 def test_build_apply_plan_includes_versioned_metadata_and_safe_default_items(tmp_path):
     mod = load_plugin_module()
     created_at = datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc)
@@ -574,3 +614,90 @@ def test_cli_accepts_generate_apply_plan_command():
     assert args.mode == "dry_run_plan"
     assert args.since_hours == 1
     assert args.as_json is True
+
+
+def test_build_apply_plan_plans_stale_path_fix_only_with_verified_canonical_replacement(tmp_path):
+    mod = load_plugin_module()
+    old_ref = "~/old/hermes-plugins/hermes-self-improvement/config.json"
+    new_ref = "~/.hermes/plugins/hermes-self-improvement/config.json"
+    target = tmp_path / "SKILL.md"
+    target.write_text(f"# Skill\n\nUse {old_ref} when checking config.\n", encoding="utf-8")
+    proposal = sample_stale_path_proposal(old_ref, new_ref, target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "stale_path_fix"
+    assert item["mutation"] == {"type": "replace_text_once", "old_text": old_ref, "new_text": new_ref}
+    assert item["eligible_for_unattended"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert item["rollback_preview"]["rollback_patch"] == {"type": "replace_text_once", "old_text": new_ref, "new_text": old_ref}
+
+
+def test_build_apply_plan_rejects_stale_path_without_independent_canonical_verification(tmp_path):
+    mod = load_plugin_module()
+    old_ref = "~/old/hermes-plugins/hermes-self-improvement/config.json"
+    new_ref = "~/.hermes/plugins/hermes-self-improvement/config.json"
+    target = tmp_path / "SKILL.md"
+    target.write_text(f"# Skill\n\nUse {old_ref} when checking config.\n", encoding="utf-8")
+    proposal = sample_stale_path_proposal(old_ref, new_ref, target)
+    proposal["canonical_replacement_evidence"] = []
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["mutation"] is None
+    assert item["eligible_for_unattended"] is False
+    assert "canonical_replacement_unverified" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_rejects_stale_fix_when_old_reference_is_not_unique(tmp_path):
+    mod = load_plugin_module()
+    old_ref = "hermes-old"
+    new_ref = "hermes-new"
+    target = tmp_path / "SKILL.md"
+    target.write_text(f"# Skill\n\n{old_ref} then {old_ref}.\n", encoding="utf-8")
+    proposal = sample_stale_command_proposal(old_ref, new_ref, target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "stale_command_fix"
+    assert item["mutation"] is None
+    assert "stale_reference_not_unique" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_rejects_stale_fix_from_untrusted_verification_source(tmp_path):
+    mod = load_plugin_module()
+    old_ref = "old-command"
+    new_ref = "new-command"
+    target = tmp_path / "SKILL.md"
+    target.write_text(f"# Skill\n\nRun {old_ref}.\n", encoding="utf-8")
+    proposal = sample_stale_command_proposal(old_ref, new_ref, target)
+    proposal["canonical_replacement_evidence"] = [{"source": "llm_guess", "verified": True}]
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["mutation"] is None
+    assert "canonical_replacement_unverified" in item["eligibility"]["reasons"]
