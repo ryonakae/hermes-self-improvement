@@ -540,6 +540,16 @@ def preview_apply_approved(
         if rollback_strategy == "delete_created_file":
             if item.get("before_hash") is not None:
                 reasons.append("rollback_created_file_before_hash_unexpected")
+        elif rollback_strategy == "restore_multiple_files":
+            source_snapshot = rollback_preview.get("source_before_snapshot")
+            if not isinstance(before_snapshot, str):
+                reasons.append("rollback_before_snapshot_unavailable")
+            elif _sha256_text(before_snapshot) != item.get("before_hash"):
+                reasons.append("rollback_before_snapshot_hash_mismatch")
+            if not isinstance(source_snapshot, str):
+                reasons.append("rollback_source_before_snapshot_unavailable")
+            elif _sha256_text(source_snapshot) != rollback_preview.get("source_before_hash"):
+                reasons.append("rollback_source_before_snapshot_hash_mismatch")
         elif not isinstance(before_snapshot, str):
             reasons.append("rollback_before_snapshot_unavailable")
         elif _sha256_text(before_snapshot) != item.get("before_hash"):
@@ -642,7 +652,7 @@ def preview_apply_approved(
                 "mutation_status": "rejected",
             })
             return payload
-        after_hash = None if mutation_type == "delete_file" else _sha256_text(after_content)
+        after_hash = None if mutation_type in {"delete_file", "rename_file"} else _sha256_text(after_content)
         expected_after_hash = (item.get("rollback_preview") or {}).get("after_hash")
         if after_hash != expected_after_hash:
             reasons = ["planned_after_hash_mismatch"]
@@ -671,9 +681,59 @@ def preview_apply_approved(
 
         if mutation_type == "delete_file":
             target_path.unlink()
+        elif mutation_type == "rename_file":
+            destination_path_text = mutation.get("destination_path")
+            if not destination_path_text:
+                reasons = ["destination_path_missing"]
+            else:
+                destination_path = Path(str(destination_path_text)).expanduser()
+                if destination_path.exists():
+                    reasons = ["destination_already_exists"]
+                elif not target_path.is_file():
+                    reasons = ["target_not_found"]
+                else:
+                    destination_path.parent.mkdir(parents=True, exist_ok=True)
+                    target_path.replace(destination_path)
+        elif mutation_type == "merge_files":
+            source_path_text = mutation.get("source_path")
+            if not source_path_text:
+                reasons = ["source_path_missing"]
+            else:
+                source_path = Path(str(source_path_text)).expanduser()
+                if not source_path.is_file():
+                    reasons = ["source_not_found"]
+                elif _current_file_hash(str(source_path)) != mutation.get("source_before_hash"):
+                    reasons = ["source_hash_mismatch"]
+                else:
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    target_path.write_text(after_content, encoding="utf-8")
+                    source_path.unlink()
         else:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(after_content, encoding="utf-8")
+        if reasons:
+            attempt = _approved_apply_attempt_payload(
+                approval=approval,
+                plan=plan,
+                item=item,
+                status="rejected",
+                reasons=reasons,
+                current_target_hash=current_hash,
+                created_at=ts,
+                expected_approval_hash=expected_approval_hash,
+                expected_target_hash=expected_target_hash,
+                confirm_approved_apply=True,
+            )
+            attempt_path = write_apply_attempt(attempt, config)
+            payload.update({
+                "current_status": "rejected",
+                "reasons": reasons,
+                "apply_attempt": attempt,
+                "apply_attempt_path": str(attempt_path),
+                "target_changed": False,
+                "mutation_status": "rejected",
+            })
+            return payload
         final_hash = _current_file_hash(str(target_path))
         validation_result = _validation_result_for_item(item=item, before_hash=current_hash, after_hash=final_hash)
         applied_diff = _applied_diff_for_item(item)

@@ -878,3 +878,126 @@ def test_build_apply_plan_supports_approval_required_skill_delete_file(tmp_path)
     assert item["rollback_preview"]["before_snapshot"] == before
     assert item["rollback_preview"]["after_hash"] is None
     assert item["rollback_preview"]["rollback_patch"]["type"] == "create_file"
+
+
+
+def test_build_apply_plan_supports_approval_required_skill_rename_file(tmp_path):
+    mod = load_plugin_module()
+    source = tmp_path / "old-skill" / "SKILL.md"
+    destination = tmp_path / "new-skill" / "SKILL.md"
+    before = "---\nname: old-skill\ndescription: Old skill.\n---\n\n# Old skill\n"
+    source.parent.mkdir(parents=True)
+    source.write_text(before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-skill-rename",
+        "title": "Rename skill after approval",
+        "target": "skill",
+        "target_path": str(source),
+        "destination_path": str(destination),
+        "action": "skill_rename",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 69,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "skill_rename"
+    assert item["target_path"] == str(source)
+    assert item["destination_path"] == str(destination)
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert item["mutation"]["type"] == "rename_file"
+    assert item["mutation"]["destination_path"] == str(destination)
+    assert item["rollback_preview"]["rollback_strategy"] == "rename_file_back"
+    assert item["rollback_preview"]["before_snapshot"] == before
+    assert item["rollback_preview"]["after_hash"] is None
+    assert item["rollback_preview"]["destination_after_hash"] == mod._sha256_text(before)
+
+
+def test_build_apply_plan_rejects_skill_rename_when_destination_exists(tmp_path):
+    mod = load_plugin_module()
+    source = tmp_path / "old-skill" / "SKILL.md"
+    destination = tmp_path / "new-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    destination.parent.mkdir(parents=True)
+    source.write_text("# Old\n", encoding="utf-8")
+    destination.write_text("# Existing destination\n", encoding="utf-8")
+    proposal = {
+        "id": "proposal-skill-rename-existing-destination",
+        "target_path": str(source),
+        "destination_path": str(destination),
+        "action": "skill_rename",
+        "risk": "high",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "skill_rename"
+    assert item["mutation"] is None
+    assert "destination_already_exists" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_supports_approval_required_skill_merge_files(tmp_path):
+    mod = load_plugin_module()
+    source = tmp_path / "source-skill" / "SKILL.md"
+    destination = tmp_path / "dest-skill" / "SKILL.md"
+    source_before = "# Source\n\nUseful source guidance.\n"
+    dest_before = "# Destination\n\nOld destination guidance.\n"
+    merged = "# Destination\n\nOld destination guidance.\n\nUseful source guidance.\n"
+    source.parent.mkdir(parents=True)
+    destination.parent.mkdir(parents=True)
+    source.write_text(source_before, encoding="utf-8")
+    destination.write_text(dest_before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-skill-merge",
+        "title": "Merge source skill into destination after approval",
+        "target": "skill",
+        "target_path": str(destination),
+        "source_path": str(source),
+        "action": "skill_merge",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 67,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+        "after_text": merged,
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "skill_merge"
+    assert item["target_path"] == str(destination)
+    assert item["source_path"] == str(source)
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert item["mutation"]["type"] == "merge_files"
+    assert item["mutation"]["source_path"] == str(source)
+    assert item["mutation"]["source_before_hash"] == mod._sha256_text(source_before)
+    assert item["rollback_preview"]["rollback_strategy"] == "restore_multiple_files"
+    assert item["rollback_preview"]["before_snapshot"] == dest_before
+    assert item["rollback_preview"]["source_before_snapshot"] == source_before
+    assert item["rollback_preview"]["after_hash"] == mod._sha256_text(merged)
+    assert item["rollback_preview"]["source_after_hash"] is None

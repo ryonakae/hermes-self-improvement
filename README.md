@@ -135,7 +135,9 @@ Policy は `hermes_self_improvement/config.py` で検証します。prompt だ�
 
 `replace_entire_file` は approval-gated path だけで使います。`skill_large_rewrite` と `memory_compress` の土台ですが、low-risk unattended apply には入れません。
 
-`skill_create` は存在しない target にだけ `create_file` mutation を作ります。rollback は作成ファイルの削除です。`skill_delete` は既存 target にだけ `delete_file` mutation を作ります。rollback は before snapshot の復元です。どちらも approval-gated で、low-risk unattended apply には入れません。
+`skill_create` は存在しない target にだけ `create_file` mutation を作ります。rollback は作成ファイルの削除です。`skill_delete` は既存 target にだけ `delete_file` mutation を作ります。rollback は before snapshot の復元です。
+
+`skill_rename` は source が存在し、destination が存在しない場合だけ `rename_file` mutation を作ります。rollback は destination を source へ戻します。`skill_merge` は source と destination の両方が存在し、replacement content がある場合だけ `merge_files` mutation を作ります。実適用では destination を置換して source を削除し、rollback は両方の before snapshot を復元します。これらは multi-target rollback data を ledger に残し、low-risk unattended apply には入れません。
 
 ### Retention prune
 

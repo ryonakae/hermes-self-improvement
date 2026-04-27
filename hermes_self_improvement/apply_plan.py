@@ -37,6 +37,10 @@ def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
         return "skill_create"
     if "skill_delete" in haystack or "skill delete" in haystack or "delete skill" in haystack:
         return "skill_delete"
+    if "skill_rename" in haystack or "skill rename" in haystack or "rename skill" in haystack:
+        return "skill_rename"
+    if "skill_merge" in haystack or "skill merge" in haystack or "merge skill" in haystack:
+        return "skill_merge"
     if "large_rewrite" in haystack or "large rewrite" in haystack:
         return "skill_large_rewrite"
     if "memory_compress" in haystack or "memory compression" in haystack or "compress_memory" in haystack:
@@ -96,6 +100,14 @@ def _target_path_for_proposal(proposal: dict[str, Any], config: dict[str, Any] |
         if value:
             return str(Path(str(value)).expanduser())
     return _custom_skill_path_for_proposal(proposal, config)
+
+
+def _path_hint_for_proposal(proposal: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = proposal.get(key)
+        if value:
+            return str(Path(str(value)).expanduser())
+    return None
 
 
 def _target_metadata(target_path: str | None) -> dict[str, Any]:
@@ -311,6 +323,46 @@ def _plan_delete_file_mutation(proposal: dict[str, Any], target_content: str | N
     return {"type": "delete_file"}, []
 
 
+def _plan_rename_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
+    if target_content is None:
+        return None, ["target_not_found"]
+    destination_path = _path_hint_for_proposal(proposal, ("destination_path", "new_path", "renamed_path"))
+    if not destination_path:
+        return None, ["destination_path_missing"]
+    destination = Path(destination_path).expanduser()
+    if destination.exists():
+        return None, ["destination_already_exists"]
+    return {
+        "type": "rename_file",
+        "destination_path": str(destination),
+        "destination_after_hash": _sha256_text(target_content),
+    }, []
+
+
+def _plan_merge_files_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
+    if target_content is None:
+        return None, ["target_not_found"]
+    source_path = _path_hint_for_proposal(proposal, ("source_path", "merge_source_path", "from_path"))
+    if not source_path:
+        return None, ["source_path_missing"]
+    source = Path(source_path).expanduser()
+    if not source.is_file():
+        return None, ["source_not_found"]
+    source_content = source.read_text(encoding="utf-8", errors="replace")
+    after_text = _replacement_content_from_proposal(proposal)
+    if not isinstance(after_text, str) or after_text == "":
+        return None, ["replacement_content_missing"]
+    if after_text == target_content:
+        return None, ["replacement_content_unchanged"]
+    return {
+        "type": "merge_files",
+        "source_path": str(source),
+        "source_before_hash": _sha256_text(source_content),
+        "after_text": after_text,
+        "after_hash": _sha256_text(after_text),
+    }, []
+
+
 def _plan_mutation_for_item(
     *,
     change_type: str,
@@ -328,6 +380,10 @@ def _plan_mutation_for_item(
         return _plan_create_file_mutation(proposal, target_content)
     if change_type == "skill_delete":
         return _plan_delete_file_mutation(proposal, target_content)
+    if change_type == "skill_rename":
+        return _plan_rename_file_mutation(proposal, target_content)
+    if change_type == "skill_merge":
+        return _plan_merge_files_mutation(proposal, target_content)
     if change_type in _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES:
         return _plan_replace_entire_file_mutation(proposal, target_content)
     heading_sets = {
@@ -350,7 +406,7 @@ def _plan_mutation_for_item(
 
 
 _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES = {"skill_large_rewrite", "memory_compress"}
-_APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES = {"skill_create", "skill_delete"}
+_APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES = {"skill_create", "skill_delete", "skill_rename", "skill_merge"}
 _APPROVAL_REQUIRED_CHANGE_TYPES = _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES | _APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES
 _LOW_RISK_UNATTENDED_CHANGE_TYPES = {
     "pitfall_addition_existing_section",
@@ -485,6 +541,10 @@ def _rollback_patch_for_mutation(mutation: dict[str, Any]) -> dict[str, Any] | N
         return {"type": "delete_file"}
     if mutation_type == "delete_file":
         return {"type": "create_file", "restore_from": "before_snapshot"}
+    if mutation_type == "rename_file":
+        return {"type": "rename_file", "direction": "destination_to_source"}
+    if mutation_type == "merge_files":
+        return {"type": "restore_multiple_files", "restore_from": "before_snapshots"}
     return None
 
 
@@ -519,9 +579,24 @@ def _rollback_preview_for_item(
         if target_content is not None:
             after_content = ""
             after_hash = None
+    elif mutation_type == "rename_file":
+        if target_content is not None:
+            after_content = ""
+            after_hash = None
+            rollback_strategy = "rename_file_back"
+    elif mutation_type == "merge_files":
+        after_text = mutation.get("after_text")
+        source_path = mutation.get("source_path")
+        if target_content is not None and isinstance(after_text, str) and source_path:
+            source = Path(str(source_path)).expanduser()
+            if source.is_file():
+                source_content = source.read_text(encoding="utf-8", errors="replace")
+                if _sha256_text(source_content) == mutation.get("source_before_hash"):
+                    after_content = after_text
+                    rollback_strategy = "restore_multiple_files"
     if after_content is None:
         return None
-    if mutation_type != "delete_file":
+    if mutation_type not in {"delete_file", "rename_file"}:
         after_hash = _sha256_text(after_content)
         after_snippet = _preview_content(after_content)
     rollback_patch = _rollback_patch_for_mutation(mutation)
@@ -536,6 +611,18 @@ def _rollback_preview_for_item(
     }
     if target_content is not None:
         preview["before_snapshot"] = target_content
+    if mutation_type == "rename_file":
+        preview["destination_path"] = mutation.get("destination_path")
+        preview["destination_after_hash"] = mutation.get("destination_after_hash")
+    if mutation_type == "merge_files":
+        source_path = mutation.get("source_path")
+        preview["source_path"] = source_path
+        preview["source_before_hash"] = mutation.get("source_before_hash")
+        preview["source_after_hash"] = None
+        if source_path:
+            source = Path(str(source_path)).expanduser()
+            if source.is_file():
+                preview["source_before_snapshot"] = source.read_text(encoding="utf-8", errors="replace")
     return preview
 
 
@@ -588,6 +675,8 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         "target": proposal.get("target"),
         "target_kind": proposal.get("target"),
         "target_path": target_path,
+        "destination_path": mutation.get("destination_path") if isinstance(mutation, dict) else None,
+        "source_path": mutation.get("source_path") if isinstance(mutation, dict) else None,
         "target_exists": target_meta["target_exists"],
         "before_hash": before_hash,
         "action": proposal.get("action"),

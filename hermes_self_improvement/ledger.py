@@ -195,10 +195,42 @@ def rollback_low_risk(
         status = "stale_target"
     rollback_data = ledger.get("rollback_data") if isinstance(ledger.get("rollback_data"), dict) else {}
     rollback_strategy = str(rollback_data.get("rollback_strategy") or "")
+    if rollback_strategy == "rename_file_back":
+        destination_path_text = rollback_data.get("destination_path")
+        destination_hash = _current_file_hash(destination_path_text) if destination_path_text else None
+        if not destination_path_text:
+            reasons.append("rollback_destination_path_missing")
+            status = "rejected" if status != "stale_target" else status
+        elif destination_hash != rollback_data.get("destination_after_hash"):
+            reasons.append("rollback_destination_hash_mismatch")
+            status = "stale_target"
+    elif rollback_strategy == "restore_multiple_files":
+        source_path_text = rollback_data.get("source_path")
+        source_hash = _current_file_hash(source_path_text) if source_path_text else None
+        if not source_path_text:
+            reasons.append("rollback_source_path_missing")
+            status = "rejected" if status != "stale_target" else status
+        elif source_hash != rollback_data.get("source_after_hash"):
+            reasons.append("rollback_source_hash_mismatch")
+            status = "stale_target"
     before_snapshot = rollback_data.get("before_snapshot")
     if rollback_strategy == "delete_created_file":
         if ledger.get("target_before_hash") is not None:
             reasons.append("rollback_created_file_before_hash_unexpected")
+            status = "rejected" if status != "stale_target" else status
+    elif rollback_strategy == "restore_multiple_files":
+        source_snapshot = rollback_data.get("source_before_snapshot")
+        if not isinstance(before_snapshot, str):
+            reasons.append("rollback_before_snapshot_unavailable")
+            status = "rejected" if status != "stale_target" else status
+        elif _sha256_text(before_snapshot) != ledger.get("target_before_hash"):
+            reasons.append("rollback_before_snapshot_hash_mismatch")
+            status = "rejected" if status != "stale_target" else status
+        if not isinstance(source_snapshot, str):
+            reasons.append("rollback_source_before_snapshot_unavailable")
+            status = "rejected" if status != "stale_target" else status
+        elif _sha256_text(source_snapshot) != rollback_data.get("source_before_hash"):
+            reasons.append("rollback_source_before_snapshot_hash_mismatch")
             status = "rejected" if status != "stale_target" else status
     elif not isinstance(before_snapshot, str):
         reasons.append("rollback_before_snapshot_unavailable")
@@ -225,26 +257,69 @@ def rollback_low_risk(
     target_changed = False
     if status == "would_rollback_low_risk" and confirm_rollback:
         target_path = Path(str(ledger.get("target_path"))).expanduser()
+        validation_result: dict[str, Any] = {"status": "passed"}
         if rollback_strategy == "delete_created_file":
             if target_path.exists():
                 target_path.unlink()
             target_changed = True
             after_hash = _current_file_hash(str(target_path))
-            validation_result = {
-                "status": "passed",
+            validation_result.update({
                 "target_deleted": after_hash is None,
                 "target_hash_matched_applied_before_rollback": current_hash == ledger.get("target_after_hash"),
-            }
+            })
+        elif rollback_strategy == "rename_file_back":
+            destination_path_text = rollback_data.get("destination_path")
+            if not destination_path_text:
+                reasons.append("rollback_destination_path_missing")
+                status = "rejected"
+            else:
+                destination_path = Path(str(destination_path_text)).expanduser()
+                if not destination_path.is_file():
+                    reasons.append("rollback_destination_not_found")
+                    status = "rejected"
+                elif target_path.exists():
+                    reasons.append("rollback_source_path_already_exists")
+                    status = "rejected"
+                else:
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    destination_path.replace(target_path)
+                    target_changed = True
+                    after_hash = _current_file_hash(str(target_path))
+                    validation_result.update({
+                        "target_hash_matches_before_snapshot": after_hash == ledger.get("target_before_hash"),
+                        "target_hash_matched_applied_before_rollback": current_hash == ledger.get("target_after_hash"),
+                    })
+        elif rollback_strategy == "restore_multiple_files":
+            source_path_text = rollback_data.get("source_path")
+            source_snapshot = rollback_data.get("source_before_snapshot")
+            if not source_path_text or not isinstance(source_snapshot, str) or not isinstance(before_snapshot, str):
+                reasons.append("rollback_multiple_files_data_missing")
+                status = "rejected"
+            else:
+                source_path = Path(str(source_path_text)).expanduser()
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                target_path.write_text(before_snapshot, encoding="utf-8")
+                source_path.parent.mkdir(parents=True, exist_ok=True)
+                source_path.write_text(source_snapshot, encoding="utf-8")
+                target_changed = True
+                after_hash = _current_file_hash(str(target_path))
+                validation_result.update({
+                    "target_hash_matches_before_snapshot": after_hash == ledger.get("target_before_hash"),
+                    "source_hash_matches_before_snapshot": _current_file_hash(str(source_path)) == rollback_data.get("source_before_hash"),
+                    "target_hash_matched_applied_before_rollback": current_hash == ledger.get("target_after_hash"),
+                })
         else:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_text(before_snapshot, encoding="utf-8")
             target_changed = True
             after_hash = _current_file_hash(str(target_path))
-            validation_result = {
-                "status": "passed",
+            validation_result.update({
                 "target_hash_matches_before_snapshot": after_hash == ledger.get("target_before_hash"),
                 "target_hash_matched_applied_before_rollback": current_hash == ledger.get("target_after_hash"),
-            }
+            })
+        if not target_changed:
+            result.update({"current_status": "rejected", "reasons": reasons, "target_changed": False})
+            return result
         if not all(value is True for key, value in validation_result.items() if key != "status"):
             validation_result["status"] = "failed"
         result.update({
@@ -396,6 +471,17 @@ def _content_after_item_mutation(item: dict[str, Any], before_content: str | Non
         return _apply_create_file(before_content, mutation)
     if mutation.get("type") == "delete_file":
         return _apply_delete_file(before_content, mutation)
+    if mutation.get("type") == "rename_file":
+        if before_content is None:
+            return None
+        return ""
+    if mutation.get("type") == "merge_files":
+        if before_content is None:
+            return None
+        after_text = mutation.get("after_text")
+        if not isinstance(after_text, str) or _sha256_text(after_text) != mutation.get("after_hash"):
+            return None
+        return after_text
     return None
 
 

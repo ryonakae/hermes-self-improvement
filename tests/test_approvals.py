@@ -1062,3 +1062,247 @@ def test_apply_approved_confirmed_supports_skill_delete_file_and_rollback_restor
     assert rollback["rollback_result"]["current_status"] == "rolled_back"
     assert rollback["target_changed"] is True
     assert target.read_text(encoding="utf-8") == before
+
+
+
+def test_apply_approved_confirmed_supports_skill_rename_file_and_rollback_renames_back(tmp_path):
+    mod = load_plugin_module()
+    source = tmp_path / "old-skill" / "SKILL.md"
+    destination = tmp_path / "new-skill" / "SKILL.md"
+    before = "---\nname: old-skill\ndescription: Old skill.\n---\n\n# Old skill\n"
+    source.parent.mkdir(parents=True)
+    source.write_text(before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-skill-rename",
+        "title": "Rename skill after approval",
+        "target": "skill",
+        "target_path": str(source),
+        "destination_path": str(destination),
+        "action": "skill_rename",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 69,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+    }
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc),
+    )
+    config = {"reports_dir": str(tmp_path / "reports")}
+    mod.write_apply_plan(plan, config)
+    item = plan["items"][0]
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 28, 15, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    result = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 28, 16, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert result["current_status"] == "applied_approved"
+    assert result["target_changed"] is True
+    assert not source.exists()
+    assert destination.read_text(encoding="utf-8") == before
+    ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
+    assert ledger["change_type"] == "skill_rename"
+    assert ledger["target_after_hash"] is None
+    assert ledger["rollback_data"]["rollback_strategy"] == "rename_file_back"
+
+    rollback = mod.rollback_low_risk(
+        ledger_id=ledger["ledger_id"],
+        config=config,
+        created_at=datetime(2026, 4, 28, 17, 0, tzinfo=timezone.utc),
+        confirm_rollback=True,
+        expected_ledger_hash=ledger["ledger_hash"],
+    )
+    assert rollback["rollback_result"]["current_status"] == "rolled_back"
+    assert rollback["target_changed"] is True
+    assert source.read_text(encoding="utf-8") == before
+    assert not destination.exists()
+
+
+def test_apply_approved_confirmed_supports_skill_merge_files_and_rollback_restores_both(tmp_path):
+    mod = load_plugin_module()
+    source = tmp_path / "source-skill" / "SKILL.md"
+    destination = tmp_path / "dest-skill" / "SKILL.md"
+    source_before = "# Source\n\nUseful source guidance.\n"
+    dest_before = "# Destination\n\nOld destination guidance.\n"
+    merged = "# Destination\n\nOld destination guidance.\n\nUseful source guidance.\n"
+    source.parent.mkdir(parents=True)
+    destination.parent.mkdir(parents=True)
+    source.write_text(source_before, encoding="utf-8")
+    destination.write_text(dest_before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-skill-merge",
+        "title": "Merge source skill into destination after approval",
+        "target": "skill",
+        "target_path": str(destination),
+        "source_path": str(source),
+        "action": "skill_merge",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 67,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+        "after_text": merged,
+    }
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc),
+    )
+    config = {"reports_dir": str(tmp_path / "reports")}
+    mod.write_apply_plan(plan, config)
+    item = plan["items"][0]
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 28, 15, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    result = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 28, 16, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert result["current_status"] == "applied_approved"
+    assert result["target_changed"] is True
+    assert destination.read_text(encoding="utf-8") == merged
+    assert not source.exists()
+    ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
+    assert ledger["change_type"] == "skill_merge"
+    assert ledger["rollback_data"]["rollback_strategy"] == "restore_multiple_files"
+    assert ledger["rollback_data"]["source_before_snapshot"] == source_before
+
+    rollback = mod.rollback_low_risk(
+        ledger_id=ledger["ledger_id"],
+        config=config,
+        created_at=datetime(2026, 4, 28, 17, 0, tzinfo=timezone.utc),
+        confirm_rollback=True,
+        expected_ledger_hash=ledger["ledger_hash"],
+    )
+    assert rollback["rollback_result"]["current_status"] == "rolled_back"
+    assert rollback["target_changed"] is True
+    assert destination.read_text(encoding="utf-8") == dest_before
+    assert source.read_text(encoding="utf-8") == source_before
+
+
+
+def test_skill_rename_rollback_rejects_modified_destination(tmp_path):
+    mod = load_plugin_module()
+    source = tmp_path / "old-skill" / "SKILL.md"
+    destination = tmp_path / "new-skill" / "SKILL.md"
+    before = "# Old skill\n"
+    source.parent.mkdir(parents=True)
+    source.write_text(before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-skill-rename-stale",
+        "target": "skill",
+        "target_path": str(source),
+        "destination_path": str(destination),
+        "action": "skill_rename",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 69,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+    }
+    plan = mod.build_apply_plan(proposals=[proposal], summary={}, execution_mode="dry_run_plan", created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc))
+    config = {"reports_dir": str(tmp_path / "reports")}
+    mod.write_apply_plan(plan, config)
+    item = plan["items"][0]
+    approval_result = mod.create_approval_artifact(plan_id=plan["plan_id"], item_id=item["item_id"], config=config, created_at=datetime(2026, 4, 28, 15, 0, tzinfo=timezone.utc), ttl_hours=24)
+    result = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 28, 16, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+    ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
+    destination.write_text("# Modified after rename\n", encoding="utf-8")
+
+    rollback = mod.rollback_low_risk(
+        ledger_id=ledger["ledger_id"],
+        config=config,
+        created_at=datetime(2026, 4, 28, 17, 0, tzinfo=timezone.utc),
+        confirm_rollback=True,
+        expected_ledger_hash=ledger["ledger_hash"],
+    )
+    assert rollback["rollback_result"]["current_status"] == "stale_target"
+    assert "rollback_destination_hash_mismatch" in rollback["rollback_result"]["reasons"]
+    assert not source.exists()
+    assert destination.read_text(encoding="utf-8") == "# Modified after rename\n"
+
+
+def test_skill_merge_rollback_rejects_recreated_source(tmp_path):
+    mod = load_plugin_module()
+    source = tmp_path / "source-skill" / "SKILL.md"
+    destination = tmp_path / "dest-skill" / "SKILL.md"
+    source_before = "# Source\n"
+    dest_before = "# Destination\n"
+    merged = "# Destination\n\n# Source\n"
+    source.parent.mkdir(parents=True)
+    destination.parent.mkdir(parents=True)
+    source.write_text(source_before, encoding="utf-8")
+    destination.write_text(dest_before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-skill-merge-stale",
+        "target": "skill",
+        "target_path": str(destination),
+        "source_path": str(source),
+        "action": "skill_merge",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 67,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+        "after_text": merged,
+    }
+    plan = mod.build_apply_plan(proposals=[proposal], summary={}, execution_mode="dry_run_plan", created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc))
+    config = {"reports_dir": str(tmp_path / "reports")}
+    mod.write_apply_plan(plan, config)
+    item = plan["items"][0]
+    approval_result = mod.create_approval_artifact(plan_id=plan["plan_id"], item_id=item["item_id"], config=config, created_at=datetime(2026, 4, 28, 15, 0, tzinfo=timezone.utc), ttl_hours=24)
+    result = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 28, 16, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+    ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
+    source.write_text("# Recreated source\n", encoding="utf-8")
+
+    rollback = mod.rollback_low_risk(
+        ledger_id=ledger["ledger_id"],
+        config=config,
+        created_at=datetime(2026, 4, 28, 17, 0, tzinfo=timezone.utc),
+        confirm_rollback=True,
+        expected_ledger_hash=ledger["ledger_hash"],
+    )
+    assert rollback["rollback_result"]["current_status"] == "stale_target"
+    assert "rollback_source_hash_mismatch" in rollback["rollback_result"]["reasons"]
+    assert source.read_text(encoding="utf-8") == "# Recreated source\n"
+    assert destination.read_text(encoding="utf-8") == merged
