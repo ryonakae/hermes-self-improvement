@@ -25,6 +25,7 @@ try:  # pragma: no cover - package import path
         _mode_policy_from_config,
         _required_capability_for_command,
         get_hermes_home,
+        load_config,
         resolve_execution_mode,
         validate_mode_action,
     )
@@ -40,6 +41,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _mode_policy_from_config,
         _required_capability_for_command,
         get_hermes_home,
+        load_config,
         resolve_execution_mode,
         validate_mode_action,
     )
@@ -173,7 +175,7 @@ def _register_bundled_skills(ctx) -> None:
 
 
 def register(ctx):
-    config = _load_config(Path(__file__).with_name("config.json"))
+    config = load_config(Path(__file__).with_name("config.json"))
     observer = RuntimeObserver(config)
 
     _register_bundled_skills(ctx)

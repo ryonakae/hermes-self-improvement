@@ -17,6 +17,7 @@ try:  # pragma: no cover - package import path
         VALID_EXECUTION_MODES,
         _load_config,
         _required_capability_for_command,
+        load_config,
         resolve_execution_mode,
         validate_mode_action,
     )
@@ -32,6 +33,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         VALID_EXECUTION_MODES,
         _load_config,
         _required_capability_for_command,
+        load_config,
         resolve_execution_mode,
         validate_mode_action,
     )
@@ -327,6 +329,12 @@ def _add_mode_argument(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Execution mode enforced by the plugin policy validator",
     )
+    parser.add_argument(
+        "--config",
+        dest="config_path",
+        default=None,
+        help="Explicit config JSON path; overrides config.local.json and HERMES_SELF_IMPROVE_CONFIG",
+    )
 
 
 def _setup_cli(parser: argparse.ArgumentParser) -> None:
@@ -405,7 +413,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 
 
 def _handle_cli(args: argparse.Namespace) -> None:
-    config = _load_config(Path(__file__).with_name("config.json"))
+    config = load_config(Path(__file__).with_name("config.json"), cli_config_path=getattr(args, "config_path", None))
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
     execution_mode = resolve_execution_mode(config, getattr(args, "mode", None))
     mode_decision = validate_mode_action(
@@ -571,7 +579,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
 
 
 def _handle_slash(raw_args: str = "") -> str:
-    config = _load_config(Path(__file__).with_name("config.json"))
+    config = load_config(Path(__file__).with_name("config.json"))
     text = (raw_args or "").strip().lower()
     if text.startswith("analyze") or text.startswith("report") or text.startswith("run"):
         use_llm = "--scorer llm" in text or "llm" in text.split()

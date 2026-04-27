@@ -29,7 +29,7 @@ SENSITIVE_PATH_PATTERNS = (
 
 
 def register(ctx):
-    config = _load_config(Path(__file__).with_name("config.json"))
+    config = load_config(Path(__file__).with_name("config.json"))
     observer = RuntimeObserver(config)
 
     for hook_name, callback in observer.hooks().items():

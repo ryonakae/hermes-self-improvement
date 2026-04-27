@@ -107,7 +107,21 @@ bin/hermes-self-improve gepa-eval --json
 - apply attempts: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/apply-attempts/YYYY-MM-DD/`
 - approvals: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/approvals/YYYY-MM-DD/`
 
-`config.json` で `data_dir`, `report_dir`, `gepa_scorer`, `llm_scorer`, `observe_hooks` などを上書きできます。
+`config.json` / `config.local.json` / `HERMES_SELF_IMPROVE_CONFIG` / `--config` で `data_dir`, `report_dir`, `gepa_scorer`, `llm_scorer`, `observe_hooks` などを上書きできます。
+
+## Config / policy precedence
+
+Runtime config is loaded fail-closed with this precedence, from low to high:
+
+1. built-in defaults
+2. repository `config.json`
+3. repository-local `config.local.json`
+4. `HERMES_SELF_IMPROVE_CONFIG`
+5. explicit CLI / tool `--config` / `config_path`
+
+Explicit env / CLI config paths must exist and contain a JSON object; missing or invalid explicit paths fail closed instead of silently falling back. `config_sources` records the files that were actually loaded.
+
+`mode_policy` overrides are restrictive by default. Without `allow_policy_expansion: true`, custom policy can narrow commands/capabilities but cannot add new commands or turn a default-denied capability into an allowed one. Use policy expansion only for deliberate local experiments and keep normal cron/report usage on the default restrictive policy.
 
 ## Execution mode
 

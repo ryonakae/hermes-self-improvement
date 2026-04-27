@@ -106,6 +106,12 @@ If no matching existing section is present for section additions, fail closed wi
 
 Rollback must fail closed for stale targets, missing rollback snapshots, before-snapshot hash mismatch, non-applied ledgers, and ledger-hash confirmation mismatch.
 
+## Config and policy source precedence
+
+Config resolution is fail-closed. Precedence is built-in defaults < repo `config.json` < `config.local.json` < `HERMES_SELF_IMPROVE_CONFIG` < explicit CLI/tool `--config` / `config_path`. Explicit env / CLI paths are required to exist and parse as JSON objects; missing explicit config is an operator error. Loaded files are recorded in `config_sources`.
+
+Policy expansion is disabled by default. A custom `mode_policy` can narrow the default command/capability set, but cannot add commands or flip default-denied capabilities to true unless `allow_policy_expansion: true` is set explicitly. This prevents cron or local config from accidentally turning `report_only` into a mutation-capable mode.
+
 ## Verification commands
 
 For mode-policy or apply-plan changes, run:

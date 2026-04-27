@@ -7,6 +7,7 @@ MODE_PROPERTY = {
 }
 
 STRING = {"type": "string"}
+CONFIG_PATH_PROPERTY = {"type": "string", "description": "Explicit config JSON path; same precedence as CLI --config."}
 BOOLEAN = {"type": "boolean"}
 INTEGER = {"type": "integer"}
 
@@ -15,7 +16,7 @@ SELF_IMPROVEMENT_STATUS_SCHEMA = {
     "description": "Show hermes-self-improvement plugin status. Read-only.",
     "parameters": {
         "type": "object",
-        "properties": {"mode": MODE_PROPERTY},
+        "properties": {"mode": MODE_PROPERTY, "config_path": CONFIG_PATH_PROPERTY},
     },
 }
 
@@ -26,6 +27,7 @@ SELF_IMPROVEMENT_GENERATE_APPLY_PLAN_SCHEMA = {
         "type": "object",
         "properties": {
             "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
             "since_hours": {"type": "integer", "default": 24},
             "scorer": {"type": "string", "enum": ["heuristic", "llm", "gepa", "compare"], "default": "heuristic"},
         },
@@ -39,6 +41,7 @@ SELF_IMPROVEMENT_LEDGER_REPORT_SCHEMA = {
         "type": "object",
         "properties": {
             "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
             "status": {"type": "string", "enum": ["all", "pending", "applied", "rolled_back", "failed", "rejected"], "default": "applied"},
             "limit": {"type": "integer", "default": 20},
         },
@@ -52,6 +55,7 @@ SELF_IMPROVEMENT_APPROVAL_REPORT_SCHEMA = {
         "type": "object",
         "properties": {
             "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
             "status": {"type": "string", "enum": ["all", "approved", "rejected", "valid"], "default": "all"},
             "limit": {"type": "integer", "default": 20},
         },
@@ -65,6 +69,7 @@ SELF_IMPROVEMENT_VALIDATE_APPROVAL_SCHEMA = {
         "type": "object",
         "properties": {
             "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
             "approval_id": STRING,
         },
         "required": ["approval_id"],
@@ -78,6 +83,7 @@ SELF_IMPROVEMENT_APPROVE_SCHEMA = {
         "type": "object",
         "properties": {
             "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
             "plan_id": STRING,
             "item_id": STRING,
             "approver_source": {"type": "string", "default": "manual_tool"},
@@ -95,6 +101,7 @@ SELF_IMPROVEMENT_APPLY_APPROVED_SCHEMA = {
         "type": "object",
         "properties": {
             "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
             "approval_id": STRING,
         },
         "required": ["approval_id"],
@@ -108,6 +115,7 @@ SELF_IMPROVEMENT_APPLY_LOW_RISK_SCHEMA = {
         "type": "object",
         "properties": {
             "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
             "plan_id": STRING,
             "item_id": STRING,
             "confirm_apply": BOOLEAN,
@@ -124,6 +132,7 @@ SELF_IMPROVEMENT_ROLLBACK_LOW_RISK_SCHEMA = {
         "type": "object",
         "properties": {
             "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
             "ledger_id": STRING,
             "confirm_rollback": BOOLEAN,
             "expected_ledger_hash": STRING,

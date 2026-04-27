@@ -8,14 +8,14 @@ try:  # pragma: no cover - package import path
     from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, validate_approval_artifact
     from .apply_plan import build_apply_plan, write_apply_plan
     from .cli import build_ledger_report_payload, run_pipeline
-    from .config import DEFAULT_RETENTION_DAYS, _load_config, _required_capability_for_command, resolve_execution_mode, validate_mode_action
+    from .config import DEFAULT_RETENTION_DAYS, _load_config, _required_capability_for_command, load_config, resolve_execution_mode, validate_mode_action
     from .ledger import apply_low_risk_skeleton, rollback_low_risk
     from .observer import _event_path, _load_events
 except Exception:  # pragma: no cover - direct file import used by tests/plugin wrapper
     from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, validate_approval_artifact
     from apply_plan import build_apply_plan, write_apply_plan
     from cli import build_ledger_report_payload, run_pipeline
-    from config import DEFAULT_RETENTION_DAYS, _load_config, _required_capability_for_command, resolve_execution_mode, validate_mode_action
+    from config import DEFAULT_RETENTION_DAYS, _load_config, _required_capability_for_command, load_config, resolve_execution_mode, validate_mode_action
     from ledger import apply_low_risk_skeleton, rollback_low_risk
     from observer import _event_path, _load_events
 
@@ -36,9 +36,10 @@ PLUGIN_VERSION = "0.1.0"
 
 def _config_from_args(args: dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(args, dict) and isinstance(args.get("config"), dict):
-        defaults = _load_config(Path(__file__).with_name("config.json"))
+        defaults = load_config(Path(__file__).with_name("config.json"), cli_config_path=args.get("config_path"))
         return {**defaults, **args["config"]}
-    return _load_config(Path(__file__).with_name("config.json"))
+    config_path = args.get("config_path") if isinstance(args, dict) else None
+    return load_config(Path(__file__).with_name("config.json"), cli_config_path=config_path)
 
 
 def _mode_from_args(config: dict[str, Any], args: dict[str, Any] | None) -> str:

@@ -64,6 +64,10 @@ PY
 
 期待値は plugin が enabled、error が null、hooks が登録されていることです。
 
+## Config / policy precedence
+
+Config precedence is defaults < `config.json` < `config.local.json` < `HERMES_SELF_IMPROVE_CONFIG` < explicit `--config`. Explicit env / CLI config paths must exist and be valid JSON. `mode_policy` is restrictive by default: without `allow_policy_expansion: true`, custom policy may narrow permissions but cannot add commands or enable capabilities that defaults deny.
+
 ## Cron / scheduled execution
 
 Cron / scheduled execution は plugin 内の scheduler 実装ではなく、Hermes runtime / scheduler 側の責務です。cron-run session は fresh session として self-contained prompt で実行し、recursive cron job を作らないでください。

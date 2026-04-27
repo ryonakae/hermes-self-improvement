@@ -23,7 +23,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `__init__.py`: registration、hook / CLI / slash command、bundled skill、tool 登録。
 - `schemas.py`: plugin tool schema。
 - `plugin_tools.py`: CLI parity tool handler。`tools.py` という名前は Hermes core `tools.registry` を shadow するため使わない。
-- `config.py`: default config、execution mode、policy gate。
+- `config.py`: default config、config precedence、execution mode、policy gate。
 - `observer.py`: hook observer、redaction、JSONL telemetry、retention。
 - `analysis.py`: event aggregation、finding 抽出、proposal 生成。
 - `scoring.py`: heuristic / LLM / GEPA / compare scorer。
@@ -68,6 +68,7 @@ Top-level `hermes self-improvement ...` は Hermes version / plugin discovery �
 5. Apply-plan / ledger path を触る場合は、target hash、rollback preview、explicit target resolution、scorer disagreement gate を確認する。
 6. `__init__.py` / registration / bundled skill discovery を触ったら、unit test だけでなく plugin manager loading も確認する。
 7. Tool handler を触る場合は、wrapper CLI に shell out せず、CLI と同じ core function と `validate_mode_action(...)` / `_required_capability_for_command(...)` を通す。
+8. Config / policy を触る場合は、defaults < `config.json` < `config.local.json` < `HERMES_SELF_IMPROVE_CONFIG` < `--config` の precedence と、`allow_policy_expansion` なしでは権限拡張できないことを確認する。
 
 ## 検証 checklist
 

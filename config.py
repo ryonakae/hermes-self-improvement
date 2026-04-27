@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ except Exception:  # pragma: no cover - standalone tests
 DEFAULT_PREVIEW_CHARS = 1000
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_EXECUTION_MODE = "report_only"
+ENV_CONFIG_PATH = "HERMES_SELF_IMPROVE_CONFIG"
 VALID_EXECUTION_MODES = {
     "report_only",
     "dry_run_plan",
@@ -66,8 +68,8 @@ DEFAULT_MODE_POLICY = {
 }
 
 
-def _load_config(path: Path) -> dict[str, Any]:
-    defaults = {
+def _default_config() -> dict[str, Any]:
+    return {
         "enabled": True,
         "preview_chars": DEFAULT_PREVIEW_CHARS,
         "retention_days": DEFAULT_RETENTION_DAYS,
@@ -76,7 +78,8 @@ def _load_config(path: Path) -> dict[str, Any]:
         "reports_dir": str(get_hermes_home() / "reports" / "self-improvement"),
         "custom_skill_roots": [str(get_hermes_home() / "skills")],
         "execution_mode": DEFAULT_EXECUTION_MODE,
-        "mode_policy": DEFAULT_MODE_POLICY,
+        "allow_policy_expansion": False,
+        "mode_policy": copy.deepcopy(DEFAULT_MODE_POLICY),
         "llm_scorer": {
             "provider": "auto",
             "model": None,
@@ -95,15 +98,130 @@ def _load_config(path: Path) -> dict[str, Any]:
             "on_session_finalize", "on_session_reset", "subagent_stop",
         ],
     }
+
+
+def _read_config_file(path: Path, *, required: bool = False) -> dict[str, Any]:
+    path = Path(path).expanduser()
     if not path.exists():
-        return defaults
+        if required:
+            raise FileNotFoundError(f"config_not_found:{path}")
+        return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            return {**defaults, **data}
-    except Exception:
-        pass
-    return defaults
+    except Exception as exc:
+        if required:
+            raise ValueError(f"config_invalid_json:{path}:{exc}") from exc
+        return {}
+    if not isinstance(data, dict):
+        if required:
+            raise ValueError(f"config_not_object:{path}")
+        return {}
+    return data
+
+
+def _local_config_path(default_path: Path) -> Path:
+    return default_path.with_name("config.local.json")
+
+
+def _sanitize_mode_policy(policy: Any, *, allow_expansion: bool) -> dict[str, Any]:
+    merged = copy.deepcopy(DEFAULT_MODE_POLICY)
+    if not isinstance(policy, dict):
+        return merged
+    for mode, mode_policy in policy.items():
+        mode = str(mode)
+        if not isinstance(mode_policy, dict):
+            continue
+        if mode not in merged and not allow_expansion:
+            continue
+        base = copy.deepcopy(merged.get(mode, {"commands": [], "capabilities": {}}))
+        default_base = DEFAULT_MODE_POLICY.get(mode, {"commands": [], "capabilities": {}})
+
+        if "commands" in mode_policy:
+            requested = [str(command) for command in (mode_policy.get("commands") or [])]
+            if allow_expansion:
+                commands = []
+                for command in list(base.get("commands") or []) + requested:
+                    if command not in commands:
+                        commands.append(command)
+            else:
+                default_commands = set(default_base.get("commands") or [])
+                commands = [command for command in requested if command in default_commands]
+            base["commands"] = commands
+
+        if isinstance(mode_policy.get("capabilities"), dict):
+            capabilities = dict(base.get("capabilities") or {})
+            default_capabilities = default_base.get("capabilities") or {}
+            for capability, value in mode_policy["capabilities"].items():
+                capability = str(capability)
+                requested = bool(value)
+                if allow_expansion:
+                    capabilities[capability] = requested
+                elif capability in default_capabilities:
+                    capabilities[capability] = requested and default_capabilities.get(capability) is True
+            base["capabilities"] = capabilities
+
+        for key, value in mode_policy.items():
+            if key not in {"commands", "capabilities"}:
+                base[key] = value
+        merged[mode] = base
+    return merged
+
+
+def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(config)
+    normalized["allow_policy_expansion"] = bool(normalized.get("allow_policy_expansion", False))
+    normalized["mode_policy"] = _sanitize_mode_policy(
+        normalized.get("mode_policy"),
+        allow_expansion=normalized["allow_policy_expansion"],
+    )
+    return normalized
+
+
+def _load_config(path: Path) -> dict[str, Any]:
+    """Load one config file plus defaults.
+
+    This legacy helper intentionally does not follow env/local precedence; use
+    load_config() for runtime CLI/tool config resolution.
+    """
+    defaults = _default_config()
+    data = _read_config_file(path, required=False)
+    return _normalize_config({**defaults, **data})
+
+
+def load_config(default_path: Path | None = None, *, cli_config_path: str | Path | None = None) -> dict[str, Any]:
+    """Load config with fail-closed precedence.
+
+    Precedence, low to high: defaults, repo default config.json, config.local.json,
+    HERMES_SELF_IMPROVE_CONFIG, explicit CLI --config. Explicit CLI/env paths are
+    required to exist and be valid JSON so operator intent never silently falls
+    back to a safer-looking but wrong config.
+    """
+    default_path = Path(default_path or Path(__file__).with_name("config.json"))
+    config = _default_config()
+    sources: list[str] = []
+
+    for path, required in [
+        (default_path, False),
+        (_local_config_path(default_path), False),
+    ]:
+        data = _read_config_file(path, required=required)
+        if data:
+            config.update(data)
+            sources.append(str(Path(path).expanduser()))
+
+    env_path = os.environ.get(ENV_CONFIG_PATH)
+    if env_path:
+        path = Path(env_path).expanduser()
+        config.update(_read_config_file(path, required=True))
+        sources.append(str(path))
+
+    if cli_config_path:
+        path = Path(cli_config_path).expanduser()
+        config.update(_read_config_file(path, required=True))
+        sources.append(str(path))
+
+    config["config_sources"] = sources
+    return _normalize_config(config)
 
 
 def resolve_execution_mode(config: dict[str, Any], cli_mode: str | None = None) -> str:
@@ -117,16 +235,12 @@ def resolve_execution_mode(config: dict[str, Any], cli_mode: str | None = None) 
 
 
 def _mode_policy_from_config(config: dict[str, Any] | None = None) -> dict[str, Any]:
-    policy = (config or {}).get("mode_policy")
-    if isinstance(policy, dict):
-        merged = {name: dict(value) for name, value in DEFAULT_MODE_POLICY.items()}
-        for mode, mode_policy in policy.items():
-            if isinstance(mode_policy, dict):
-                base = dict(merged.get(mode, {}))
-                base.update(mode_policy)
-                merged[str(mode)] = base
-        return merged
-    return DEFAULT_MODE_POLICY
+    if not isinstance(config, dict):
+        return copy.deepcopy(DEFAULT_MODE_POLICY)
+    return _sanitize_mode_policy(
+        config.get("mode_policy"),
+        allow_expansion=bool(config.get("allow_policy_expansion", False)),
+    )
 
 
 def validate_mode_action(
