@@ -319,3 +319,111 @@ def test_cli_accepts_approval_report_command_shape():
     assert args.status == "valid"
     assert args.limit == 5
     assert args.as_json is True
+
+
+
+def test_apply_approved_preview_validates_and_returns_diff_without_mutating(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    target = Path(item["target_path"])
+    before = target.read_text(encoding="utf-8")
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    preview = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+    )
+
+    assert preview["schema_name"] == "self_improvement_apply_approved_preview"
+    assert preview["current_status"] == "would_apply_approved"
+    assert preview["target_changed"] is False
+    assert preview["approval_validation"]["current_status"] == "valid"
+    assert preview["approval_id"] == approval_result["approval"]["approval_id"]
+    assert preview["plan_id"] == plan["plan_id"]
+    assert preview["item_id"] == item["item_id"]
+    assert preview["target_path"] == item["target_path"]
+    assert preview["current_target_hash"] == item["before_hash"]
+    assert preview["planned_diff"]["change_type"] == "typo_fix"
+    assert preview["validation_plan"]["status"] == "planned"
+    assert preview["rollback_preview"]["before_hash"] == item["before_hash"]
+    assert target.read_text(encoding="utf-8") == before
+
+
+def test_apply_approved_preview_rejects_expired_approval_without_diff(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=1,
+    )
+
+    preview = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert preview["current_status"] == "rejected"
+    assert "approval_expired" in preview["reasons"]
+    assert "planned_diff" not in preview
+    assert preview["target_changed"] is False
+
+
+def test_apply_approved_preview_rejects_stale_target(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    target = Path(item["target_path"])
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+    target.write_text("# Skill\n\nUse teh browser very carefully.\n", encoding="utf-8")
+
+    preview = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+    )
+
+    assert preview["current_status"] == "rejected"
+    assert "target_hash_mismatch" in preview["reasons"]
+    assert preview["target_changed"] is False
+
+
+def test_cli_accepts_apply_approved_preview_command_shape():
+    mod = load_plugin_module()
+    parser = __import__("argparse").ArgumentParser()
+    mod._setup_cli(parser)
+
+    args = parser.parse_args([
+        "apply-approved",
+        "approval-1",
+        "--mode",
+        "apply_approved",
+        "--json",
+    ])
+
+    assert args.self_improvement_cmd == "apply-approved"
+    assert args.approval_id == "approval-1"
+    assert args.mode == "apply_approved"
+    assert args.as_json is True
+
+
+def test_policy_allows_apply_approved_preview_only_in_apply_approved_mode():
+    mod = load_plugin_module()
+
+    allowed = mod.validate_mode_action("apply_approved", "apply-approved", required_capability="write_ledger")
+    denied = mod.validate_mode_action("dry_run_plan", "apply-approved", required_capability="write_ledger")
+
+    assert allowed == {"allowed": True, "reason": "allowed"}
+    assert denied["allowed"] is False

@@ -50,6 +50,7 @@ bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24
 bin/hermes-self-improve ledger-report --status applied --json
 bin/hermes-self-improve approval-report --status all --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
+bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
 bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 ```
 
@@ -115,7 +116,7 @@ bin/hermes-self-improve gepa-eval --json
 - `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval`, `ledger-report`, `approval-report`, `validate-approval` を許可する既定 mode。
 - `dry_run_plan`: `generate-apply-plan` と read-only の `ledger-report` / `approval-report` / `validate-approval` を許可するが、target file は変更しない。
 - `apply_low_risk`: 低リスク item の preview / attempt / rollback 記録と read-only の `ledger-report` / `approval-report` / `validate-approval` を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>`、rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` があり、hash・rollback preview・validation が通る場合だけ。
-- `apply_approved`: approval artifact 作成用の `approve` と read-only の `approval-report` / `validate-approval` を許可する。承認済み変更の実適用はまだ通常運用では使わない。
+- `apply_approved`: approval artifact 作成用の `approve`、read-only の `approval-report` / `validate-approval`、非破壊 preview の `apply-approved` を許可する。`apply-approved` は approval hash / expiry / plan / item / target hash を再検証して `would_apply_approved` を返すだけで、承認済み変更の実適用はまだ閉じている。
 
 ## Plugin tools
 
@@ -127,8 +128,11 @@ bin/hermes-self-improve gepa-eval --json
 - `self_improvement_approval_report`
 - `self_improvement_validate_approval`
 - `self_improvement_approve`
+- `self_improvement_apply_approved`
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
+
+`self_improvement_apply_approved` は validation-only / preview-only で、actual approved mutation はまだ実装しません。
 
 Mutation-capable tools は CLI と同じく fail-closed です。`self_improvement_apply_low_risk` の実変更には `mode="apply_low_risk"`, `confirm_apply=true`, `expected_item_hash` が必要です。`self_improvement_rollback_low_risk` の実 rollback には `mode="apply_low_risk"`, `confirm_rollback=true`, `expected_ledger_hash` が必要です。条件が揃わない場合は preview / rejected artifact に留め、target file は変更しません。
 

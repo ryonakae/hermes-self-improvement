@@ -53,6 +53,7 @@ try:  # pragma: no cover - package import path
     from .plugin_tools import (
         _handle_self_improvement_approval_report_tool,
         _handle_self_improvement_approve_tool,
+        _handle_self_improvement_apply_approved_tool,
         _handle_self_improvement_apply_low_risk_tool,
         _handle_self_improvement_generate_apply_plan_tool,
         _handle_self_improvement_ledger_report_tool,
@@ -70,6 +71,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     _tools_spec.loader.exec_module(_tools_mod)
     _handle_self_improvement_approval_report_tool = _tools_mod._handle_self_improvement_approval_report_tool
     _handle_self_improvement_approve_tool = _tools_mod._handle_self_improvement_approve_tool
+    _handle_self_improvement_apply_approved_tool = _tools_mod._handle_self_improvement_apply_approved_tool
     _handle_self_improvement_apply_low_risk_tool = _tools_mod._handle_self_improvement_apply_low_risk_tool
     _handle_self_improvement_generate_apply_plan_tool = _tools_mod._handle_self_improvement_generate_apply_plan_tool
     _handle_self_improvement_ledger_report_tool = _tools_mod._handle_self_improvement_ledger_report_tool
@@ -84,6 +86,7 @@ _SELF_IMPROVEMENT_TOOL_HANDLERS = {
     "self_improvement_approval_report": _handle_self_improvement_approval_report_tool,
     "self_improvement_validate_approval": _handle_self_improvement_validate_approval_tool,
     "self_improvement_approve": _handle_self_improvement_approve_tool,
+    "self_improvement_apply_approved": _handle_self_improvement_apply_approved_tool,
     "self_improvement_apply_low_risk": _handle_self_improvement_apply_low_risk_tool,
     "self_improvement_rollback_low_risk": _handle_self_improvement_rollback_low_risk_tool,
 }
@@ -311,9 +314,9 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 
 
 try:  # pragma: no cover - package import path
-    from .approvals import build_approval_report_payload, create_approval_artifact, render_approval_report, validate_approval_artifact, write_approval_artifact
+    from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report, validate_approval_artifact, write_approval_artifact
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from approvals import build_approval_report_payload, create_approval_artifact, render_approval_report, validate_approval_artifact, write_approval_artifact
+    from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report, validate_approval_artifact, write_approval_artifact
 
 
 try:  # pragma: no cover - package import path

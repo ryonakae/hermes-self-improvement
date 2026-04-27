@@ -92,7 +92,7 @@ If no matching existing section is present for section additions, fail closed wi
 
 `ledger-report` is read-only and summarizes ledger `review_summary`, `applied_diff`, `validation_result`, and `git_metadata` so applied vs deferred changes can be reviewed without reopening each JSON artifact.
 
-`approve <plan-id> <item-id>` creates a single-item approval artifact under `approvals/YYYY-MM-DD/` in `apply_approved` mode. The approval binds `plan_hash`, `item_hash`, approved change type, target path, approver source, and expiry. It does not mutate targets. `approval-report` is read-only and validates approval artifacts against their own `approval_hash`, expiry, current plan hash, current item hash, change type, and target path. Later `apply-approved` work must use this fail-closed validation plus policy checks before applying anything.
+`approve <plan-id> <item-id>` creates a single-item approval artifact under `approvals/YYYY-MM-DD/` in `apply_approved` mode. The approval binds `plan_hash`, `item_hash`, approved change type, target path, approver source, and expiry. It does not mutate targets. `approval-report` is read-only and validates approval artifacts against their own `approval_hash`, expiry, current plan hash, current item hash, change type, and target path. `apply-approved <approval-id>` is now validation-only / preview-only: it re-runs approval validation, checks current target hash against the approved item before hash, and returns planned diff / validation plan / rollback preview with `target_changed: false`. Actual approved mutation remains closed.
 
 `stale_plan`, `rejected`, and confirmation-hash mismatch attempts should not create ledgers or planned diffs beyond the safe preview metadata.
 
@@ -126,12 +126,13 @@ After `generate-apply-plan`, verify the artifact path exists and schema metadata
 
 ## Plugin tools
 
-The plugin exposes CLI-parity tools for status, apply-plan generation, ledger reports, approval reports, approval validation, approval artifact creation, guarded low-risk apply, and guarded low-risk rollback. Tool handlers must call the same core Python functions as the CLI and must call `validate_mode_action(...)` with `_required_capability_for_command(...)` before invoking mutation-capable paths. They must not shell out to `bin/hermes-self-improve`.
+The plugin exposes CLI-parity tools for status, apply-plan generation, ledger reports, approval reports, approval validation, approval artifact creation, approved-apply preview, guarded low-risk apply, and guarded low-risk rollback. Tool handlers must call the same core Python functions as the CLI and must call `validate_mode_action(...)` with `_required_capability_for_command(...)` before invoking mutation-capable paths. They must not shell out to `bin/hermes-self-improve`.
 
 Mutation tools remain fail-closed:
 
 - `self_improvement_apply_low_risk` only mutates when mode policy allows `apply-low-risk`, `confirm_apply=true`, and `expected_item_hash` matches the selected item hash.
 - `self_improvement_rollback_low_risk` only mutates when mode policy allows `rollback-low-risk`, `confirm_rollback=true`, and `expected_ledger_hash` matches the ledger hash.
+- `self_improvement_apply_approved` is validation-only / preview-only and must return `would_apply_approved` or `rejected` with `target_changed: false`; it must not mutate targets.
 - missing confirmation, hash mismatch, stale target, unsupported mutation, missing rollback snapshot, or policy denial must return a rejected/would-apply/would-rollback payload with `target_changed: false`.
 
 

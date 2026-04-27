@@ -23,6 +23,7 @@ bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24
 bin/hermes-self-improve ledger-report --status applied --json
 bin/hermes-self-improve approval-report --status all --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
+bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
 bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 ```
 
@@ -89,10 +90,11 @@ cron では `apply-low-risk --confirm-apply` や `rollback-low-risk --confirm-ro
 - `self_improvement_approval_report`
 - `self_improvement_validate_approval`
 - `self_improvement_approve`
+- `self_improvement_apply_approved`
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
 
-Mutation-capable tools は `apply_low_risk` mode と explicit confirmation/hash が揃わない限り target を変更しません。
+`self_improvement_apply_approved` は approval artifact を検証して planned diff / rollback preview を返す preview-only tool です。actual approved mutation はまだ閉じています。Mutation-capable tools は `apply_low_risk` mode と explicit confirmation/hash が揃わない限り target を変更しません。
 
 ## 重要パス
 
@@ -137,7 +139,7 @@ Runtime artifact の既定保存先:
 - hook は観測専用です。hook 内で LLM、GEPA optimizer、skill patch、memory edit、重い集計を実行しないでください。
 - `execution_mode` は prompt ではなく `config.py` / CLI policy で検証します。未知 mode / 未許可 command / 足りない capability は拒否します。
 - `generate-apply-plan` は artifact 生成のみで、target file を変更しません。
-- `apply-low-risk` は既定では preview / apply-attempt / pending ledger だけを書きます。target file の実変更は `--confirm-apply --expected-item-hash <item_hash>` があり、eligibility・before hash・rollback preview・post-write validation が通る場合だけです。`rollback-low-risk` も既定では非破壊で、実 rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` と current target hash 検証が必要です。
+- `apply-low-risk` は既定では preview / apply-attempt / pending ledger だけを書きます。target file の実変更は `--confirm-apply --expected-item-hash <item_hash>` があり、eligibility・before hash・rollback preview・post-write validation が通る場合だけです。`rollback-low-risk` も既定では非破壊で、実 rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` と current target hash 検証が必要です。`apply-approved` は現時点では validation-only / preview-only で、target を変更しません。
 - 作業前に `git status --short` と該当 diff を確認し、無関係な変更を巻き戻さないでください。
 - README は人間向けの入口、AGENTS.md はエージェント向けの最短作業入口として分けます。長い設計経緯は README か repo-tracked plan/docs に寄せてください。
 

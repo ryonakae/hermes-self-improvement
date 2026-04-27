@@ -10,7 +10,7 @@ from typing import Any
 
 try:  # pragma: no cover - package import path
     from .analysis import AnalysisResult, analyze_events
-    from .approvals import build_approval_report_payload, create_approval_artifact, render_approval_report
+    from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
     from .apply_plan import build_apply_plan, write_apply_plan
     from .config import (
         DEFAULT_RETENTION_DAYS,
@@ -25,7 +25,7 @@ try:  # pragma: no cover - package import path
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import AnalysisResult, analyze_events
-    from approvals import build_approval_report_payload, create_approval_artifact, render_approval_report
+    from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
     from apply_plan import build_apply_plan, write_apply_plan
     from config import (
         DEFAULT_RETENTION_DAYS,
@@ -376,6 +376,11 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_approve.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_approve)
     p_approve.set_defaults(func=_handle_cli)
+    p_apply_approved = sub.add_parser("apply-approved", help="Validate and preview one approved apply artifact without mutating targets")
+    p_apply_approved.add_argument("approval_id")
+    p_apply_approved.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_apply_approved)
+    p_apply_approved.set_defaults(func=_handle_cli)
     p_apply_plan = sub.add_parser("generate-apply-plan", help="Generate a dry-run apply plan artifact")
     p_apply_plan.add_argument("--since-hours", type=int, default=24)
     p_apply_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
@@ -477,6 +482,20 @@ def _handle_cli(args: argparse.Namespace) -> None:
                 print(f"Approval written: {payload.get('approval_path')}")
             if approval.get("reasons"):
                 print("Reasons: " + ", ".join(approval.get("reasons") or []))
+        return
+    if cmd == "apply-approved":
+        payload = preview_apply_approved(
+            approval_id=str(getattr(args, "approval_id")),
+            config=config,
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(f"Apply-approved preview status: {payload.get('current_status')}")
+            if payload.get("reasons"):
+                print("Reasons: " + ", ".join(payload.get("reasons") or []))
+            if payload.get("target_path"):
+                print(f"Target: {payload.get('target_path')}")
         return
     if cmd == "generate-apply-plan":
         out = run_pipeline(

@@ -325,7 +325,7 @@ Executor requirements:
 
 ### Phase 5 — Approval gates for broader C/D
 
-Implementation progress as of 2026-04-27: `approve <plan-id> <item-id>` can now create single-item approval artifacts under `reports/self-improvement/approvals/YYYY-MM-DD/`. The artifact binds `plan_hash`, `item_hash`, approved change type, target path, approver source, creation time, and expiry. `approval-report` now validates approval artifacts against artifact hash, expiry, current plan hash, current item hash, change type, and target path. Both surfaces are non-mutating and exist as authorization / review primitives for later `apply-approved` work; actual approved apply remains closed.
+Implementation progress as of 2026-04-27: `approve <plan-id> <item-id>` can now create single-item approval artifacts under `reports/self-improvement/approvals/YYYY-MM-DD/`. The artifact binds `plan_hash`, `item_hash`, approved change type, target path, approver source, creation time, and expiry. `approval-report` validates approval artifacts against artifact hash, expiry, current plan hash, current item hash, change type, and target path. `apply-approved <approval-id>` is validation-only / preview-only: it re-runs approval validation, checks current target hash, and returns planned diff / validation plan / rollback preview without mutating targets. Actual approved apply remains closed.
 
 Before memory compression or skill create/merge/rename/delete:
 
@@ -372,11 +372,11 @@ Completed:
 - official `ctx.register_cli_command("self-improvement", ...)` registration and standalone `bin/hermes-self-improve` fallback;
 - interface strategy decision for CLI / wrapper / tools / cron boundaries;
 - plugin tool parity surface via `plugin.yaml` `provides_tools`, `schemas.py`, `plugin_tools.py`, and `register(ctx)` tool registration for status / apply-plan / ledger-report / approval-report / validate-approval / approve / apply-low-risk / rollback-low-risk;
-- Cron / scheduled execution docs that keep scheduling outside the plugin, require fresh self-contained sessions, forbid recursive cron creation, and recommend only dry-run/report commands by default.
+- Cron / scheduled execution docs that keep scheduling outside the plugin, require fresh self-contained sessions, forbid recursive cron creation, and recommend only dry-run/report commands by default;
+- `apply-approved` validation-only / preview-only core, CLI, and tool path, with actual approved mutation still closed.
 
 Remaining:
 
-- add `apply-approved` validation-only / preview-only before any approved mutation path;
 - finish config / policy source precedence (`--config`, `HERMES_SELF_IMPROVE_CONFIG`, local config, explicit policy expansion guard);
 - add stale path / stale command dry-run planner support only when canonical replacements are independently verified;
 - later: approved mutation for broader C/D classes, retention/noise cleanup, and report integration.
@@ -389,12 +389,14 @@ Implemented tool parity surface:
 - `self_improvement_approval_report`
 - `self_improvement_validate_approval`
 - `self_improvement_approve`
+- `self_improvement_apply_approved`
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
 
 Next implementation slice:
 
-- or start `apply-approved` validation-only / preview-only, keeping actual approved mutation closed;
+- finish config / policy source precedence (`--config`, `HERMES_SELF_IMPROVE_CONFIG`, local config, explicit policy expansion guard);
+- or add stale path / stale command dry-run planner support only when canonical replacements are independently verified;
 - keep tool handlers aligned with CLI policy gates as new commands are added.
 
 ## Tests / validation

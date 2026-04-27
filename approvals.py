@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover - package import path
-    from .ledger import _find_apply_plan_item, _load_apply_plan_by_id
+    from .ledger import _current_file_hash, _find_apply_plan_item, _load_apply_plan_by_id, _planned_diff_for_item, _validation_plan_for_item
     from .observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from ledger import _find_apply_plan_item, _load_apply_plan_by_id
+    from ledger import _current_file_hash, _find_apply_plan_item, _load_apply_plan_by_id, _planned_diff_for_item, _validation_plan_for_item
     from observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -235,6 +235,87 @@ def validate_approval_artifact(
         "item_hash": approval.get("item_hash"),
         "target_changed": False,
     }
+
+
+def preview_apply_approved(
+    *,
+    approval_id: str,
+    config: dict[str, Any],
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Validate an approval artifact and return a non-mutating approved-apply preview.
+
+    This intentionally does not write ledgers and does not mutate targets. Actual
+    approved mutation remains closed until a later implementation slice.
+    """
+    ts = (now or datetime.now(UTC)).astimezone(UTC)
+    validation = validate_approval_artifact(approval_id=approval_id, config=config, now=ts)
+    base: dict[str, Any] = {
+        "schema_name": "self_improvement_apply_approved_preview",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "approval_id": approval_id,
+        "previewed_at": ts.isoformat(),
+        "approval_validation": validation,
+        "target_changed": False,
+        "mutation_enabled": False,
+        "mutation_status": "closed",
+    }
+    if validation.get("current_status") != "valid":
+        return {
+            **base,
+            "current_status": "rejected",
+            "reasons": list(validation.get("reasons") or ["approval_validation_failed"]),
+        }
+
+    try:
+        approval, approval_path = _find_approval_artifact(approval_id, config)
+        plan, plan_path = _load_apply_plan_by_id(str(approval.get("plan_id") or ""), config)
+    except FileNotFoundError as exc:
+        return {
+            **base,
+            "current_status": "rejected",
+            "reasons": ["approval_preview_lookup_failed"],
+            "error": str(exc),
+        }
+    item = _find_apply_plan_item(plan, str(approval.get("item_id") or ""))
+    if item is None:
+        return {**base, "current_status": "rejected", "reasons": ["item_not_found"]}
+
+    reasons: list[str] = []
+    current_hash = _current_file_hash(item.get("target_path"))
+    if current_hash != item.get("before_hash"):
+        reasons.append("target_hash_mismatch")
+    if not isinstance(item.get("rollback_preview"), dict):
+        reasons.append("rollback_preview_missing")
+    if not isinstance(item.get("mutation"), dict):
+        reasons.append("mutation_plan_missing")
+
+    payload = {
+        **base,
+        "current_status": "rejected" if reasons else "would_apply_approved",
+        "reasons": reasons,
+        "approval_path": str(approval_path),
+        "apply_plan_path": str(plan_path),
+        "plan_id": approval.get("plan_id"),
+        "item_id": approval.get("item_id"),
+        "item_hash": approval.get("item_hash"),
+        "change_type": item.get("change_type"),
+        "target_path": item.get("target_path"),
+        "current_target_hash": current_hash,
+        "expected_before_hash": item.get("before_hash"),
+        "target_hash_matches_before": current_hash == item.get("before_hash"),
+        "risk": item.get("risk"),
+        "confidence": item.get("confidence"),
+        "score": item.get("score"),
+        "recommendation": item.get("recommendation"),
+        "scorer": item.get("scorer"),
+        "rollback_preview": item.get("rollback_preview"),
+    }
+    if not reasons:
+        payload["planned_diff"] = _planned_diff_for_item(item)
+        payload["validation_plan"] = _validation_plan_for_item(item)
+    return payload
 
 
 def build_approval_report_payload(

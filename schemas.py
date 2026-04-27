@@ -87,6 +87,20 @@ SELF_IMPROVEMENT_APPROVE_SCHEMA = {
     },
 }
 
+
+SELF_IMPROVEMENT_APPLY_APPROVED_SCHEMA = {
+    "name": "self_improvement_apply_approved",
+    "description": "Validate and preview one approved apply artifact without mutating targets. Actual approved mutation remains closed.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "mode": MODE_PROPERTY,
+            "approval_id": STRING,
+        },
+        "required": ["approval_id"],
+    },
+}
+
 SELF_IMPROVEMENT_APPLY_LOW_RISK_SCHEMA = {
     "name": "self_improvement_apply_low_risk",
     "description": "Preview or explicitly apply one low-risk apply-plan item. Actual mutation requires apply_low_risk mode, confirm_apply=true, and matching expected_item_hash.",
@@ -125,6 +139,7 @@ SELF_IMPROVEMENT_TOOL_SPECS = (
     ("self_improvement_approval_report", SELF_IMPROVEMENT_APPROVAL_REPORT_SCHEMA),
     ("self_improvement_validate_approval", SELF_IMPROVEMENT_VALIDATE_APPROVAL_SCHEMA),
     ("self_improvement_approve", SELF_IMPROVEMENT_APPROVE_SCHEMA),
+    ("self_improvement_apply_approved", SELF_IMPROVEMENT_APPLY_APPROVED_SCHEMA),
     ("self_improvement_apply_low_risk", SELF_IMPROVEMENT_APPLY_LOW_RISK_SCHEMA),
     ("self_improvement_rollback_low_risk", SELF_IMPROVEMENT_ROLLBACK_LOW_RISK_SCHEMA),
 )

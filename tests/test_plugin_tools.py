@@ -62,6 +62,7 @@ def test_register_exposes_self_improvement_tool_parity_surface():
         "self_improvement_approve",
         "self_improvement_apply_low_risk",
         "self_improvement_rollback_low_risk",
+        "self_improvement_apply_approved",
     }
     for _name, kwargs in ctx.tools:
         assert kwargs["toolset"] == "self_improvement"
@@ -163,3 +164,65 @@ def test_approve_tool_creates_artifact_without_target_mutation(tmp_path):
     assert payload["target_changed"] is False
     assert target.read_text(encoding="utf-8") == "# Skill\n\nUse teh browser carefully.\n"
     assert Path(payload["approval_path"]).is_file()
+
+
+
+def test_apply_approved_tool_returns_preview_without_mutation(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
+    proposal = {
+        "id": "proposal-tool-approved-preview",
+        "title": "Fix typo in skill prose",
+        "target": "file_workflow_skills",
+        "target_path": str(target),
+        "action": "typo_fix",
+        "risk": "low",
+        "confidence": "high",
+        "score": 91,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "scorer": "heuristic-v0.1",
+        "old_text": "teh",
+        "new_text": "the",
+    }
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={"event_count": 10},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+    config = {"reports_dir": str(tmp_path / "reports")}
+    mod.write_apply_plan(plan, config)
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=plan["items"][0]["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+    )
+
+    raw = mod._handle_self_improvement_apply_approved_tool({
+        "mode": "apply_approved",
+        "approval_id": approval_result["approval"]["approval_id"],
+        "config": config,
+    })
+
+    payload = parse_tool_payload(raw)
+    assert payload["schema_name"] == "self_improvement_apply_approved_preview"
+    assert payload["current_status"] == "would_apply_approved"
+    assert payload["target_changed"] is False
+    assert target.read_text(encoding="utf-8") == "# Skill\n\nUse teh browser carefully.\n"
+
+
+def test_apply_approved_tool_denies_wrong_mode(tmp_path):
+    mod = load_plugin_module()
+
+    raw = mod._handle_self_improvement_apply_approved_tool({
+        "mode": "report_only",
+        "approval_id": "approval-1",
+        "config": {"reports_dir": str(tmp_path / "reports")},
+    })
+
+    payload = parse_tool_payload(raw)
+    assert payload["error"] == "execution_mode_denied"
+    assert payload["command"] == "apply-approved"
+    assert payload["target_changed"] is False
