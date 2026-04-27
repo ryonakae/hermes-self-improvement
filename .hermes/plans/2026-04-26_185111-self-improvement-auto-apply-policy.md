@@ -319,8 +319,8 @@ Executor requirements:
 - target skill must be read immediately before patching;
 - patch must be generated against the current content;
 - use `skill_manage` for skill edits where possible;
-- write report entry with evidence, score, risk, and applied diff;
-- if target is git-managed, commit locally after validation;
+- write report entry with evidence, score, risk, applied diff, and validation result;
+- if target is git-managed, record repository metadata such as repo root, dirty-before/after status, and suggested commit summary when available, but do not create commits; ownership of commits belongs to the target repository workflow;
 - if target is not git-managed, ensure ledger exists before applying.
 
 ### Phase 5 — Approval gates for broader C/D
@@ -342,7 +342,7 @@ Likely test areas:
 - low-evidence proposal rejection;
 - ledger schema validation;
 - non-git-managed target handling;
-- git-managed target commit decision;
+- git-managed target metadata recording without committing;
 - report rendering for applied vs deferred proposals.
 
 Suggested commands once implementation begins:
@@ -360,6 +360,7 @@ python3 -m py_compile hermes-self-improvement/__init__.py hermes-self-improvemen
 - Keeping policy only in a skill makes it easy to use but hard to review as a design artifact.
 - Keeping policy only in repo docs makes it reviewable but easier for the active agent to miss unless the skill points to it.
 - Non-git-managed skill edits need a real rollback story before auto-apply is safe.
+- Git-managed target commits should remain outside this plugin's responsibility; this plugin should observe, analyze, apply guarded improvements, and record enough metadata for the target workflow to commit or reject the change.
 - Ledger files can accumulate noise; retention and summarization should be designed later.
 - Approval gates must be explicit before moving into memory cleanup or skill restructuring.
 
