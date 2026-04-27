@@ -42,8 +42,9 @@ When strengthening apply-plan schema, use TDD to preserve fail-closed behavior. 
 - `ledger_preview`
 - `rollback_preview`
 - `scorer_disagreements`
+- `scorer_comparison_policy`
 
-Resolve `before_hash` from the target file when `target_path` points at an existing file.
+Resolve `before_hash` from the target file when `target_path` points at an existing file. GEPA/LLM compare disagreement is change-type-aware: strict change types such as memory compression/deletion, skill lifecycle, broad rewrite, trigger change, and policy expansion use stricter score/confidence thresholds; low-risk prose classes may use looser score/confidence thresholds; risk or recommendation mismatch still blocks unattended apply.
 
 Keep `eligible_for_unattended=false` when any of these are true:
 

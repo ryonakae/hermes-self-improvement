@@ -180,6 +180,8 @@ Mutation-capable tools も CLI と同じ confirmation と expected hash を要�
 
 `report`、`run`、`generate-apply-plan` は、明示的に `--scorer` を渡さない限り `compare` を使います。`analyze` は観測・分類なので軽量な `heuristic` のままです。`--scorer gepa` は dependency-free offline baseline にフォールバックしません。active runtime に `dspy` が無い場合は `gepa_scorer_error` として明示し、unattended apply は許可しません。依存は次で入れます。
 
+`compare` の disagreement 判定は `scorer_comparison_policy` で change type ごとに調整します。risk / recommendation mismatch は常に block 寄り、memory / lifecycle / destructive / broad change は strict threshold、`typo_fix` / `pitfall_addition_existing_section` / `validation_addition_existing_section` は少し緩い score / confidence threshold を使います。`generate-apply-plan` は `scorer_disagreements` と `scorer_comparison_policy` を item に残し、disagreement がある item は unattended eligible にしません。
+
 ```bash
 python3 -m pip install -e .
 ```

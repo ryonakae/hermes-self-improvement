@@ -48,7 +48,7 @@ def score_proposals_impl(
         gepa_scored = score_proposals_impl(
             proposals, findings, scorer="gepa", config=config, llm_scorer_func=llm_scorer_func, gepa_scorer_func=gepa_scorer_func
         )
-        return _compare_scorer_results(proposals, heuristic, llm_scored, gepa_scored)
+        return _compare_scorer_results(proposals, heuristic, llm_scored, gepa_scored, config=config or {})
     return heuristic
 
 
@@ -190,6 +190,8 @@ def _compare_scorer_results(
     heuristic: list[dict[str, Any]],
     llm_scored: list[dict[str, Any]],
     gepa_scored: list[dict[str, Any]],
+    *,
+    config: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     heuristic_by_id = {str(item.get("id") or ""): item for item in heuristic}
     llm_by_id = {str(item.get("id") or ""): item for item in llm_scored}
@@ -203,15 +205,13 @@ def _compare_scorer_results(
         llm_score = _coerce_int(llm.get("score"), default=h.get("score", 0))
         gepa_score = _coerce_int(gepa.get("score"), default=h.get("score", 0))
         delta = abs(llm_score - gepa_score)
-        disagreements: list[str] = []
-        if delta >= 20:
-            disagreements.append("score_gap")
-        if llm.get("recommendation") != gepa.get("recommendation"):
-            disagreements.append("recommendation_mismatch")
-        if llm.get("risk") != gepa.get("risk"):
-            disagreements.append("risk_mismatch")
-        if llm.get("confidence") != gepa.get("confidence"):
-            disagreements.append("confidence_mismatch")
+        comparison_policy = _comparison_policy_for_proposal(proposal, config or {})
+        disagreements = _scorer_disagreements_for_policy(
+            llm=llm,
+            gepa=gepa,
+            score_delta=delta,
+            policy=comparison_policy,
+        )
 
         p2 = dict(h)
         p2["scorer"] = "compare-v0.1"
@@ -219,6 +219,7 @@ def _compare_scorer_results(
         p2["gepa_score"] = gepa_score
         p2["score_delta"] = delta
         p2["scorer_disagreements"] = disagreements
+        p2["scorer_comparison_policy"] = comparison_policy
         p2["llm_recommendation"] = llm.get("recommendation")
         p2["gepa_recommendation"] = gepa.get("recommendation")
         p2["llm_risk"] = llm.get("risk")
@@ -244,6 +245,78 @@ def _compare_scorer_results(
         ),
         reverse=True,
     )
+
+
+def _proposal_change_type(proposal: dict[str, Any]) -> str:
+    explicit = str(proposal.get("change_type") or "").strip()
+    if explicit:
+        return explicit
+    action = str(proposal.get("action") or "").lower()
+    title = str(proposal.get("title") or "").lower()
+    haystack = f"{action} {title}"
+    if "pitfall" in haystack:
+        return "pitfall_addition_existing_section"
+    if "validation" in haystack or "verification" in haystack or "checklist" in haystack:
+        return "validation_addition_existing_section"
+    if "typo" in haystack:
+        return "typo_fix"
+    if "memory_compress" in haystack or "memory compression" in haystack or "compress_memory" in haystack:
+        return "memory_compress"
+    if "memory_delete" in haystack or "memory delete" in haystack or "delete memory" in haystack:
+        return "memory_delete"
+    for change_type in ("skill_create", "skill_delete", "skill_rename", "skill_merge", "skill_trigger_change", "skill_large_rewrite"):
+        if change_type in haystack or change_type.replace("_", " ") in haystack:
+            return change_type
+    return "unknown_or_unclassified"
+
+
+def _comparison_policy_for_proposal(proposal: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    raw_policy = config.get("scorer_comparison_policy") if isinstance(config.get("scorer_comparison_policy"), dict) else {}
+    default = {
+        "block_on_risk_disagreement": True,
+        "block_on_recommendation_disagreement": True,
+        "score_delta_block_threshold": 15,
+        "confidence_rank_delta_block_threshold": 1,
+    }
+    if isinstance(raw_policy.get("default"), dict):
+        default.update(raw_policy["default"])
+    change_type = _proposal_change_type(proposal)
+    selected = dict(default)
+    selected["policy_name"] = "default"
+    strict_types = {str(item) for item in raw_policy.get("strict_change_types", [])} if isinstance(raw_policy.get("strict_change_types"), list) else {"unknown_or_unclassified"}
+    low_risk_prose = raw_policy.get("low_risk_prose") if isinstance(raw_policy.get("low_risk_prose"), dict) else {}
+    low_risk_types = {str(item) for item in low_risk_prose.get("change_types", [])} if isinstance(low_risk_prose.get("change_types"), list) else set()
+    if change_type in low_risk_types:
+        selected.update({k: v for k, v in low_risk_prose.items() if k != "change_types"})
+        selected["policy_name"] = "low_risk_prose"
+    elif change_type in strict_types or change_type == "unknown_or_unclassified":
+        strict = raw_policy.get("strict") if isinstance(raw_policy.get("strict"), dict) else {}
+        selected.update(strict)
+        selected["policy_name"] = "strict"
+    selected["change_type"] = change_type
+    selected["block_on_risk_disagreement"] = bool(selected.get("block_on_risk_disagreement", True))
+    selected["block_on_recommendation_disagreement"] = bool(selected.get("block_on_recommendation_disagreement", True))
+    selected["score_delta_block_threshold"] = _coerce_int(selected.get("score_delta_block_threshold"), default=15)
+    selected["confidence_rank_delta_block_threshold"] = _coerce_int(selected.get("confidence_rank_delta_block_threshold"), default=1)
+    return selected
+
+
+def _scorer_disagreements_for_policy(*, llm: dict[str, Any], gepa: dict[str, Any], score_delta: int, policy: dict[str, Any]) -> list[str]:
+    disagreements: list[str] = []
+    if score_delta >= _coerce_int(policy.get("score_delta_block_threshold"), default=15):
+        disagreements.append("score_gap")
+    if policy.get("block_on_recommendation_disagreement", True) and llm.get("recommendation") != gepa.get("recommendation"):
+        disagreements.append("recommendation_mismatch")
+    if policy.get("block_on_risk_disagreement", True) and llm.get("risk") != gepa.get("risk"):
+        disagreements.append("risk_mismatch")
+    confidence_delta = abs(_confidence_rank(llm.get("confidence")) - _confidence_rank(gepa.get("confidence")))
+    if confidence_delta >= _coerce_int(policy.get("confidence_rank_delta_block_threshold"), default=1):
+        disagreements.append("confidence_gap")
+    return disagreements
+
+
+def _confidence_rank(value: Any) -> int:
+    return {"low": 0, "medium": 1, "high": 2}.get(str(value or "").lower(), -1)
 
 
 def _max_risk(*values: Any) -> str:

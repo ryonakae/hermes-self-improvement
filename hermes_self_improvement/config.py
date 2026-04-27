@@ -104,6 +104,35 @@ def _default_config() -> dict[str, Any]:
             "num_threads": 4,
             "track_stats": True,
         },
+        "scorer_comparison_policy": {
+            "default": {
+                "block_on_risk_disagreement": True,
+                "block_on_recommendation_disagreement": True,
+                "score_delta_block_threshold": 15,
+                "confidence_rank_delta_block_threshold": 1,
+            },
+            "strict_change_types": [
+                "memory_compress",
+                "memory_delete",
+                "skill_create",
+                "skill_delete",
+                "skill_rename",
+                "skill_merge",
+                "skill_trigger_change",
+                "skill_large_rewrite",
+                "config_policy_expansion",
+                "unknown_or_unclassified",
+            ],
+            "strict": {
+                "score_delta_block_threshold": 5,
+                "confidence_rank_delta_block_threshold": 1,
+            },
+            "low_risk_prose": {
+                "change_types": ["typo_fix", "pitfall_addition_existing_section", "validation_addition_existing_section"],
+                "score_delta_block_threshold": 20,
+                "confidence_rank_delta_block_threshold": 2,
+            },
+        },
         "observe_hooks": [
             "pre_tool_call", "post_tool_call", "pre_llm_call", "post_llm_call",
             "pre_api_request", "post_api_request", "on_session_start", "on_session_end",

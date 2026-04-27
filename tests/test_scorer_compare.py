@@ -117,6 +117,89 @@ def test_compare_scorer_marks_llm_gepa_disagreements(monkeypatch):
     assert first["score_breakdown"]["verification_plan"]["level"] == "low"
 
 
+def test_compare_scorer_uses_change_type_aware_thresholds(monkeypatch):
+    mod = load_plugin_module()
+    proposals = [
+        {
+            "id": "low-risk-prose",
+            "change_type": "pitfall_addition_existing_section",
+            "risk": "low",
+            "confidence": "medium",
+            "title": "Add pitfall note",
+            "auto_apply": False,
+        },
+        {
+            "id": "strict-memory",
+            "change_type": "memory_compress",
+            "risk": "medium",
+            "confidence": "medium",
+            "title": "Compress memory",
+            "auto_apply": False,
+        },
+    ]
+
+    def fake_llm(*, proposals, findings, config):
+        return {
+            "scores": [
+                {"id": "low-risk-prose", "score": 88, "recommendation": "review_for_possible_low_risk_apply", "risk": "low", "confidence": "high", "rationale": "ok"},
+                {"id": "strict-memory", "score": 80, "recommendation": "human_review", "risk": "medium", "confidence": "medium", "rationale": "ok"},
+            ]
+        }
+
+    def fake_gepa(*, proposals, findings, config):
+        return {
+            "scores": [
+                {"id": "low-risk-prose", "score": 70, "recommendation": "review_for_possible_low_risk_apply", "risk": "low", "confidence": "low", "rationale": "ok"},
+                {"id": "strict-memory", "score": 74, "recommendation": "human_review", "risk": "medium", "confidence": "medium", "rationale": "ok"},
+            ]
+        }
+
+    monkeypatch.setattr(mod, "_call_llm_scorer", fake_llm)
+    monkeypatch.setattr(mod, "_call_gepa_scorer", fake_gepa)
+    policy = {
+        "default": {"block_on_risk_disagreement": True, "block_on_recommendation_disagreement": True, "score_delta_block_threshold": 15, "confidence_rank_delta_block_threshold": 1},
+        "strict_change_types": ["memory_compress", "unknown_or_unclassified"],
+        "strict": {"score_delta_block_threshold": 5, "confidence_rank_delta_block_threshold": 1},
+        "low_risk_prose": {"change_types": ["pitfall_addition_existing_section"], "score_delta_block_threshold": 20, "confidence_rank_delta_block_threshold": 2},
+    }
+
+    scored = mod.score_proposals(proposals, scorer="compare", config={"scorer_comparison_policy": policy})
+    by_id = {item["id"]: item for item in scored}
+
+    assert by_id["low-risk-prose"]["scorer_disagreements"] == ["confidence_gap"]
+    assert by_id["low-risk-prose"]["scorer_comparison_policy"]["policy_name"] == "low_risk_prose"
+    assert by_id["low-risk-prose"]["recommendation"] == "human_review"
+    assert by_id["strict-memory"]["scorer_disagreements"] == ["score_gap"]
+    assert by_id["strict-memory"]["scorer_comparison_policy"]["policy_name"] == "strict"
+
+
+def test_compare_scorer_always_blocks_risk_and_recommendation_mismatch(monkeypatch):
+    mod = load_plugin_module()
+    proposals = [{"id": "typo", "change_type": "typo_fix", "risk": "low", "confidence": "high", "title": "Typo fix"}]
+
+    def fake_llm(*, proposals, findings, config):
+        return {"scores": [{"id": "typo", "score": 90, "recommendation": "review_for_possible_low_risk_apply", "risk": "low", "confidence": "high", "rationale": "ok"}]}
+
+    def fake_gepa(*, proposals, findings, config):
+        return {"scores": [{"id": "typo", "score": 89, "recommendation": "human_review", "risk": "medium", "confidence": "high", "rationale": "ok"}]}
+
+    monkeypatch.setattr(mod, "_call_llm_scorer", fake_llm)
+    monkeypatch.setattr(mod, "_call_gepa_scorer", fake_gepa)
+    scored = mod.score_proposals(
+        proposals,
+        scorer="compare",
+        config={
+            "scorer_comparison_policy": {
+                "low_risk_prose": {"change_types": ["typo_fix"], "score_delta_block_threshold": 100, "confidence_rank_delta_block_threshold": 3}
+            }
+        },
+    )
+
+    assert "recommendation_mismatch" in scored[0]["scorer_disagreements"]
+    assert "risk_mismatch" in scored[0]["scorer_disagreements"]
+    assert scored[0]["recommendation"] == "human_review"
+
+
 def test_render_report_includes_compare_summary():
     mod = load_plugin_module()
     result = mod.AnalysisResult(
