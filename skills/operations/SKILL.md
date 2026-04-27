@@ -56,6 +56,7 @@ bin/hermes-self-improve analyze --since-hours 24
 bin/hermes-self-improve report --since-hours 24 --scorer llm
 bin/hermes-self-improve run --since-hours 24 --json --scorer compare
 bin/hermes-self-improve gepa-eval --json
+bin/hermes-self-improve gepa-optimize --mode report_only --trainset evals/proposal_eval_cases.jsonl --valset evals/proposal_eval_cases.jsonl --max-full-evals 2 --json
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
 bin/hermes-self-improve ledger-report --status applied --json
 bin/hermes-self-improve approval-report --status all --json
@@ -130,6 +131,7 @@ Expected: enabled true, error null, hooks > 0。
 - `target_skill` / `skill_name` / `skill` は configured `custom_skill_roots` 配下だけに解決し、absolute path・`..`・root escape を拒否する。
 - Plugin-bundled skills は read-only として扱われ、現在実行中の agent session にはすぐ現れない場合がある。discovery reload / new session / gateway restart の必要性を疑う。
 - `importlib.util.module_from_spec` で unit test する場合は、`exec_module` 前に `sys.modules[spec.name] = module` を入れる。`@dataclass` 処理が失敗するのを避けるため。
+- `cli.py` の parser / handler を unit test するとき、direct file spec import だと相対 import が失敗し、fallback の bare import（例: `from analysis import ...`）も `sys.path` 次第で失敗しやすい。CLI 全体の parser を見るテストは repo root を一時的に `sys.path` に入れて `importlib.import_module("hermes_self_improvement.cli")` で package import する。個別 adapter/module の fake dependency test は file spec import でよい。
 - DSPy/GEPA dependency を `python3 -m pip install -e .` で入れる作業は、Safehouse の書き込み制限で dependency install が途中失敗することがある。特に `litellm/proxy/auth/public_key.pem` への `Operation not permitted` を見たら、まず `python3 -m ensurepip --upgrade` で壊れた pip/certifi を復旧し、次に active runtime の `dspy_available` / `bin/hermes-self-improve status` で実際に DSPy が見えているか確認する。plugin 側は missing DSPy を fail-closed にし、offline fixture を runtime scorer の代替にしない。
 - DSPy/GEPA scorer tests は基本 fake dependency で書く。runtime hook / normal import が `dspy` を eager import しないことを守るため、unit tests では `require_dspy()` や program module boundary を monkeypatch し、実 installed DSPy に依存する test は opt-in smoke に寄せる。`score_with_gepa()` では mode/config validation をできるだけ `require_dspy()` より前に置き、missing dependency が config error を不必要に覆い隠さないようにする。
 - GEPA optimizer / trainset 変換では malformed eval case を `rejected` として記録するだけで終わらせず、optimizer training / compile path では non-empty rejected set を fail-closed にする。report / non-optimizer path では rejected を表示して継続してよいが、partial train silently は避ける。

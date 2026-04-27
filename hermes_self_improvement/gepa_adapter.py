@@ -40,6 +40,7 @@ def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
         "mode",
         "llm_source",
         "compiled_program_path",
+        "active_evaluator_pointer_path",
         "reflection_model",
         "task_model",
         "max_full_evals",
@@ -47,6 +48,32 @@ def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
         "track_stats",
     }
     return {key: gepa_config.get(key) for key in sorted(allowed_keys) if key in gepa_config}
+
+
+def _active_evaluator_pointer_path(config: dict[str, Any]) -> Path:
+    raw = config.get("active_evaluator_pointer_path")
+    if raw:
+        return Path(str(raw)).expanduser()
+    return _reports_dir(config) / "gepa" / "active-evaluator.json"
+
+
+def _resolve_compiled_program_path(config: dict[str, Any], gepa_config: dict[str, Any]) -> Path | None:
+    configured = gepa_config.get("compiled_program_path")
+    if configured:
+        return Path(str(configured)).expanduser()
+    pointer_path = _active_evaluator_pointer_path(config)
+    if not pointer_path.exists():
+        return None
+    try:
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"active evaluator pointer is invalid JSON: {pointer_path}: {exc}") from exc
+    if not isinstance(pointer, dict):
+        raise RuntimeError(f"active evaluator pointer is not a JSON object: {pointer_path}")
+    candidate = pointer.get("compiled_program_path") or pointer.get("candidate_path")
+    if not candidate:
+        raise RuntimeError(f"active evaluator pointer missing compiled_program_path: {pointer_path}")
+    return Path(str(candidate)).expanduser()
 
 
 RUBRIC = {
@@ -299,13 +326,30 @@ def score_with_gepa(
         )
 
     if mode == "compiled_program_eval":
-        compiled_path = gepa_config.get("compiled_program_path")
-        if not compiled_path:
-            raise RuntimeError("compiled_program_eval requires gepa_scorer.compiled_program_path")
+        compiled_path = _resolve_compiled_program_path(config, gepa_config)
+        if compiled_path is None:
+            raise RuntimeError("compiled_program_eval requires gepa_scorer.compiled_program_path or an active evaluator pointer")
+        if not compiled_path.exists():
+            raise RuntimeError(f"compiled GEPA artifact not found: {compiled_path}")
         dspy = require_dspy()
         if not hasattr(dspy, "Signature") or not hasattr(dspy, "Module") or not hasattr(dspy, "Predict"):
             raise RuntimeError("DSPy is installed, but the expected DSPy program API is not available")
-        raise RuntimeError("compiled GEPA artifact scoring is not implemented yet")
+        payload = build_gepa_payload(proposals=proposals, findings=findings, config=config)
+        program_module = _load_dspy_program_module()
+        result = program_module.score_with_compiled_dspy_program(
+            proposals=proposals,
+            findings=findings,
+            rubric=payload["rubric"],
+            config=config,
+            compiled_program_path=str(compiled_path),
+            dspy_module=dspy,
+        )
+        for score in result.get("scores") or []:
+            if isinstance(score, dict):
+                score["auto_apply"] = False
+        result["compiled_program_path"] = str(compiled_path)
+        result.setdefault("compiled_program_id", compiled_path.stem)
+        return result
 
     if mode != "dspy_program_eval":
         raise RuntimeError(f"Unknown GEPA scorer mode: {mode}")

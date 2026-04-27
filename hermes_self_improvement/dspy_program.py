@@ -80,18 +80,78 @@ def score_with_dspy_program(
     """Score proposals with the DSPy module and return plugin scorer payload."""
     gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
     program = build_dspy_program(lm_config=gepa_config, dspy_module=dspy_module)
+    dspy = dspy_module or require_dspy()
+    return _score_with_program(
+        program=program,
+        proposals=proposals,
+        findings=findings,
+        rubric=rubric,
+        dspy_module=dspy,
+        mode="dspy_program_eval",
+        optimizer="not_configured",
+    )
+
+
+def score_with_compiled_dspy_program(
+    *,
+    proposals: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
+    rubric: dict[str, Any],
+    config: dict[str, Any],
+    compiled_program_path: str,
+    dspy_module: Any | None = None,
+) -> dict[str, Any]:
+    """Load a compiled DSPy/GEPA program artifact and score proposals.
+
+    The active evaluator pointer is managed outside this function. Loading a
+    compiled candidate remains advisory and never changes apply authorization.
+    """
+    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    dspy = dspy_module or require_dspy()
+    program = build_dspy_program(lm_config=gepa_config, dspy_module=dspy)
+    load_fn = getattr(program, "load", None)
+    if not callable(load_fn):
+        raise RuntimeError("DSPy program does not support loading compiled artifacts")
+    loaded = load_fn(str(compiled_program_path))
+    if loaded is not None:
+        program = loaded
+    payload = _score_with_program(
+        program=program,
+        proposals=proposals,
+        findings=findings,
+        rubric=rubric,
+        dspy_module=dspy,
+        mode="compiled_program_eval",
+        optimizer="gepa",
+    )
+    payload["compiled_program_path"] = str(compiled_program_path)
+    payload["compiled_program_id"] = str(compiled_program_path).rstrip("/").split("/")[-1].rsplit(".", 1)[0]
+    return payload
+
+
+def _score_with_program(
+    *,
+    program: Any,
+    proposals: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
+    rubric: dict[str, Any],
+    dspy_module: Any,
+    mode: str,
+    optimizer: str,
+) -> dict[str, Any]:
     scores: list[dict[str, Any]] = []
     findings_json = json.dumps(findings, ensure_ascii=False, sort_keys=True, default=str)
     rubric_json = json.dumps(rubric, ensure_ascii=False, sort_keys=True, default=str)
     for proposal in proposals:
         proposal_json = json.dumps(proposal, ensure_ascii=False, sort_keys=True, default=str)
-        scores.append(program.forward(proposal_json=proposal_json, findings_json=findings_json, rubric_json=rubric_json))
-    dspy = dspy_module or require_dspy()
+        score = program.forward(proposal_json=proposal_json, findings_json=findings_json, rubric_json=rubric_json)
+        score["auto_apply"] = False
+        scores.append(score)
     return {
-        "mode": "dspy_program_eval",
-        "optimizer": "not_configured",
+        "mode": mode,
+        "optimizer": optimizer,
         "program": PROGRAM_NAME,
-        "dspy_version": str(getattr(dspy, "__version__", "unknown")),
+        "dspy_version": str(getattr(dspy_module, "__version__", "unknown")),
         "scores": scores,
         "rubric_version": rubric.get("version"),
         "safety": {"advisory_only": True, "force_auto_apply_false": True},

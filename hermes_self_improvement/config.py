@@ -96,6 +96,7 @@ def _default_config() -> dict[str, Any]:
             "timeout": 120,
             "max_iterations": 0,
             "compiled_program_path": None,
+            "active_evaluator_pointer_path": None,
             "llm_source": "hermes_auxiliary",
             "reflection_model": None,
             "task_model": None,
