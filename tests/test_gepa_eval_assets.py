@@ -209,6 +209,61 @@ def test_dspy_program_requires_concrete_remediation_for_high_reuse_value():
     assert concrete["score_breakdown"]["reuse_value"]["level"] == "high"
 
 
+def test_eval_case_to_dspy_example_converts_required_fields_with_fake_dspy():
+    adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_dspy_example")
+
+    class FakeExample(dict):
+        def with_inputs(self, *names):
+            self["inputs"] = names
+            return self
+
+    class FakeDspy:
+        Example = FakeExample
+
+    case = adapter.load_eval_cases()[0]
+    example = adapter.eval_case_to_dspy_example(case, dspy_module=FakeDspy)
+
+    assert example["id"] == case["id"]
+    assert example["proposal"] == case["proposal"]
+    assert example["findings"] == case["findings"]
+    assert example["expected"] == case["expected"]
+    assert example["rubric"]["version"] == "proposal-eval-v0.1"
+    assert example["inputs"] == ("proposal", "findings", "rubric")
+
+
+def test_eval_case_to_dspy_example_rejects_malformed_case_without_importing_dspy():
+    adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_dspy_example_reject")
+
+    try:
+        adapter.eval_case_to_dspy_example({"id": "bad", "proposal": {}}, dspy_module=object())
+    except ValueError as exc:
+        assert "missing required eval case fields" in str(exc)
+    else:
+        raise AssertionError("malformed eval case should fail closed")
+
+
+def test_convert_eval_cases_to_dspy_examples_records_rejected_cases_for_reports():
+    adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_dspy_examples_batch")
+
+    class FakeExample(dict):
+        def with_inputs(self, *names):
+            self["inputs"] = names
+            return self
+
+    class FakeDspy:
+        Example = FakeExample
+
+    converted = adapter.convert_eval_cases_to_dspy_examples(
+        [adapter.load_eval_cases()[0], {"id": "bad", "proposal": {}}],
+        dspy_module=FakeDspy,
+    )
+
+    assert len(converted["examples"]) == 1
+    assert converted["examples"][0]["id"] == "repeated-tool-failure-human-review"
+    assert converted["rejected"][0]["id"] == "bad"
+    assert "missing required eval case fields" in converted["rejected"][0]["reason"]
+
+
 def test_build_gepa_payload_includes_eval_assets_and_program_name():
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_payload")
 

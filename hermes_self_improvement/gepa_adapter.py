@@ -68,6 +68,47 @@ def require_dspy() -> Any:
     return importlib.import_module("dspy")
 
 
+def eval_case_to_dspy_example(case: dict[str, Any], *, dspy_module: Any | None = None, rubric: dict[str, Any] | None = None) -> Any:
+    """Convert one repo-tracked eval case into a DSPy Example lazily."""
+    if not isinstance(case, dict):
+        raise ValueError("eval case must be a JSON object")
+    missing = [field for field in ("proposal", "findings", "expected") if field not in case]
+    if missing:
+        raise ValueError(f"missing required eval case fields: {', '.join(missing)}")
+    if not isinstance(case.get("proposal"), dict):
+        raise ValueError("eval case proposal must be a JSON object")
+    if not isinstance(case.get("findings"), list):
+        raise ValueError("eval case findings must be a JSON array")
+    if not isinstance(case.get("expected"), dict):
+        raise ValueError("eval case expected must be a JSON object")
+
+    dspy = dspy_module or require_dspy()
+    example = dspy.Example(
+        id=case.get("id"),
+        description=case.get("description"),
+        proposal=case["proposal"],
+        findings=case["findings"],
+        rubric=rubric or load_rubric(),
+        expected=case["expected"],
+    )
+    with_inputs = getattr(example, "with_inputs", None)
+    if callable(with_inputs):
+        return with_inputs("proposal", "findings", "rubric")
+    return example
+
+
+def convert_eval_cases_to_dspy_examples(cases: list[dict[str, Any]], *, dspy_module: Any | None = None, rubric: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Convert eval cases while recording malformed cases for non-optimizer reports."""
+    examples: list[Any] = []
+    rejected: list[dict[str, Any]] = []
+    for index, case in enumerate(cases):
+        try:
+            examples.append(eval_case_to_dspy_example(case, dspy_module=dspy_module, rubric=rubric))
+        except Exception as exc:
+            rejected.append({"index": index, "id": case.get("id") if isinstance(case, dict) else None, "reason": str(exc)})
+    return {"examples": examples, "rejected": rejected}
+
+
 def build_gepa_payload(
     *,
     proposals: list[dict[str, Any]],
