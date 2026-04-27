@@ -249,6 +249,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 try:  # pragma: no cover - package import path
     from .apply_plan import (
         _PITFALL_SECTION_HEADINGS,
+        _VALIDATION_SECTION_HEADINGS,
         _apply_append_to_existing_section,
         _build_apply_plan_item,
         _classify_apply_change_type,
@@ -271,6 +272,7 @@ try:  # pragma: no cover - package import path
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_plan import (
         _PITFALL_SECTION_HEADINGS,
+        _VALIDATION_SECTION_HEADINGS,
         _apply_append_to_existing_section,
         _build_apply_plan_item,
         _classify_apply_change_type,

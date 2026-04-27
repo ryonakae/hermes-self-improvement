@@ -65,15 +65,12 @@ Target resolution must stay explicit:
 
 ## Current mutation planner slice
 
-The first mutation planner slice only creates `append_to_existing_section` mutations for `pitfall_addition_existing_section` when the target already has one of these sections:
+The current mutation planner creates `append_to_existing_section` mutations only for these low-risk classes when the target already has an appropriate existing section:
 
-- `## Pitfalls`
-- `## 注意`
-- `## 注意点`
-- `## よくある失敗`
-- `## 落とし穴`
+- `pitfall_addition_existing_section`: `## Pitfalls`, `## 注意`, `## 注意点`, `## よくある失敗`, `## 落とし穴`
+- `validation_addition_existing_section`: `## Validation`, `## Verification`, `## Tests`, `## Checklist`, `## 検証`, `## 確認`, `## テスト`, `## チェックリスト`
 
-If no existing section is present, fail closed with `existing_section_missing` rather than creating a new section automatically.
+If no matching existing section is present, fail closed with `existing_section_missing` rather than creating a new section automatically.
 
 ## Ledger and apply attempts
 

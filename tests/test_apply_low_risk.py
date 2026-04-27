@@ -50,6 +50,37 @@ def write_eligible_plan(tmp_path):
     return mod, plan, plan["items"][0], plan_path, target, original
 
 
+
+def write_eligible_validation_plan(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    original = "# Skill\n\n## Validation\n- Existing check\n"
+    target.write_text(original, encoding="utf-8")
+    proposal = {
+        "id": "proposal-3",
+        "title": "Add validation checklist for generated apply plans",
+        "target": "file_workflow_skills",
+        "target_path": str(target),
+        "action": "add_apply_plan_validation_checklist",
+        "risk": "low",
+        "confidence": "high",
+        "score": 88,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "scorer": "heuristic-v0.1",
+        "count": 7,
+        "tool_name": "terminal",
+        "error_kind": "validation_gap",
+        "reason": "Verify generated apply-plan artifacts before applying low-risk changes.",
+    }
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={"event_count": 10},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+    plan_path = mod.write_apply_plan(plan, {"reports_dir": str(tmp_path / "reports")})
+    return mod, plan, plan["items"][0], plan_path, target, original
+
 def test_apply_low_risk_skeleton_records_would_apply_attempt_without_mutating_target(tmp_path):
     mod, plan, item, _plan_path, target, original = write_eligible_plan(tmp_path)
 
@@ -209,6 +240,29 @@ def test_apply_low_risk_confirmed_mutates_target_and_records_applied_ledger(tmp_
     assert ledger["target_after_hash"] == item["rollback_preview"]["after_hash"]
     assert ledger["validation_result"]["status"] == "passed"
 
+
+
+def test_apply_low_risk_confirmed_mutates_validation_addition_target(tmp_path):
+    mod, plan, item, _plan_path, target, original = write_eligible_validation_plan(tmp_path)
+
+    result = mod.apply_low_risk_skeleton(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config={"reports_dir": str(tmp_path / "reports")},
+        created_at=datetime(2026, 4, 26, 16, 30, tzinfo=timezone.utc),
+        confirm_apply=True,
+        expected_item_hash=item["item_hash"],
+    )
+
+    mutated = target.read_text(encoding="utf-8")
+    assert mutated != original
+    assert "- Existing check" in mutated
+    assert "Verify generated apply-plan artifacts before applying low-risk changes." in mutated
+    attempt = result["apply_attempt"]
+    assert attempt["current_status"] == "applied_low_risk"
+    assert attempt["change_type"] == "validation_addition_existing_section"
+    assert attempt["target_after_hash"] == item["rollback_preview"]["after_hash"]
+    assert attempt["validation_result"]["status"] == "passed"
 
 def test_apply_low_risk_confirmed_rejects_item_hash_mismatch_without_mutating_target(tmp_path):
     mod, plan, item, _plan_path, target, original = write_eligible_plan(tmp_path)

@@ -101,6 +101,17 @@ _PITFALL_SECTION_HEADINGS = (
     "## 落とし穴",
 )
 
+_VALIDATION_SECTION_HEADINGS = (
+    "## Validation",
+    "## Verification",
+    "## Tests",
+    "## Checklist",
+    "## 検証",
+    "## 確認",
+    "## テスト",
+    "## チェックリスト",
+)
+
 
 def _find_existing_section_heading(content: str | None, headings: tuple[str, ...]) -> str | None:
     if not content:
@@ -127,11 +138,16 @@ def _plan_mutation_for_item(
     explicit = proposal.get("mutation")
     if isinstance(explicit, dict):
         return explicit, []
-    if change_type != "pitfall_addition_existing_section":
+    heading_sets = {
+        "pitfall_addition_existing_section": _PITFALL_SECTION_HEADINGS,
+        "validation_addition_existing_section": _VALIDATION_SECTION_HEADINGS,
+    }
+    headings = heading_sets.get(change_type)
+    if headings is None:
         return None, []
     if target_content is None:
         return None, []
-    heading = _find_existing_section_heading(target_content, _PITFALL_SECTION_HEADINGS)
+    heading = _find_existing_section_heading(target_content, headings)
     if not heading:
         return None, ["existing_section_missing"]
     return {

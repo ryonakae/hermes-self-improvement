@@ -55,6 +55,25 @@ def sample_pitfall_proposal():
     }
 
 
+
+def sample_validation_proposal():
+    return {
+        "id": "proposal-3",
+        "title": "Add validation checklist for generated apply plans",
+        "target": "file_workflow_skills",
+        "action": "add_apply_plan_validation_checklist",
+        "risk": "low",
+        "confidence": "high",
+        "score": 88,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "scorer": "heuristic-v0.1",
+        "auto_apply": False,
+        "count": 7,
+        "tool_name": "terminal",
+        "error_kind": "validation_gap",
+        "reason": "Verify generated apply-plan artifacts before applying low-risk changes.",
+    }
+
 def test_build_apply_plan_includes_versioned_metadata_and_safe_default_items(tmp_path):
     mod = load_plugin_module()
     created_at = datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc)
@@ -203,6 +222,54 @@ def test_build_apply_plan_plans_pitfall_mutation_for_existing_pitfalls_section(t
     assert item["eligible_for_unattended"] is True
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
 
+
+
+def test_build_apply_plan_plans_validation_mutation_for_existing_validation_section(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\n## Validation\n- Existing check\n", encoding="utf-8")
+    proposal = sample_validation_proposal()
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "validation_addition_existing_section"
+    assert item["mutation"] == {
+        "type": "append_to_existing_section",
+        "section_heading": "## Validation",
+        "text": "- Verify generated apply-plan artifacts before applying low-risk changes.",
+    }
+    assert item["eligible_for_unattended"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert item["rollback_preview"]["after_hash"] != item["rollback_preview"]["before_hash"]
+    assert "Verify generated apply-plan artifacts" in item["rollback_preview"]["after_snippet"]
+
+
+def test_build_apply_plan_fails_closed_when_validation_section_is_missing(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\n## Usage\n- Existing note\n", encoding="utf-8")
+    proposal = sample_validation_proposal()
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "validation_addition_existing_section"
+    assert item["mutation"] is None
+    assert item["eligible_for_unattended"] is False
+    assert "existing_section_missing" in item["eligibility"]["reasons"]
 
 def test_build_apply_plan_resolves_explicit_custom_skill_hint_inside_configured_roots(tmp_path):
     mod = load_plugin_module()
