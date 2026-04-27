@@ -529,8 +529,11 @@ Implementation progress as of 2026-04-28:
 - After Safehouse write access was relaxed, `python3 -m pip install -e .` from the plugin root succeeded. Runtime now reports `dspy_available=true`; installed versions observed were `dspy 3.2.0`, `gepa 0.0.27`, `litellm 1.82.6`, `openai 2.32.0`, and `anthropic 0.96.0`.
 - Dependency inspection showed `hermes-self-improvement` directly requires only `dspy`; `openai` and `litellm` are direct dependencies of `dspy`, while `anthropic` is already present from `hermes-agent` and is only a DSPy optional extra. This does not change the runtime LLM policy: DSPy/GEPA LM calls should use Hermes-authenticated auxiliary model routing, not plugin-managed provider API keys.
 - Validation after install: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`190 passed`), and `bin/hermes-self-improve gepa-eval --json` (`all_passed: true`).
+- Started the real DSPy program slice: `dspy_program.py` now has lazy `dspy` detection/import helpers, a real `dspy.Signature` / `dspy.Module` / `dspy.Predict` program boundary using `proposal_json`, `findings_json`, `rubric_json`, and structured `score_json`, plus sanitizer gates that clamp score, enforce allowed enums, and force `auto_apply=false`.
+- Wired `score_with_gepa(... mode=dspy_program_eval ...)` to the DSPy program boundary instead of raising the previous “not implemented yet” error; the adapter still fails closed for missing DSPy, disabled GEPA, unsupported DSPy API, compiled artifact mode without path, and unknown modes.
+- Added fake-DSPy unit coverage for the program boundary, invalid JSON fail-closed behavior, adapter handoff, and adapter-level `auto_apply=false` enforcement. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`193 passed`), `bin/hermes-self-improve status`, and `bin/hermes-self-improve gepa-eval --json` (`all_passed: true`).
 
-Start with dependency and mode clarity, not a full optimizer run:
+Historical first slice kept for traceability:
 
 1. Add `pyproject.toml` with `dspy>=3.1,<4` as a required dependency.
 2. Remove/rename runtime fields so the current dependency-free path cannot masquerade as “GEPA optimizer”; keep deterministic scoring only in tests/fixtures if needed.
@@ -538,4 +541,4 @@ Start with dependency and mode clarity, not a full optimizer run:
 4. Add tests that default import paths work without DSPy.
 5. Commit.
 
-Then implement the real DSPy module and fake-GEPA compile tests in the following slice.
+Then continue with the GEPA feedback metric, eval-case conversion, and fake-GEPA compile tests in the following slice.

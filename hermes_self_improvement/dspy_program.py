@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib
+import importlib.util
+import json
 from typing import Any
 
 ALLOWED_RECOMMENDATIONS = {
@@ -9,6 +12,150 @@ ALLOWED_RECOMMENDATIONS = {
 }
 ALLOWED_RISKS = {"low", "medium", "high"}
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
+PROGRAM_NAME = "ProposalScoringDspyProgram"
+
+
+def dspy_available() -> bool:
+    """Return whether DSPy can be imported without importing it eagerly."""
+    return importlib.util.find_spec("dspy") is not None
+
+
+def require_dspy() -> Any:
+    """Import DSPy only for explicit evaluator paths."""
+    if not dspy_available():
+        raise ModuleNotFoundError(
+            "No module named 'dspy'. Install the hermes-self-improvement evaluator dependencies with `python3 -m pip install -e .`."
+        )
+    return importlib.import_module("dspy")
+
+
+def build_dspy_program(*, lm_config: dict[str, Any] | None = None, dspy_module: Any | None = None) -> Any:
+    """Build the real DSPy proposal scorer module behind a lazy import boundary.
+
+    ``lm_config`` is accepted for the future Hermes auxiliary LM bridge. This
+    function intentionally does not configure provider credentials; provider
+    selection belongs to Hermes, not this plugin.
+    """
+    dspy = dspy_module or require_dspy()
+    _ = lm_config or {}
+
+    class ProposalScoringDspySignature(dspy.Signature):
+        proposal_json = dspy.InputField(desc="One Hermes self-improvement proposal as JSON.")
+        findings_json = dspy.InputField(desc="Related telemetry findings as JSON array.")
+        rubric_json = dspy.InputField(desc="Scoring rubric and safety constraints as JSON.")
+        score_json = dspy.OutputField(
+            desc=(
+                "JSON object with id, score 0-100, recommendation, risk, confidence, "
+                "rationale, auto_apply=false, and optional score_breakdown."
+            )
+        )
+
+    class ProposalScoringDspyProgram(dspy.Module):
+        signature = ProposalScoringDspySignature
+
+        def __init__(self):
+            self.predict = dspy.Predict(ProposalScoringDspySignature)
+
+        def forward(self, *, proposal_json: str, findings_json: str, rubric_json: str) -> dict[str, Any]:
+            prediction = self.predict(
+                proposal_json=proposal_json,
+                findings_json=findings_json,
+                rubric_json=rubric_json,
+            )
+            raw_score_json = _prediction_value(prediction, "score_json")
+            proposal = _loads_json_object(proposal_json, label="proposal_json")
+            return sanitize_score_output(raw_score_json, proposal_id=str(proposal.get("id") or ""))
+
+    return ProposalScoringDspyProgram()
+
+
+def score_with_dspy_program(
+    *,
+    proposals: list[dict[str, Any]],
+    findings: list[dict[str, Any]],
+    rubric: dict[str, Any],
+    config: dict[str, Any],
+    dspy_module: Any | None = None,
+) -> dict[str, Any]:
+    """Score proposals with the DSPy module and return plugin scorer payload."""
+    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    program = build_dspy_program(lm_config=gepa_config, dspy_module=dspy_module)
+    scores: list[dict[str, Any]] = []
+    findings_json = json.dumps(findings, ensure_ascii=False, sort_keys=True, default=str)
+    rubric_json = json.dumps(rubric, ensure_ascii=False, sort_keys=True, default=str)
+    for proposal in proposals:
+        proposal_json = json.dumps(proposal, ensure_ascii=False, sort_keys=True, default=str)
+        scores.append(program.forward(proposal_json=proposal_json, findings_json=findings_json, rubric_json=rubric_json))
+    dspy = dspy_module or require_dspy()
+    return {
+        "mode": "dspy_program_eval",
+        "optimizer": "not_configured",
+        "program": PROGRAM_NAME,
+        "dspy_version": str(getattr(dspy, "__version__", "unknown")),
+        "scores": scores,
+        "rubric_version": rubric.get("version"),
+        "safety": {"advisory_only": True, "force_auto_apply_false": True},
+    }
+
+
+def sanitize_score_output(raw: Any, *, proposal_id: str = "") -> dict[str, Any]:
+    """Parse and constrain model-produced score JSON for safe scorer merging."""
+    if isinstance(raw, dict):
+        parsed = raw
+    else:
+        text = str(raw or "").strip()
+        try:
+            parsed = json.loads(text)
+        except Exception as exc:
+            raise ValueError(f"Invalid DSPy score_json: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("Invalid DSPy score_json: expected JSON object")
+
+    score = _coerce_int(parsed.get("score"), default=0)
+    result = {
+        "id": str(parsed.get("id") or proposal_id),
+        "score": max(0, min(100, score)),
+        "recommendation": _coerce_choice(parsed.get("recommendation"), ALLOWED_RECOMMENDATIONS, "report_only"),
+        "risk": _coerce_choice(parsed.get("risk"), ALLOWED_RISKS, "medium"),
+        "confidence": _coerce_choice(parsed.get("confidence"), ALLOWED_CONFIDENCE, "low"),
+        "rationale": str(parsed.get("rationale") or ""),
+        "auto_apply": False,
+    }
+    if isinstance(parsed.get("score_breakdown"), dict):
+        result["score_breakdown"] = _sanitize_score_breakdown(parsed["score_breakdown"])
+    return result
+
+
+def _prediction_value(prediction: Any, field: str) -> Any:
+    if isinstance(prediction, dict):
+        return prediction.get(field)
+    return getattr(prediction, field, None)
+
+
+def _loads_json_object(text: str, *, label: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(text)
+    except Exception as exc:
+        raise ValueError(f"Invalid {label}: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Invalid {label}: expected JSON object")
+    return parsed
+
+
+def _sanitize_score_breakdown(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    sanitized: dict[str, dict[str, Any]] = {}
+    for name, value in raw.items():
+        if not isinstance(value, dict):
+            continue
+        item: dict[str, Any] = {}
+        if value.get("level") in ALLOWED_CONFIDENCE:
+            item["level"] = value["level"]
+        item["points"] = _coerce_int(value.get("points"), default=0)
+        item["weight"] = _coerce_int(value.get("weight"), default=0)
+        if value.get("reason") is not None:
+            item["reason"] = str(value.get("reason") or "")[:240]
+        sanitized[str(name)] = item
+    return sanitized
 
 
 class ProposalScoringSignature:
@@ -241,6 +388,13 @@ def _has_concrete_remediation(proposal: dict[str, Any]) -> bool:
 def _coerce_choice(value: Any, allowed: set[str], default: str) -> str:
     text = str(value or "").lower()
     return text if text in allowed else default
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return int(default or 0)
 
 
 def _evidence_count(findings: list[dict[str, Any]]) -> int:

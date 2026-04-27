@@ -113,24 +113,35 @@ def score_with_gepa(
             "offline_program_eval is a regression fixture, not a runtime GEPA scorer; use gepa-eval for fixture checks or configure dspy_program_eval/compiled_program_eval"
         )
 
-    dspy = require_dspy()
     if mode == "compiled_program_eval":
         compiled_path = gepa_config.get("compiled_program_path")
         if not compiled_path:
             raise RuntimeError("compiled_program_eval requires gepa_scorer.compiled_program_path")
+        dspy = require_dspy()
+        if not hasattr(dspy, "Signature") or not hasattr(dspy, "Module") or not hasattr(dspy, "Predict"):
+            raise RuntimeError("DSPy is installed, but the expected DSPy program API is not available")
         raise RuntimeError("compiled GEPA artifact scoring is not implemented yet")
 
     if mode != "dspy_program_eval":
         raise RuntimeError(f"Unknown GEPA scorer mode: {mode}")
 
-    if not hasattr(dspy, "Signature"):
+    dspy = require_dspy()
+    if not hasattr(dspy, "Signature") or not hasattr(dspy, "Module") or not hasattr(dspy, "Predict"):
         raise RuntimeError("DSPy is installed, but the expected DSPy program API is not available")
 
-    # The real DSPy module lands in the next implementation slice. Fail closed
-    # rather than quietly using the old deterministic scaffold for decisions.
     payload = build_gepa_payload(proposals=proposals, findings=findings, config=config)
-    _ = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
-    raise RuntimeError("DSPy program evaluator is not implemented yet; GEPA scoring is unavailable until the next integration slice")
+    program_module = _load_dspy_program_module()
+    result = program_module.score_with_dspy_program(
+        proposals=proposals,
+        findings=findings,
+        rubric=payload["rubric"],
+        config=config,
+        dspy_module=dspy,
+    )
+    for score in result.get("scores") or []:
+        if isinstance(score, dict):
+            score["auto_apply"] = False
+    return result
 
 
 def _score_with_offline_program(

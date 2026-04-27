@@ -10,6 +10,19 @@ GEPA_ADAPTER = PLUGIN_DIR / "hermes_self_improvement" / "gepa_adapter.py"
 CONFIG_PATH = PLUGIN_DIR / "config.json"
 
 
+class FakeDspy:
+    __version__ = "fake-dspy-test"
+
+    class Signature:
+        pass
+
+    class Module:
+        pass
+
+    class Predict:
+        pass
+
+
 def load_adapter():
     spec = importlib.util.spec_from_file_location("hermes_self_improvement_gepa_adapter_offline", GEPA_ADAPTER)
     module = importlib.util.module_from_spec(spec)
@@ -43,19 +56,46 @@ def test_gepa_adapter_runtime_scorer_requires_real_dspy_path_when_not_installed(
         raise AssertionError("runtime GEPA scoring must not fall back to the offline fixture when DSPy is missing")
 
 
-def test_gepa_adapter_runtime_scorer_fails_closed_until_dspy_program_is_implemented():
+def test_gepa_adapter_runtime_scorer_uses_real_dspy_program_boundary(monkeypatch):
     adapter = load_adapter()
 
-    try:
-        adapter.score_with_gepa(
-            proposals=[{"id": "proposal-1", "risk": "medium", "confidence": "medium", "auto_apply": False}],
-            findings=[],
-            config={"gepa_scorer": {"enabled": True, "mode": "dspy_program_eval"}},
-        )
-    except RuntimeError as exc:
-        assert "DSPy program evaluator is not implemented yet" in str(exc)
-    else:
-        raise AssertionError("runtime GEPA scoring must fail closed until the real DSPy program exists")
+    class FakeProgramModule:
+        @staticmethod
+        def score_with_dspy_program(*, proposals, findings, rubric, config, dspy_module):
+            assert proposals[0]["id"] == "proposal-1"
+            assert findings == [{"kind": "tool_failure_cluster", "count": 4}]
+            assert rubric["version"] == "proposal-eval-v0.1"
+            assert hasattr(dspy_module, "Signature")
+            return {
+                "mode": "dspy_program_eval",
+                "optimizer": "not_configured",
+                "program": "ProposalScoringDspyProgram",
+                "scores": [
+                    {
+                        "id": "proposal-1",
+                        "score": 81,
+                        "recommendation": "human_review",
+                        "risk": "medium",
+                        "confidence": "high",
+                        "rationale": "Fake DSPy program score.",
+                        "auto_apply": True,
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(adapter, "require_dspy", lambda: FakeDspy)
+    monkeypatch.setattr(adapter, "_load_dspy_program_module", lambda: FakeProgramModule)
+
+    payload = adapter.score_with_gepa(
+        proposals=[{"id": "proposal-1", "risk": "medium", "confidence": "medium", "auto_apply": False}],
+        findings=[{"kind": "tool_failure_cluster", "count": 4}],
+        config={"gepa_scorer": {"enabled": True, "mode": "dspy_program_eval"}},
+    )
+
+    assert payload["mode"] == "dspy_program_eval"
+    assert payload["program"] == "ProposalScoringDspyProgram"
+    assert payload["scores"][0]["score"] == 81
+    assert payload["scores"][0]["auto_apply"] is False
 
 
 def test_gepa_adapter_keeps_disabled_config_as_closed_fallback_signal():
