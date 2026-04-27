@@ -62,6 +62,7 @@ try:  # pragma: no cover - package import path
         _handle_self_improvement_ledger_report_tool,
         _handle_self_improvement_rollback_low_risk_tool,
         _handle_self_improvement_retention_report_tool,
+        _handle_self_improvement_retention_prune_tool,
         _handle_self_improvement_status_tool,
         _handle_self_improvement_validate_approval_tool,
     )
@@ -81,6 +82,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     _handle_self_improvement_ledger_report_tool = _tools_mod._handle_self_improvement_ledger_report_tool
     _handle_self_improvement_rollback_low_risk_tool = _tools_mod._handle_self_improvement_rollback_low_risk_tool
     _handle_self_improvement_retention_report_tool = _tools_mod._handle_self_improvement_retention_report_tool
+    _handle_self_improvement_retention_prune_tool = _tools_mod._handle_self_improvement_retention_prune_tool
     _handle_self_improvement_status_tool = _tools_mod._handle_self_improvement_status_tool
     _handle_self_improvement_validate_approval_tool = _tools_mod._handle_self_improvement_validate_approval_tool
 
@@ -91,6 +93,7 @@ _SELF_IMPROVEMENT_TOOL_HANDLERS = {
     "self_improvement_approval_report": _handle_self_improvement_approval_report_tool,
     "self_improvement_validate_approval": _handle_self_improvement_validate_approval_tool,
     "self_improvement_retention_report": _handle_self_improvement_retention_report_tool,
+    "self_improvement_retention_prune": _handle_self_improvement_retention_prune_tool,
     "self_improvement_approve": _handle_self_improvement_approve_tool,
     "self_improvement_apply_approved": _handle_self_improvement_apply_approved_tool,
     "self_improvement_apply_low_risk": _handle_self_improvement_apply_low_risk_tool,
@@ -292,6 +295,7 @@ try:  # pragma: no cover - package import path
         _setup_cli,
         build_approval_report_payload,
         build_ledger_report_payload,
+        build_retention_prune_payload,
         build_retention_report_payload,
         main,
         render_approval_report,
@@ -312,6 +316,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _setup_cli,
         build_approval_report_payload,
         build_ledger_report_payload,
+        build_retention_prune_payload,
         build_retention_report_payload,
         main,
         render_approval_report,

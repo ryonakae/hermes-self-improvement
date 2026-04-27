@@ -23,6 +23,8 @@ bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24
 bin/hermes-self-improve ledger-report --status applied --json
 bin/hermes-self-improve approval-report --status all --json
 bin/hermes-self-improve retention-report --mode report_only --json
+bin/hermes-self-improve retention-prune --mode apply_approved --json
+bin/hermes-self-improve retention-prune --mode apply_approved --confirm-prune --expected-artifact-list-hash <artifact_list_hash> --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
 bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
 bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --confirm-approved-apply --expected-approval-hash <approval_hash> --expected-target-hash <current_hash> --json
@@ -100,7 +102,7 @@ The integration is read-only. It does not create, approve, apply, rollback, remo
 
 ## Retention report
 
-`retention-report` / `self_improvement_retention_report` は read-only preview です。`apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` の artifact を集計し、`retention_days` より古い候補、malformed JSON、カテゴリ別件数を報告します。`--category` / tool `category` でカテゴリを絞り込めます。ファイルの削除・移動・圧縮・prune は行いません。実 cleanup を追加する場合も、まず preview と expected artifact list / hash による明示 confirmation を別 slice で設計します。
+`retention-report` / `self_improvement_retention_report` は read-only preview です。`apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` の artifact を集計し、`retention_days` より古い候補、malformed JSON、カテゴリ別件数を報告します。`--category` / tool `category` でカテゴリを絞り込めます。`retention-report` はファイルの削除・移動・圧縮・prune を行いません。`retention-prune` は `apply_approved` mode で、preview の `artifact_list_hash` と `--confirm-prune --expected-artifact-list-hash` が一致した場合だけ expired candidates を削除します。
 
 ## Plugin tools
 
@@ -114,10 +116,13 @@ The integration is read-only. It does not create, approve, apply, rollback, remo
 - `self_improvement_approval_report`
 - `self_improvement_validate_approval`
 - `self_improvement_retention_report`
+- `self_improvement_retention_prune`
 - `self_improvement_approve`
 - `self_improvement_apply_approved`
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
+
+`self_improvement_retention_prune` は expired artifact cleanup 用の guarded mutation tool です。既定では `would_prune` preview だけを返し、実削除は `confirm_prune=true` と `expected_artifact_list_hash` が preview の `artifact_list_hash` と一致する場合だけです。
 
 `self_improvement_apply_approved` は approval artifact を検証して planned diff / rollback preview を返す preview-only tool です。`expected_approval_hash` / `expected_target_hash` を渡すと、operator が確認した approval hash と current target hash の一致も検証し、不一致なら `expected_approval_hash_mismatch` / `expected_target_hash_mismatch` で拒否します。valid preview には attempt / ledger の非永続 preview metadata（required confirmation、expected hashes、rollback preview hash、validation plan）も含めます。実 mutation は `--confirm-approved-apply` / tool `confirm_approved_apply=true` と `expected_approval_hash` / `expected_target_hash` が揃い、approval・target・rollback preview hash・rollback before snapshot・post-write validation が通る場合だけです。`approval-report --include-previews` / tool `include_previews` は各 approval の preview status だけを集約し、target を変更しません。Mutation-capable tools は explicit confirmation/hash が揃わない限り target を変更しません。
 

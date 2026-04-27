@@ -78,6 +78,23 @@ SELF_IMPROVEMENT_RETENTION_REPORT_SCHEMA = {
     },
 }
 
+SELF_IMPROVEMENT_RETENTION_PRUNE_SCHEMA = {
+    "name": "self_improvement_retention_prune",
+    "description": "Preview or explicitly prune expired self-improvement artifacts. Actual deletion requires apply_approved mode, confirm_prune=true, and matching expected_artifact_list_hash.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
+            "limit": {"type": "integer", "default": 20},
+            "retention_days": {"type": "integer"},
+            "category": {"type": "string", "enum": ["all", "apply-plans", "ledgers", "apply-attempts", "approvals"], "default": "all"},
+            "confirm_prune": BOOLEAN,
+            "expected_artifact_list_hash": STRING,
+        },
+    },
+}
+
 SELF_IMPROVEMENT_VALIDATE_APPROVAL_SCHEMA = {
     "name": "self_improvement_validate_approval",
     "description": "Validate one approval artifact against its hash, expiry, current plan, current item, change type, and target path. Read-only.",
@@ -167,6 +184,7 @@ SELF_IMPROVEMENT_TOOL_SPECS = (
     ("self_improvement_approval_report", SELF_IMPROVEMENT_APPROVAL_REPORT_SCHEMA),
     ("self_improvement_validate_approval", SELF_IMPROVEMENT_VALIDATE_APPROVAL_SCHEMA),
     ("self_improvement_retention_report", SELF_IMPROVEMENT_RETENTION_REPORT_SCHEMA),
+    ("self_improvement_retention_prune", SELF_IMPROVEMENT_RETENTION_PRUNE_SCHEMA),
     ("self_improvement_approve", SELF_IMPROVEMENT_APPROVE_SCHEMA),
     ("self_improvement_apply_approved", SELF_IMPROVEMENT_APPLY_APPROVED_SCHEMA),
     ("self_improvement_apply_low_risk", SELF_IMPROVEMENT_APPLY_LOW_RISK_SCHEMA),

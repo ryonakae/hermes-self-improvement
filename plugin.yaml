@@ -20,6 +20,7 @@ provides_tools:
   - self_improvement_approval_report
   - self_improvement_validate_approval
   - self_improvement_retention_report
+  - self_improvement_retention_prune
   - self_improvement_approve
   - self_improvement_apply_approved
   - self_improvement_apply_low_risk

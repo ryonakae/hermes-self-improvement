@@ -33,6 +33,7 @@ DEFAULT_MODE_POLICY = {
             "write_ledger": False,
             "mutate_skills": False,
             "mutate_memory": False,
+            "prune_artifacts": False,
         },
     },
     "dry_run_plan": {
@@ -43,6 +44,7 @@ DEFAULT_MODE_POLICY = {
             "write_ledger": False,
             "mutate_skills": False,
             "mutate_memory": False,
+            "prune_artifacts": False,
         },
     },
     "apply_low_risk": {
@@ -53,16 +55,18 @@ DEFAULT_MODE_POLICY = {
             "write_ledger": True,
             "mutate_skills": True,
             "mutate_memory": False,
+            "prune_artifacts": False,
         },
     },
     "apply_approved": {
-        "commands": ["status", "approve", "approval-report", "validate-approval", "apply-approved", "retention-report"],
+        "commands": ["status", "approve", "approval-report", "validate-approval", "apply-approved", "retention-report", "retention-prune"],
         "capabilities": {
             "write_apply_plan": False,
             "write_apply_attempt": True,
             "write_ledger": True,
             "mutate_skills": True,
             "mutate_memory": True,
+            "prune_artifacts": True,
         },
     },
 }
@@ -280,4 +284,5 @@ def _required_capability_for_command(command: str) -> str | None:
         "rollback-low-risk": "mutate_skills",
         "apply-approved": "write_ledger",
         "approve": "write_apply_attempt",
+        "retention-prune": "prune_artifacts",
     }.get(command)

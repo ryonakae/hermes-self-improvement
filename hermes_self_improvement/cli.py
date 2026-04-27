@@ -22,7 +22,7 @@ try:  # pragma: no cover - package import path
         validate_mode_action,
     )
     from .ledger import apply_low_risk_skeleton, rollback_low_risk
-    from .observer import _event_path, _load_events, _report_dir, _reports_dir
+    from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import AnalysisResult, analyze_events
@@ -38,7 +38,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         validate_mode_action,
     )
     from ledger import apply_low_risk_skeleton, rollback_low_risk
-    from observer import _event_path, _load_events, _report_dir, _reports_dir
+    from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -374,6 +374,120 @@ def build_retention_report_payload(
     }
 
 
+def _retention_artifact_list_hash(candidates: list[dict[str, Any]]) -> str:
+    bound = [
+        {
+            "category": item.get("category"),
+            "artifact_id": item.get("artifact_id"),
+            "created_at": item.get("created_at"),
+            "size_bytes": item.get("size_bytes"),
+            "path": item.get("path"),
+        }
+        for item in candidates
+    ]
+    return _sha256_text(_stable_json(bound))
+
+
+def _is_path_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def build_retention_prune_payload(
+    *,
+    config: dict[str, Any],
+    now: datetime | None = None,
+    retention_days: int | None = None,
+    limit: int = 20,
+    category: str = "all",
+    confirm_prune: bool = False,
+    expected_artifact_list_hash: str | None = None,
+) -> dict[str, Any]:
+    ts = (now or datetime.now(UTC)).astimezone(UTC)
+    report = build_retention_report_payload(
+        config=config,
+        now=ts,
+        retention_days=retention_days,
+        limit=limit,
+        category=category,
+    )
+    candidates = list(report.get("expired_candidates") or [])
+    artifact_list_hash = _retention_artifact_list_hash(candidates)
+    reasons: list[str] = []
+    if report.get("current_status") == "rejected":
+        reasons.extend(report.get("reasons") or ["retention_report_rejected"])
+    if confirm_prune and not expected_artifact_list_hash:
+        reasons.append("expected_artifact_list_hash_required")
+    if expected_artifact_list_hash is not None and expected_artifact_list_hash != artifact_list_hash:
+        reasons.append("artifact_list_hash_mismatch")
+
+    payload: dict[str, Any] = {
+        "schema_name": "self_improvement_retention_prune",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "created_at": ts.isoformat(),
+        "reports_dir": report.get("reports_dir"),
+        "retention_days": report.get("retention_days"),
+        "cutoff_at": report.get("cutoff_at"),
+        "category_filter": report.get("category_filter"),
+        "limit": int(limit),
+        "confirmation_required": True,
+        "confirmed": bool(confirm_prune),
+        "expected_artifact_list_hash": expected_artifact_list_hash,
+        "artifact_list_hash": artifact_list_hash,
+        "artifact_list_hash_matches_expected": None if expected_artifact_list_hash is None else expected_artifact_list_hash == artifact_list_hash,
+        "current_status": "rejected" if reasons else "would_prune",
+        "reasons": reasons,
+        "target_changed": False,
+        "prune_candidate_count": len(candidates),
+        "prune_candidates": candidates,
+        "malformed_count": report.get("malformed_count", 0),
+        "malformed_artifacts": report.get("malformed_artifacts") or [],
+        "pruned_count": 0,
+        "pruned_artifacts": [],
+    }
+    if not confirm_prune or reasons:
+        return payload
+
+    reports_root = _reports_dir(config)
+    pruned: list[dict[str, Any]] = []
+    prune_reasons: list[str] = []
+    for item in candidates:
+        path_text = item.get("path")
+        path = Path(str(path_text)).expanduser()
+        category_name = str(item.get("category") or "")
+        category_root = reports_root / category_name
+        if category_name not in _RETENTION_ARTIFACT_CATEGORIES or not _is_path_under(path, category_root):
+            prune_reasons.append("artifact_path_outside_category_root")
+            break
+        if not path.is_file():
+            prune_reasons.append("artifact_missing_before_prune")
+            break
+    if prune_reasons:
+        payload.update({
+            "current_status": "rejected",
+            "reasons": prune_reasons,
+            "target_changed": False,
+        })
+        return payload
+
+    for item in candidates:
+        path = Path(str(item.get("path"))).expanduser()
+        size = path.stat().st_size if path.exists() else 0
+        path.unlink()
+        pruned.append({**item, "size_bytes": size, "pruned_at": ts.isoformat()})
+    payload.update({
+        "current_status": "pruned",
+        "target_changed": bool(pruned),
+        "pruned_count": len(pruned),
+        "pruned_artifacts": pruned,
+    })
+    return payload
+
+
 def render_retention_report(payload: dict[str, Any]) -> str:
     lines = [
         "# Hermes self-improvement retention report",
@@ -686,6 +800,15 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_retention_report.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_retention_report)
     p_retention_report.set_defaults(func=_handle_cli)
+    p_retention_prune = sub.add_parser("retention-prune", help="Preview or explicitly prune expired self-improvement artifacts")
+    p_retention_prune.add_argument("--limit", type=int, default=20)
+    p_retention_prune.add_argument("--retention-days", type=int, default=None)
+    p_retention_prune.add_argument("--category", choices=["all", *_RETENTION_ARTIFACT_CATEGORIES], default="all")
+    p_retention_prune.add_argument("--confirm-prune", action="store_true", help="Actually delete the listed expired artifacts after hash guard passes")
+    p_retention_prune.add_argument("--expected-artifact-list-hash", default=None, help="Required candidate-list hash for --confirm-prune")
+    p_retention_prune.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_retention_prune)
+    p_retention_prune.set_defaults(func=_handle_cli)
     p_approve = sub.add_parser("approve", help="Create an approval artifact for one apply-plan item")
     p_approve.add_argument("plan_id")
     p_approve.add_argument("item_id")
@@ -798,6 +921,23 @@ def _handle_cli(args: argparse.Namespace) -> None:
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
             print(render_retention_report(payload))
+        return
+    if cmd == "retention-prune":
+        payload = build_retention_prune_payload(
+            config=config,
+            retention_days=getattr(args, "retention_days", None),
+            limit=int(getattr(args, "limit", 20)),
+            category=str(getattr(args, "category", "all")),
+            confirm_prune=bool(getattr(args, "confirm_prune", False)),
+            expected_artifact_list_hash=getattr(args, "expected_artifact_list_hash", None),
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(f"Retention prune status: {payload.get('current_status')}")
+            print(f"Candidates: {payload.get('prune_candidate_count')}")
+            if payload.get("reasons"):
+                print("Reasons: " + ", ".join(payload.get("reasons") or []))
         return
     if cmd == "approve":
         payload = create_approval_artifact(

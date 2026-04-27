@@ -217,4 +217,162 @@ def test_plugin_registers_retention_report_tool():
 
     names = {tool["name"] for tool in ctx.tools}
     assert "self_improvement_retention_report" in names
-    assert len([name for name in names if name.startswith("self_improvement_")]) == 10
+    assert len([name for name in names if name.startswith("self_improvement_")]) == 11
+
+
+def test_retention_prune_preview_requires_hash_and_does_not_delete(tmp_path):
+    mod = load_plugin_module()
+    config = seed_artifacts(tmp_path)
+
+    result = mod.build_retention_prune_payload(
+        config=config,
+        now=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
+        limit=10,
+    )
+
+    assert result["schema_name"] == "self_improvement_retention_prune"
+    assert result["current_status"] == "would_prune"
+    assert result["target_changed"] is False
+    assert result["confirmation_required"] is True
+    assert result["artifact_list_hash"]
+    assert result["prune_candidate_count"] == 3
+    assert result["malformed_count"] == 1
+    assert all(Path(item["path"]).exists() for item in result["prune_candidates"])
+
+
+def test_retention_prune_rejects_confirmation_without_expected_hash(tmp_path):
+    mod = load_plugin_module()
+    config = seed_artifacts(tmp_path)
+
+    result = mod.build_retention_prune_payload(
+        config=config,
+        now=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
+        confirm_prune=True,
+        limit=10,
+    )
+
+    assert result["current_status"] == "rejected"
+    assert "expected_artifact_list_hash_required" in result["reasons"]
+    assert result["target_changed"] is False
+    assert all(Path(item["path"]).exists() for item in result["prune_candidates"])
+
+
+def test_retention_prune_rejects_hash_mismatch_without_deleting(tmp_path):
+    mod = load_plugin_module()
+    config = seed_artifacts(tmp_path)
+
+    result = mod.build_retention_prune_payload(
+        config=config,
+        now=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
+        confirm_prune=True,
+        expected_artifact_list_hash="sha256:not-the-list",
+        limit=10,
+    )
+
+    assert result["current_status"] == "rejected"
+    assert "artifact_list_hash_mismatch" in result["reasons"]
+    assert result["target_changed"] is False
+    assert all(Path(item["path"]).exists() for item in result["prune_candidates"])
+
+
+def test_retention_prune_confirmed_deletes_only_expired_candidates(tmp_path):
+    mod = load_plugin_module()
+    config = seed_artifacts(tmp_path)
+    preview = mod.build_retention_prune_payload(
+        config=config,
+        now=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
+        limit=10,
+    )
+    candidate_paths = [Path(item["path"]) for item in preview["prune_candidates"]]
+    recent_plan = Path(config["reports_dir"]) / "apply-plans" / "2026-04-20" / "recent-plan.json"
+    malformed = Path(config["reports_dir"]) / "ledgers" / "2026-03-03" / "malformed.json"
+
+    result = mod.build_retention_prune_payload(
+        config=config,
+        now=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
+        confirm_prune=True,
+        expected_artifact_list_hash=preview["artifact_list_hash"],
+        limit=10,
+    )
+
+    assert result["current_status"] == "pruned"
+    assert result["target_changed"] is True
+    assert result["pruned_count"] == 3
+    assert all(not path.exists() for path in candidate_paths)
+    assert recent_plan.exists()
+    assert malformed.exists()
+    assert result["artifact_list_hash_matches_expected"] is True
+
+
+def test_retention_prune_cli_and_tool_are_guarded(tmp_path):
+    mod = load_plugin_module()
+    config = seed_artifacts(tmp_path)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    preview = subprocess.run(
+        [str(CLI), "retention-prune", "--mode", "apply_approved", "--config", str(config_path), "--json", "--limit", "5", "--category", "approvals"],
+        cwd=str(PLUGIN_DIR),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=True,
+    )
+    preview_payload = json.loads(preview.stdout)
+    assert preview_payload["current_status"] == "would_prune"
+    assert preview_payload["target_changed"] is False
+    assert preview_payload["category_filter"] == "approvals"
+
+    raw = mod._handle_self_improvement_retention_prune_tool({
+        "mode": "apply_approved",
+        "config": config,
+        "limit": 5,
+        "category": "approvals",
+        "confirm_prune": True,
+        "expected_artifact_list_hash": preview_payload["artifact_list_hash"],
+    })
+    tool_payload = json.loads(raw)
+    assert tool_payload["current_status"] == "pruned"
+    assert tool_payload["target_changed"] is True
+    assert tool_payload["pruned_count"] == 1
+
+
+def test_policy_allows_retention_prune_only_in_apply_approved_mode():
+    mod = load_plugin_module()
+
+    assert mod.validate_mode_action("apply_approved", "retention-prune", required_capability="prune_artifacts")["allowed"] is True
+    for mode in ["report_only", "dry_run_plan", "apply_low_risk"]:
+        assert mod.validate_mode_action(mode, "retention-prune", required_capability="prune_artifacts")["allowed"] is False
+
+
+def test_plugin_registers_retention_prune_tool():
+    mod = load_plugin_module()
+
+    class Ctx:
+        def __init__(self):
+            self.tools = []
+            self.hooks = []
+            self.commands = []
+            self.skills = []
+
+        def register_tool(self, **kwargs):
+            self.tools.append(kwargs)
+
+        def register_hook(self, name, callback):
+            self.hooks.append((name, callback))
+
+        def register_cli_command(self, *args, **kwargs):
+            self.commands.append((args, kwargs))
+
+        def register_command(self, *args, **kwargs):
+            self.commands.append((args, kwargs))
+
+        def register_skill(self, *args, **kwargs):
+            self.skills.append((args, kwargs))
+
+    ctx = Ctx()
+    mod.register(ctx)
+
+    names = {tool["name"] for tool in ctx.tools}
+    assert "self_improvement_retention_prune" in names
+    assert len([name for name in names if name.startswith("self_improvement_")]) == 11

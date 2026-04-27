@@ -7,14 +7,14 @@ from typing import Any
 try:  # pragma: no cover - package import path
     from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, validate_approval_artifact
     from .apply_plan import build_apply_plan, write_apply_plan
-    from .cli import build_ledger_report_payload, build_retention_report_payload, run_pipeline
+    from .cli import build_ledger_report_payload, build_retention_prune_payload, build_retention_report_payload, run_pipeline
     from .config import DEFAULT_RETENTION_DAYS, _load_config, _required_capability_for_command, load_config, resolve_execution_mode, validate_mode_action
     from .ledger import apply_low_risk_skeleton, rollback_low_risk
     from .observer import _event_path, _load_events
 except Exception:  # pragma: no cover - direct file import used by tests/plugin wrapper
     from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, validate_approval_artifact
     from apply_plan import build_apply_plan, write_apply_plan
-    from cli import build_ledger_report_payload, build_retention_report_payload, run_pipeline
+    from cli import build_ledger_report_payload, build_retention_prune_payload, build_retention_report_payload, run_pipeline
     from config import DEFAULT_RETENTION_DAYS, _load_config, _required_capability_for_command, load_config, resolve_execution_mode, validate_mode_action
     from ledger import apply_low_risk_skeleton, rollback_low_risk
     from observer import _event_path, _load_events
@@ -167,6 +167,24 @@ def _handle_self_improvement_retention_report_tool(args: dict[str, Any] | None =
         retention_days=args.get("retention_days"),
         limit=_coerce_int(args.get("limit"), 20, 1, 100),
         category=str(args.get("category") or "all"),
+    ))
+
+
+def _handle_self_improvement_retention_prune_tool(args: dict[str, Any] | None = None, **_kw) -> str:
+    args = args or {}
+    config = _config_from_args(args)
+    execution_mode = _mode_from_args(config, args)
+    command = "retention-prune"
+    decision = _check_mode(config, execution_mode, command)
+    if not decision.get("allowed"):
+        return _deny_payload(execution_mode=execution_mode, command=command, decision=decision)
+    return tool_result(build_retention_prune_payload(
+        config=config,
+        retention_days=args.get("retention_days"),
+        limit=_coerce_int(args.get("limit"), 20, 1, 1000),
+        category=str(args.get("category") or "all"),
+        confirm_prune=bool(args.get("confirm_prune", False)),
+        expected_artifact_list_hash=args.get("expected_artifact_list_hash"),
     ))
 
 

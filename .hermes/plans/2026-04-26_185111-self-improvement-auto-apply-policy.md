@@ -388,7 +388,7 @@ Completed:
 - stale path / stale command dry-run planner support using `replace_text_once` only when canonical replacement evidence comes from trusted independent sources and the stale reference appears exactly once;
 - read-only report integration that adds concise apply ledger, approval gate, and retention summaries to `run` / `report` output when artifacts or retention candidates exist;
 - package layout refactor with implementation under `hermes_self_improvement/` and root `__init__.py` kept as a thin discovery entrypoint;
-- read-only `retention-report` preview for old apply-plan / ledger / apply-attempt / approval artifacts, with category filtering and malformed artifact details, with no deletion or pruning.
+- read-only `retention-report` preview for old apply-plan / ledger / apply-attempt / approval artifacts, with category filtering and malformed artifact details; guarded `retention-prune` can delete expired candidates only in `apply_approved` mode with `--confirm-prune` and matching `expected_artifact_list_hash`.
 
 Remaining:
 
@@ -409,7 +409,7 @@ Implemented tool parity surface:
 
 Next implementation slice:
 
-- next: exercise approved mutation on more approved change classes, keep confirmation / expected approval hash / target hash / rollback ledger requirements mandatory, and continue keeping broader destructive classes closed;
+- next: exercise approved mutation on more approved change classes, keep confirmation / expected approval hash / target hash / rollback ledger requirements mandatory, and continue keeping broader memory/skill destructive classes closed; retention artifact cleanup now has a guarded prune path;
 - keep tool handlers aligned with CLI policy gates as new commands are added;
 - if retention cleanup moves beyond preview, design explicit confirmation / expected artifact list / hash guards first.
 

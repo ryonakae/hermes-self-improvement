@@ -50,6 +50,8 @@ bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24
 bin/hermes-self-improve ledger-report --status applied --json
 bin/hermes-self-improve approval-report --status all --json
 bin/hermes-self-improve retention-report --mode report_only --json
+bin/hermes-self-improve retention-prune --mode apply_approved --json
+bin/hermes-self-improve retention-prune --mode apply_approved --confirm-prune --expected-artifact-list-hash <artifact_list_hash> --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
 bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
 bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --confirm-approved-apply --expected-approval-hash <approval_hash> --expected-target-hash <current_hash> --json
@@ -151,12 +153,13 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 - `self_improvement_approval_report`
 - `self_improvement_validate_approval`
 - `self_improvement_retention_report`
+- `self_improvement_retention_prune`
 - `self_improvement_approve`
 - `self_improvement_apply_approved`
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
 
-`self_improvement_apply_approved` は既定では validation-only / preview-only で、valid preview には attempt / ledger の非永続 preview metadata が含まれます。実 mutation は `confirm_approved_apply=true` と `expected_approval_hash` / `expected_target_hash` が揃う場合だけです。
+`self_improvement_apply_approved` は既定では validation-only / preview-only で、valid preview には attempt / ledger の非永続 preview metadata が含まれます。実 mutation は `confirm_approved_apply=true` と `expected_approval_hash` / `expected_target_hash` が揃う場合だけです。`retention-prune` / `self_improvement_retention_prune` は既定では prune preview だけを返し、実削除は `--confirm-prune --expected-artifact-list-hash <artifact_list_hash>` / `confirm_prune=true` と一致 hash がある場合だけです。
 
 Mutation-capable tools は CLI と同じく fail-closed です。`self_improvement_apply_low_risk` の実変更には `mode="apply_low_risk"`, `confirm_apply=true`, `expected_item_hash` が必要です。`self_improvement_rollback_low_risk` の実 rollback には `mode="apply_low_risk"`, `confirm_rollback=true`, `expected_ledger_hash` が必要です。条件が揃わない場合は preview / rejected artifact に留め、target file は変更しません。
 
@@ -172,7 +175,7 @@ The integration is read-only. It does not create, approve, apply, rollback, remo
 
 ## Retention report
 
-`retention-report` / `self_improvement_retention_report` は read-only preview です。`apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` の artifact を集計し、`retention_days` より古い候補、malformed JSON、カテゴリ別件数を報告します。`--category <apply-plans|ledgers|apply-attempts|approvals>` / tool `category` で対象カテゴリを絞り込めます。ファイルの削除・移動・圧縮・prune は行いません。実 cleanup を追加する場合も、まず preview と expected artifact list / hash による明示 confirmation を別 slice で設計します。
+`retention-report` / `self_improvement_retention_report` は read-only preview です。`retention-prune` / `self_improvement_retention_prune` は同じ candidate list の hash を operator-visible にし、確認済み hash が一致した場合だけ expired candidates を削除します。`apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` の artifact を集計し、`retention_days` より古い候補、malformed JSON、カテゴリ別件数を報告します。`--category <apply-plans|ledgers|apply-attempts|approvals>` / tool `category` で対象カテゴリを絞り込めます。ファイルの削除・移動・圧縮・prune は行いません。実 cleanup を追加する場合も、まず preview と expected artifact list / hash による明示 confirmation を別 slice で設計します。
 
 ## Cron / scheduled execution
 
@@ -186,6 +189,8 @@ bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24
 bin/hermes-self-improve ledger-report --mode report_only --status applied --json
 bin/hermes-self-improve approval-report --mode report_only --status all --json
 bin/hermes-self-improve retention-report --mode report_only --json
+bin/hermes-self-improve retention-prune --mode apply_approved --json
+bin/hermes-self-improve retention-prune --mode apply_approved --confirm-prune --expected-artifact-list-hash <artifact_list_hash> --json
 ```
 
 Cron prompts must not run `apply-low-risk --confirm-apply`, must not run `rollback-low-risk --confirm-rollback`, and must not pass expected hashes for mutation. If a future scheduled review finds a candidate, it should report the plan path, item hash, ledger hash, risk, evidence, and validation status for a human or separate explicit workflow.

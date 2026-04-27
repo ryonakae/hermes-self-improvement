@@ -60,6 +60,7 @@ def test_register_exposes_self_improvement_tool_parity_surface():
         "self_improvement_approval_report",
         "self_improvement_validate_approval",
         "self_improvement_retention_report",
+        "self_improvement_retention_prune",
         "self_improvement_approve",
         "self_improvement_apply_low_risk",
         "self_improvement_rollback_low_risk",

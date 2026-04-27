@@ -56,6 +56,7 @@ bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24
 bin/hermes-self-improve ledger-report --status applied --json
 bin/hermes-self-improve approval-report --status all --json
 bin/hermes-self-improve retention-report --mode report_only --json
+bin/hermes-self-improve retention-prune --mode apply_approved --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
 bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
 bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json

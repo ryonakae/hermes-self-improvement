@@ -149,6 +149,7 @@ Mutation tools remain fail-closed:
 - `self_improvement_apply_low_risk` only mutates when mode policy allows `apply-low-risk`, `confirm_apply=true`, and `expected_item_hash` matches the selected item hash.
 - `self_improvement_rollback_low_risk` only mutates when mode policy allows `rollback-low-risk`, `confirm_rollback=true`, and `expected_ledger_hash` matches the ledger hash.
 - `self_improvement_apply_approved` defaults to validation-only / preview-only. It only mutates when mode policy allows `apply-approved`, `confirm_approved_apply=true`, and both `expected_approval_hash` and `expected_target_hash` match live artifacts.
+- `self_improvement_retention_prune` defaults to `would_prune` preview. It only deletes expired artifact candidates when mode policy allows `retention-prune`, `confirm_prune=true`, and `expected_artifact_list_hash` matches the current candidate list hash.
 - missing confirmation, hash mismatch, stale target, unsupported mutation, missing rollback snapshot, or policy denial must return a rejected/would-apply/would-rollback payload with `target_changed: false`.
 
 
@@ -157,4 +158,4 @@ Implementation note: do not place a handler module named `tools.py` at the plugi
 
 ## Retention report
 
-`retention-report` is read-only. It scans `apply-plans/`, `ledgers/`, `apply-attempts/`, and `approvals/` under the configured reports directory, reports artifacts older than `retention_days`, and surfaces malformed JSON. `--category` / tool `category` can narrow the preview to one artifact family. It does not remove, prune, rotate, or compress files. Any future destructive cleanup must require a separate explicit confirmation and expected artifact list/hash.
+`retention-report` is read-only. It scans `apply-plans/`, `ledgers/`, `apply-attempts/`, and `approvals/` under the configured reports directory, reports artifacts older than `retention_days`, and surfaces malformed JSON. `--category` / tool `category` can narrow the preview to one artifact family. It does not remove, prune, rotate, or compress files. `retention-prune` / `self_improvement_retention_prune` is the destructive cleanup path. It defaults to `would_prune` preview and only deletes expired candidates when `confirm_prune=true` / `--confirm-prune` and `expected_artifact_list_hash` matches the preview `artifact_list_hash`. Malformed artifacts are reported but not pruned by this path.
