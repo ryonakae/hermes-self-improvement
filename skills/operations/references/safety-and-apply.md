@@ -157,4 +157,4 @@ Implementation note: do not place a handler module named `tools.py` at the plugi
 
 ## Retention report
 
-`retention-report` is read-only. It scans `apply-plans/`, `ledgers/`, `apply-attempts/`, and `approvals/` under the configured reports directory, reports artifacts older than `retention_days`, and surfaces malformed JSON. It does not remove, prune, rotate, or compress files. Any future destructive cleanup must require a separate explicit confirmation and expected artifact list/hash.
+`retention-report` is read-only. It scans `apply-plans/`, `ledgers/`, `apply-attempts/`, and `approvals/` under the configured reports directory, reports artifacts older than `retention_days`, and surfaces malformed JSON. `--category` / tool `category` can narrow the preview to one artifact family. It does not remove, prune, rotate, or compress files. Any future destructive cleanup must require a separate explicit confirmation and expected artifact list/hash.

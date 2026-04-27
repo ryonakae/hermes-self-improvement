@@ -357,7 +357,7 @@ Decision from 2026-04-27: expose the same guarded self-improvement operations th
    - Cron docs may mention `hermes cron create "..."`, but the scheduled task should invoke the plugin CLI / tools rather than embedding scheduler-specific logic into the plugin.
    - Cron-run sessions must not create recursive cron jobs and must not run mutation confirmations (`--confirm-apply`, `--confirm-rollback`) by default.
 
-Retention report implementation note: `retention-report` / `self_improvement_retention_report` is read-only and reports aged `apply-plans`, `ledgers`, `apply-attempts`, and `approvals` plus malformed artifacts; it does not prune/delete.
+Retention report implementation note: `retention-report` / `self_improvement_retention_report` is read-only and reports aged `apply-plans`, `ledgers`, `apply-attempts`, and `approvals` plus malformed artifacts; `--category` / tool `category` can narrow the preview to one artifact family. It does not prune/delete.
 
 Layout refactor implementation note: root `plugin.yaml` and root `__init__.py` remain the Hermes discovery surface, while implementation modules now live under `hermes_self_improvement/`; tool handlers are `hermes_self_improvement/tool_handlers.py`, not a root `tools.py`, to avoid shadowing Hermes core `tools.registry`.
 
@@ -388,7 +388,7 @@ Completed:
 - stale path / stale command dry-run planner support using `replace_text_once` only when canonical replacement evidence comes from trusted independent sources and the stale reference appears exactly once;
 - read-only report integration that adds concise apply ledger, approval gate, and retention summaries to `run` / `report` output when artifacts or retention candidates exist;
 - package layout refactor with implementation under `hermes_self_improvement/` and root `__init__.py` kept as a thin discovery entrypoint;
-- read-only `retention-report` preview for old apply-plan / ledger / apply-attempt / approval artifacts, with no deletion or pruning.
+- read-only `retention-report` preview for old apply-plan / ledger / apply-attempt / approval artifacts, with category filtering and malformed artifact details, with no deletion or pruning.
 
 Remaining:
 

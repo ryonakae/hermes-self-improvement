@@ -244,8 +244,31 @@ def build_retention_report_payload(
     now: datetime | None = None,
     retention_days: int | None = None,
     limit: int = 20,
+    category: str = "all",
 ) -> dict[str, Any]:
     ts = (now or datetime.now(UTC)).astimezone(UTC)
+    category_filter = str(category or "all")
+    if category_filter != "all" and category_filter not in _RETENTION_ARTIFACT_CATEGORIES:
+        return {
+            "schema_name": "self_improvement_retention_report",
+            "schema_version": "1.0",
+            "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+            "created_at": ts.isoformat(),
+            "mode": "read_only_preview",
+            "current_status": "rejected",
+            "target_changed": False,
+            "category_filter": category_filter,
+            "reasons": ["unknown_category"],
+            "allowed_categories": list(_RETENTION_ARTIFACT_CATEGORIES),
+            "total_files": 0,
+            "total_bytes": 0,
+            "expired_candidate_count": 0,
+            "malformed_count": 0,
+            "limit": int(limit),
+            "categories": {},
+            "expired_candidates": [],
+            "malformed_artifacts": [],
+        }
     try:
         days = int(retention_days if retention_days is not None else config.get("retention_days", DEFAULT_RETENTION_DAYS))
     except Exception:
@@ -254,11 +277,16 @@ def build_retention_report_payload(
     cutoff = ts - timedelta(days=days)
     categories: dict[str, Any] = {}
     expired: list[dict[str, Any]] = []
+    malformed: list[dict[str, Any]] = []
     total_files = 0
     malformed_count = 0
     total_bytes = 0
 
-    for category, paths in _retention_artifact_files(config).items():
+    all_paths = _retention_artifact_files(config)
+    if category_filter != "all":
+        all_paths = {category_filter: all_paths.get(category_filter, [])}
+
+    for category, paths in all_paths.items():
         category_total = 0
         category_expired = 0
         category_malformed = 0
@@ -276,12 +304,27 @@ def build_retention_report_payload(
             if error:
                 category_malformed += 1
                 malformed_count += 1
+                malformed.append({
+                    "category": category,
+                    "artifact_id": path.stem,
+                    "error": error,
+                    "size_bytes": size,
+                    "path": str(path),
+                })
                 continue
             payload = payload or {}
             artifact_dt = _parse_artifact_dt(payload.get("created_at")) or _artifact_dt_from_path(path)
             if artifact_dt is None:
                 category_malformed += 1
                 malformed_count += 1
+                malformed.append({
+                    "category": category,
+                    "artifact_id": _artifact_id(category, payload, path),
+                    "error": "missing_created_at",
+                    "schema_name": payload.get("schema_name"),
+                    "size_bytes": size,
+                    "path": str(path),
+                })
                 continue
             if artifact_dt < cutoff:
                 category_expired += 1
@@ -304,7 +347,10 @@ def build_retention_report_payload(
         }
 
     expired.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("path") or "")))
-    limited = expired[: max(0, int(limit))]
+    malformed.sort(key=lambda item: str(item.get("path") or ""))
+    safe_limit = max(0, int(limit))
+    limited = expired[:safe_limit]
+    malformed_limited = malformed[:safe_limit]
     return {
         "schema_name": "self_improvement_retention_report",
         "schema_version": "1.0",
@@ -314,7 +360,9 @@ def build_retention_report_payload(
         "retention_days": days,
         "cutoff_at": cutoff.isoformat(),
         "mode": "read_only_preview",
+        "current_status": "ok",
         "target_changed": False,
+        "category_filter": category_filter,
         "total_files": total_files,
         "total_bytes": total_bytes,
         "expired_candidate_count": len(expired),
@@ -322,6 +370,7 @@ def build_retention_report_payload(
         "limit": int(limit),
         "categories": categories,
         "expired_candidates": limited,
+        "malformed_artifacts": malformed_limited,
     }
 
 
@@ -331,6 +380,7 @@ def render_retention_report(payload: dict[str, Any]) -> str:
         "",
         "- mode: read-only preview",
         f"- reports_dir: `{payload.get('reports_dir')}`",
+        f"- category_filter: `{payload.get('category_filter', 'all')}`",
         f"- retention_days: {payload.get('retention_days')}",
         f"- cutoff_at: `{payload.get('cutoff_at')}`",
         f"- total files: {payload.get('total_files')}",
@@ -356,6 +406,15 @@ def render_retention_report(payload: dict[str, Any]) -> str:
         lines.append(
             f"- `{item.get('category')}` {item.get('artifact_id')} "
             f"age_days={item.get('age_days')} status=`{item.get('current_status')}` path=`{item.get('path')}`"
+        )
+    lines.extend(["", "## Malformed artifacts"])
+    malformed = payload.get("malformed_artifacts") if isinstance(payload.get("malformed_artifacts"), list) else []
+    if not malformed:
+        lines.append("- malformed artifact はありません。")
+    for item in malformed:
+        lines.append(
+            f"- `{item.get('category')}` {item.get('artifact_id')} "
+            f"error=`{item.get('error')}` path=`{item.get('path')}`"
         )
     lines.extend([
         "",
@@ -622,6 +681,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_retention_report = sub.add_parser("retention-report", help="Preview old self-improvement artifacts eligible for retention cleanup without deleting anything")
     p_retention_report.add_argument("--limit", type=int, default=20)
     p_retention_report.add_argument("--retention-days", type=int, default=None)
+    p_retention_report.add_argument("--category", choices=["all", *_RETENTION_ARTIFACT_CATEGORIES], default="all")
     p_retention_report.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_retention_report)
     p_retention_report.set_defaults(func=_handle_cli)
@@ -727,6 +787,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             config=config,
             retention_days=getattr(args, "retention_days", None),
             limit=int(getattr(args, "limit", 20)),
+            category=str(getattr(args, "category", "all")),
         )
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))

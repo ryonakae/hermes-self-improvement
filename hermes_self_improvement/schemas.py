@@ -72,6 +72,7 @@ SELF_IMPROVEMENT_RETENTION_REPORT_SCHEMA = {
             "config_path": CONFIG_PATH_PROPERTY,
             "limit": {"type": "integer", "default": 20},
             "retention_days": {"type": "integer"},
+            "category": {"type": "string", "enum": ["all", "apply-plans", "ledgers", "apply-attempts", "approvals"], "default": "all"},
         },
     },
 }

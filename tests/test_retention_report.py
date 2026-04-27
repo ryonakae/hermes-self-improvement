@@ -78,11 +78,51 @@ def test_build_retention_report_payload_is_read_only_and_marks_expired_candidate
     assert payload["total_files"] == 6
     assert payload["expired_candidate_count"] == 3
     assert payload["malformed_count"] == 1
+    assert payload["category_filter"] == "all"
     assert set(payload["categories"]) >= {"apply-plans", "ledgers", "apply-attempts", "approvals"}
+    assert payload["malformed_artifacts"][0]["category"] == "ledgers"
+    assert payload["malformed_artifacts"][0]["error"] == "malformed_json"
     expired_ids = {item.get("artifact_id") for item in payload["expired_candidates"]}
     assert {"old-plan", "old-ledger", "old-approval"} <= expired_ids
     assert "recent-plan" not in expired_ids
     assert not any(not Path(item["path"]).exists() for item in payload["expired_candidates"])
+
+
+def test_retention_report_supports_category_filter_and_malformed_details(tmp_path):
+    mod = load_plugin_module()
+    config = seed_artifacts(tmp_path)
+
+    payload = mod.build_retention_report_payload(
+        config=config,
+        now=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
+        category="ledgers",
+        limit=10,
+    )
+
+    assert payload["category_filter"] == "ledgers"
+    assert set(payload["categories"]) == {"ledgers"}
+    assert payload["total_files"] == 2
+    assert payload["expired_candidate_count"] == 1
+    assert payload["expired_candidates"][0]["artifact_id"] == "old-ledger"
+    assert payload["malformed_count"] == 1
+    assert payload["malformed_artifacts"][0]["path"].endswith("malformed.json")
+
+
+def test_retention_report_rejects_unknown_category_without_scanning(tmp_path):
+    mod = load_plugin_module()
+    config = seed_artifacts(tmp_path)
+
+    payload = mod.build_retention_report_payload(
+        config=config,
+        now=datetime(2026, 4, 27, 12, 0, tzinfo=timezone.utc),
+        category="unknown",
+    )
+
+    assert payload["current_status"] == "rejected"
+    assert payload["target_changed"] is False
+    assert payload["expired_candidate_count"] == 0
+    assert payload["malformed_count"] == 0
+    assert "unknown_category" in payload["reasons"]
 
 
 def test_render_retention_report_includes_preview_not_deletion_language(tmp_path):
@@ -100,6 +140,8 @@ def test_render_retention_report_includes_preview_not_deletion_language(tmp_path
     assert "expired candidates: 3" in rendered
     assert "read-only preview" in rendered
     assert "old-ledger" in rendered
+    assert "malformed artifacts" in rendered.lower()
+    assert "malformed.json" in rendered
     assert "delete" not in rendered.lower()
     assert "prune" not in rendered.lower()
 
@@ -119,7 +161,7 @@ def test_retention_report_cli_and_tool_return_read_only_payload(tmp_path):
     config_path.write_text(json.dumps(config), encoding="utf-8")
 
     completed = subprocess.run(
-        [str(CLI), "retention-report", "--mode", "report_only", "--config", str(config_path), "--json", "--limit", "5"],
+        [str(CLI), "retention-report", "--mode", "report_only", "--config", str(config_path), "--json", "--limit", "5", "--category", "ledgers"],
         cwd=str(PLUGIN_DIR),
         text=True,
         stdout=subprocess.PIPE,
@@ -128,16 +170,21 @@ def test_retention_report_cli_and_tool_return_read_only_payload(tmp_path):
     )
     cli_payload = json.loads(completed.stdout)
     assert cli_payload["target_changed"] is False
-    assert cli_payload["expired_candidate_count"] == 3
+    assert cli_payload["category_filter"] == "ledgers"
+    assert cli_payload["expired_candidate_count"] == 1
+    assert cli_payload["malformed_count"] == 1
 
     raw = mod._handle_self_improvement_retention_report_tool({
         "mode": "report_only",
         "config": config,
         "limit": 5,
+        "category": "approvals",
     })
     tool_payload = json.loads(raw)
     assert tool_payload["target_changed"] is False
-    assert tool_payload["expired_candidate_count"] == 3
+    assert tool_payload["category_filter"] == "approvals"
+    assert tool_payload["expired_candidate_count"] == 1
+    assert tool_payload["malformed_count"] == 0
 
 
 def test_plugin_registers_retention_report_tool():

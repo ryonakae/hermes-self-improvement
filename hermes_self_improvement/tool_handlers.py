@@ -165,6 +165,7 @@ def _handle_self_improvement_retention_report_tool(args: dict[str, Any] | None =
         config=config,
         retention_days=args.get("retention_days"),
         limit=_coerce_int(args.get("limit"), 20, 1, 100),
+        category=str(args.get("category") or "all"),
     ))
 
 

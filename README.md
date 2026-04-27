@@ -171,7 +171,7 @@ The integration is read-only. It does not create, approve, apply, rollback, remo
 
 ## Retention report
 
-`retention-report` / `self_improvement_retention_report` は read-only preview です。`apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` の artifact を集計し、`retention_days` より古い候補、malformed JSON、カテゴリ別件数を報告します。ファイルの削除・移動・圧縮・prune は行いません。実 cleanup を追加する場合も、まず preview と expected artifact list / hash による明示 confirmation を別 slice で設計します。
+`retention-report` / `self_improvement_retention_report` は read-only preview です。`apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` の artifact を集計し、`retention_days` より古い候補、malformed JSON、カテゴリ別件数を報告します。`--category <apply-plans|ledgers|apply-attempts|approvals>` / tool `category` で対象カテゴリを絞り込めます。ファイルの削除・移動・圧縮・prune は行いません。実 cleanup を追加する場合も、まず preview と expected artifact list / hash による明示 confirmation を別 slice で設計します。
 
 ## Cron / scheduled execution
 
