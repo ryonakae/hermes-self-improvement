@@ -134,3 +134,82 @@ def test_propose_from_findings_rejects_unknown_skill_lifecycle_action():
     proposals = mod.propose_from_findings([finding])
 
     assert proposals == []
+
+
+
+def test_analyze_events_passes_through_explicit_memory_compression_candidate_event():
+    mod = load_plugin_module()
+    now = datetime(2026, 4, 28, 22, 0, tzinfo=timezone.utc)
+    event = {
+        "ts": now.isoformat(),
+        "event": "self_improvement_candidate",
+        "session_id": "s-candidate",
+        "candidate_kind": "memory_compression_candidate",
+        "target_path": "/tmp/hermes-memories/MEMORY.md",
+        "before_hash": "before123",
+        "after_text": "# Compressed memory\n",
+        "reason": "Memory file has redundant entries.",
+        "count": 3,
+    }
+
+    result = mod.analyze_events([event], now, now)
+
+    assert result.summary["explicit_candidate_count"] == 1
+    assert result.findings == [
+        {
+            "kind": "memory_compression_candidate",
+            "source_event": "self_improvement_candidate",
+            "session_id": "s-candidate",
+            "target_path": "/tmp/hermes-memories/MEMORY.md",
+            "before_hash": "before123",
+            "after_text": "# Compressed memory\n",
+            "reason": "Memory file has redundant entries.",
+            "count": 3,
+        }
+    ]
+    assert result.proposals[0]["change_type"] == "memory_compress"
+    assert result.proposals[0]["auto_apply"] is False
+
+
+def test_analyze_events_passes_through_explicit_skill_lifecycle_candidate_event():
+    mod = load_plugin_module()
+    now = datetime(2026, 4, 28, 22, 0, tzinfo=timezone.utc)
+    event = {
+        "ts": now.isoformat(),
+        "event": "self_improvement_candidate",
+        "session_id": "s-candidate",
+        "candidate_kind": "skill_lifecycle_candidate",
+        "action": "skill_merge",
+        "target_path": "/tmp/skills/dest/SKILL.md",
+        "source_path": "/tmp/skills/source/SKILL.md",
+        "after_text": "# Merged skill\n",
+        "reason": "Two skills overlap.",
+    }
+
+    result = mod.analyze_events([event], now, now)
+
+    assert result.summary["explicit_candidate_count"] == 1
+    assert result.findings[0]["kind"] == "skill_lifecycle_candidate"
+    assert result.findings[0]["source_event"] == "self_improvement_candidate"
+    assert result.proposals[0]["change_type"] == "skill_merge"
+    assert result.proposals[0]["source_path"] == "/tmp/skills/source/SKILL.md"
+    assert result.proposals[0]["auto_apply"] is False
+
+
+def test_analyze_events_drops_malformed_explicit_candidate_event():
+    mod = load_plugin_module()
+    now = datetime(2026, 4, 28, 22, 0, tzinfo=timezone.utc)
+    event = {
+        "ts": now.isoformat(),
+        "event": "self_improvement_candidate",
+        "candidate_kind": "skill_lifecycle_candidate",
+        "action": "rewrite_everything",
+        "target_path": "/tmp/skills/unsafe/SKILL.md",
+    }
+
+    result = mod.analyze_events([event], now, now)
+
+    assert result.summary["explicit_candidate_count"] == 0
+    assert result.summary["dropped_explicit_candidate_count"] == 1
+    assert result.findings == []
+    assert result.proposals == []

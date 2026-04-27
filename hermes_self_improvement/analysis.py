@@ -34,7 +34,8 @@ def analyze_events(events: list[dict[str, Any]], since: datetime, until: datetim
     )
     sessions = {ev.get("session_id") for ev in events if ev.get("session_id")}
 
-    findings: list[dict[str, Any]] = []
+    explicit_candidate_findings, dropped_explicit_candidate_count = _explicit_candidate_findings(events)
+    findings: list[dict[str, Any]] = list(explicit_candidate_findings)
     for (tool, error_kind), count in errors_by_tool_kind.most_common(20):
         total = by_tool.get(tool, 0)
         if count <= 0:
@@ -70,6 +71,8 @@ def analyze_events(events: list[dict[str, Any]], since: datetime, until: datetim
         "tool_errors_by_kind": dict(errors_by_kind),
         "filtered_partial_event_count": filtered_partial_event_count,
         "reclassified_tool_result_count": reclassified_tool_result_count,
+        "explicit_candidate_count": len(explicit_candidate_findings),
+        "dropped_explicit_candidate_count": dropped_explicit_candidate_count,
     }
     return AnalysisResult(since=since, until=until, events=events, summary=summary, findings=findings, proposals=proposals)
 
@@ -82,6 +85,62 @@ def _compact_event(ev: dict[str, Any]) -> dict[str, Any]:
         "error_kind": ev.get("error_kind"),
         "result_preview": ev.get("result_preview"),
     }
+
+
+_EXPLICIT_CANDIDATE_KINDS = {"memory_compression_candidate", "skill_lifecycle_candidate"}
+_EXPLICIT_CANDIDATE_PASSTHROUGH_KEYS = (
+    "target_path",
+    "path",
+    "file_path",
+    "skill_path",
+    "before_hash",
+    "after_text",
+    "new_content",
+    "replacement_content",
+    "reason",
+    "count",
+    "action",
+    "change_type",
+    "destination_path",
+    "source_path",
+    "confidence",
+    "title",
+)
+
+
+def _candidate_kind_for_event(ev: dict[str, Any]) -> str:
+    return str(ev.get("candidate_kind") or ev.get("kind") or ev.get("finding_kind") or "")
+
+
+def _explicit_candidate_from_event(ev: dict[str, Any]) -> dict[str, Any] | None:
+    kind = _candidate_kind_for_event(ev)
+    if ev.get("event") != "self_improvement_candidate" or kind not in _EXPLICIT_CANDIDATE_KINDS:
+        return None
+    finding: dict[str, Any] = {
+        "kind": kind,
+        "source_event": "self_improvement_candidate",
+        "session_id": ev.get("session_id"),
+    }
+    for key in _EXPLICIT_CANDIDATE_PASSTHROUGH_KEYS:
+        if ev.get(key) is not None:
+            finding[key] = ev.get(key)
+    if _proposal_for_explicit_candidate(finding) is None:
+        return None
+    return finding
+
+
+def _explicit_candidate_findings(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    findings: list[dict[str, Any]] = []
+    dropped = 0
+    for ev in events:
+        if ev.get("event") != "self_improvement_candidate":
+            continue
+        finding = _explicit_candidate_from_event(ev)
+        if finding is None:
+            dropped += 1
+            continue
+        findings.append(finding)
+    return findings, dropped
 
 
 def propose_from_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
