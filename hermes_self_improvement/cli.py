@@ -64,6 +64,8 @@ def _render_gepa_eval(payload: dict[str, Any]) -> str:
         f"- adapter: `{payload.get('adapter_version')}`",
         f"- mode: `{payload.get('mode')}`",
         f"- rubric: `{payload.get('rubric_version')}`",
+        f"- dspy available: {payload.get('dspy_available')}",
+        f"- runtime GEPA requires DSPy: {payload.get('dspy_required_for_runtime_gepa')}",
         f"- cases: {payload.get('passed_count')}/{payload.get('case_count')} passed",
         f"- all_passed: {payload.get('all_passed')}",
         "",
@@ -766,13 +768,13 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_analyze.set_defaults(func=_handle_cli)
     p_report = sub.add_parser("report", help="Analyze and write Markdown report")
     p_report.add_argument("--since-hours", type=int, default=24)
-    p_report.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
+    p_report.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
     p_report.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_report)
     p_report.set_defaults(func=_handle_cli)
     p_run = sub.add_parser("run", help="Analyze, score proposals, and write report")
     p_run.add_argument("--since-hours", type=int, default=24)
-    p_run.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
+    p_run.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
     p_run.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_run)
     p_run.set_defaults(func=_handle_cli)
@@ -827,7 +829,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_apply_approved.set_defaults(func=_handle_cli)
     p_apply_plan = sub.add_parser("generate-apply-plan", help="Generate a dry-run apply plan artifact")
     p_apply_plan.add_argument("--since-hours", type=int, default=24)
-    p_apply_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
+    p_apply_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
     p_apply_plan.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_apply_plan)
     p_apply_plan.set_defaults(func=_handle_cli)
@@ -877,6 +879,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "retention_days": int(config.get("retention_days", DEFAULT_RETENTION_DAYS)),
             "event_count_sample": len(events),
             "last_event_ts": events[-1].get("ts") if events else None,
+            "gepa_scorer_mode": (config.get("gepa_scorer") or {}).get("mode") if isinstance(config.get("gepa_scorer"), dict) else None,
+            "dspy_available": importlib.util.find_spec("dspy") is not None,
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return

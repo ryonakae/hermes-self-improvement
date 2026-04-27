@@ -23,4 +23,6 @@ def test_gepa_eval_cli_outputs_regression_summary_json():
     assert payload["mode"] == "offline_program_eval_regression"
     assert payload["case_count"] >= 4
     assert payload["all_passed"] is True
+    assert payload["dspy_required_for_runtime_gepa"] is True
+    assert "dspy_available" in payload
     assert payload["failed_count"] == 0

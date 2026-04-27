@@ -102,7 +102,7 @@ def test_gepa_scorer_preserves_score_breakdown(monkeypatch):
     assert scored[0]["score_breakdown"]["operational_safety"]["points"] == 16
 
 
-def test_gepa_scorer_falls_back_to_heuristic_when_optional_dependency_missing(monkeypatch):
+def test_gepa_scorer_falls_back_to_heuristic_when_required_dependency_missing(monkeypatch):
     mod = load_plugin_module()
 
     def missing_gepa(*, proposals, findings, config):

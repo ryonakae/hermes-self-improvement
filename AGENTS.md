@@ -20,15 +20,15 @@ cd /path/to/hermes-self-improvement
 
 bin/hermes-self-improve status
 bin/hermes-self-improve analyze --since-hours 24 --json
-bin/hermes-self-improve report --since-hours 24 --scorer compare
-bin/hermes-self-improve run --since-hours 24 --json --scorer compare
+bin/hermes-self-improve report --since-hours 24
+bin/hermes-self-improve run --since-hours 24 --json
 bin/hermes-self-improve gepa-eval --json
 ```
 
 Apply / approval / retention の確認です。
 
 ```bash
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
 bin/hermes-self-improve ledger-report --mode report_only --status all --json
 bin/hermes-self-improve approval-report --mode report_only --status all --include-previews --json
 bin/hermes-self-improve retention-report --mode report_only --json
@@ -138,7 +138,7 @@ Runtime artifact は `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配�
 Cron は plugin 内の scheduler ではなく Hermes runtime / scheduler 側の責務です。safe cron は report / dry-run に限定します。
 
 ```bash
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
 bin/hermes-self-improve ledger-report --mode report_only --status applied --json
 bin/hermes-self-improve approval-report --mode report_only --status all --json
 bin/hermes-self-improve retention-report --mode report_only --json

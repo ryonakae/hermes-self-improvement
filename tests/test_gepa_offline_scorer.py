@@ -19,37 +19,43 @@ def load_adapter():
     return module
 
 
-def test_gepa_adapter_scores_with_offline_dspy_program_when_optimizer_not_configured():
+def test_gepa_adapter_runtime_scorer_requires_real_dspy_path_when_not_installed(monkeypatch):
+    adapter = load_adapter()
+    monkeypatch.setattr(adapter, "dspy_available", lambda: False)
+
+    try:
+        adapter.score_with_gepa(
+            proposals=[
+                {
+                    "id": "proposal-1",
+                    "title": "Fix recurring skill lookup misses",
+                    "risk": "medium",
+                    "confidence": "medium",
+                    "auto_apply": False,
+                }
+            ],
+            findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}],
+            config={"gepa_scorer": {"enabled": True, "mode": "dspy_program_eval"}},
+        )
+    except ModuleNotFoundError as exc:
+        assert "pip install -e" in str(exc)
+    else:
+        raise AssertionError("runtime GEPA scoring must not fall back to the offline fixture when DSPy is missing")
+
+
+def test_gepa_adapter_runtime_scorer_fails_closed_until_dspy_program_is_implemented():
     adapter = load_adapter()
 
-    result = adapter.score_with_gepa(
-        proposals=[
-            {
-                "id": "proposal-1",
-                "title": "Fix recurring skill lookup misses",
-                "risk": "medium",
-                "confidence": "medium",
-                "auto_apply": False,
-            }
-        ],
-        findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}],
-        config={"gepa_scorer": {"enabled": True, "max_iterations": 0}},
-    )
-
-    assert result["adapter_version"] == "gepa-v0.1"
-    assert result["mode"] == "offline_program_eval"
-    assert result["optimizer"] == "not_configured"
-    assert len(result["scores"]) == 1
-    score = result["scores"][0]
-    assert score["id"] == "proposal-1"
-    assert 0 <= score["score"] <= 100
-    assert score["recommendation"] in {
-        "report_only",
-        "human_review",
-        "review_for_possible_low_risk_apply",
-    }
-    assert score["auto_apply"] is False
-    assert "offline" in score["rationale"].lower()
+    try:
+        adapter.score_with_gepa(
+            proposals=[{"id": "proposal-1", "risk": "medium", "confidence": "medium", "auto_apply": False}],
+            findings=[],
+            config={"gepa_scorer": {"enabled": True, "mode": "dspy_program_eval"}},
+        )
+    except RuntimeError as exc:
+        assert "DSPy program evaluator is not implemented yet" in str(exc)
+    else:
+        raise AssertionError("runtime GEPA scoring must fail closed until the real DSPy program exists")
 
 
 def test_gepa_adapter_keeps_disabled_config_as_closed_fallback_signal():
@@ -67,13 +73,17 @@ def test_gepa_adapter_keeps_disabled_config_as_closed_fallback_signal():
         raise AssertionError("disabled GEPA scorer should fail closed so caller can use heuristic fallback")
 
 
-def test_default_config_enables_safe_offline_gepa_scoring():
+def test_default_config_uses_real_dspy_gepa_mode():
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
     gepa_config = config["gepa_scorer"]
     assert gepa_config["enabled"] is True
-    assert gepa_config["mode"] == "offline_program_eval"
+    assert gepa_config["mode"] == "dspy_program_eval"
+    assert gepa_config["llm_source"] == "hermes_auxiliary"
+    assert gepa_config["reflection_model"] is None
+    assert gepa_config["task_model"] is None
     assert gepa_config["max_iterations"] == 0
+    assert "compiled_program_path" in gepa_config
 
 
 def test_evaluate_offline_program_reports_eval_case_results():
@@ -86,6 +96,8 @@ def test_evaluate_offline_program_reports_eval_case_results():
     assert result["case_count"] >= 4
     assert result["passed_count"] + result["failed_count"] == result["case_count"]
     assert result["all_passed"] is True
+    assert result["dspy_required_for_runtime_gepa"] is True
+    assert "dspy_available" in result
     case_ids = {case["id"] for case in result["cases"]}
     assert "repeated-tool-failure-human-review" in case_ids
     assert "dangerous-auto-apply-denied" in case_ids

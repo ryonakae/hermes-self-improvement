@@ -65,7 +65,7 @@ Current external docs check:
 
 5. Tests must not require network or live LLM by default.
    - Unit tests use fake DSPy modules or dependency injection.
-   - Integration tests that require real DSPy / provider credentials are opt-in.
+   - Integration tests that require real DSPy plus Hermes-authenticated LLM routing are opt-in.
 
 ## Target behavior
 
@@ -119,6 +119,10 @@ Decision from Q6: use **C**. Active evaluator promotion should reuse the existin
 
 Decision from Q7: use **C**. Repo-tracked `config.json` may define defaults, but the active evaluator pointer should live as runtime state under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/gepa/active-evaluator.json`. Promotion updates this pointer through the approval-gated `evaluator_promote` path, with hash-bound rollback data. Do not frequently rewrite repo-tracked config just to change the active evaluator.
 
+Decision from Q8: use **Hermes-authenticated providers only**. The DSPy/GEPA evaluator should use the provider authentication already configured for Hermes Agent, not plugin-specific OpenAI/Anthropic/LiteLLM API key settings. The default LLM source is Hermes auxiliary model routing. Model names may be configurable for task/reflection roles, but `null` means “use the Hermes auxiliary default”. Do not expose provider selection as a first-class plugin option; if a different provider is desired, it should be configured in Hermes itself.
+
+Decision from Q9: package dependencies and runtime credentials are separate. `dspy` remains a required Python dependency for the evaluator path, but installing/importing the package must not imply that OpenAI or Anthropic API keys are required. Any LM call for DSPy program evaluation or GEPA optimization goes through Hermes' configured provider/auth path. Plugin artifacts and config must not store provider API keys.
+
 ### Task 1: Add package metadata with required DSPy / GEPA dependency
 
 **Objective:** Make DSPy / GEPA an explicit required dependency for `hermes-self-improvement` installations, while still avoiding top-level imports so hook/plugin discovery remains lightweight.
@@ -141,15 +145,7 @@ dependencies = [
 ]
 ```
 
-- Optional provider extras may still exist for convenience, but the core evaluator assumes `dspy` is installed:
-
-```toml
-[project.optional-dependencies]
-providers = [
-  "openai>=2",
-  "anthropic>=0.90",
-]
-```
+- Do not add plugin-specific provider extras for OpenAI/Anthropic as first-class UX. The evaluator uses Hermes-authenticated provider routing. If provider-specific packages are pulled in transitively by DSPy, that is a package dependency detail, not a plugin credential/config requirement.
 
 - Do not import `dspy` from top-level package import paths.
 - Add installation docs:
@@ -185,6 +181,7 @@ Expected before installation: plugin hook/import paths still avoid importing `ds
 **Design:**
 
 - Move dependency-free deterministic scoring out of runtime scorer code into test fixtures/helpers, or keep it behind private test-only helpers if needed.
+- The default DSPy LM bridge must call Hermes' already-authenticated LLM path, preferably the same auxiliary model route used by the current `llm` scorer. Do not require plugin-specific provider API keys.
 - Add lazy helpers:
 
 ```python
@@ -287,9 +284,10 @@ bin/hermes-self-improve gepa-optimize \
 {
   "gepa_scorer": {
     "enabled": true,
-    "mode": "compiled_program",
+    "mode": "compiled_program_eval",
+    "llm_source": "hermes_auxiliary",
     "compiled_program_path": null,
-    "reflection_model": "openai/gpt-5",
+    "reflection_model": null,
     "task_model": null,
     "max_full_evals": 2,
     "num_threads": 4,
@@ -297,6 +295,8 @@ bin/hermes-self-improve gepa-optimize \
   }
 }
 ```
+
+`llm_source` is intentionally not a provider selector. The only supported default is `hermes_auxiliary`, meaning Hermes Agent's configured/authenticated auxiliary LLM route. `reflection_model` and `task_model` are optional model-name overrides passed to Hermes' LLM client; `null` means use the Hermes auxiliary default. Do not store OpenAI/Anthropic/LiteLLM API keys in plugin config.
 
 **Artifact output:**
 
@@ -475,10 +475,12 @@ bin/hermes-self-improve gepa-optimize \
 **Docs should say:**
 
 - DSPy/GEPA is a required dependency for the full self-improvement evaluator path, not a nice-to-have optional feature.
+- DSPy/GEPA package dependencies are separate from provider credentials: the plugin uses Hermes-authenticated provider routing and should not ask users to configure OpenAI/Anthropic API keys in plugin config.
 - Hook/plugin discovery still lazy-imports DSPy so lightweight observation and safety gates do not depend on optimizer startup cost.
 - `--scorer gepa` should prefer compiled/live DSPy modes and report clearly if the required dependency is missing from the active runtime.
 - GEPA remains advisory and cannot authorize auto-apply.
 - GEPA/LLM comparison is the default decision input. `report`, `run`, and `generate-apply-plan` should default to compare for decision-producing output, while lightweight `analyze` may remain heuristic. Disagreement blocks unattended apply and routes the proposal to human review or approval gates.
+- The default LLM source for DSPy program eval / GEPA optimize is Hermes auxiliary model routing. `reflection_model` and `task_model` may override model names only; provider selection belongs to Hermes configuration, not this plugin.
 - Disagreement materiality is policy-configurable by change type. Risk/recommendation disagreement always blocks unattended apply; score/confidence thresholds can be looser for low-risk prose additions and stricter for memory / lifecycle / destructive / broad changes.
 
 ## Suggested implementation order
@@ -490,7 +492,7 @@ bin/hermes-self-improve gepa-optimize \
 5. Add real DSPy module behind lazy import.
 6. Add metric and eval-case conversion.
 7. Add `gepa-optimize` CLI with fake-DSPy tests first.
-8. Run one real local optimizer smoke only after dependency/provider config is available.
+8. Run one real local optimizer smoke only after DSPy is installed and Hermes-authenticated LLM routing is confirmed.
 9. Wire compiled artifact into `--scorer gepa`.
 10. Update docs and tool parity.
 
@@ -501,7 +503,7 @@ bin/hermes-self-improve gepa-optimize \
 - `python3 -m pip install -e .` installs `dspy` as a required project dependency.
 - `bin/hermes-self-improve gepa-eval --json` uses real DSPy when evaluating the user-facing GEPA path; deterministic behavior is confined to fake-DSPy tests / fixtures.
 - A fake-DSPy test proves `gepa-optimize` calls `dspy.GEPA(...).compile(student, trainset=..., valset=...)` with metric and budget.
-- A real-DSPy optional smoke can run when provider credentials are configured.
+- A real-DSPy optional smoke can run when DSPy is installed and Hermes-authenticated LLM routing is available.
 - GEPA scorer payloads always force `auto_apply=false`.
 - `report` / `run` / `generate-apply-plan` default to GEPA/LLM compare for decision-producing output, while `analyze` can remain heuristic by default.
 - `compare` reports GEPA/LLM disagreement and blocks unattended apply / routes to human review or approval gates, using policy-configurable change-type thresholds.
@@ -510,10 +512,23 @@ bin/hermes-self-improve gepa-optimize \
 
 - DSPy API surface may shift. Keep all DSPy imports and API calls in a small adapter boundary.
 - GEPA optimizer runs can be expensive. Require explicit budget and never call from hooks or default cron.
-- Provider credentials must not leak into artifacts. Redact config before writing compile reports.
+- Provider credentials are managed by Hermes, not by this plugin. Artifact redaction should still treat config summaries as sensitive enough to redact any accidental key-like values.
 - Optimized scorer output can look authoritative. Keep mutation gates independent of score.
 
 ## Immediate next slice
+
+Implementation progress as of 2026-04-28:
+
+- Added `pyproject.toml` with `dspy>=3.1,<4` as the plugin's only direct runtime dependency; OpenAI/Anthropic provider extras were removed so provider choice remains a Hermes configuration concern.
+- Changed repo default `gepa_scorer.mode` from `offline_program_eval` to `dspy_program_eval`, added compiled/evaluator config placeholders, and updated the plan to use `llm_source: "hermes_auxiliary"` with `reflection_model` / `task_model` as model-name overrides only.
+- User-facing `--scorer gepa` now fails closed for missing DSPy or unimplemented real DSPy/compiled paths instead of silently using the deterministic offline scaffold.
+- `gepa-eval` remains as a dependency-free regression fixture and reports `dspy_available` / `dspy_required_for_runtime_gepa` so operators can distinguish fixture checks from runtime evaluator readiness.
+- `status` reports `gepa_scorer_mode` and `dspy_available`.
+- `report`, `run`, and `generate-apply-plan` now default to `compare`; `analyze` remains `heuristic`.
+- Added tests for required dependency metadata, no eager DSPy import on plugin load, CLI scorer defaults, and fail-closed runtime GEPA behavior.
+- After Safehouse write access was relaxed, `python3 -m pip install -e .` from the plugin root succeeded. Runtime now reports `dspy_available=true`; installed versions observed were `dspy 3.2.0`, `gepa 0.0.27`, `litellm 1.82.6`, `openai 2.32.0`, and `anthropic 0.96.0`.
+- Dependency inspection showed `hermes-self-improvement` directly requires only `dspy`; `openai` and `litellm` are direct dependencies of `dspy`, while `anthropic` is already present from `hermes-agent` and is only a DSPy optional extra. This does not change the runtime LLM policy: DSPy/GEPA LM calls should use Hermes-authenticated auxiliary model routing, not plugin-managed provider API keys.
+- Validation after install: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`190 passed`), and `bin/hermes-self-improve gepa-eval --json` (`all_passed: true`).
 
 Start with dependency and mode clarity, not a full optimizer run:
 

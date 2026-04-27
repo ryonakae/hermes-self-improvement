@@ -92,9 +92,16 @@ def _default_config() -> dict[str, Any]:
         },
         "gepa_scorer": {
             "enabled": False,
-            "mode": "candidate_comparison",
+            "mode": "dspy_program_eval",
             "timeout": 120,
             "max_iterations": 0,
+            "compiled_program_path": None,
+            "llm_source": "hermes_auxiliary",
+            "reflection_model": None,
+            "task_model": None,
+            "max_full_evals": 2,
+            "num_threads": 4,
+            "track_stats": True,
         },
         "observe_hooks": [
             "pre_tool_call", "post_tool_call", "pre_llm_call", "post_llm_call",

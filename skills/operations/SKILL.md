@@ -14,6 +14,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - Runtime hook は観測専用にする。hook 内で LLM、GEPA optimizer、skill patch、memory edit、重い集計を実行しない。
 - 問題抽出、proposal 生成、採点、report、apply-plan は CLI / cron / explicit evaluator command から明示的に実行する。
 - DSPy/GEPA は `hermes-self-improvement` plugin の evaluator path では必須依存として扱う。ただし hook / plugin discovery path では lazy import を維持し、Hermes runtime 全体の必須依存にはしない。
+- DSPy/GEPA evaluator の LLM call は Hermes で認証済みの provider routing を使う。default は Hermes auxiliary model。`reflection_model` / `task_model` は model name override のみで、`null` は Hermes auxiliary default を意味する。plugin 独自に OpenAI / Anthropic / LiteLLM API key や provider selector を持たせない。
 - Runtime scorer の `--scorer gepa` は real DSPy / GEPA path を使い、dependency-free offline baseline に黙って fallback しない。deterministic scaffold は必要なら tests / fixtures / private helper に閉じる。
 - LLM / GEPA scoring は advisory only。`auto_apply` は常に false 扱いにし、無人変更の許可として使わない。GEPA/LLM comparison を self-improvement decision の default input とし、score / recommendation / risk / confidence / target / rationale の material disagreement は human review / approval-required に倒して unattended apply を block する。material 判定は change type ごとの policy config で扱い、risk / recommendation disagreement は常に block、memory / lifecycle / destructive / broad change は厳しめ、typo / pitfall / validation addition は score / confidence threshold だけ少し緩めてもよい。`report` / `run` / `generate-apply-plan` は compare default、軽量 `analyze` は heuristic default でよい。
 - Evaluator 自体も自己改善対象にする。GEPA/LLM disagreement、human approval/rejection、rollback/failure ledger、regression eval cases から candidate evaluator を生成・評価してよいが、active evaluator への昇格は既存 approval artifact model に乗せた approval-gated `evaluator_promote` とし、candidate hash / active-before pointer/hash / regression result hash / rollback pointer を束縛して silent replacement を禁止する。
@@ -33,8 +34,8 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry、retention。
 - `hermes_self_improvement/analysis.py`: event aggregation、finding 抽出、proposal 生成。explicit `memory_compression_candidate` / `skill_lifecycle_candidate` finding と `self_improvement_candidate` event は approval-required proposal に変換するが、auto-apply 許可にはしない。`scan_memory_compression_candidates()` / `scan_skill_lifecycle_candidates()` は dry-run candidate event だけを作る。
 - `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer。
-- `hermes_self_improvement/dspy_program.py`: DSPy-compatible scoring contract と offline baseline。
-- `hermes_self_improvement/gepa_adapter.py`: GEPA payload、offline eval、optimizer fail-closed 境界。
+- `hermes_self_improvement/dspy_program.py`: real DSPy scoring contract / module boundary。deterministic baseline は runtime scorer ではなく regression fixture に閉じる。
+- `hermes_self_improvement/gepa_adapter.py`: GEPA payload、offline fixture eval、real DSPy/GEPA path の fail-closed 境界。
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と low-risk mutation planning。
 - `hermes_self_improvement/ledger.py`: pending ledger と apply attempt artifact。
 - `hermes_self_improvement/approvals.py`: approval artifact generation / validation / report / `apply-approved` preview and guarded apply helpers。plan / item hash / expiry に束縛された承認メタデータを作り、後続 apply のために fail-closed 検証する。実 mutation は explicit confirmation と expected approval/target hashes が揃う場合だけ。
@@ -129,3 +130,4 @@ Expected: enabled true, error null, hooks > 0。
 - `target_skill` / `skill_name` / `skill` は configured `custom_skill_roots` 配下だけに解決し、absolute path・`..`・root escape を拒否する。
 - Plugin-bundled skills は read-only として扱われ、現在実行中の agent session にはすぐ現れない場合がある。discovery reload / new session / gateway restart の必要性を疑う。
 - `importlib.util.module_from_spec` で unit test する場合は、`exec_module` 前に `sys.modules[spec.name] = module` を入れる。`@dataclass` 処理が失敗するのを避けるため。
+- DSPy/GEPA dependency を `python3 -m pip install -e .` で入れる作業は、Safehouse の書き込み制限で dependency install が途中失敗することがある。特に `litellm/proxy/auth/public_key.pem` への `Operation not permitted` を見たら、まず `python3 -m ensurepip --upgrade` で壊れた pip/certifi を復旧し、次に active runtime の `dspy_available` / `bin/hermes-self-improve status` で実際に DSPy が見えているか確認する。plugin 側は missing DSPy を fail-closed にし、offline fixture を runtime scorer の代替にしない。

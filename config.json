@@ -10,9 +10,16 @@
   },
   "gepa_scorer": {
     "enabled": true,
-    "mode": "offline_program_eval",
+    "mode": "dspy_program_eval",
     "timeout": 120,
-    "max_iterations": 0
+    "max_iterations": 0,
+    "compiled_program_path": null,
+    "llm_source": "hermes_auxiliary",
+    "reflection_model": null,
+    "task_model": null,
+    "max_full_evals": 2,
+    "num_threads": 4,
+    "track_stats": true
   },
   "observe_hooks": [
     "pre_tool_call",

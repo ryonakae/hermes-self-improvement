@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -53,6 +54,20 @@ def load_eval_cases(path: Path | None = None) -> list[dict[str, Any]]:
     return cases
 
 
+def dspy_available() -> bool:
+    """Return whether the required DSPy package is importable without importing it."""
+    return importlib.util.find_spec("dspy") is not None
+
+
+def require_dspy() -> Any:
+    """Import DSPy for explicit evaluator paths, failing with an actionable error."""
+    if not dspy_available():
+        raise ModuleNotFoundError(
+            "No module named 'dspy'. Install the hermes-self-improvement evaluator dependencies with `python3 -m pip install -e .`."
+        )
+    return importlib.import_module("dspy")
+
+
 def build_gepa_payload(
     *,
     proposals: list[dict[str, Any]],
@@ -82,35 +97,40 @@ def score_with_gepa(
     findings: list[dict[str, Any]],
     config: dict[str, Any],
 ) -> dict[str, Any]:
-    """Score proposals with the GEPA/DSPy evaluation path.
+    """Score proposals with the real DSPy / GEPA evaluator path.
 
-    With ``max_iterations <= 0`` this runs the dependency-free DSPy-compatible
-    proposal scoring scaffold against the current rubric/eval payload. That gives
-    cron and manual reports a real advisory scorer without requiring DSPy or a
-    live optimizer. Positive ``max_iterations`` remains reserved for explicit
-    manual GEPA optimizer experiments.
+    User-facing ``--scorer gepa`` no longer runs the dependency-free offline
+    scaffold. The offline scorer remains available only through
+    ``evaluate_offline_program`` for regression tests and fixture validation.
     """
     gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
     if not bool(gepa_config.get("enabled", False)):
-        raise RuntimeError("GEPA scorer is disabled; set gepa_scorer.enabled=true for manual experiments")
+        raise RuntimeError("GEPA scorer is disabled; set gepa_scorer.enabled=true for evaluator scoring")
 
-    max_iterations = int(gepa_config.get("max_iterations") or 0)
-    if max_iterations <= 0:
-        return _score_with_offline_program(proposals=proposals, findings=findings, config=config)
+    mode = str(gepa_config.get("mode") or "dspy_program_eval")
+    if mode == "offline_program_eval":
+        raise RuntimeError(
+            "offline_program_eval is a regression fixture, not a runtime GEPA scorer; use gepa-eval for fixture checks or configure dspy_program_eval/compiled_program_eval"
+        )
 
-    try:
-        import dspy  # type: ignore
-    except ModuleNotFoundError as exc:  # pragma: no cover - depends on host env
-        raise ModuleNotFoundError("No module named 'dspy' (optional GEPA optimizer dependency)") from exc
+    dspy = require_dspy()
+    if mode == "compiled_program_eval":
+        compiled_path = gepa_config.get("compiled_program_path")
+        if not compiled_path:
+            raise RuntimeError("compiled_program_eval requires gepa_scorer.compiled_program_path")
+        raise RuntimeError("compiled GEPA artifact scoring is not implemented yet")
 
-    if not (hasattr(dspy, "GEPA") or hasattr(dspy, "gepa")):
-        raise RuntimeError("DSPy is installed, but GEPA optimizer is not available")
+    if mode != "dspy_program_eval":
+        raise RuntimeError(f"Unknown GEPA scorer mode: {mode}")
 
-    # A full optimizer run needs a task-specific metric and validated GEPA
-    # invocation. Keep it closed until that loop is implemented and tested.
+    if not hasattr(dspy, "Signature"):
+        raise RuntimeError("DSPy is installed, but the expected DSPy program API is not available")
+
+    # The real DSPy module lands in the next implementation slice. Fail closed
+    # rather than quietly using the old deterministic scaffold for decisions.
     payload = build_gepa_payload(proposals=proposals, findings=findings, config=config)
     _ = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
-    raise RuntimeError("GEPA optimizer invocation is not configured yet; use max_iterations=0 for offline program evaluation")
+    raise RuntimeError("DSPy program evaluator is not implemented yet; GEPA scoring is unavailable until the next integration slice")
 
 
 def _score_with_offline_program(
@@ -156,7 +176,7 @@ def evaluate_offline_program(*, config: dict[str, Any] | None = None) -> dict[st
     results: list[dict[str, Any]] = []
     for case in cases:
         expected = case.get("expected") if isinstance(case.get("expected"), dict) else {}
-        scoring = score_with_gepa(
+        scoring = _score_with_offline_program(
             proposals=[case.get("proposal") or {}],
             findings=case.get("findings") if isinstance(case.get("findings"), list) else [],
             config=cfg,
@@ -179,6 +199,8 @@ def evaluate_offline_program(*, config: dict[str, Any] | None = None) -> dict[st
     return {
         "adapter_version": ADAPTER_VERSION,
         "mode": "offline_program_eval_regression",
+        "dspy_available": dspy_available(),
+        "dspy_required_for_runtime_gepa": True,
         "rubric_version": rubric.get("version"),
         "case_count": len(results),
         "passed_count": passed_count,

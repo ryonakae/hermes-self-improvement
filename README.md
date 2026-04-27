@@ -8,7 +8,7 @@ hook は観測だけをします。skill や memory を会話中に勝手に書�
 
 - Hermes runtime の hook event を JSONL に記録する
 - tool error や warning から改善候補を作る
-- proposal を heuristic / LLM / GEPA-compatible scorer で採点する
+- proposal を heuristic / LLM / DSPy-backed GEPA scorer で採点する
 - report、apply plan、ledger、approval、retention preview を artifact として残す
 - 低リスクな text replacement を、hash と validation 付きで適用する
 - approval 済み item を、approval hash と target hash 付きで適用する
@@ -36,14 +36,14 @@ cd /path/to/hermes-self-improvement
 
 bin/hermes-self-improve status
 bin/hermes-self-improve analyze --since-hours 24 --json
-bin/hermes-self-improve report --since-hours 24 --scorer compare
-bin/hermes-self-improve run --since-hours 24 --json --scorer compare
+bin/hermes-self-improve report --since-hours 24 --json
+bin/hermes-self-improve run --since-hours 24 --json
 ```
 
 apply plan と review 系です。
 
 ```bash
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
 bin/hermes-self-improve ledger-report --mode report_only --status all --json
 bin/hermes-self-improve approval-report --mode report_only --status all --include-previews --json
 bin/hermes-self-improve retention-report --mode report_only --json
@@ -175,10 +175,16 @@ Mutation-capable tools も CLI と同じ confirmation と expected hash を要�
 
 - `heuristic`: 依存なしの deterministic scorer
 - `llm`: Hermes auxiliary LLM 経路。失敗時は heuristic に戻す
-- `gepa`: `hermes_self_improvement/gepa_adapter.py` 経由の offline DSPy-compatible scorer
+- `gepa`: DSPy / GEPA evaluator path。`dspy` はこの plugin の evaluator 依存として必須だが、hook / plugin discovery では lazy import する
 - `compare`: LLM と GEPA の disagreement を report に出す
 
-現在の `--scorer gepa` は offline baseline で、本物の optimizer run ではありません。これは次の重点実装として見直し済みです。計画は `.hermes/plans/2026-04-28_012243-dspy-gepa-integration.md` にあります。方針は、DSPy を optional dependency として追加し、実 DSPy module / GEPA compile / compiled artifact scoring を入れることです。ただし scorer は advisory のままで、GEPA の点数だけで `auto_apply` は許可しません。
+`report`、`run`、`generate-apply-plan` は、明示的に `--scorer` を渡さない限り `compare` を使います。`analyze` は観測・分類なので軽量な `heuristic` のままです。`--scorer gepa` は dependency-free offline baseline にフォールバックしません。active runtime に `dspy` が無い場合は `gepa_scorer_error` として明示し、unattended apply は許可しません。依存は次で入れます。
+
+```bash
+python3 -m pip install -e .
+```
+
+`gepa-eval` は repo-tracked eval case の dependency-free regression fixture として残します。本物の optimizer run ではありません。GEPA は scorer の改善・比較・優先順位づけに使いますが、GEPA の点数だけで `auto_apply` は許可しません。
 
 ## ディレクトリ
 
@@ -220,6 +226,7 @@ $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
 bin/hermes-self-improve status
 bin/hermes-self-improve gepa-eval --json
+python3 -m pip install -e .  # full DSPy/GEPA evaluator path を使う環境では必要
 ```
 
 plugin registration、tool schema、bundled skill discovery を触ったら plugin manager loading も確認します。
