@@ -129,6 +129,63 @@ def _proposal_mutation_text(proposal: dict[str, Any]) -> str:
     return f"- {reason}"
 
 
+def _line_is_protected_for_typo_fix(content: str, old_text: str) -> tuple[bool, str | None]:
+    in_code_fence = False
+    in_frontmatter = False
+    frontmatter_checked = False
+    for idx, line in enumerate(content.splitlines(), 1):
+        stripped = line.strip()
+        if idx == 1 and stripped == "---":
+            in_frontmatter = True
+            frontmatter_checked = True
+        elif in_frontmatter and stripped == "---":
+            in_frontmatter = False
+            continue
+        elif idx == 1:
+            frontmatter_checked = True
+        if stripped.startswith("```"):
+            in_code_fence = not in_code_fence
+            continue
+        if old_text not in line:
+            continue
+        if in_frontmatter or (not frontmatter_checked and idx == 1):
+            return True, "typo_target_protected_context"
+        if in_code_fence:
+            return True, "typo_target_protected_context"
+        if "`" in line or "http://" in line or "https://" in line or "/" in line or "\\" in line:
+            return True, "typo_target_protected_context"
+        if "=" in stripped or stripped.startswith(("- `", "* `")):
+            return True, "typo_target_protected_context"
+        if line.startswith(("    ", "\t")):
+            return True, "typo_target_protected_context"
+        if stripped.startswith(("$ ", "hermes ", "python ", "pip ", "git ", "cd ")):
+            return True, "typo_target_protected_context"
+    return False, None
+
+
+def _plan_typo_fix_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
+    if target_content is None:
+        return None, []
+    old_text = str(proposal.get("old_text") or proposal.get("typo_old_text") or "")
+    new_text = str(proposal.get("new_text") or proposal.get("typo_new_text") or "")
+    blockers: list[str] = []
+    if not old_text or not new_text or old_text == new_text:
+        return None, ["typo_replacement_missing"]
+    if "\n" in old_text or "\n" in new_text or len(old_text) > 120 or len(new_text) > 120:
+        return None, ["typo_replacement_not_small_single_line"]
+    if any(token in old_text or token in new_text for token in ("`", "://", "/", "~", "$")):
+        return None, ["typo_replacement_unsafe_token"]
+    occurrence_count = target_content.count(old_text)
+    if occurrence_count != 1:
+        return None, ["typo_old_text_not_unique" if occurrence_count > 1 else "typo_old_text_missing"]
+    protected, reason = _line_is_protected_for_typo_fix(target_content, old_text)
+    if protected and reason:
+        blockers.append(reason)
+    if blockers:
+        return None, blockers
+    return {"type": "replace_text_once", "old_text": old_text, "new_text": new_text}, []
+
+
 def _plan_mutation_for_item(
     *,
     change_type: str,
@@ -138,6 +195,8 @@ def _plan_mutation_for_item(
     explicit = proposal.get("mutation")
     if isinstance(explicit, dict):
         return explicit, []
+    if change_type == "typo_fix":
+        return _plan_typo_fix_mutation(proposal, target_content)
     heading_sets = {
         "pitfall_addition_existing_section": _PITFALL_SECTION_HEADINGS,
         "validation_addition_existing_section": _VALIDATION_SECTION_HEADINGS,
@@ -209,6 +268,14 @@ def _apply_append_to_existing_section(content: str, mutation: dict[str, Any]) ->
     return "".join(lines[:insert_idx] + [insert_text] + lines[insert_idx:])
 
 
+def _apply_replace_text_once(content: str, mutation: dict[str, Any]) -> str | None:
+    old_text = str(mutation.get("old_text") or "")
+    new_text = str(mutation.get("new_text") or "")
+    if not old_text or old_text == new_text or content.count(old_text) != 1:
+        return None
+    return content.replace(old_text, new_text, 1)
+
+
 def _preview_content(text: str, max_chars: int = 4000) -> str:
     if len(text) <= max_chars:
         return text
@@ -228,6 +295,8 @@ def _rollback_preview_for_item(
     after_content = None
     if mutation.get("type") == "append_to_existing_section":
         after_content = _apply_append_to_existing_section(target_content, mutation)
+    elif mutation.get("type") == "replace_text_once":
+        after_content = _apply_replace_text_once(target_content, mutation)
     if after_content is None:
         return None
     return {

@@ -81,6 +81,39 @@ def write_eligible_validation_plan(tmp_path):
     plan_path = mod.write_apply_plan(plan, {"reports_dir": str(tmp_path / "reports")})
     return mod, plan, plan["items"][0], plan_path, target, original
 
+
+def write_eligible_typo_plan(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    original = "# Skill\n\nUse teh browser carefully.\n"
+    target.write_text(original, encoding="utf-8")
+    proposal = {
+        "id": "proposal-4",
+        "title": "Fix typo in skill prose",
+        "target": "file_workflow_skills",
+        "target_path": str(target),
+        "action": "typo_fix",
+        "risk": "low",
+        "confidence": "high",
+        "score": 91,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "scorer": "heuristic-v0.1",
+        "count": 3,
+        "tool_name": "read_file",
+        "error_kind": "typo_detected",
+        "reason": "Replace teh with the in prose.",
+        "old_text": "teh",
+        "new_text": "the",
+    }
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={"event_count": 10},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+    plan_path = mod.write_apply_plan(plan, {"reports_dir": str(tmp_path / "reports")})
+    return mod, plan, plan["items"][0], plan_path, target, original
+
 def test_apply_low_risk_skeleton_records_would_apply_attempt_without_mutating_target(tmp_path):
     mod, plan, item, _plan_path, target, original = write_eligible_plan(tmp_path)
 
@@ -261,6 +294,28 @@ def test_apply_low_risk_confirmed_mutates_validation_addition_target(tmp_path):
     attempt = result["apply_attempt"]
     assert attempt["current_status"] == "applied_low_risk"
     assert attempt["change_type"] == "validation_addition_existing_section"
+    assert attempt["target_after_hash"] == item["rollback_preview"]["after_hash"]
+    assert attempt["validation_result"]["status"] == "passed"
+
+
+def test_apply_low_risk_confirmed_mutates_typo_fix_target(tmp_path):
+    mod, plan, item, _plan_path, target, original = write_eligible_typo_plan(tmp_path)
+
+    result = mod.apply_low_risk_skeleton(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config={"reports_dir": str(tmp_path / "reports")},
+        created_at=datetime(2026, 4, 26, 16, 30, tzinfo=timezone.utc),
+        confirm_apply=True,
+        expected_item_hash=item["item_hash"],
+    )
+
+    mutated = target.read_text(encoding="utf-8")
+    assert mutated != original
+    assert "Use the browser carefully." in mutated
+    attempt = result["apply_attempt"]
+    assert attempt["current_status"] == "applied_low_risk"
+    assert attempt["change_type"] == "typo_fix"
     assert attempt["target_after_hash"] == item["rollback_preview"]["after_hash"]
     assert attempt["validation_result"]["status"] == "passed"
 

@@ -74,6 +74,27 @@ def sample_validation_proposal():
         "reason": "Verify generated apply-plan artifacts before applying low-risk changes.",
     }
 
+
+def sample_typo_proposal():
+    return {
+        "id": "proposal-4",
+        "title": "Fix typo in skill prose",
+        "target": "file_workflow_skills",
+        "action": "typo_fix",
+        "risk": "low",
+        "confidence": "high",
+        "score": 91,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "scorer": "heuristic-v0.1",
+        "auto_apply": False,
+        "count": 3,
+        "tool_name": "read_file",
+        "error_kind": "typo_detected",
+        "reason": "Replace teh with the in prose.",
+        "old_text": "teh",
+        "new_text": "the",
+    }
+
 def test_build_apply_plan_includes_versioned_metadata_and_safe_default_items(tmp_path):
     mod = load_plugin_module()
     created_at = datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc)
@@ -270,6 +291,100 @@ def test_build_apply_plan_fails_closed_when_validation_section_is_missing(tmp_pa
     assert item["mutation"] is None
     assert item["eligible_for_unattended"] is False
     assert "existing_section_missing" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_plans_typo_fix_for_safe_prose_line(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
+    proposal = sample_typo_proposal()
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "typo_fix"
+    assert item["mutation"] == {
+        "type": "replace_text_once",
+        "old_text": "teh",
+        "new_text": "the",
+    }
+    assert item["eligible_for_unattended"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert "Use the browser carefully." in item["rollback_preview"]["after_snippet"]
+
+
+def test_build_apply_plan_rejects_typo_fix_inside_code_fence(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\n```bash\necho teh\n```\n", encoding="utf-8")
+    proposal = sample_typo_proposal()
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "typo_fix"
+    assert item["mutation"] is None
+    assert item["eligible_for_unattended"] is False
+    assert "typo_target_protected_context" in item["eligibility"]["reasons"]
+
+
+
+def test_build_apply_plan_rejects_typo_fix_in_inline_code_url_or_frontmatter(tmp_path):
+    mod = load_plugin_module()
+    unsafe_cases = [
+        "# Skill\n\nUse `teh` literal carefully.\n",
+        "# Skill\n\nSee https://example.com/teh for details.\n",
+        "---\ndescription: teh workflow\n---\n# Skill\n",
+        "# Skill\n\nOpen /tmp/teh-file before continuing.\n",
+    ]
+    for idx, content in enumerate(unsafe_cases):
+        target = tmp_path / f"SKILL-{idx}.md"
+        target.write_text(content, encoding="utf-8")
+        proposal = sample_typo_proposal()
+        proposal["target_path"] = str(target)
+
+        plan = mod.build_apply_plan(
+            proposals=[proposal],
+            summary={},
+            execution_mode="dry_run_plan",
+            created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+        )
+
+        item = plan["items"][0]
+        assert item["mutation"] is None
+        assert item["eligible_for_unattended"] is False
+        assert "typo_target_protected_context" in item["eligibility"]["reasons"]
+
+def test_build_apply_plan_rejects_typo_fix_when_text_is_not_unique(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\nteh first and teh second.\n", encoding="utf-8")
+    proposal = sample_typo_proposal()
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["mutation"] is None
+    assert item["eligible_for_unattended"] is False
+    assert "typo_old_text_not_unique" in item["eligibility"]["reasons"]
 
 def test_build_apply_plan_resolves_explicit_custom_skill_hint_inside_configured_roots(tmp_path):
     mod = load_plugin_module()

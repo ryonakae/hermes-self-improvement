@@ -69,8 +69,9 @@ The current mutation planner creates `append_to_existing_section` mutations only
 
 - `pitfall_addition_existing_section`: `## Pitfalls`, `## 注意`, `## 注意点`, `## よくある失敗`, `## 落とし穴`
 - `validation_addition_existing_section`: `## Validation`, `## Verification`, `## Tests`, `## Checklist`, `## 検証`, `## 確認`, `## テスト`, `## チェックリスト`
+- `typo_fix`: explicit single-occurrence `old_text` -> `new_text` replacement in safe prose only
 
-If no matching existing section is present, fail closed with `existing_section_missing` rather than creating a new section automatically.
+If no matching existing section is present for section additions, fail closed with `existing_section_missing` rather than creating a new section automatically. Typo fixes fail closed when the old text is missing, non-unique, not small/single-line, or appears in protected contexts such as code fences, inline code, URLs, YAML frontmatter, indented code, commands, paths, or technical tokens.
 
 ## Ledger and apply attempts
 
