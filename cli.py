@@ -10,7 +10,7 @@ from typing import Any
 
 try:  # pragma: no cover - package import path
     from .analysis import AnalysisResult, analyze_events
-    from .approvals import create_approval_artifact
+    from .approvals import build_approval_report_payload, create_approval_artifact, render_approval_report
     from .apply_plan import build_apply_plan, write_apply_plan
     from .config import (
         DEFAULT_RETENTION_DAYS,
@@ -25,7 +25,7 @@ try:  # pragma: no cover - package import path
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import AnalysisResult, analyze_events
-    from approvals import create_approval_artifact
+    from approvals import build_approval_report_payload, create_approval_artifact, render_approval_report
     from apply_plan import build_apply_plan, write_apply_plan
     from config import (
         DEFAULT_RETENTION_DAYS,
@@ -362,6 +362,12 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_ledger_report.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_ledger_report)
     p_ledger_report.set_defaults(func=_handle_cli)
+    p_approval_report = sub.add_parser("approval-report", help="Summarize approval artifacts and validation status")
+    p_approval_report.add_argument("--status", choices=["all", "approved", "rejected", "valid"], default="all")
+    p_approval_report.add_argument("--limit", type=int, default=20)
+    p_approval_report.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_approval_report)
+    p_approval_report.set_defaults(func=_handle_cli)
     p_approve = sub.add_parser("approve", help="Create an approval artifact for one apply-plan item")
     p_approve.add_argument("plan_id")
     p_approve.add_argument("item_id")
@@ -442,6 +448,17 @@ def _handle_cli(args: argparse.Namespace) -> None:
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
             print(render_ledger_report(payload))
+        return
+    if cmd == "approval-report":
+        payload = build_approval_report_payload(
+            config=config,
+            status=str(getattr(args, "status", "all")),
+            limit=int(getattr(args, "limit", 20)),
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(render_approval_report(payload))
         return
     if cmd == "approve":
         payload = create_approval_artifact(

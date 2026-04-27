@@ -154,3 +154,168 @@ def test_policy_allows_approve_only_in_apply_approved_mode():
 
     assert allowed == {"allowed": True, "reason": "allowed"}
     assert denied["allowed"] is False
+
+
+def test_validate_approval_artifact_accepts_current_plan_item(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    validation = mod.validate_approval_artifact(
+        approval_id=result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+    )
+
+    assert validation["current_status"] == "valid"
+    assert validation["approval_id"] == result["approval"]["approval_id"]
+    assert validation["target_changed"] is False
+    assert validation["reasons"] == []
+    assert validation["approval_path"] == result["approval_path"]
+
+
+def test_validate_approval_artifact_rejects_expired_approval(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=1,
+    )
+
+    validation = mod.validate_approval_artifact(
+        approval_id=result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 18, 0, tzinfo=timezone.utc),
+    )
+
+    assert validation["current_status"] == "rejected"
+    assert "approval_expired" in validation["reasons"]
+    assert validation["target_changed"] is False
+
+
+def test_validate_approval_artifact_rejects_plan_hash_drift(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+    plan_path = next((tmp_path / "reports" / "apply-plans").glob("**/*.json"))
+    saved_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    saved_plan["summary"] = {"event_count": 999}
+    plan_path.write_text(json.dumps(saved_plan, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    validation = mod.validate_approval_artifact(
+        approval_id=result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+    )
+
+    assert validation["current_status"] == "rejected"
+    assert "plan_hash_mismatch" in validation["reasons"]
+
+
+def test_validate_approval_artifact_rejects_item_hash_drift(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+    plan_path = next((tmp_path / "reports" / "apply-plans").glob("**/*.json"))
+    saved_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    saved_plan["items"][0]["item_hash"] = "sha256:different"
+    plan_path.write_text(json.dumps(saved_plan, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    validation = mod.validate_approval_artifact(
+        approval_id=result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+    )
+
+    assert validation["current_status"] == "rejected"
+    assert "item_hash_mismatch" in validation["reasons"]
+
+
+def test_validate_approval_artifact_rejects_artifact_hash_drift(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+    approval_path = Path(result["approval_path"])
+    artifact = json.loads(approval_path.read_text(encoding="utf-8"))
+    artifact["target_path"] = str(tmp_path / "other.md")
+    approval_path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    validation = mod.validate_approval_artifact(
+        approval_id=result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+    )
+
+    assert validation["current_status"] == "rejected"
+    assert "approval_hash_mismatch" in validation["reasons"]
+
+
+def test_approval_report_payload_includes_validation_status(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    payload = mod.build_approval_report_payload(
+        config=config,
+        status="all",
+        limit=20,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+    )
+    rendered = mod.render_approval_report(payload)
+
+    assert payload["schema_name"] == "self_improvement_approval_report"
+    assert payload["approval_count"] == 1
+    assert payload["approvals"][0]["approval_id"] == result["approval"]["approval_id"]
+    assert payload["approvals"][0]["validation_status"] == "valid"
+    assert "Hermes self-improvement approval report" in rendered
+    assert result["approval"]["approval_id"] in rendered
+
+
+def test_cli_accepts_approval_report_command_shape():
+    mod = load_plugin_module()
+    parser = __import__("argparse").ArgumentParser()
+    mod._setup_cli(parser)
+
+    args = parser.parse_args([
+        "approval-report",
+        "--mode",
+        "report_only",
+        "--status",
+        "valid",
+        "--limit",
+        "5",
+        "--json",
+    ])
+
+    assert args.self_improvement_cmd == "approval-report"
+    assert args.mode == "report_only"
+    assert args.status == "valid"
+    assert args.limit == 5
+    assert args.as_json is True

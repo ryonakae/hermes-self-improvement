@@ -29,12 +29,13 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `gepa_adapter.py`: GEPA payload、offline eval、optimizer fail-closed 境界。
 - `apply_plan.py`: dry-run apply plan と low-risk mutation planning。
 - `ledger.py`: pending ledger と apply attempt artifact。
+- `approvals.py`: approval artifact generation / validation / report helpers。実 target mutation の許可ではなく、plan / item hash / expiry に束縛された承認メタデータを作り、後続 apply のために fail-closed 検証する。
 - `cli.py`: CLI parser、report rendering、pipeline orchestration。
 - `bin/hermes-self-improve`: standalone wrapper CLI。
 - `evals/`: GEPA offline scorer の rubric / regression cases。
 - `skills/operations/SKILL.md`: この bundled operational skill。
 
-Runtime artifact は既定で `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存する。
+Runtime artifact は既定で `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存する。主な subdirectory は `apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/`。
 
 ## 日常コマンド
 
@@ -48,6 +49,7 @@ bin/hermes-self-improve run --since-hours 24 --json --scorer compare
 bin/hermes-self-improve gepa-eval --json
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
 bin/hermes-self-improve ledger-report --status applied --json
+bin/hermes-self-improve approval-report --status all --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
 bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 ```

@@ -225,8 +225,10 @@ try:  # pragma: no cover - package import path
         _handle_slash,
         _render_gepa_eval,
         _setup_cli,
+        build_approval_report_payload,
         build_ledger_report_payload,
         main,
+        render_approval_report,
         render_ledger_report,
         render_report,
         run_pipeline,
@@ -241,8 +243,10 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _handle_slash,
         _render_gepa_eval,
         _setup_cli,
+        build_approval_report_payload,
         build_ledger_report_payload,
         main,
+        render_approval_report,
         render_ledger_report,
         render_report,
         run_pipeline,
@@ -251,9 +255,9 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 
 
 try:  # pragma: no cover - package import path
-    from .approvals import create_approval_artifact, write_approval_artifact
+    from .approvals import build_approval_report_payload, create_approval_artifact, render_approval_report, validate_approval_artifact, write_approval_artifact
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from approvals import create_approval_artifact, write_approval_artifact
+    from approvals import build_approval_report_payload, create_approval_artifact, render_approval_report, validate_approval_artifact, write_approval_artifact
 
 
 try:  # pragma: no cover - package import path

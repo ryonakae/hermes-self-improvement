@@ -100,3 +100,10 @@ def test_policy_allows_rollback_low_risk_only_in_apply_low_risk_mode():
 
     assert allowed == {"allowed": True, "reason": "allowed"}
     assert denied["allowed"] is False
+
+
+def test_policy_allows_approval_report_as_read_only_command():
+    mod = load_plugin_module()
+
+    for mode in ["report_only", "dry_run_plan", "apply_low_risk", "apply_approved"]:
+        assert mod.validate_mode_action(mode, "approval-report") == {"allowed": True, "reason": "allowed"}

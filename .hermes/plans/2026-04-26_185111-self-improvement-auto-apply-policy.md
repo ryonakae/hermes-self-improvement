@@ -325,7 +325,7 @@ Executor requirements:
 
 ### Phase 5 — Approval gates for broader C/D
 
-Implementation progress as of 2026-04-27: `approve <plan-id> <item-id>` can now create single-item approval artifacts under `reports/self-improvement/approvals/YYYY-MM-DD/`. The artifact binds `plan_hash`, `item_hash`, approved change type, target path, approver source, creation time, and expiry. It is non-mutating and exists as the authorization primitive for later `apply-approved` work; actual approved apply remains closed.
+Implementation progress as of 2026-04-27: `approve <plan-id> <item-id>` can now create single-item approval artifacts under `reports/self-improvement/approvals/YYYY-MM-DD/`. The artifact binds `plan_hash`, `item_hash`, approved change type, target path, approver source, creation time, and expiry. `approval-report` now validates approval artifacts against artifact hash, expiry, current plan hash, current item hash, change type, and target path. Both surfaces are non-mutating and exist as authorization / review primitives for later `apply-approved` work; actual approved apply remains closed.
 
 Before memory compression or skill create/merge/rename/delete:
 
@@ -345,7 +345,7 @@ Likely test areas:
 - ledger schema validation;
 - non-git-managed target handling;
 - git-managed target metadata recording without committing;
-- report rendering for applied vs deferred proposals, including `ledger-report` summaries for applied ledgers.
+- report rendering for applied vs deferred proposals, including `ledger-report` summaries for applied ledgers and `approval-report` summaries for approval gates.
 
 Suggested commands once implementation begins:
 

@@ -21,6 +21,7 @@ bin/hermes-self-improve gepa-eval --json
 # dry-run apply plan（target file は変更しない）
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
 bin/hermes-self-improve ledger-report --status applied --json
+bin/hermes-self-improve approval-report --status all --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
 bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 ```
@@ -74,6 +75,7 @@ PY
 - `gepa_adapter.py`: GEPA payload、offline eval、optimizer fail-closed 境界。
 - `apply_plan.py`: dry-run apply plan と low-risk mutation planning。
 - `ledger.py`: pending ledger と apply attempt artifact。
+- `approvals.py`: approval artifact generation / validation / report helpers。
 - `cli.py`: CLI parser、report rendering、pipeline orchestration。
 - `evals/`: offline scorer の rubric / regression cases。
 - `skills/operations/SKILL.md`: plugin-bundled operational skill。
