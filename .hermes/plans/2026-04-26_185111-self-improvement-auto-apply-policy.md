@@ -203,6 +203,8 @@ In this phase, generate the same ledger payload that would be written during app
 
 ### Phase 3 — Change ledger
 
+Implementation progress as of 2026-04-27: eligible dry-run apply-plan items can now produce and save proposal-level `pending` ledger JSON with rollback preview data. The low-risk executor and target mutation path are still closed.
+
 Decision from Q6: use pending-first ledger writes.
 
 Implement ledger writing before any non-git-managed skill mutation:

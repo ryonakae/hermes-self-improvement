@@ -14,6 +14,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 - `execution_mode` は cron prompt ではなく plugin CLI/config/policy で解決・検証する。初期 default は `report_only`。有効 mode は `report_only`, `dry_run_plan`, `apply_low_risk`, `apply_approved` で、未定義 command/capability は deny-by-default。
 - `generate-apply-plan` は versioned JSON artifact を生成するだけで、まだ実ファイルを変更しない。item には `change_type`, `target_path`, `target_exists`, `before_hash`, `proposal_hash`, `item_hash`, `eligibility`, `ledger_preview`, `rollback_preview`, `scorer_disagreements` を入れ、target が存在しない候補や mutation plan が無い候補は fail closed にする。
 - v1 mutation planner は `pitfall_addition_existing_section` だけを扱う。target に既存 `## Pitfalls` / `## 注意` / `## 注意点` / `## よくある失敗` / `## 落とし穴` セクションがある場合のみ `append_to_existing_section` mutation を作り、既存セクションが無い場合は `existing_section_missing` で拒否する。eligible item には before/after hash と snippet を含む rollback preview を付け、将来の pending ledger が復元材料を持てるようにする。
+- `build_pending_ledger` / `write_pending_ledger` は eligible apply-plan item から proposal-level の pending ledger JSON を作り、`reports/self-improvement/ledgers/YYYY-MM-DD/` に保存できる。現時点では ledger を書ける内部部品までで、skill/memory 本体の mutation CLI はまだ開けない。
 - target resolver は explicit hints のみ使う。`target_path` / `path` / `file_path` / `skill_path` があればそれを優先し、無い場合は `target_skill` / `skill_name` / `skill` を `custom_skill_roots` 配下の `<skill>/SKILL.md` にだけ解決する。絶対パス・`..`・root 外への解決は拒否し、曖昧な自然言語 title からは推測しない。
 
 ## CLI
