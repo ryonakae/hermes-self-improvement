@@ -188,6 +188,8 @@ python3 -m pip install -e .
 
 `gepa-eval` は repo-tracked eval case の dependency-free regression fixture として残します。本物の optimizer run ではありません。GEPA は scorer の改善・比較・優先順位づけに使いますが、GEPA の点数だけで `auto_apply` は許可しません。
 
+Compiled evaluator の active 化は `evaluator_promote` change type の approval-gated apply-plan item として扱います。candidate path/hash と regression result hash を pointer payload に束縛し、`${reports_dir}/gepa/active-evaluator.json` または configured `active_evaluator_pointer_path` を `create_file` / `replace_entire_file` mutation で更新します。昇格は approval artifact、expected hash、rollback preview を通るまで実行されません。
+
 ## ディレクトリ
 
 - `plugin.yaml`: Hermes plugin manifest

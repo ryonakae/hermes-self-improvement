@@ -121,6 +121,7 @@ def _default_config() -> dict[str, Any]:
                 "skill_trigger_change",
                 "skill_large_rewrite",
                 "config_policy_expansion",
+                "evaluator_promote",
                 "unknown_or_unclassified",
             ],
             "strict": {

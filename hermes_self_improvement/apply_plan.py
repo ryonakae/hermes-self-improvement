@@ -119,6 +119,13 @@ def _target_path_for_proposal(proposal: dict[str, Any], config: dict[str, Any] |
         value = proposal.get(key)
         if value:
             return str(Path(str(value)).expanduser())
+    if str(proposal.get("change_type") or "") == "evaluator_promote":
+        cfg = config or {}
+        gepa_cfg = cfg.get("gepa_scorer") if isinstance(cfg.get("gepa_scorer"), dict) else {}
+        raw = cfg.get("active_evaluator_pointer_path") or gepa_cfg.get("active_evaluator_pointer_path")
+        if raw:
+            return str(Path(str(raw)).expanduser())
+        return str(_reports_dir(cfg) / "gepa" / "active-evaluator.json")
     return _custom_skill_path_for_proposal(proposal, config)
 
 
@@ -354,6 +361,46 @@ def _plan_memory_delete_mutation(
     return _plan_delete_file_mutation(proposal, target_content)
 
 
+def _plan_evaluator_promote_mutation(
+    proposal: dict[str, Any],
+    target_content: str | None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    candidate_path_text = proposal.get("compiled_program_path") or proposal.get("candidate_path")
+    if not candidate_path_text:
+        return None, ["candidate_path_missing"]
+    candidate_path = Path(str(candidate_path_text)).expanduser()
+    if not candidate_path.is_file():
+        return None, ["candidate_not_found"]
+    candidate_content = candidate_path.read_text(encoding="utf-8", errors="replace")
+    candidate_hash = _sha256_text(candidate_content)
+    expected_candidate_hash = proposal.get("candidate_hash") or proposal.get("compiled_program_hash")
+    if expected_candidate_hash and str(expected_candidate_hash) != candidate_hash:
+        return None, ["candidate_hash_mismatch"]
+    regression_result_hash = proposal.get("regression_result_hash")
+    if not regression_result_hash:
+        return None, ["regression_result_hash_missing"]
+    active_before_hash = _sha256_text(target_content) if target_content is not None else None
+    pointer = {
+        "schema_name": "self_improvement_active_evaluator",
+        "schema_version": "1.0",
+        "operation": "evaluator_promote",
+        "compiled_program_path": str(candidate_path),
+        "compiled_program_hash": candidate_hash,
+        "candidate_id": proposal.get("candidate_id") or candidate_path.stem,
+        "regression_result_hash": str(regression_result_hash),
+        "active_before_hash": active_before_hash,
+        "rollback_strategy": "restore_previous_active_evaluator_pointer" if target_content is not None else "delete_created_active_evaluator_pointer",
+    }
+    if proposal.get("candidate_report_path"):
+        pointer["candidate_report_path"] = str(Path(str(proposal.get("candidate_report_path"))).expanduser())
+    after_text = json.dumps(pointer, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    if target_content is None:
+        return {"type": "create_file", "after_text": after_text, "after_hash": _sha256_text(after_text)}, []
+    if after_text == target_content:
+        return None, ["replacement_content_unchanged"]
+    return {"type": "replace_entire_file", "after_text": after_text, "after_hash": _sha256_text(after_text)}, []
+
+
 def _plan_rename_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
     if target_content is None:
         return None, ["target_not_found"]
@@ -419,6 +466,8 @@ def _plan_mutation_for_item(
         return _plan_merge_files_mutation(proposal, target_content)
     if change_type == "memory_delete":
         return _plan_memory_delete_mutation(proposal, target_content, target_path, config)
+    if change_type == "evaluator_promote":
+        return _plan_evaluator_promote_mutation(proposal, target_content)
     if change_type in _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES:
         return _plan_replace_entire_file_mutation(proposal, target_content)
     heading_sets = {
@@ -443,7 +492,13 @@ def _plan_mutation_for_item(
 _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES = {"skill_large_rewrite", "memory_compress"}
 _APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES = {"skill_create", "skill_delete", "skill_rename", "skill_merge"}
 _APPROVAL_REQUIRED_MEMORY_TYPES = {"memory_delete"}
-_APPROVAL_REQUIRED_CHANGE_TYPES = _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES | _APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES | _APPROVAL_REQUIRED_MEMORY_TYPES
+_APPROVAL_REQUIRED_EVALUATOR_TYPES = {"evaluator_promote"}
+_APPROVAL_REQUIRED_CHANGE_TYPES = (
+    _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES
+    | _APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES
+    | _APPROVAL_REQUIRED_MEMORY_TYPES
+    | _APPROVAL_REQUIRED_EVALUATOR_TYPES
+)
 _LOW_RISK_UNATTENDED_CHANGE_TYPES = {
     "pitfall_addition_existing_section",
     "validation_addition_existing_section",
@@ -467,7 +522,7 @@ def _eligibility_for_apply_item(
         reasons.append("change_type_unknown")
     if not target_path:
         reasons.append("target_path_missing")
-    elif target_exists is False and change_type != "skill_create":
+    elif target_exists is False and change_type not in {"skill_create", "evaluator_promote"}:
         reasons.append("target_not_found")
     reasons.extend(mutation_blockers)
     if mutation is None:

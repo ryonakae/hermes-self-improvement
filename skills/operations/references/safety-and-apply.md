@@ -6,8 +6,8 @@ Use this reference when changing execution modes, policy gates, apply-plan gener
 
 - Runtime hooks observe only; they do not mutate skills or memory.
 - LLM / GEPA / compare scorers are advisory only and always force `auto_apply: false`.
-- Semantic skill changes, memory reclassification/deletion, rename/merge, broad rewrites, and trigger meaning changes require human review.
-- `skill_create`, `skill_delete`, `skill_rename`, `skill_merge`, and `memory_delete` are implemented only through approval-gated apply. They must not enter unattended low-risk apply.
+- Semantic skill changes, memory reclassification/deletion, rename/merge, broad rewrites, trigger meaning changes, and active evaluator promotion require human review.
+- `skill_create`, `skill_delete`, `skill_rename`, `skill_merge`, `memory_delete`, and `evaluator_promote` are implemented only through approval-gated apply. They must not enter unattended low-risk apply.
 - Natural-language cron prompts are not a policy enforcement channel. Enforce permissions in plugin CLI/config/policy code.
 
 ## Execution modes
