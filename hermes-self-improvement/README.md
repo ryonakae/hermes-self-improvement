@@ -22,6 +22,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 
 - `__init__.py`: plugin registration and compatibility exports during the refactor.
 - `config.py`: defaults, local config loading, execution mode resolution, mode policy validation, and command capability mapping.
+- `observer.py`: runtime observer, telemetry JSONL helpers, redaction, retention pruning, partial hook filtering, and tool-result classification.
 
 ## CLI
 
