@@ -84,7 +84,8 @@ bin/hermes-self-improve gepa-eval --json
 - `cli.py`: CLI parser、report rendering、pipeline orchestration。
 - `bin/hermes-self-improve`: standalone wrapper CLI。
 - `evals/`: GEPA offline scorer の rubric と regression cases。
-- `skills/hermes-self-improvement-plugin/SKILL.md`: plugin に同梱する運用 skill。
+- `skills/operations/SKILL.md`: plugin に同梱する運用 skill。
+- `skills/operations/references/`: bundled skill から必要時だけ読む詳細メモ。
 - `tests/`: pytest test suite。
 
 ## データの保存先

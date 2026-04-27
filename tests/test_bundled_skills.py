@@ -36,22 +36,22 @@ class RecordingContext:
         self.commands.append((name, kwargs))
 
 
-def test_register_exposes_bundled_self_improvement_skill():
+def test_register_exposes_bundled_self_improvement_operations_skill():
     mod = load_plugin_module()
     ctx = RecordingContext()
 
     mod.register(ctx)
 
     assert (
-        "hermes-self-improvement-plugin",
-        PLUGIN_INIT.parent / "skills" / "hermes-self-improvement-plugin" / "SKILL.md",
+        "operations",
+        PLUGIN_INIT.parent / "skills" / "operations" / "SKILL.md",
     ) in ctx.skills
 
 
 def test_bundled_skill_file_exists_and_keeps_expected_name():
-    skill_md = PLUGIN_INIT.parent / "skills" / "hermes-self-improvement-plugin" / "SKILL.md"
+    skill_md = PLUGIN_INIT.parent / "skills" / "operations" / "SKILL.md"
 
     content = skill_md.read_text(encoding="utf-8")
 
-    assert content.startswith("---\nname: hermes-self-improvement-plugin\n")
-    assert "# hermes-self-improvement plugin" in content
+    assert content.startswith("---\nname: operations\n")
+    assert "# hermes-self-improvement operations" in content

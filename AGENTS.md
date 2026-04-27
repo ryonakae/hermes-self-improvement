@@ -73,7 +73,8 @@ PY
 - `ledger.py`: pending ledger と apply attempt artifact。
 - `cli.py`: CLI parser、report rendering、pipeline orchestration。
 - `evals/`: offline scorer の rubric / regression cases。
-- `skills/hermes-self-improvement-plugin/SKILL.md`: plugin-bundled operational skill。
+- `skills/operations/SKILL.md`: plugin-bundled operational skill。
+- `skills/operations/references/`: skill 用の詳細 reference。
 - `tests/`: pytest suite。
 
 Runtime artifact の既定保存先:
@@ -106,4 +107,5 @@ Runtime artifact の既定保存先:
 
 - `README.md`: plugin の目的、DSPy / GEPA の位置づけ、主要コマンド、保存先。
 - `docs/` または repo-tracked plan: 方針整理やロードマップを置く場所。
-- `skills/hermes-self-improvement-plugin/SKILL.md`: 運用時に使う詳細 checklist と cron 連携メモ。
+- `skills/operations/SKILL.md`: 運用時に使う短い operational index。
+- `skills/operations/references/`: architecture / safety / operations の詳細。
