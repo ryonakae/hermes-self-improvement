@@ -804,3 +804,79 @@ def test_confirmed_apply_approved_ledger_can_be_rolled_back(tmp_path):
     assert rollback["rollback_result"]["current_status"] == "rolled_back"
     assert rollback["target_changed"] is True
     assert target.read_text(encoding="utf-8") == before
+
+
+def test_apply_approved_rejects_rollback_preview_hash_mismatch_before_mutating(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    target = Path(item["target_path"])
+    before = target.read_text(encoding="utf-8")
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+    plan_path = next((tmp_path / "reports" / "apply-plans").glob("**/*.json"))
+    saved_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    saved_plan["items"][0]["ledger_preview"]["rollback_preview_hash"] = "sha256:wrong"
+    saved_plan["items"][0]["item_hash"] = item["item_hash"]
+    # Preserve approval validation by restoring the originally approved plan hash after tampering is not allowed.
+    # The test targets the mutation guard directly by updating approval's plan hash to the tampered plan.
+    plan_path.write_text(json.dumps(saved_plan, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    approval_path = Path(approval_result["approval_path"])
+    approval = json.loads(approval_path.read_text(encoding="utf-8"))
+    approval["plan_hash"] = mod._sha256_text(mod._stable_json(saved_plan))
+    approval["approval_hash"] = mod._sha256_text(mod._stable_json({k: v for k, v in approval.items() if k != "approval_hash"}))
+    approval_path.write_text(json.dumps(approval, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = mod.preview_apply_approved(
+        approval_id=approval["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert result["current_status"] == "rejected"
+    assert "rollback_preview_hash_mismatch" in result["reasons"]
+    assert result["target_changed"] is False
+    assert target.read_text(encoding="utf-8") == before
+
+
+def test_apply_approved_rejects_missing_rollback_before_snapshot_before_mutating(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    target = Path(item["target_path"])
+    before = target.read_text(encoding="utf-8")
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+    plan_path = next((tmp_path / "reports" / "apply-plans").glob("**/*.json"))
+    saved_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    saved_plan["items"][0]["rollback_preview"].pop("before_snapshot", None)
+    saved_plan["items"][0]["ledger_preview"]["rollback_preview_hash"] = mod._sha256_text(mod._stable_json(saved_plan["items"][0]["rollback_preview"]))
+    plan_path.write_text(json.dumps(saved_plan, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    approval_path = Path(approval_result["approval_path"])
+    approval = json.loads(approval_path.read_text(encoding="utf-8"))
+    approval["plan_hash"] = mod._sha256_text(mod._stable_json(saved_plan))
+    approval["approval_hash"] = mod._sha256_text(mod._stable_json({k: v for k, v in approval.items() if k != "approval_hash"}))
+    approval_path.write_text(json.dumps(approval, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = mod.preview_apply_approved(
+        approval_id=approval["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert result["current_status"] == "rejected"
+    assert "rollback_before_snapshot_unavailable" in result["reasons"]
+    assert result["target_changed"] is False
+    assert target.read_text(encoding="utf-8") == before

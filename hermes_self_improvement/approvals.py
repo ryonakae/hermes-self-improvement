@@ -525,8 +525,19 @@ def preview_apply_approved(
         reasons.append("expected_target_hash_mismatch")
     if current_hash != item.get("before_hash"):
         reasons.append("target_hash_mismatch")
-    if not isinstance(item.get("rollback_preview"), dict):
+    rollback_preview = item.get("rollback_preview")
+    if not isinstance(rollback_preview, dict):
         reasons.append("rollback_preview_missing")
+    else:
+        ledger_preview = item.get("ledger_preview") if isinstance(item.get("ledger_preview"), dict) else {}
+        expected_rollback_hash = ledger_preview.get("rollback_preview_hash")
+        if expected_rollback_hash and _sha256_text(_stable_json(rollback_preview)) != expected_rollback_hash:
+            reasons.append("rollback_preview_hash_mismatch")
+        before_snapshot = rollback_preview.get("before_snapshot")
+        if not isinstance(before_snapshot, str):
+            reasons.append("rollback_before_snapshot_unavailable")
+        elif _sha256_text(before_snapshot) != item.get("before_hash"):
+            reasons.append("rollback_before_snapshot_hash_mismatch")
     if not isinstance(item.get("mutation"), dict):
         reasons.append("mutation_plan_missing")
 
