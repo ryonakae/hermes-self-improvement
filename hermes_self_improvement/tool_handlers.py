@@ -212,7 +212,11 @@ def _handle_self_improvement_apply_approved_tool(args: dict[str, Any] | None = N
     approval_id = str(args.get("approval_id") or "")
     if not approval_id:
         return tool_error("approval_id is required", target_changed=False)
-    return tool_result(preview_apply_approved(approval_id=approval_id, config=config))
+    return tool_result(preview_apply_approved(
+        approval_id=approval_id,
+        config=config,
+        expected_approval_hash=args.get("expected_approval_hash"),
+    ))
 
 
 def _handle_self_improvement_apply_low_risk_tool(args: dict[str, Any] | None = None, **_kw) -> str:

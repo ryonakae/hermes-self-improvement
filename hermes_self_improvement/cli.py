@@ -696,6 +696,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_approve.set_defaults(func=_handle_cli)
     p_apply_approved = sub.add_parser("apply-approved", help="Validate and preview one approved apply artifact without mutating targets")
     p_apply_approved.add_argument("approval_id")
+    p_apply_approved.add_argument("--expected-approval-hash", default=None, help="Optional binding hash for fail-closed approved apply preview")
     p_apply_approved.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_apply_approved)
     p_apply_approved.set_defaults(func=_handle_cli)
@@ -818,6 +819,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
         payload = preview_apply_approved(
             approval_id=str(getattr(args, "approval_id")),
             config=config,
+            expected_approval_hash=getattr(args, "expected_approval_hash", None),
         )
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))

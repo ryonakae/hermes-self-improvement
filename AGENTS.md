@@ -118,7 +118,7 @@ The integration is read-only. It does not create, approve, apply, rollback, remo
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
 
-`self_improvement_apply_approved` は approval artifact を検証して planned diff / rollback preview を返す preview-only tool です。`approval-report --include-previews` / tool `include_previews` は各 approval の preview status だけを集約し、target を変更しません。actual approved mutation はまだ閉じています。Mutation-capable tools は `apply_low_risk` mode と explicit confirmation/hash が揃わない限り target を変更しません。
+`self_improvement_apply_approved` は approval artifact を検証して planned diff / rollback preview を返す preview-only tool です。`expected_approval_hash` を渡すと、operator が確認した approval hash と実 artifact の一致も検証し、不一致なら `expected_approval_hash_mismatch` で拒否します。`approval-report --include-previews` / tool `include_previews` は各 approval の preview status だけを集約し、target を変更しません。actual approved mutation はまだ閉じています。Mutation-capable tools は `apply_low_risk` mode と explicit confirmation/hash が揃わない限り target を変更しません。
 
 ## 重要パス
 

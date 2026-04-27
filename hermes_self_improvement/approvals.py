@@ -255,6 +255,7 @@ def preview_apply_approved(
     approval_id: str,
     config: dict[str, Any],
     now: datetime | None = None,
+    expected_approval_hash: str | None = None,
 ) -> dict[str, Any]:
     """Validate an approval artifact and return a non-mutating approved-apply preview.
 
@@ -270,6 +271,7 @@ def preview_apply_approved(
         "approval_id": approval_id,
         "previewed_at": ts.isoformat(),
         "approval_validation": validation,
+        "expected_approval_hash": expected_approval_hash,
         "target_changed": False,
         "mutation_enabled": False,
         "mutation_status": "closed",
@@ -296,6 +298,9 @@ def preview_apply_approved(
         return {**base, "current_status": "rejected", "reasons": ["item_not_found"]}
 
     reasons: list[str] = []
+    approval_hash = approval.get("approval_hash")
+    if expected_approval_hash is not None and approval_hash != expected_approval_hash:
+        reasons.append("expected_approval_hash_mismatch")
     current_hash = _current_file_hash(item.get("target_path"))
     if current_hash != item.get("before_hash"):
         reasons.append("target_hash_mismatch")
@@ -309,6 +314,9 @@ def preview_apply_approved(
         "current_status": "rejected" if reasons else "would_apply_approved",
         "reasons": reasons,
         "approval_path": str(approval_path),
+        "approval_hash": approval_hash,
+        "expected_approval_hash": expected_approval_hash,
+        "approval_hash_matches_expected": None if expected_approval_hash is None else approval_hash == expected_approval_hash,
         "apply_plan_path": str(plan_path),
         "plan_id": approval.get("plan_id"),
         "item_id": approval.get("item_id"),

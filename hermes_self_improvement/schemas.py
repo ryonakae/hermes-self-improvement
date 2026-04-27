@@ -119,6 +119,7 @@ SELF_IMPROVEMENT_APPLY_APPROVED_SCHEMA = {
             "mode": MODE_PROPERTY,
             "config_path": CONFIG_PATH_PROPERTY,
             "approval_id": STRING,
+            "expected_approval_hash": STRING,
         },
         "required": ["approval_id"],
     },

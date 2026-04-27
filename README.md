@@ -138,7 +138,7 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 - `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval`, `ledger-report`, `approval-report`, `validate-approval`, `retention-report` を許可する既定 mode。
 - `dry_run_plan`: `generate-apply-plan` と read-only の `ledger-report` / `approval-report` / `validate-approval` / `retention-report` を許可するが、target file は変更しない。
 - `apply_low_risk`: 低リスク item の preview / attempt / rollback 記録と read-only の `ledger-report` / `approval-report` / `validate-approval` / `retention-report` を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>`、rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` があり、hash・rollback preview・validation が通る場合だけ。
-- `apply_approved`: approval artifact 作成用の `approve`、read-only の `approval-report` / `validate-approval` / `retention-report`、非破壊 preview の `apply-approved` を許可する。`approval-report --include-previews` は各 approval の `apply-approved` preview status を集約するだけで target file は変更しない。`apply-approved` は approval hash / expiry / plan / item / target hash を再検証して `would_apply_approved` を返すだけで、承認済み変更の実適用はまだ閉じている。
+- `apply_approved`: approval artifact 作成用の `approve`、read-only の `approval-report` / `validate-approval` / `retention-report`、非破壊 preview の `apply-approved` を許可する。`approval-report --include-previews` は各 approval の `apply-approved` preview status を集約するだけで target file は変更しない。`apply-approved --expected-approval-hash <approval_hash>` は operator が見ている approval と実 artifact を束縛し、不一致なら fail-closed で `expected_approval_hash_mismatch` を返す。`apply-approved` は approval hash / expiry / plan / item / target hash を再検証して `would_apply_approved` を返すだけで、承認済み変更の実適用はまだ閉じている。
 
 ## Plugin tools
 

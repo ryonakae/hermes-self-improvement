@@ -383,7 +383,7 @@ Completed:
 - interface strategy decision for CLI / wrapper / tools / cron boundaries;
 - plugin tool parity surface via `plugin.yaml` `provides_tools`, `schemas.py`, `plugin_tools.py`, and `register(ctx)` tool registration for status / apply-plan / ledger-report / approval-report / validate-approval / approve / apply-low-risk / rollback-low-risk;
 - Cron / scheduled execution docs that keep scheduling outside the plugin, require fresh self-contained sessions, forbid recursive cron creation, and recommend only dry-run/report commands by default;
-- `apply-approved` validation-only / preview-only core, CLI, and tool path, plus `approval-report --include-previews` aggregation for approval review, with actual approved mutation still closed;
+- `apply-approved` validation-only / preview-only core, CLI, and tool path, plus `approval-report --include-previews` aggregation and optional `expected_approval_hash` binding for approval review, with actual approved mutation still closed;
 - config / policy source precedence (`config.json`, `config.local.json`, `HERMES_SELF_IMPROVE_CONFIG`, `--config`) plus restrictive-by-default policy expansion guard;
 - stale path / stale command dry-run planner support using `replace_text_once` only when canonical replacement evidence comes from trusted independent sources and the stale reference appears exactly once;
 - read-only report integration that adds concise apply ledger, approval gate, and retention summaries to `run` / `report` output when artifacts or retention candidates exist;
