@@ -250,6 +250,123 @@ def validate_approval_artifact(
     }
 
 
+def _approved_apply_write_previews(
+    *,
+    approval: dict[str, Any],
+    approval_path: Path,
+    plan: dict[str, Any],
+    plan_path: Path,
+    item: dict[str, Any],
+    current_target_hash: str | None,
+    expected_approval_hash: str | None,
+    expected_target_hash: str | None,
+    created_at: datetime,
+) -> dict[str, Any]:
+    """Build non-mutating attempt/ledger previews for future approved apply.
+
+    These previews are deliberately not persisted. They make the future mutation
+    contract auditable before the actual `--confirm-approved-apply` path is
+    opened.
+    """
+    approval_hash = approval.get("approval_hash")
+    rollback_preview = item.get("rollback_preview") if isinstance(item.get("rollback_preview"), dict) else {}
+    ledger_preview = item.get("ledger_preview") if isinstance(item.get("ledger_preview"), dict) else {}
+    validation_plan = _validation_plan_for_item(item)
+    plan_hash = _sha256_text(_stable_json(plan))
+    preview_seed = {
+        "approval_id": approval.get("approval_id"),
+        "approval_hash": approval_hash,
+        "plan_id": approval.get("plan_id"),
+        "plan_hash": plan_hash,
+        "item_id": approval.get("item_id"),
+        "item_hash": approval.get("item_hash"),
+        "current_target_hash": current_target_hash,
+        "created_at": created_at.isoformat(),
+    }
+    attempt_preview = {
+        "schema_name": "self_improvement_approved_apply_attempt_preview",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "preview_id": f"approved-apply-preview-{_sha256_text(_stable_json(preview_seed))[:12]}",
+        "previewed_at": created_at.isoformat(),
+        "current_status": "would_apply_approved",
+        "target_changed": False,
+        "would_write_attempt": True,
+        "would_write_ledger": True,
+        "confirmation_required": True,
+        "required_confirmation": {
+            "confirm_flag": "--confirm-approved-apply",
+            "expected_approval_hash_required": True,
+            "expected_target_hash_required": True,
+        },
+        "approval_id": approval.get("approval_id"),
+        "approval_path": str(approval_path),
+        "approval_hash": approval_hash,
+        "expected_approval_hash": expected_approval_hash,
+        "approval_hash_matches_expected": None if expected_approval_hash is None else approval_hash == expected_approval_hash,
+        "expected_target_hash": expected_target_hash,
+        "target_hash_matches_expected": None if expected_target_hash is None else current_target_hash == expected_target_hash,
+        "apply_plan_path": str(plan_path),
+        "plan_id": approval.get("plan_id"),
+        "plan_hash": plan_hash,
+        "item_id": approval.get("item_id"),
+        "item_hash": approval.get("item_hash"),
+        "change_type": item.get("change_type"),
+        "target_path": item.get("target_path"),
+        "target_before_hash": item.get("before_hash"),
+        "current_target_hash": current_target_hash,
+        "target_after_hash": rollback_preview.get("after_hash"),
+        "rollback_preview_hash": ledger_preview.get("rollback_preview_hash"),
+        "validation_plan": validation_plan,
+    }
+    ledger_write_preview = {
+        "schema_name": "self_improvement_apply_ledger_preview",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "previewed_at": created_at.isoformat(),
+        "current_status": "would_apply_approved",
+        "dry_run": True,
+        "target_changed": False,
+        "approval_id": approval.get("approval_id"),
+        "approval_hash": approval_hash,
+        "plan_id": approval.get("plan_id"),
+        "plan_hash": plan_hash,
+        "item_id": approval.get("item_id"),
+        "item_hash": approval.get("item_hash"),
+        "proposal_id": item.get("proposal_id"),
+        "proposal_hash": item.get("proposal_hash"),
+        "target_path": item.get("target_path"),
+        "target_kind": item.get("target_kind"),
+        "change_type": item.get("change_type"),
+        "target_before_hash": item.get("before_hash"),
+        "current_target_hash": current_target_hash,
+        "target_after_hash": rollback_preview.get("after_hash"),
+        "risk": item.get("risk"),
+        "confidence": item.get("confidence"),
+        "score": item.get("score"),
+        "recommendation": item.get("recommendation"),
+        "scorer": item.get("scorer"),
+        "mutation": item.get("mutation"),
+        "rollback_data": rollback_preview,
+        "rollback_preview_hash": ledger_preview.get("rollback_preview_hash"),
+        "validation_plan": validation_plan,
+        "events": [
+            {
+                "status": "would_apply_approved",
+                "ts": created_at.isoformat(),
+                "target_changed": False,
+                "message": "Approved apply preview prepared attempt/ledger metadata; no target files were changed.",
+            }
+        ],
+    }
+    ledger_write_preview["preview_hash"] = _sha256_text(_stable_json({k: v for k, v in ledger_write_preview.items() if k != "preview_hash"}))
+    attempt_preview["preview_hash"] = _sha256_text(_stable_json({k: v for k, v in attempt_preview.items() if k != "preview_hash"}))
+    return {
+        "approved_apply_attempt_preview": attempt_preview,
+        "approved_apply_ledger_preview": ledger_write_preview,
+    }
+
+
 def preview_apply_approved(
     *,
     approval_id: str,
@@ -342,6 +459,17 @@ def preview_apply_approved(
     if not reasons:
         payload["planned_diff"] = _planned_diff_for_item(item)
         payload["validation_plan"] = _validation_plan_for_item(item)
+        payload.update(_approved_apply_write_previews(
+            approval=approval,
+            approval_path=approval_path,
+            plan=plan,
+            plan_path=plan_path,
+            item=item,
+            current_target_hash=current_hash,
+            expected_approval_hash=expected_approval_hash,
+            expected_target_hash=expected_target_hash,
+            created_at=ts,
+        ))
     return payload
 
 

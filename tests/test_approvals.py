@@ -591,3 +591,79 @@ def test_policy_allows_apply_approved_preview_only_in_apply_approved_mode():
 
     assert allowed == {"allowed": True, "reason": "allowed"}
     assert denied["allowed"] is False
+
+
+def test_apply_approved_preview_includes_guarded_attempt_and_ledger_previews(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    preview = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert preview["current_status"] == "would_apply_approved"
+    attempt_preview = preview["approved_apply_attempt_preview"]
+    assert attempt_preview["schema_name"] == "self_improvement_approved_apply_attempt_preview"
+    assert attempt_preview["current_status"] == "would_apply_approved"
+    assert attempt_preview["would_write_attempt"] is True
+    assert attempt_preview["would_write_ledger"] is True
+    assert attempt_preview["target_changed"] is False
+    assert attempt_preview["confirmation_required"] is True
+    assert attempt_preview["required_confirmation"]["confirm_flag"] == "--confirm-approved-apply"
+    assert attempt_preview["expected_approval_hash"] == approval_result["approval"]["approval_hash"]
+    assert attempt_preview["expected_target_hash"] == item["before_hash"]
+    assert attempt_preview["approval_hash_matches_expected"] is True
+    assert attempt_preview["target_hash_matches_expected"] is True
+
+    ledger_preview = preview["approved_apply_ledger_preview"]
+    assert ledger_preview["schema_name"] == "self_improvement_apply_ledger_preview"
+    assert ledger_preview["current_status"] == "would_apply_approved"
+    assert ledger_preview["dry_run"] is True
+    assert ledger_preview["approval_id"] == approval_result["approval"]["approval_id"]
+    assert ledger_preview["approval_hash"] == approval_result["approval"]["approval_hash"]
+    assert ledger_preview["plan_id"] == plan["plan_id"]
+    assert ledger_preview["item_id"] == item["item_id"]
+    assert ledger_preview["item_hash"] == item["item_hash"]
+    assert ledger_preview["target_before_hash"] == item["before_hash"]
+    assert ledger_preview["target_after_hash"] == item["rollback_preview"]["after_hash"]
+    assert ledger_preview["rollback_preview_hash"] == item["ledger_preview"]["rollback_preview_hash"]
+    assert ledger_preview["validation_plan"]["status"] == "planned"
+    assert ledger_preview["target_changed"] is False
+
+
+def test_apply_approved_preview_omits_write_previews_when_guard_rejects(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    target = Path(item["target_path"])
+    before = target.read_text(encoding="utf-8")
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    preview = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        expected_approval_hash="sha256:wrong",
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert preview["current_status"] == "rejected"
+    assert "expected_approval_hash_mismatch" in preview["reasons"]
+    assert "approved_apply_attempt_preview" not in preview
+    assert "approved_apply_ledger_preview" not in preview
+    assert preview["target_changed"] is False
+    assert target.read_text(encoding="utf-8") == before
