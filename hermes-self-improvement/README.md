@@ -18,6 +18,11 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 - `apply-low-risk <plan-id> <item-id>` は現時点では skeleton。plan/item を読み込み、eligibility と target hash を検証し、`would_apply_low_risk` / `stale_plan` / `rejected` の apply-attempt JSON を `reports/self-improvement/apply-attempts/YYYY-MM-DD/` に保存するが、target file は変更しない。`would_apply_low_risk` の場合だけ pending ledger を `reports/self-improvement/ledgers/YYYY-MM-DD/` に作成し、attempt に `pending_ledger_path` / `pending_ledger_hash` を記録する。
 - target resolver は explicit hints のみ使う。`target_path` / `path` / `file_path` / `skill_path` があればそれを優先し、無い場合は `target_skill` / `skill_name` / `skill` を `custom_skill_roots` 配下の `<skill>/SKILL.md` にだけ解決する。絶対パス・`..`・root 外への解決は拒否し、曖昧な自然言語 title からは推測しない。
 
+## Layout
+
+- `__init__.py`: plugin registration and compatibility exports during the refactor.
+- `config.py`: defaults, local config loading, execution mode resolution, mode policy validation, and command capability mapping.
+
 ## CLI
 
 現行 Hermes の top-level plugin CLI discovery は memory plugin 側に寄っているため、cron からは同梱 wrapper を使う。
