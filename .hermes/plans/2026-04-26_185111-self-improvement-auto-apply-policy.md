@@ -343,7 +343,7 @@ Likely test areas:
 - ledger schema validation;
 - non-git-managed target handling;
 - git-managed target metadata recording without committing;
-- report rendering for applied vs deferred proposals.
+- report rendering for applied vs deferred proposals, including `ledger-report` summaries for applied ledgers.
 
 Suggested commands once implementation begins:
 

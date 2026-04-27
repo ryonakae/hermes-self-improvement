@@ -20,7 +20,7 @@ try:  # pragma: no cover - package import path
         validate_mode_action,
     )
     from .ledger import apply_low_risk_skeleton, rollback_low_risk
-    from .observer import _event_path, _load_events, _report_dir
+    from .observer import _event_path, _load_events, _report_dir, _reports_dir
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import AnalysisResult, analyze_events
@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         validate_mode_action,
     )
     from ledger import apply_low_risk_skeleton, rollback_low_risk
-    from observer import _event_path, _load_events, _report_dir
+    from observer import _event_path, _load_events, _report_dir, _reports_dir
     from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -73,6 +73,110 @@ def _render_gepa_eval(payload: dict[str, Any]) -> str:
         lines.append(f"- risk: `{score.get('risk')}`")
         lines.append(f"- confidence: `{score.get('confidence')}`")
         lines.append(f"- auto_apply: {score.get('auto_apply')}")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _ledger_files(config: dict[str, Any]) -> list[Path]:
+    root = _reports_dir(config) / "ledgers"
+    if not root.exists():
+        return []
+    return sorted((p for p in root.glob("**/*.json") if p.is_file()), reverse=True)
+
+
+def _load_ledger_file(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    data["_ledger_path"] = str(path)
+    return data
+
+
+def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
+    review = ledger.get("review_summary") if isinstance(ledger.get("review_summary"), dict) else {}
+    validation = ledger.get("validation_result") if isinstance(ledger.get("validation_result"), dict) else {}
+    git_metadata = ledger.get("git_metadata") if isinstance(ledger.get("git_metadata"), dict) else {}
+    return {
+        "ledger_id": ledger.get("ledger_id"),
+        "ledger_path": ledger.get("_ledger_path"),
+        "created_at": ledger.get("created_at"),
+        "current_status": ledger.get("current_status"),
+        "title": review.get("title") or ledger.get("proposal_id"),
+        "target_path": ledger.get("target_path"),
+        "change_type": review.get("change_type") or ledger.get("change_type"),
+        "risk": review.get("risk") or ledger.get("risk"),
+        "confidence": review.get("confidence") or ledger.get("confidence"),
+        "score": review.get("score") or ledger.get("score"),
+        "scorer": review.get("scorer") or ledger.get("scorer"),
+        "recommendation": review.get("recommendation") or ledger.get("recommendation"),
+        "validation_status": review.get("validation_status") or validation.get("status"),
+        "evidence_summary": review.get("evidence_summary"),
+        "git_commit_created": review.get("git_commit_created", bool(git_metadata.get("commit_created"))),
+        "git_metadata": git_metadata,
+        "target_before_hash": ledger.get("target_before_hash"),
+        "target_after_hash": ledger.get("target_after_hash"),
+        "applied_diff": ledger.get("applied_diff") if isinstance(ledger.get("applied_diff"), dict) else None,
+        "rollback_available": isinstance(ledger.get("rollback_data"), dict),
+    }
+
+
+def build_ledger_report_payload(*, config: dict[str, Any], status: str = "applied", limit: int = 20) -> dict[str, Any]:
+    selected: list[dict[str, Any]] = []
+    for path in _ledger_files(config):
+        ledger = _load_ledger_file(path)
+        if ledger is None:
+            continue
+        current_status = str(ledger.get("current_status") or "unknown")
+        if status != "all" and current_status != status:
+            continue
+        selected.append(_summarize_ledger_for_report(ledger))
+        if len(selected) >= limit:
+            break
+    return {
+        "schema_name": "self_improvement_ledger_report",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "status_filter": status,
+        "limit": limit,
+        "ledger_count": len(selected),
+        "ledgers": selected,
+    }
+
+
+def render_ledger_report(payload: dict[str, Any]) -> str:
+    lines = [
+        "# Hermes self-improvement ledger report",
+        "",
+        f"- status_filter: `{payload.get('status_filter')}`",
+        f"- ledgers: {payload.get('ledger_count')}",
+        "",
+    ]
+    ledgers = payload.get("ledgers") if isinstance(payload.get("ledgers"), list) else []
+    if not ledgers:
+        lines.append("- ledger はありません。")
+        return "\n".join(lines).rstrip() + "\n"
+    for idx, ledger in enumerate(ledgers, 1):
+        lines.extend([
+            f"## {idx}. {ledger.get('title') or ledger.get('ledger_id')}",
+            f"- ledger_id: `{ledger.get('ledger_id')}`",
+            f"- status: `{ledger.get('current_status')}`",
+            f"- target: `{ledger.get('target_path')}`",
+            f"- change_type: `{ledger.get('change_type')}`",
+            f"- risk/score: `{ledger.get('risk')}` / {ledger.get('score')}",
+            f"- validation: `{ledger.get('validation_status')}`",
+            f"- git commit created: {ledger.get('git_commit_created')}",
+        ])
+        if ledger.get("evidence_summary"):
+            lines.append(f"- evidence: {ledger.get('evidence_summary')}")
+        git_metadata = ledger.get("git_metadata") if isinstance(ledger.get("git_metadata"), dict) else {}
+        if git_metadata.get("is_git_managed"):
+            lines.append(f"- git target: `{git_metadata.get('target_relative_path')}` in `{git_metadata.get('repo_root')}`")
+            lines.append(f"- git status: `{git_metadata.get('target_status_short')}`")
+        if ledger.get("ledger_path"):
+            lines.append(f"- ledger_path: `{ledger.get('ledger_path')}`")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -250,6 +354,12 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_gepa_eval.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_gepa_eval)
     p_gepa_eval.set_defaults(func=_handle_cli)
+    p_ledger_report = sub.add_parser("ledger-report", help="Summarize low-risk apply ledgers for human review")
+    p_ledger_report.add_argument("--status", choices=["all", "pending", "applied", "rolled_back", "failed", "rejected"], default="applied")
+    p_ledger_report.add_argument("--limit", type=int, default=20)
+    p_ledger_report.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_ledger_report)
+    p_ledger_report.set_defaults(func=_handle_cli)
     p_apply_plan = sub.add_parser("generate-apply-plan", help="Generate a dry-run apply plan artifact")
     p_apply_plan.add_argument("--since-hours", type=int, default=24)
     p_apply_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
@@ -311,6 +421,17 @@ def _handle_cli(args: argparse.Namespace) -> None:
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
             print(_render_gepa_eval(payload))
+        return
+    if cmd == "ledger-report":
+        payload = build_ledger_report_payload(
+            config=config,
+            status=str(getattr(args, "status", "applied")),
+            limit=int(getattr(args, "limit", 20)),
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(render_ledger_report(payload))
         return
     if cmd == "generate-apply-plan":
         out = run_pipeline(

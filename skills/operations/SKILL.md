@@ -47,6 +47,7 @@ bin/hermes-self-improve report --since-hours 24 --scorer llm
 bin/hermes-self-improve run --since-hours 24 --json --scorer compare
 bin/hermes-self-improve gepa-eval --json
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve ledger-report --status applied --json
 bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 ```
 

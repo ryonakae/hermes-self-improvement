@@ -90,6 +90,8 @@ If no matching existing section is present for section additions, fail closed wi
 - records `applied_diff`, `validation_result`, `review_summary`, and `git_metadata` on confirmed apply attempts and applied ledgers so humans can review what changed without reconstructing context from the plan artifact
 - does not create git commits for git-managed targets; commit ownership stays with the target repository workflow, while self-improvement artifacts should record enough metadata for review
 
+`ledger-report` is read-only and summarizes ledger `review_summary`, `applied_diff`, `validation_result`, and `git_metadata` so applied vs deferred changes can be reviewed without reopening each JSON artifact.
+
 `stale_plan`, `rejected`, and confirmation-hash mismatch attempts should not create ledgers or planned diffs beyond the safe preview metadata.
 
 `rollback-low-risk <ledger-id>` currently:
@@ -112,6 +114,7 @@ $PY -m pytest tests/test_execution_policy.py tests/test_apply_plan.py tests/test
 bin/hermes-self-improve status --mode dry_run_plan
 bin/hermes-self-improve run --mode dry_run_plan --since-hours 1 --json --scorer heuristic
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 1 --json --scorer heuristic
+bin/hermes-self-improve ledger-report --mode report_only --status applied --json
 ```
 
 After `generate-apply-plan`, verify the artifact path exists and schema metadata is correct.

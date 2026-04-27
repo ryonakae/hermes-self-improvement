@@ -225,7 +225,9 @@ try:  # pragma: no cover - package import path
         _handle_slash,
         _render_gepa_eval,
         _setup_cli,
+        build_ledger_report_payload,
         main,
+        render_ledger_report,
         render_report,
         run_pipeline,
     )
@@ -239,7 +241,9 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _handle_slash,
         _render_gepa_eval,
         _setup_cli,
+        build_ledger_report_payload,
         main,
+        render_ledger_report,
         render_report,
         run_pipeline,
     )
