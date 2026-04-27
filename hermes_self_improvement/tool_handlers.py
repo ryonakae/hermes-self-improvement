@@ -216,6 +216,7 @@ def _handle_self_improvement_apply_approved_tool(args: dict[str, Any] | None = N
         approval_id=approval_id,
         config=config,
         expected_approval_hash=args.get("expected_approval_hash"),
+        expected_target_hash=args.get("expected_target_hash"),
     ))
 
 

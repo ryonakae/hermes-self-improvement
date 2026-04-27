@@ -463,6 +463,56 @@ def test_apply_approved_preview_rejects_expected_approval_hash_mismatch(tmp_path
     assert target.read_text(encoding="utf-8") == before
 
 
+def test_apply_approved_preview_accepts_expected_target_hash(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    preview = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert preview["current_status"] == "would_apply_approved"
+    assert preview["expected_target_hash"] == item["before_hash"]
+    assert preview["target_hash_matches_expected"] is True
+    assert preview["target_changed"] is False
+
+
+def test_apply_approved_preview_rejects_expected_target_hash_mismatch(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    target = Path(item["target_path"])
+    before = target.read_text(encoding="utf-8")
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    preview = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        expected_target_hash="sha256:not-the-target-hash",
+    )
+
+    assert preview["current_status"] == "rejected"
+    assert "expected_target_hash_mismatch" in preview["reasons"]
+    assert preview["target_hash_matches_expected"] is False
+    assert "planned_diff" not in preview
+    assert preview["target_changed"] is False
+    assert target.read_text(encoding="utf-8") == before
+
+
 def test_apply_approved_preview_rejects_expired_approval_without_diff(tmp_path):
     mod, config, plan, item = write_plan(tmp_path)
     approval_result = mod.create_approval_artifact(
@@ -520,6 +570,8 @@ def test_cli_accepts_apply_approved_preview_command_shape():
         "apply_approved",
         "--expected-approval-hash",
         "sha256:expected",
+        "--expected-target-hash",
+        "sha256:target",
         "--json",
     ])
 
@@ -527,6 +579,7 @@ def test_cli_accepts_apply_approved_preview_command_shape():
     assert args.approval_id == "approval-1"
     assert args.mode == "apply_approved"
     assert args.expected_approval_hash == "sha256:expected"
+    assert args.expected_target_hash == "sha256:target"
     assert args.as_json is True
 
 
