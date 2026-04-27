@@ -41,6 +41,38 @@ find_plugin_skill("hermes-self-improvement:operations")
 
 Plugin-bundled skills are read-only and may not appear in the active agent session until plugin discovery is reloaded. If a running gateway or long-lived session still behaves as if the old skill is loaded, suspect a reload / restart boundary before suspecting file content.
 
+## Cron / scheduled execution
+
+Cron / scheduled execution belongs to the Hermes runtime / scheduler, not this plugin. The plugin does not implement a scheduler; it provides safe CLI commands and tools that scheduled jobs can call. Scheduled runs should use a fresh session, a self-contained prompt, and must not create recursive cron jobs.
+
+Safe scheduled command set:
+
+```bash
+cd /path/to/hermes-self-improvement
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve ledger-report --mode report_only --status applied --json
+bin/hermes-self-improve approval-report --mode report_only --status all --json
+```
+
+Do not run `apply-low-risk --confirm-apply` from cron. Do not run `rollback-low-risk --confirm-rollback` from cron. Do not pass `expected_item_hash` or `expected_ledger_hash` in scheduled jobs. Scheduled jobs may mention `hermes cron create` in operator-facing docs, but the job body should only call safe CLI/tools and report artifacts.
+
+Recommended cron prompt:
+
+```text
+Target repository: /path/to/hermes-self-improvement
+
+Run the hermes-self-improvement scheduled review in a fresh session.
+Do not create, update, or remove cron jobs. Do not schedule recursive cron jobs.
+Do not run apply-low-risk. Do not run rollback-low-risk. Do not pass confirmation flags or expected hashes.
+
+From the target repository, run the safe non-mutating commands:
+- bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+- bin/hermes-self-improve ledger-report --mode report_only --status applied --json
+- bin/hermes-self-improve approval-report --mode report_only --status all --json
+
+Summarize generated artifact paths, proposal counts, high-confidence low-risk candidates, applied/rolled-back ledger summaries, approval drift/expiry summaries, and any command failures.
+```
+
 ## Scheduled skill maintenance pattern
 
 For scheduled maintenance jobs that use this plugin:

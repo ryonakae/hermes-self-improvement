@@ -78,7 +78,7 @@ bin/hermes-self-improve gepa-eval --json
 - `plugin.yaml`: Hermes plugin manifest。
 - `__init__.py`: plugin registration、hook / CLI / slash command / tool 登録、互換 export。
 - `schemas.py`: plugin tool schema。
-- `plugin_plugin_tools.py`: CLI と同じ core function / policy gate を使う tool handler。
+- `plugin_tools.py`: CLI と同じ core function / policy gate を使う tool handler。`tools.py` という名前は Hermes core `tools.registry` を shadow するため使わない。
 - `config.py`: default config、execution mode、policy gate。
 - `observer.py`: hook observer、redaction、JSONL telemetry、retention。
 - `analysis.py`: telemetry aggregation、finding 抽出、proposal 生成。
@@ -119,7 +119,7 @@ bin/hermes-self-improve gepa-eval --json
 
 ## Plugin tools
 
-`plugin.yaml` は次の agent-native tools を宣言します。いずれも `plugin_plugin_tools.py` の handler から CLI と同じ core function を呼び、`validate_mode_action(...)` / `_required_capability_for_command(...)` による policy gate を通します。wrapper CLI への shell out はしません。
+`plugin.yaml` は次の agent-native tools を宣言します。いずれも `plugin_tools.py` の handler から CLI と同じ core function を呼び、`validate_mode_action(...)` / `_required_capability_for_command(...)` による policy gate を通します。wrapper CLI への shell out はしません。
 
 - `self_improvement_status`
 - `self_improvement_generate_apply_plan`
@@ -131,6 +131,21 @@ bin/hermes-self-improve gepa-eval --json
 - `self_improvement_rollback_low_risk`
 
 Mutation-capable tools は CLI と同じく fail-closed です。`self_improvement_apply_low_risk` の実変更には `mode="apply_low_risk"`, `confirm_apply=true`, `expected_item_hash` が必要です。`self_improvement_rollback_low_risk` の実 rollback には `mode="apply_low_risk"`, `confirm_rollback=true`, `expected_ledger_hash` が必要です。条件が揃わない場合は preview / rejected artifact に留め、target file は変更しません。
+
+## Cron / scheduled execution
+
+Cron / scheduled execution is a runtime concern, not a plugin-internal scheduler. This plugin does not implement a scheduler and scheduled jobs should invoke the safe CLI or tools in a fresh session with a self-contained prompt. Do not create recursive cron jobs from a cron-run session.
+
+Recommended scheduled jobs are non-mutating by default:
+
+```bash
+cd /path/to/hermes-self-improvement
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve ledger-report --mode report_only --status applied --json
+bin/hermes-self-improve approval-report --mode report_only --status all --json
+```
+
+Cron prompts must not run `apply-low-risk --confirm-apply`, must not run `rollback-low-risk --confirm-rollback`, and must not pass expected hashes for mutation. If a future scheduled review finds a candidate, it should report the plan path, item hash, ledger hash, risk, evidence, and validation status for a human or separate explicit workflow.
 
 ## 開発方針
 

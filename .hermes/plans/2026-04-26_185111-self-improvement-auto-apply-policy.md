@@ -355,6 +355,9 @@ Decision from 2026-04-27: expose the same guarded self-improvement operations th
 6. Cron remains outside the plugin implementation. The plugin should document recommended scheduled-execution prompts and commands, but should not implement a scheduler.
    - Cron examples should prefer dry-run/report operations and self-contained prompts.
    - Cron docs may mention `hermes cron create "..."`, but the scheduled task should invoke the plugin CLI / tools rather than embedding scheduler-specific logic into the plugin.
+   - Cron-run sessions must not create recursive cron jobs and must not run mutation confirmations (`--confirm-apply`, `--confirm-rollback`) by default.
+
+Cron / scheduled execution implementation note: documentation now recommends `generate-apply-plan --mode dry_run_plan`, `ledger-report --mode report_only`, and `approval-report --mode report_only` only. Actual mutation remains a separate explicit human/operator workflow.
 
 Implementation progress snapshot as of 2026-04-27:
 
@@ -368,11 +371,11 @@ Completed:
 - `approve` approval artifact creation and `approval-report` validation/reporting;
 - official `ctx.register_cli_command("self-improvement", ...)` registration and standalone `bin/hermes-self-improve` fallback;
 - interface strategy decision for CLI / wrapper / tools / cron boundaries;
-- plugin tool parity surface via `plugin.yaml` `provides_tools`, `schemas.py`, `plugin_plugin_tools.py`, and `register(ctx)` tool registration for status / apply-plan / ledger-report / approval-report / validate-approval / approve / apply-low-risk / rollback-low-risk.
+- plugin tool parity surface via `plugin.yaml` `provides_tools`, `schemas.py`, `plugin_tools.py`, and `register(ctx)` tool registration for status / apply-plan / ledger-report / approval-report / validate-approval / approve / apply-low-risk / rollback-low-risk;
+- Cron / scheduled execution docs that keep scheduling outside the plugin, require fresh self-contained sessions, forbid recursive cron creation, and recommend only dry-run/report commands by default.
 
 Remaining:
 
-- document recommended cron / scheduled-execution prompts and commands without embedding scheduler logic in the plugin;
 - add `apply-approved` validation-only / preview-only before any approved mutation path;
 - finish config / policy source precedence (`--config`, `HERMES_SELF_IMPROVE_CONFIG`, local config, explicit policy expansion guard);
 - add stale path / stale command dry-run planner support only when canonical replacements are independently verified;
@@ -391,7 +394,6 @@ Implemented tool parity surface:
 
 Next implementation slice:
 
-- document recommended cron / scheduled-execution prompts and commands without embedding scheduler logic in the plugin;
 - or start `apply-approved` validation-only / preview-only, keeping actual approved mutation closed;
 - keep tool handlers aligned with CLI policy gates as new commands are added.
 

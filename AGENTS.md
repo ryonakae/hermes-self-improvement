@@ -63,9 +63,23 @@ PY
 
 期待値は plugin が enabled、error が null、hooks が登録されていることです。
 
+## Cron / scheduled execution
+
+Cron / scheduled execution は plugin 内の scheduler 実装ではなく、Hermes runtime / scheduler 側の責務です。cron-run session は fresh session として self-contained prompt で実行し、recursive cron job を作らないでください。
+
+安全な cron は report / dry-run に限定します。例:
+
+```bash
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+bin/hermes-self-improve ledger-report --mode report_only --status applied --json
+bin/hermes-self-improve approval-report --mode report_only --status all --json
+```
+
+cron では `apply-low-risk --confirm-apply` や `rollback-low-risk --confirm-rollback` を実行してはいけません。hash 付きの実 mutation は、人間の明示操作か別の explicit workflow に分離します。
+
 ## Plugin tools
 
-`plugin.yaml` / `schemas.py` / `plugin_plugin_tools.py` で CLI parity の tools を登録しています。tool handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を使います。
+`plugin.yaml` / `schemas.py` / `plugin_tools.py` で CLI parity の tools を登録しています。`tools.py` という名前は Hermes core `tools.registry` を shadow するため使いません。tool handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を使います。
 
 登録 tools:
 
@@ -85,7 +99,7 @@ Mutation-capable tools は `apply_low_risk` mode と explicit confirmation/hash 
 - `plugin.yaml`: plugin manifest。
 - `__init__.py`: registration、hook / CLI / slash command / tool 登録、互換 export。
 - `schemas.py`: plugin tool schema。
-- `plugin_plugin_tools.py`: CLI parity tool handler。
+- `plugin_tools.py`: CLI parity tool handler。
 - `config.py`: default config、execution mode、deny-by-default policy。
 - `observer.py`: hook observer、redaction、JSONL telemetry、retention。
 - `analysis.py`: event aggregation、finding 抽出、proposal 生成。

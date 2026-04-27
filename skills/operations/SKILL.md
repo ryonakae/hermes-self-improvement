@@ -22,7 +22,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `plugin.yaml`: plugin manifest。
 - `__init__.py`: registration、hook / CLI / slash command、bundled skill、tool 登録。
 - `schemas.py`: plugin tool schema。
-- `plugin_plugin_tools.py`: CLI parity tool handler。
+- `plugin_tools.py`: CLI parity tool handler。`tools.py` という名前は Hermes core `tools.registry` を shadow するため使わない。
 - `config.py`: default config、execution mode、policy gate。
 - `observer.py`: hook observer、redaction、JSONL telemetry、retention。
 - `analysis.py`: event aggregation、finding 抽出、proposal 生成。
