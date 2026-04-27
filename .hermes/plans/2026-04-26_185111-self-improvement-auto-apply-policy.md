@@ -335,6 +335,38 @@ Before memory compression or skill create/merge/rename/delete:
 - require human approval;
 - keep auto-apply disabled for these classes until repeated safe operation is proven.
 
+### Interface strategy — CLI, wrapper, tools, and cron
+
+Decision from 2026-04-27: expose the same guarded self-improvement operations through three interfaces, all backed by shared core functions and the same policy gates.
+
+1. Official plugin CLI registration stays in place via `ctx.register_cli_command("self-improvement", ...)`.
+   - This follows the documented Hermes plugin interface and should become the primary UX when the active Hermes runtime wires general plugin CLI commands into top-level `hermes self-improvement ...`.
+   - Current runtime caveat: plugin discovery and `PluginManager._cli_commands` registration work, but top-level `hermes self-improvement ...` may still be unavailable if the runtime only wires memory-provider CLI discovery.
+2. The standalone wrapper `bin/hermes-self-improve ...` remains as the stable fallback for development, tests, cron prompts, and runtimes where top-level plugin CLI exposure is not yet available.
+3. Agent tools should be registered for parity with CLI operations, not just read-only summaries.
+   - Tool handlers must call the same Python core functions as the CLI handlers.
+   - Tool handlers must run `validate_mode_action(...)` with `_required_capability_for_command(...)` before invoking any core operation; tools must not bypass the CLI policy gate.
+   - Tool handlers must not shell out to the wrapper CLI or reimplement mutation logic.
+4. Guarded mutation tools may exist for `apply-low-risk` and `rollback-low-risk` because the core functions already fail closed on missing confirmation, hash mismatch, stale target, missing rollback data, unsupported mutation, and policy denial.
+   - `self_improvement_apply_low_risk` must require `mode="apply_low_risk"`; actual mutation still requires `confirm_apply=true` plus matching `expected_item_hash`.
+   - `self_improvement_rollback_low_risk` must require `mode="apply_low_risk"`; actual rollback still requires `confirm_rollback=true` plus matching `expected_ledger_hash`.
+   - Without the explicit confirmation flags and expected hashes, these tools should behave as preview / would-apply / would-rollback checks and leave targets unchanged.
+5. `apply-approved` remains closed until a validation-only / preview-only path is implemented first.
+6. Cron remains outside the plugin implementation. The plugin should document recommended scheduled-execution prompts and commands, but should not implement a scheduler.
+   - Cron examples should prefer dry-run/report operations and self-contained prompts.
+   - Cron docs may mention `hermes cron create "..."`, but the scheduled task should invoke the plugin CLI / tools rather than embedding scheduler-specific logic into the plugin.
+
+Initial tool parity target:
+
+- `self_improvement_status`
+- `self_improvement_generate_apply_plan`
+- `self_improvement_ledger_report`
+- `self_improvement_approval_report`
+- `self_improvement_validate_approval`
+- `self_improvement_approve`
+- `self_improvement_apply_low_risk`
+- `self_improvement_rollback_low_risk`
+
 ## Tests / validation
 
 Likely test areas:
@@ -345,7 +377,9 @@ Likely test areas:
 - ledger schema validation;
 - non-git-managed target handling;
 - git-managed target metadata recording without committing;
-- report rendering for applied vs deferred proposals, including `ledger-report` summaries for applied ledgers and `approval-report` summaries for approval gates.
+- report rendering for applied vs deferred proposals, including `ledger-report` summaries for applied ledgers and `approval-report` summaries for approval gates;
+- plugin tool registration and handler parity with the CLI surface, including policy-gate denial tests for mutation-capable tools;
+- scheduled-execution documentation examples that keep cron outside the plugin and prefer dry-run/report commands.
 
 Suggested commands once implementation begins:
 
