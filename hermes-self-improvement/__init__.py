@@ -103,9 +103,22 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     )
 
 
+def _register_bundled_skills(ctx) -> None:
+    skills_dir = Path(__file__).parent / "skills"
+    if not skills_dir.exists():
+        return
+
+    for child in sorted(skills_dir.iterdir()):
+        skill_md = child / "SKILL.md"
+        if child.is_dir() and skill_md.exists():
+            ctx.register_skill(child.name, skill_md)
+
+
 def register(ctx):
     config = _load_config(Path(__file__).with_name("config.json"))
     observer = RuntimeObserver(config)
+
+    _register_bundled_skills(ctx)
 
     for hook_name, callback in observer.hooks().items():
         ctx.register_hook(hook_name, callback)

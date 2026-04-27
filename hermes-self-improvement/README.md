@@ -28,6 +28,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 - `apply_plan.py`: dry-run apply plan generation, low-risk mutation planning, target metadata resolution, rollback previews, and apply-plan artifact writing.
 - `ledger.py`: pending ledger artifacts, apply-attempt artifact writing, apply-plan lookup helpers, file hash checks, and the current non-mutating `apply-low-risk` skeleton.
 - `cli.py`: report rendering, GEPA eval CLI support, pipeline orchestration, standalone CLI parser/handler, and slash-command handler.
+- `skills/hermes-self-improvement-plugin/SKILL.md`: bundled operational skill, loadable as `skill_view("hermes-self-improvement:hermes-self-improvement-plugin")` when the plugin is discovered.
 
 ## CLI
 
