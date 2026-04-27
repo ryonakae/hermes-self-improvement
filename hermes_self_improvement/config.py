@@ -26,7 +26,7 @@ VALID_EXECUTION_MODES = {
 RESERVED_EXECUTION_MODES = {"full_auto_with_policy"}
 DEFAULT_MODE_POLICY = {
     "report_only": {
-        "commands": ["status", "analyze", "report", "run", "gepa-eval", "ledger-report", "approval-report", "validate-approval"],
+        "commands": ["status", "analyze", "report", "run", "gepa-eval", "ledger-report", "approval-report", "validate-approval", "retention-report"],
         "capabilities": {
             "write_apply_plan": False,
             "write_apply_attempt": False,
@@ -36,7 +36,7 @@ DEFAULT_MODE_POLICY = {
         },
     },
     "dry_run_plan": {
-        "commands": ["status", "analyze", "report", "run", "generate-apply-plan", "ledger-report", "approval-report", "validate-approval"],
+        "commands": ["status", "analyze", "report", "run", "generate-apply-plan", "ledger-report", "approval-report", "validate-approval", "retention-report"],
         "capabilities": {
             "write_apply_plan": True,
             "write_apply_attempt": False,
@@ -46,7 +46,7 @@ DEFAULT_MODE_POLICY = {
         },
     },
     "apply_low_risk": {
-        "commands": ["status", "apply-low-risk", "rollback-low-risk", "ledger-report", "approval-report", "validate-approval"],
+        "commands": ["status", "apply-low-risk", "rollback-low-risk", "ledger-report", "approval-report", "validate-approval", "retention-report"],
         "capabilities": {
             "write_apply_plan": False,
             "write_apply_attempt": True,
@@ -56,7 +56,7 @@ DEFAULT_MODE_POLICY = {
         },
     },
     "apply_approved": {
-        "commands": ["status", "approve", "approval-report", "validate-approval", "apply-approved"],
+        "commands": ["status", "approve", "approval-report", "validate-approval", "apply-approved", "retention-report"],
         "capabilities": {
             "write_apply_plan": False,
             "write_apply_attempt": True,

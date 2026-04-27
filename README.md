@@ -49,6 +49,7 @@ bin/hermes-self-improve gepa-eval --json
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
 bin/hermes-self-improve ledger-report --status applied --json
 bin/hermes-self-improve approval-report --status all --json
+bin/hermes-self-improve retention-report --mode report_only --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
 bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
 bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
@@ -59,7 +60,7 @@ bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --js
 ```bash
 cd /path/to/hermes-self-improvement
 PY=${PYTHON:-python3}
-$PY -m py_compile __init__.py *.py
+$PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
 bin/hermes-self-improve status
 bin/hermes-self-improve gepa-eval --json
@@ -134,10 +135,10 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 
 `execution_mode` は cron prompt ではなく plugin CLI / config / policy で検証します。未知の mode、許可されていない command、足りない capability は deny-by-default です。
 
-- `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval`, `ledger-report`, `approval-report`, `validate-approval` を許可する既定 mode。
-- `dry_run_plan`: `generate-apply-plan` と read-only の `ledger-report` / `approval-report` / `validate-approval` を許可するが、target file は変更しない。
-- `apply_low_risk`: 低リスク item の preview / attempt / rollback 記録と read-only の `ledger-report` / `approval-report` / `validate-approval` を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>`、rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` があり、hash・rollback preview・validation が通る場合だけ。
-- `apply_approved`: approval artifact 作成用の `approve`、read-only の `approval-report` / `validate-approval`、非破壊 preview の `apply-approved` を許可する。`apply-approved` は approval hash / expiry / plan / item / target hash を再検証して `would_apply_approved` を返すだけで、承認済み変更の実適用はまだ閉じている。
+- `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval`, `ledger-report`, `approval-report`, `validate-approval`, `retention-report` を許可する既定 mode。
+- `dry_run_plan`: `generate-apply-plan` と read-only の `ledger-report` / `approval-report` / `validate-approval` / `retention-report` を許可するが、target file は変更しない。
+- `apply_low_risk`: 低リスク item の preview / attempt / rollback 記録と read-only の `ledger-report` / `approval-report` / `validate-approval` / `retention-report` を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>`、rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` があり、hash・rollback preview・validation が通る場合だけ。
+- `apply_approved`: approval artifact 作成用の `approve`、read-only の `approval-report` / `validate-approval` / `retention-report`、非破壊 preview の `apply-approved` を許可する。`apply-approved` は approval hash / expiry / plan / item / target hash を再検証して `would_apply_approved` を返すだけで、承認済み変更の実適用はまだ閉じている。
 
 ## Plugin tools
 
@@ -148,6 +149,7 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 - `self_improvement_ledger_report`
 - `self_improvement_approval_report`
 - `self_improvement_validate_approval`
+- `self_improvement_retention_report`
 - `self_improvement_approve`
 - `self_improvement_apply_approved`
 - `self_improvement_apply_low_risk`
@@ -164,7 +166,11 @@ Mutation-capable tools は CLI と同じく fail-closed です。`self_improveme
 - `Apply ledger summary` lists recent low-risk ledgers across statuses for review;
 - `Approval gate summary` lists recent approval artifacts and whether current validation is still valid.
 
-The integration is read-only. It does not create, approve, apply, rollback, or prune artifacts. Empty artifact sets stay quiet so routine reports do not gain noisy empty sections.
+The integration is read-only. It does not create, approve, apply, rollback, remove, or prune artifacts. Empty artifact sets stay quiet so routine reports do not gain noisy empty sections.
+
+## Retention report
+
+`retention-report` / `self_improvement_retention_report` は read-only preview です。`apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` の artifact を集計し、`retention_days` より古い候補、malformed JSON、カテゴリ別件数を報告します。ファイルの削除・移動・圧縮・prune は行いません。実 cleanup を追加する場合も、まず preview と expected artifact list / hash による明示 confirmation を別 slice で設計します。
 
 ## Cron / scheduled execution
 

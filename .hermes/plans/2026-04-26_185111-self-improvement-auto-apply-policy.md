@@ -357,6 +357,8 @@ Decision from 2026-04-27: expose the same guarded self-improvement operations th
    - Cron docs may mention `hermes cron create "..."`, but the scheduled task should invoke the plugin CLI / tools rather than embedding scheduler-specific logic into the plugin.
    - Cron-run sessions must not create recursive cron jobs and must not run mutation confirmations (`--confirm-apply`, `--confirm-rollback`) by default.
 
+Retention report implementation note: `retention-report` / `self_improvement_retention_report` is read-only and reports aged `apply-plans`, `ledgers`, `apply-attempts`, and `approvals` plus malformed artifacts; it does not prune/delete.
+
 Layout refactor implementation note: root `plugin.yaml` and root `__init__.py` remain the Hermes discovery surface, while implementation modules now live under `hermes_self_improvement/`; tool handlers are `hermes_self_improvement/tool_handlers.py`, not a root `tools.py`, to avoid shadowing Hermes core `tools.registry`.
 
 Report integration implementation note: `run` / `report` now include read-only `Apply ledger summary` and `Approval gate summary` sections only when artifacts exist; empty artifact sets remain quiet.
@@ -385,11 +387,12 @@ Completed:
 - config / policy source precedence (`config.json`, `config.local.json`, `HERMES_SELF_IMPROVE_CONFIG`, `--config`) plus restrictive-by-default policy expansion guard;
 - stale path / stale command dry-run planner support using `replace_text_once` only when canonical replacement evidence comes from trusted independent sources and the stale reference appears exactly once;
 - read-only report integration that adds concise apply ledger and approval gate summaries to `run` / `report` output when artifacts exist;
-- package layout refactor with implementation under `hermes_self_improvement/` and root `__init__.py` kept as a thin discovery entrypoint.
+- package layout refactor with implementation under `hermes_self_improvement/` and root `__init__.py` kept as a thin discovery entrypoint;
+- read-only `retention-report` preview for old apply-plan / ledger / apply-attempt / approval artifacts, with no deletion or pruning.
 
 Remaining:
 
-- later: approved mutation for broader C/D classes and retention/noise cleanup.
+- later: approved mutation for broader C/D classes and destructive retention/noise cleanup, if ever enabled, with explicit confirmation and expected artifact hashes.
 
 Implemented tool parity surface:
 
@@ -406,8 +409,8 @@ Implemented tool parity surface:
 Next implementation slice:
 
 - later: approved mutation design remains closed until explicit confirmation / expected approval hash / target hash / rollback ledger requirements are specified;
-- or improve retention cleanup for apply ledgers and approval artifacts;
-- keep tool handlers aligned with CLI policy gates as new commands are added.
+- keep tool handlers aligned with CLI policy gates as new commands are added;
+- if retention cleanup moves beyond preview, design explicit confirmation / expected artifact list / hash guards first.
 
 ## Tests / validation
 
