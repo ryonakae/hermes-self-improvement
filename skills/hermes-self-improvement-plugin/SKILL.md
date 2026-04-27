@@ -1,6 +1,6 @@
 ---
 name: hermes-self-improvement-plugin
-description: Hermes の自己改善 plugin（`hermes-self-improvement`）を設計・実装・拡張・検証するときに使う。runtime hook で観測だけを収集し、分析・proposal・score・report は wrapper CLI / cron から実行する構成、`~/.hermes/plugins/hermes-plugins/hermes-self-improvement`、telemetry、custom-skill-maintenance cron 連携、GEPA/LLM scorer の安全な接続を扱う依頼では必ず参照する。
+description: Hermes の自己改善 plugin（`hermes-self-improvement`）を設計・実装・拡張・検証するときに使う。runtime hook で観測だけを収集し、分析・proposal・score・report は wrapper CLI / cron から実行する構成、`~/.hermes/plugins/hermes-self-improvement`、telemetry、custom-skill-maintenance cron 連携、GEPA/LLM scorer の安全な接続を扱う依頼では必ず参照する。
 ---
 
 # hermes-self-improvement plugin
@@ -20,18 +20,18 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 
 ## 主要パス
 
-- plugin: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/`
-- manifest: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/plugin.yaml`
-- registration / compatibility entrypoint: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/__init__.py`
-- config module: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/config.py`
-- observer module: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/observer.py`
-- analysis module: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/analysis.py`
-- scoring module: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/scoring.py`
-- apply plan module: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/apply_plan.py`
-- ledger module: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/ledger.py`
-- CLI/report module: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/cli.py`
-- local config JSON: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/config.json`
-- wrapper CLI: `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve`
+- plugin: `~/.hermes/plugins/hermes-self-improvement/`
+- manifest: `~/.hermes/plugins/hermes-self-improvement/plugin.yaml`
+- registration / compatibility entrypoint: `~/.hermes/plugins/hermes-self-improvement/__init__.py`
+- config module: `~/.hermes/plugins/hermes-self-improvement/config.py`
+- observer module: `~/.hermes/plugins/hermes-self-improvement/observer.py`
+- analysis module: `~/.hermes/plugins/hermes-self-improvement/analysis.py`
+- scoring module: `~/.hermes/plugins/hermes-self-improvement/scoring.py`
+- apply plan module: `~/.hermes/plugins/hermes-self-improvement/apply_plan.py`
+- ledger module: `~/.hermes/plugins/hermes-self-improvement/ledger.py`
+- CLI/report module: `~/.hermes/plugins/hermes-self-improvement/cli.py`
+- local config JSON: `~/.hermes/plugins/hermes-self-improvement/config.json`
+- wrapper CLI: `~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve`
 - telemetry: `~/.hermes/reports/self-improvement/state/events.jsonl`
 - reports: `~/.hermes/reports/self-improvement/daily/latest.md`
 - skill maintenance cron: `custom-skill-maintenance`, job id `8fb5ad61cfef`
@@ -63,14 +63,14 @@ Retention / classifier notes:
 The wrapper CLI supports:
 
 ```bash
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve status
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer llm --json
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer gepa --json
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve gepa-eval --json
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve run --since-hours 24 --json --scorer llm
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve status
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer llm --json
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer gepa --json
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve gepa-eval --json
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve run --since-hours 24 --json --scorer llm
 ```
 
 Scorer behavior:
@@ -104,13 +104,13 @@ Execution mode / policy gate implementation notes:
 
 ## Repository / discovery notes
 
-- The custom plugins repo is `~/.hermes/plugins/hermes-plugins/`.
-- `hermes-self-improvement` lives under `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/`.
-- `live-context-injector` also lives under `~/.hermes/plugins/hermes-plugins/live-context-injector/`.
-- Hermes user plugin discovery scans `~/.hermes/plugins/` recursively one category level deep. A nested repo layout like `plugins/hermes-plugins/<plugin-name>/plugin.yaml` is discovered with lookup keys such as `hermes-plugins/hermes-self-improvement`.
-- `plugins.enabled` can keep using the bare plugin names (`hermes-self-improvement`, `live-context-injector`) because the loader accepts both path-derived keys and legacy bare names.
-- When moving plugins into this repo, add cache/runtime noise to `.gitignore` and avoid committing `__pycache__/` or `.pytest_cache/`.
-- After moving, verify discovery with `PluginManager().discover_and_load(force=True)` before editing `config.yaml`; a config change may be unnecessary.
+- The `hermes-self-improvement` plugin repo is `~/.hermes/plugins/hermes-self-improvement/`.
+- `hermes-self-improvement` is a git-managed plugin at `~/.hermes/plugins/hermes-self-improvement/plugin.yaml`.
+- `live-context-injector` is a separate local plugin at `~/.hermes/plugins/live-context-injector/plugin.yaml` and is intentionally outside this repo.
+- Hermes user plugin discovery scans `~/.hermes/plugins/`; direct child plugins such as `plugins/hermes-self-improvement/plugin.yaml` and `plugins/live-context-injector/plugin.yaml` are the preferred layout.
+- `plugins.enabled` should use the bare plugin names (`hermes-self-improvement`, `live-context-injector`).
+- Keep cache/runtime noise in `.gitignore` and avoid committing `__pycache__/` or `.pytest_cache/`.
+- After layout changes, verify discovery with `PluginManager().discover_and_load(force=True)` before editing `config.yaml`; a config change may be unnecessary.
 - When comparing a plugin against the official docs, check both plugin-manager registration and user-facing CLI exposure. In this environment, `ctx.register_cli_command()` can appear in `get_plugin_manager()._cli_commands` / `list_plugins()` while `hermes <plugin> ...` is still not accepted by the top-level CLI, and `hermes plugins list` may omit nested user plugins even when `discover_plugins(force=True)` loads them. Treat that as a Hermes CLI/discovery integration gap to investigate, not immediately as a plugin manifest/register bug. Keep using the wrapper CLI for operational commands until top-level CLI exposure is verified.
 - The operational skill is also bundled in the plugin at `skills/hermes-self-improvement-plugin/SKILL.md` and registered from `register(ctx)` with `ctx.register_skill(child.name, skill_md)`. Verify with Hermes' venv Python: `get_plugin_manager().list_plugin_skills("hermes-self-improvement")` and `find_plugin_skill("hermes-self-improvement:hermes-self-improvement-plugin")`. Plugin-bundled skills are read-only and may not appear in the current already-running agent session's `<available_skills>` / `skill_view` until plugin discovery is reloaded, so keep the custom skill as a discoverability/compatibility copy until that behavior is intentionally changed.
 
@@ -121,21 +121,21 @@ After changing the plugin:
 1. Compile all plugin modules touched by the refactor.
 
 ```bash
-python3 -m py_compile ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/__init__.py ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/*.py
+python3 -m py_compile ~/.hermes/plugins/hermes-self-improvement/__init__.py ~/.hermes/plugins/hermes-self-improvement/*.py
 ```
 
 2. Run the full plugin test suite before any commit.
 
 ```bash
-cd ~/.hermes/plugins/hermes-plugins
-python3 -m pytest hermes-self-improvement/tests -q
+cd ~/.hermes/plugins/hermes-self-improvement
+python3 -m pytest tests -q
 ```
 
 3. Check standalone CLI.
 
 ```bash
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve status
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve status
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24
 ```
 
 4. Check plugin manager loading. This is mandatory after any `__init__.py` / module-layout refactor, because unit tests and the wrapper CLI can pass even when plugin discovery fails. In particular, verify that `register(ctx)` still exists in `__init__.py`; an over-broad extraction can accidentally remove it and discovery will report `no register() function`.
@@ -167,11 +167,11 @@ Responsibility split:
 For `custom-skill-maintenance`, prefer this sequence:
 
 1. Read the report template under `~/.hermes/automations/custom-skill-maintenance/templates/`.
-2. Read `~/.hermes/plugins/hermes-plugins/hermes-self-improvement/README.md` and the active repo-tracked plan/docs if the task touches auto-apply policy.
+2. Read `~/.hermes/plugins/hermes-self-improvement/README.md` and the active repo-tracked plan/docs if the task touches auto-apply policy.
 3. Run:
 
 ```bash
-/Users/ryo.nakae/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
+/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
 ```
 
 Confirm proposal rows show `scorer: llm-v0.1`; if they show `heuristic-v0.1` with `llm_scorer_error`, record the fallback reason in the maintenance report.
@@ -210,7 +210,7 @@ When the user asks whether current memory or custom skills look healthy, run the
 1. Run compare scoring and save JSON for inspection:
 
 ```bash
-/Users/ryo.nakae/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json > /tmp/hermes-review-compare.json
+/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json > /tmp/hermes-review-compare.json
 ```
 
 2. Summarize proposal count, tool error kinds, and each proposal's `llm_score`, `gepa_score`, `score_delta`, and `scorer_disagreements`. Treat large LLM/GEPA gaps as review signals, not as permission to patch.

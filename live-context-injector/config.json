@@ -1,8 +1,0 @@
-{
-  "current_path": "/Users/ryo.nakae/.hermes/live-contexts/current.md",
-  "state_path": "/Users/ryo.nakae/.hermes/state/live-context-injector.json",
-  "enabled_platforms": ["cli", "slack"],
-  "allowed_sender_ids": ["U0APZSWQPHA"],
-  "session_state_ttl_hours": 168,
-  "max_context_chars": 12000
-}

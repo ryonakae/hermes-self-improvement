@@ -35,24 +35,24 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 現行 Hermes の top-level plugin CLI discovery は memory plugin 側に寄っているため、cron からは同梱 wrapper を使う。
 
 ```bash
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve status
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve status --mode dry_run_plan
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer llm --json
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer gepa --json
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve gepa-eval --json
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve run --since-hours 24 --json --scorer llm
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve run --mode dry_run_plan --since-hours 24 --json --scorer compare
-~/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve status
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve status --mode dry_run_plan
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer llm --json
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer gepa --json
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve gepa-eval --json
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve run --since-hours 24 --json --scorer llm
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve run --mode dry_run_plan --since-hours 24 --json --scorer compare
+~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
 ```
 
 開発中は direct module 実行でも確認できる。
 
 ```bash
-python3 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/__init__.py status
-python3 ~/.hermes/plugins/hermes-plugins/hermes-self-improvement/__init__.py run --since-hours 24
+python3 ~/.hermes/plugins/hermes-self-improvement/__init__.py status
+python3 ~/.hermes/plugins/hermes-self-improvement/__init__.py run --since-hours 24
 ```
 
 plugin runtime では `/self-improvement status|analyze|report` の slash command も登録する。`/self-improvement report llm` または `/self-improvement report --scorer llm` で LLM scorer、`/self-improvement report gepa` で GEPA scorer path、`/self-improvement report compare` で LLM/GEPA disagreement review を使う。
@@ -85,7 +85,7 @@ GEPA 手動検証用の評価資産:
 評価資産だけを確認する例:
 
 ```bash
-cd ~/.hermes/plugins/hermes-plugins/hermes-self-improvement
+cd ~/.hermes/plugins/hermes-self-improvement
 python3 -m pytest tests/test_gepa_eval_assets.py -q
 python3 -m py_compile gepa_adapter.py dspy_program.py
 bin/hermes-self-improve analyze --since-hours 24 --json --scorer gepa

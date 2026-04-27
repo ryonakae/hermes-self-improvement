@@ -1,7 +1,7 @@
 # hermes-self-improvement auto-apply policy plan
 
 Created: 2026-04-26 18:51 JST
-Repository: `/Users/ryo.nakae/.hermes/plugins/hermes-plugins`
+Repository: `/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement`
 
 ## Goal
 
@@ -10,7 +10,7 @@ Move the hermes-self-improvement auto-apply policy out of ad-hoc skill edits and
 ## Current context
 
 - `hermes-self-improvement` lives at:
-  - `/Users/ryo.nakae/.hermes/plugins/hermes-plugins/hermes-self-improvement`
+  - `/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement`
 - The repo is currently `main...origin/main [ahead 1]`.
 - Recent implementation already added GEPA offline scorer calibration for low-evidence `not_found` proposals.
 - The custom skill `hermes-self-improvement-plugin` currently contains policy notes for:
@@ -348,11 +348,11 @@ Likely test areas:
 Suggested commands once implementation begins:
 
 ```bash
-cd /Users/ryo.nakae/.hermes/plugins/hermes-plugins
+cd /Users/ryo.nakae/.hermes/plugins/hermes-self-improvement
 python3 -m pytest hermes-self-improvement/tests -q
 python3 -m py_compile hermes-self-improvement/__init__.py hermes-self-improvement/*.py
-/Users/ryo.nakae/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve status --mode report_only
-/Users/ryo.nakae/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
+/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve status --mode report_only
+/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
 ```
 
 ## Risks and tradeoffs
