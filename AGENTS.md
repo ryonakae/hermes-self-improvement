@@ -92,7 +92,8 @@ cron では `apply-low-risk --confirm-apply` や `rollback-low-risk --confirm-ro
 `run` / `report` now include concise operational summaries when artifacts exist:
 
 - `Apply ledger summary` lists recent low-risk ledgers across statuses for review;
-- `Approval gate summary` lists recent approval artifacts and whether current validation is still valid.
+- `Approval gate summary` lists recent approval artifacts and whether current validation is still valid;
+- `Retention summary` lists expired artifact candidates and malformed files from the read-only retention preview.
 
 The integration is read-only. It does not create, approve, apply, rollback, remove, or prune artifacts. Empty artifact sets stay quiet so routine reports do not gain noisy empty sections.
 

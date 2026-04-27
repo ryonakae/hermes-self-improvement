@@ -164,7 +164,8 @@ Mutation-capable tools は CLI と同じく fail-closed です。`self_improveme
 `run` / `report` now include concise operational summaries when artifacts exist:
 
 - `Apply ledger summary` lists recent low-risk ledgers across statuses for review;
-- `Approval gate summary` lists recent approval artifacts and whether current validation is still valid.
+- `Approval gate summary` lists recent approval artifacts and whether current validation is still valid;
+- `Retention summary` lists expired artifact candidates and malformed files from the read-only retention preview.
 
 The integration is read-only. It does not create, approve, apply, rollback, remove, or prune artifacts. Empty artifact sets stay quiet so routine reports do not gain noisy empty sections.
 
@@ -183,6 +184,7 @@ cd /path/to/hermes-self-improvement
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
 bin/hermes-self-improve ledger-report --mode report_only --status applied --json
 bin/hermes-self-improve approval-report --mode report_only --status all --json
+bin/hermes-self-improve retention-report --mode report_only --json
 ```
 
 Cron prompts must not run `apply-low-risk --confirm-apply`, must not run `rollback-low-risk --confirm-rollback`, and must not pass expected hashes for mutation. If a future scheduled review finds a candidate, it should report the plan path, item hash, ledger hash, risk, evidence, and validation status for a human or separate explicit workflow.

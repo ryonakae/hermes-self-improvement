@@ -472,6 +472,7 @@ def _build_operational_report_payloads(config: dict[str, Any]) -> dict[str, Any]
     return {
         "ledger": build_ledger_report_payload(config=config, status="all", limit=5),
         "approval": build_approval_report_payload(config=config, status="all", limit=5),
+        "retention": build_retention_report_payload(config=config, limit=5),
     }
 
 
@@ -504,6 +505,25 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
                 f"valid: {valid}, "
                 f"status `{approval.get('current_status')}`, "
                 f"change `{approval.get('approved_change_type')}`{reason_suffix}"
+            )
+    retention_payload = payloads.get("retention") if isinstance(payloads.get("retention"), dict) else {}
+    expired_count = int(retention_payload.get("expired_candidate_count") or 0)
+    malformed_count = int(retention_payload.get("malformed_count") or 0)
+    if expired_count or malformed_count:
+        lines.extend(["", "## Retention summary"])
+        lines.append(
+            f"- read-only preview: expired candidates: {expired_count}, "
+            f"malformed files: {malformed_count}, retention_days: {retention_payload.get('retention_days')}"
+        )
+        categories = retention_payload.get("categories") if isinstance(retention_payload.get("categories"), dict) else {}
+        for name, summary in categories.items():
+            if not isinstance(summary, dict):
+                continue
+            if not summary.get("expired_candidate_count") and not summary.get("malformed_count"):
+                continue
+            lines.append(
+                f"- `{name}`: expired {summary.get('expired_candidate_count')}, "
+                f"malformed {summary.get('malformed_count')}"
             )
     return lines
 

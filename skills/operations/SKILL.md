@@ -35,7 +35,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と low-risk mutation planning。
 - `hermes_self_improvement/ledger.py`: pending ledger と apply attempt artifact。
 - `hermes_self_improvement/approvals.py`: approval artifact generation / validation / report / `apply-approved` preview helpers。実 target mutation の許可ではなく、plan / item hash / expiry に束縛された承認メタデータを作り、後続 apply のために fail-closed 検証する。
-- `hermes_self_improvement/cli.py`: CLI parser、report rendering、ledger/approval report integration、pipeline orchestration。
+- `hermes_self_improvement/cli.py`: CLI parser、report rendering、ledger/approval/retention report integration、pipeline orchestration。
 - `bin/hermes-self-improve`: standalone wrapper CLI。
 - `evals/`: GEPA offline scorer の rubric / regression cases。
 - `skills/operations/SKILL.md`: この bundled operational skill。

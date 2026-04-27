@@ -361,7 +361,7 @@ Retention report implementation note: `retention-report` / `self_improvement_ret
 
 Layout refactor implementation note: root `plugin.yaml` and root `__init__.py` remain the Hermes discovery surface, while implementation modules now live under `hermes_self_improvement/`; tool handlers are `hermes_self_improvement/tool_handlers.py`, not a root `tools.py`, to avoid shadowing Hermes core `tools.registry`.
 
-Report integration implementation note: `run` / `report` now include read-only `Apply ledger summary` and `Approval gate summary` sections only when artifacts exist; empty artifact sets remain quiet.
+Report integration implementation note: `run` / `report` now include read-only `Apply ledger summary`, `Approval gate summary`, and `Retention summary` sections only when artifacts or retention candidates exist; empty artifact/candidate sets remain quiet.
 
 Stale path / command implementation note: missing old reference alone never implies a correction. `stale_path_fix` and `stale_command_fix` require explicit stale/canonical strings, exactly one target occurrence, small single-line replacement text, and trusted evidence such as active memory, README, config, actual file/repository file, plugin manifest, or observed successful command.
 
@@ -386,7 +386,7 @@ Completed:
 - `apply-approved` validation-only / preview-only core, CLI, and tool path, with actual approved mutation still closed;
 - config / policy source precedence (`config.json`, `config.local.json`, `HERMES_SELF_IMPROVE_CONFIG`, `--config`) plus restrictive-by-default policy expansion guard;
 - stale path / stale command dry-run planner support using `replace_text_once` only when canonical replacement evidence comes from trusted independent sources and the stale reference appears exactly once;
-- read-only report integration that adds concise apply ledger and approval gate summaries to `run` / `report` output when artifacts exist;
+- read-only report integration that adds concise apply ledger, approval gate, and retention summaries to `run` / `report` output when artifacts or retention candidates exist;
 - package layout refactor with implementation under `hermes_self_improvement/` and root `__init__.py` kept as a thin discovery entrypoint;
 - read-only `retention-report` preview for old apply-plan / ledger / apply-attempt / approval artifacts, with no deletion or pruning.
 
@@ -401,6 +401,7 @@ Implemented tool parity surface:
 - `self_improvement_ledger_report`
 - `self_improvement_approval_report`
 - `self_improvement_validate_approval`
+- `self_improvement_retention_report`
 - `self_improvement_approve`
 - `self_improvement_apply_approved`
 - `self_improvement_apply_low_risk`
