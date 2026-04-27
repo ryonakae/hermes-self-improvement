@@ -52,7 +52,7 @@ def _path_inside_root(candidate: Path, root: Path) -> bool:
 def _custom_skill_roots(config: dict[str, Any] | None) -> list[Path]:
     roots = (config or {}).get("custom_skill_roots")
     if roots is None:
-        roots = [get_hermes_home() / "skills" / "hermes-custom"]
+        roots = [get_hermes_home() / "skills"]
     if isinstance(roots, (str, Path)):
         roots = [roots]
     if not isinstance(roots, list):

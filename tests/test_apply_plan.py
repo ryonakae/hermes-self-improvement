@@ -39,9 +39,9 @@ def sample_proposals():
 def sample_pitfall_proposal():
     return {
         "id": "proposal-2",
-        "title": "Document Safehouse permission-denied workflow",
+        "title": "Document sandbox permission-denied workflow",
         "target": "file_workflow_skills",
-        "action": "add_safehouse_permission_denied_pitfall",
+        "action": "add_sandbox_permission_denied_pitfall",
         "risk": "low",
         "confidence": "high",
         "score": 86,
@@ -51,7 +51,7 @@ def sample_pitfall_proposal():
         "count": 19,
         "tool_name": "terminal",
         "error_kind": "permission_denied",
-        "reason": "Observed repeated Safehouse permission-denied events.",
+        "reason": "Observed repeated sandbox permission-denied events.",
     }
 
 
@@ -120,7 +120,7 @@ def test_build_apply_plan_classifies_pitfall_proposals_but_keeps_them_ineligible
         "tool_name": "terminal",
         "error_kind": "permission_denied",
         "count": 19,
-        "reason": "Observed repeated Safehouse permission-denied events.",
+        "reason": "Observed repeated sandbox permission-denied events.",
     }
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
@@ -198,7 +198,7 @@ def test_build_apply_plan_plans_pitfall_mutation_for_existing_pitfalls_section(t
     assert item["mutation"] == {
         "type": "append_to_existing_section",
         "section_heading": "## Pitfalls",
-        "text": "- Observed repeated Safehouse permission-denied events.",
+        "text": "- Observed repeated sandbox permission-denied events.",
     }
     assert item["eligible_for_unattended"] is True
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
@@ -206,13 +206,13 @@ def test_build_apply_plan_plans_pitfall_mutation_for_existing_pitfalls_section(t
 
 def test_build_apply_plan_resolves_explicit_custom_skill_hint_inside_configured_roots(tmp_path):
     mod = load_plugin_module()
-    skill_root = tmp_path / "hermes-custom"
-    skill_dir = skill_root / "safehouse-skill"
+    skill_root = tmp_path / "custom-skills"
+    skill_dir = skill_root / "sandbox-skill"
     skill_dir.mkdir(parents=True)
     skill_file = skill_dir / "SKILL.md"
-    skill_file.write_text("# Safehouse\n\n## Pitfalls\n- Existing note\n", encoding="utf-8")
+    skill_file.write_text("# Sandbox\n\n## Pitfalls\n- Existing note\n", encoding="utf-8")
     proposal = sample_pitfall_proposal()
-    proposal["target_skill"] = "safehouse-skill"
+    proposal["target_skill"] = "sandbox-skill"
 
     plan = mod.build_apply_plan(
         proposals=[proposal],
@@ -232,7 +232,7 @@ def test_build_apply_plan_resolves_explicit_custom_skill_hint_inside_configured_
 
 def test_build_apply_plan_refuses_unsafe_custom_skill_hint(tmp_path):
     mod = load_plugin_module()
-    skill_root = tmp_path / "hermes-custom"
+    skill_root = tmp_path / "custom-skills"
     skill_root.mkdir()
     proposal = sample_pitfall_proposal()
     proposal["target_skill"] = "../outside"
@@ -316,7 +316,7 @@ def test_build_apply_plan_includes_rollback_preview_for_eligible_append_mutation
     assert rollback["after_hash"] != rollback["before_hash"]
     assert rollback["before_snippet"] == original
     assert "- Existing note" in rollback["after_snippet"]
-    assert "Observed repeated Safehouse permission-denied events." in rollback["after_snippet"]
+    assert "Observed repeated sandbox permission-denied events." in rollback["after_snippet"]
     assert item["ledger_preview"]["rollback_data"] == "inline_rollback_preview_available"
     assert item["ledger_preview"]["rollback_preview_hash"] == hashlib.sha256(
         json.dumps(rollback, ensure_ascii=False, sort_keys=True).encode("utf-8")

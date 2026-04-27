@@ -181,10 +181,10 @@ def _proposal_template_for_finding(
             "category-qualified names are not accepted by the runtime."
         )
     elif error_kind == "permission_denied":
-        title = "Document Safehouse permission-denied workflow"
-        action = "add_safehouse_permission_denied_pitfall"
+        title = "Document sandbox permission-denied workflow"
+        action = "add_sandbox_permission_denied_pitfall"
         reason = (
-            f"Observed {count} permission-denied events. These often come from Safehouse sandbox "
+            f"Observed {count} permission-denied events. These often come from sandbox or host access policy "
             "limits and should be handled as constraints rather than bypassed."
         )
     elif tool == "patch" and ("path required" in example_text or error_kind in {"schema_or_validation", "unknown_error"}):

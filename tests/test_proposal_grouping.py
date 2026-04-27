@@ -37,13 +37,13 @@ def test_analyze_events_groups_findings_by_tool_and_error_kind():
         post_tool_event(
             "skill_view",
             "not_found",
-            {"success": False, "error": "Skill 'hermes-custom:foo' not found."},
+            {"success": False, "error": "Skill 'custom-skills:foo' not found."},
             1,
         ),
         post_tool_event(
             "skill_view",
             "not_found",
-            {"success": False, "error": "Skill 'hermes-custom:bar' not found."},
+            {"success": False, "error": "Skill 'custom-skills:bar' not found."},
             2,
         ),
         post_tool_event(
@@ -79,7 +79,7 @@ def test_proposals_are_specific_to_root_cause():
             "rate": 0.3,
             "examples": [
                 {
-                    "result_preview": "{\"success\": false, \"error\": \"Skill 'hermes-custom:foo' not found.\"}"
+                    "result_preview": "{\"success\": false, \"error\": \"Skill 'custom-skills:foo' not found.\"}"
                 }
             ],
         },
@@ -119,9 +119,9 @@ def test_proposals_are_specific_to_root_cause():
 
     titles = [p["title"] for p in proposals]
     assert "Fix skill lookup namespace misses" in titles
-    assert titles.count("Document Safehouse permission-denied workflow") == 1
+    assert titles.count("Document sandbox permission-denied workflow") == 1
     assert "Tighten patch tool argument validation guidance" in titles
     assert all("error_kind" in p for p in proposals)
-    safehouse = next(p for p in proposals if p["title"] == "Document Safehouse permission-denied workflow")
-    assert safehouse["count"] == 5
-    assert safehouse["tools"] == ["execute_code", "terminal"]
+    sandbox = next(p for p in proposals if p["title"] == "Document sandbox permission-denied workflow")
+    assert sandbox["count"] == 5
+    assert sandbox["tools"] == ["execute_code", "terminal"]

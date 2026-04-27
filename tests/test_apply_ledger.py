@@ -26,10 +26,10 @@ def eligible_plan_with_one_item(tmp_path):
     target.write_text(original, encoding="utf-8")
     proposal = {
         "id": "proposal-2",
-        "title": "Document Safehouse permission-denied workflow",
+        "title": "Document sandbox permission-denied workflow",
         "target": "file_workflow_skills",
         "target_path": str(target),
-        "action": "add_safehouse_permission_denied_pitfall",
+        "action": "add_sandbox_permission_denied_pitfall",
         "risk": "low",
         "confidence": "high",
         "score": 86,
@@ -39,7 +39,7 @@ def eligible_plan_with_one_item(tmp_path):
         "count": 19,
         "tool_name": "terminal",
         "error_kind": "permission_denied",
-        "reason": "Observed repeated Safehouse permission-denied events.",
+        "reason": "Observed repeated sandbox permission-denied events.",
     }
     plan = mod.build_apply_plan(
         proposals=[proposal],

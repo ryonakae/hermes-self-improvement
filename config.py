@@ -74,7 +74,7 @@ def _load_config(path: Path) -> dict[str, Any]:
         "data_dir": str(get_hermes_home() / "reports" / "self-improvement" / "state"),
         "report_dir": str(get_hermes_home() / "reports" / "self-improvement" / "daily"),
         "reports_dir": str(get_hermes_home() / "reports" / "self-improvement"),
-        "custom_skill_roots": [str(get_hermes_home() / "skills" / "hermes-custom")],
+        "custom_skill_roots": [str(get_hermes_home() / "skills")],
         "execution_mode": DEFAULT_EXECUTION_MODE,
         "mode_policy": DEFAULT_MODE_POLICY,
         "llm_scorer": {

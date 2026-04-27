@@ -110,7 +110,7 @@ def _score_breakdown(
     evidence_level = "high" if evidence_count >= 4 and has_examples and not is_unknown_error else "medium" if evidence_count >= 2 else "low"
     reuse_level = (
         "high"
-        if concrete_remediation and (evidence_count >= 4 or (evidence_count >= 2 and any(word in text for word in ("workflow", "skill", "safehouse"))))
+        if concrete_remediation and (evidence_count >= 4 or (evidence_count >= 2 and any(word in text for word in ("workflow", "skill", "sandbox"))))
         else "medium" if evidence_count >= 2 and not generic_review else "low"
     )
     if risk == "high" or proposal.get("auto_apply"):
@@ -224,7 +224,7 @@ def _has_concrete_remediation(proposal: dict[str, Any]) -> bool:
         "requires",
         "fallback",
         "namespace",
-        "safehouse",
+        "sandbox",
         "permission",
         "timeout",
         "background",

@@ -1,6 +1,6 @@
 ---
 name: hermes-self-improvement-plugin
-description: Hermes の自己改善 plugin（`hermes-self-improvement`）を設計・実装・拡張・検証するときに使う。runtime hook で観測だけを収集し、分析・proposal・score・report は wrapper CLI / cron から実行する構成、`~/.hermes/plugins/hermes-self-improvement`、telemetry、custom-skill-maintenance cron 連携、GEPA/LLM scorer の安全な接続を扱う依頼では必ず参照する。
+description: Hermes の自己改善 plugin（`hermes-self-improvement`）を設計・実装・拡張・検証するときに使う。runtime hook で観測だけを収集し、分析・proposal・score・report は wrapper CLI / cron から実行する構成、telemetry、GEPA/LLM scorer の安全な接続を扱う依頼では必ず参照する。
 ---
 
 # hermes-self-improvement plugin
@@ -15,26 +15,24 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 - 問題抽出・候補生成・採点・report 作成は wrapper CLI / cron / offline evaluator から実行する。
 - 無人 cron で自動適用できる変更は low-risk のみに限定する。
 - skill / memory の意味を変える変更、rename / merge / delete / 大幅 rewrite / trigger description の大幅変更は proposal に留める。
-- 長い設計方針、段階的ロードマップ、未決事項は skill に積み増さず、repo-tracked plan / docs に置く。skill は実行時に必要な短い運用手順と参照先に留める。方針整理が始まったら `/plan` 相当で `.hermes/plans/` に計画書を作り、固まった内容を repo docs へ昇格する。
-- 方針・設計判断・段階的ロードマップ・未決事項は skill に積み増しすぎない。`/plan` で repo 側の `.hermes/plans/` に計画を書き、安定した内容は repo docs に昇格する。skill は実行時に必要な短い運用手順と参照先に留める。
+- 方針・設計判断・段階的ロードマップ・未決事項は skill に積み増しすぎない。repo-tracked plan / docs に計画を書き、安定した内容は repo docs に昇格する。skill は実行時に必要な短い運用手順と参照先に留める。
 
 ## 主要パス
 
-- plugin: `~/.hermes/plugins/hermes-self-improvement/`
-- manifest: `~/.hermes/plugins/hermes-self-improvement/plugin.yaml`
-- registration / compatibility entrypoint: `~/.hermes/plugins/hermes-self-improvement/__init__.py`
-- config module: `~/.hermes/plugins/hermes-self-improvement/config.py`
-- observer module: `~/.hermes/plugins/hermes-self-improvement/observer.py`
-- analysis module: `~/.hermes/plugins/hermes-self-improvement/analysis.py`
-- scoring module: `~/.hermes/plugins/hermes-self-improvement/scoring.py`
-- apply plan module: `~/.hermes/plugins/hermes-self-improvement/apply_plan.py`
-- ledger module: `~/.hermes/plugins/hermes-self-improvement/ledger.py`
-- CLI/report module: `~/.hermes/plugins/hermes-self-improvement/cli.py`
-- local config JSON: `~/.hermes/plugins/hermes-self-improvement/config.json`
-- wrapper CLI: `~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve`
-- telemetry: `~/.hermes/reports/self-improvement/state/events.jsonl`
-- reports: `~/.hermes/reports/self-improvement/daily/latest.md`
-- skill maintenance cron: `custom-skill-maintenance`, job id `8fb5ad61cfef`
+- plugin repo: this repository root.
+- manifest: `plugin.yaml`
+- registration / compatibility entrypoint: `__init__.py`
+- config module: `config.py`
+- observer module: `observer.py`
+- analysis module: `analysis.py`
+- scoring module: `scoring.py`
+- apply plan module: `apply_plan.py`
+- ledger module: `ledger.py`
+- CLI/report module: `cli.py`
+- local config JSON: `config.json`
+- wrapper CLI: `bin/hermes-self-improve`
+- telemetry: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/state/events.jsonl`
+- reports: `${HERMES_HOME:-~/.hermes}/reports/self-improvement/daily/latest.md`
 
 ## Current implementation notes
 
@@ -58,19 +56,19 @@ Retention / classifier notes:
 
 - `retention_days` is enforced by `RuntimeObserver` before the first event write in a process. Old timestamped rows are pruned, malformed JSON rows are dropped, and rows with missing/unparseable timestamps are kept for manual inspection.
 - Tool result classification must prefer structured success/error fields over searching raw content text. Successful `read_file`, `search_files`, `skill_view`, `skills_list`, and `patch` payloads may legitimately contain words like "timeout", "not found", or "permission denied" in documentation/code snippets; those should not become failure clusters. Analysis also reclassifies historical `post_tool_call` rows from `result_preview` without rewriting JSONL, including truncated success previews such as `{"success": true`, `{"total_count":`, or `{"content":`.
-- Findings should cluster by `(tool_name, error_kind)` rather than tool alone. Proposals should be remediation-oriented and deduplicate equivalent fixes, e.g. merge `permission_denied` clusters from terminal/process/execute_code into one Safehouse proposal.
+- Findings should cluster by `(tool_name, error_kind)` rather than tool alone. Proposals should be remediation-oriented and deduplicate equivalent fixes, e.g. merge `permission_denied` clusters from terminal/process/execute_code into one sandbox/access-policy proposal.
 
 The wrapper CLI supports:
 
 ```bash
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve status
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer llm --json
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer gepa --json
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve gepa-eval --json
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve run --since-hours 24 --json --scorer llm
+bin/hermes-self-improve status
+bin/hermes-self-improve analyze --since-hours 24
+bin/hermes-self-improve analyze --since-hours 24 --scorer llm --json
+bin/hermes-self-improve analyze --since-hours 24 --scorer gepa --json
+bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
+bin/hermes-self-improve gepa-eval --json
+bin/hermes-self-improve report --since-hours 24 --scorer llm
+bin/hermes-self-improve run --since-hours 24 --json --scorer llm
 ```
 
 Scorer behavior:
@@ -87,7 +85,7 @@ Scorer behavior:
 - GEPA evaluation assets live in the plugin directory: `evals/proposal_eval_cases.jsonl` contains regression cases, `evals/rubric.json` contains rubric `proposal-eval-v0.1`, and `dspy_program.py` contains dependency-free `ProposalScoringProgram` / `ProposalBatchScoringProgram` scaffolds used by the offline scorer and future DSPy/GEPA wiring.
 - LLM and GEPA scoring are advisory only; they always force `auto_apply: false` and must not be treated as permission for unattended skill/memory edits.
 - Auto-apply roadmap: the current operating scope is B/C — allow only low-risk existing-skill additions/fixes such as small pitfall/validation additions, typo fixes, and obvious stale path or stale command corrections after checking telemetry evidence and the target skill. Stale path / stale command is auto-applicable only when the old path/command check fails and the current canonical replacement is confirmed by another source such as active memory, README, config, or an existing file. Memory cleanup remains review-only for now. Future target is broader C/D, meaning memory compression/deduplication and eventually skill creation/merge/rename/delete, but those require stronger dry-run plans, rollback ledgers, and human-approval gates before unattended execution.
-- Change history policy: most custom skills under `~/.hermes/skills/hermes-custom` are not git-managed. For non-git-managed skills, auto-apply must write a timestamped local change ledger with before/after snippets and rollback data instead of pretending a git commit exists. If a target skill is inside a git repository, make a local commit after successful low-risk auto-apply and do not push.
+- Change history policy: most custom skills under configured `custom_skill_roots` are not git-managed. For non-git-managed skills, auto-apply must write a timestamped local change ledger with before/after snippets and rollback data instead of pretending a git commit exists. If a target skill is inside a git repository, make a local commit after successful low-risk auto-apply and do not push.
 
 Current Hermes top-level plugin CLI discovery does not expose this as `hermes self-improvement`; cron should use the wrapper CLI instead.
 
@@ -98,50 +96,51 @@ Execution mode / policy gate implementation notes:
 - Default mode is `report_only`; active modes are `report_only`, `dry_run_plan`, `apply_low_risk`, and `apply_approved`. Keep `full_auto_with_policy` reserved until policy/ledger/approval enforcement is mature.
 - Model mode policy as command allowlists plus capability flags, and deny by default. Unknown mode, unknown command, or missing capability should fail closed with a structured reason such as `unknown_execution_mode`, `command_not_allowed`, or `capability_not_allowed`.
 - Existing read/report commands (`status`, `analyze`, `report`, `run`, `gepa-eval`) should remain usable in `report_only`; do not break current cron/report workflows while adding future mutation gates.
-- Add dry-run planning as a separate safe slice before any mutation work. Implement `generate-apply-plan` in `dry_run_plan` mode, require a `write_apply_plan` capability, and write versioned JSON artifacts under `~/.hermes/reports/self-improvement/apply-plans/YYYY-MM-DD/`. Apply-plan artifacts should start conservative: schema metadata, `created_by`, `execution_mode`, summary/items, and all mutation/apply fields disabled or approval-required until ledger/approval/rollback enforcement exists. Eligible dry-run items should include rollback preview metadata (before/after hash and snippets) so later pending ledgers can be written from verified preview data instead of re-inferring rollback state. `build_pending_ledger` / `write_pending_ledger` can now create and save proposal-level pending ledger JSON. `apply-low-risk <plan-id> <item-id>` currently runs a non-mutating skeleton: it loads the explicit plan item, checks eligibility and target hash, writes an apply-attempt artifact, records `planned_diff` and `validation_plan` for `would_apply_low_risk`, and leaves target files unchanged. When the result is `would_apply_low_risk`, it also writes a pending ledger and records `pending_ledger_path` / `pending_ledger_hash` on the attempt; `stale_plan` and `rejected` attempts do not create ledgers or planned diffs.
+- Add dry-run planning as a separate safe slice before any mutation work. Implement `generate-apply-plan` in `dry_run_plan` mode, require a `write_apply_plan` capability, and write versioned JSON artifacts under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/apply-plans/YYYY-MM-DD/`. Apply-plan artifacts should start conservative: schema metadata, `created_by`, `execution_mode`, summary/items, and all mutation/apply fields disabled or approval-required until ledger/approval/rollback enforcement exists. Eligible dry-run items should include rollback preview metadata (before/after hash and snippets) so later pending ledgers can be written from verified preview data instead of re-inferring rollback state. `build_pending_ledger` / `write_pending_ledger` can now create and save proposal-level pending ledger JSON. `apply-low-risk <plan-id> <item-id>` currently runs a non-mutating skeleton: it loads the explicit plan item, checks eligibility and target hash, writes an apply-attempt artifact, records `planned_diff` and `validation_plan` for `would_apply_low_risk`, and leaves target files unchanged. When the result is `would_apply_low_risk`, it also writes a pending ledger and records `pending_ledger_path` / `pending_ledger_hash` on the attempt; `stale_plan` and `rejected` attempts do not create ledgers or planned diffs.
 - When strengthening apply-plan item schema, use TDD to lock down fail-closed behavior. Items should carry stable metadata such as `change_type`, `target_kind`, `target_path`, `target_exists`, `before_hash`, `proposal_hash`, `item_hash`, `eligibility`, `evidence`, `ledger_preview`, and `scorer_disagreements`. Resolve `before_hash` from the target file when `target_path` points at an existing file. Classification may identify low-risk types like pitfall/validation/typo, but missing target path, missing target file, missing mutation plan, unknown change type, or scorer disagreement must keep `eligible_for_unattended=false`. The first mutation planner slice only creates `append_to_existing_section` mutations for `pitfall_addition_existing_section` when the target already has a Pitfalls/注意系 section; otherwise fail closed with `existing_section_missing`. Target resolution should stay explicit: direct path hints win, otherwise resolve only `target_skill` / `skill_name` / `skill` under configured `custom_skill_roots`; reject absolute names, `..`, and root escapes, and do not infer targets from prose titles.
 - After implementing mode-policy or apply-plan changes, verify with full plugin tests, `py_compile`, `bin/hermes-self-improve status --mode dry_run_plan`, a read-only `run --mode dry_run_plan --json` smoke test, and when apply-plan code changes, `bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 1 --json --scorer heuristic` plus a JSON check that the artifact path exists and schema metadata is correct.
 
 ## Repository / discovery notes
 
-- The `hermes-self-improvement` plugin repo is `~/.hermes/plugins/hermes-self-improvement/`.
-- `hermes-self-improvement` is a git-managed plugin at `~/.hermes/plugins/hermes-self-improvement/plugin.yaml`.
-- `live-context-injector` is a separate local plugin at `~/.hermes/plugins/live-context-injector/plugin.yaml` and is intentionally outside this repo.
-- Hermes user plugin discovery scans `~/.hermes/plugins/`; direct child plugins such as `plugins/hermes-self-improvement/plugin.yaml` and `plugins/live-context-injector/plugin.yaml` are the preferred layout.
-- `plugins.enabled` should use the bare plugin names (`hermes-self-improvement`, `live-context-injector`).
+- The `hermes-self-improvement` plugin repo is this repository root.
+- When installed as a user plugin, place it under `${HERMES_HOME:-~/.hermes}/plugins/hermes-self-improvement/` or another path supported by Hermes plugin discovery.
+- `plugins.enabled` should use the bare plugin name (`hermes-self-improvement`).
 - Keep cache/runtime noise in `.gitignore` and avoid committing `__pycache__/` or `.pytest_cache/`.
 - After layout changes, verify discovery with `PluginManager().discover_and_load(force=True)` before editing `config.yaml`; a config change may be unnecessary.
-- When comparing a plugin against the official docs, check both plugin-manager registration and user-facing CLI exposure. In this environment, `ctx.register_cli_command()` can appear in `get_plugin_manager()._cli_commands` / `list_plugins()` while `hermes <plugin> ...` is still not accepted by the top-level CLI, and `hermes plugins list` may omit nested user plugins even when `discover_plugins(force=True)` loads them. Treat that as a Hermes CLI/discovery integration gap to investigate, not immediately as a plugin manifest/register bug. Keep using the wrapper CLI for operational commands until top-level CLI exposure is verified.
-- The operational skill is also bundled in the plugin at `skills/hermes-self-improvement-plugin/SKILL.md` and registered from `register(ctx)` with `ctx.register_skill(child.name, skill_md)`. Verify with Hermes' venv Python: `get_plugin_manager().list_plugin_skills("hermes-self-improvement")` and `find_plugin_skill("hermes-self-improvement:hermes-self-improvement-plugin")`. Plugin-bundled skills are read-only and may not appear in the current already-running agent session's `<available_skills>` / `skill_view` until plugin discovery is reloaded, so keep the custom skill as a discoverability/compatibility copy until that behavior is intentionally changed.
+- When comparing a plugin against the official docs, check both plugin-manager registration and user-facing CLI exposure. Depending on the Hermes version, `ctx.register_cli_command()` can appear in `get_plugin_manager()._cli_commands` / `list_plugins()` while `hermes <plugin> ...` is still not accepted by the top-level CLI, and `hermes plugins list` may omit nested user plugins even when `discover_plugins(force=True)` loads them. Treat that as a Hermes CLI/discovery integration gap to investigate, not immediately as a plugin manifest/register bug. Keep using the wrapper CLI for operational commands until top-level CLI exposure is verified.
+- The operational skill is also bundled in the plugin at `skills/hermes-self-improvement-plugin/SKILL.md` and registered from `register(ctx)` with `ctx.register_skill(child.name, skill_md)`. Verify with the Python environment used to run Hermes: `get_plugin_manager().list_plugin_skills("hermes-self-improvement")` and `find_plugin_skill("hermes-self-improvement:hermes-self-improvement-plugin")`. Plugin-bundled skills are read-only and may not appear in the current already-running agent session's `<available_skills>` / `skill_view` until plugin discovery is reloaded, so keep the custom skill as a discoverability/compatibility copy until that behavior is intentionally changed.
 
 ## Validation checklist
 
 After changing the plugin:
 
-1. Compile all plugin modules touched by the refactor.
+1. Compile all plugin modules touched by the refactor. Use the Python environment that has Hermes and test dependencies installed.
 
 ```bash
-python3 -m py_compile ~/.hermes/plugins/hermes-self-improvement/__init__.py ~/.hermes/plugins/hermes-self-improvement/*.py
+PY=${PYTHON:-python3}
+$PY -m py_compile __init__.py *.py
 ```
 
 2. Run the full plugin test suite before any commit.
 
 ```bash
-cd ~/.hermes/plugins/hermes-self-improvement
-python3 -m pytest tests -q
+cd /path/to/hermes-self-improvement
+PY=${PYTHON:-python3}
+$PY -m pytest tests -q
 ```
 
 3. Check standalone CLI.
 
 ```bash
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve status
-~/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24
+bin/hermes-self-improve status
+bin/hermes-self-improve report --since-hours 24
 ```
 
 4. Check plugin manager loading. This is mandatory after any `__init__.py` / module-layout refactor, because unit tests and the wrapper CLI can pass even when plugin discovery fails. In particular, verify that `register(ctx)` still exists in `__init__.py`; an over-broad extraction can accidentally remove it and discovery will report `no register() function`.
 
 ```bash
-python3 - <<'PY'
+PY=${PYTHON:-python3}
+$PY - <<'PY'
 from hermes_cli.plugins import discover_plugins, get_plugin_manager
 import json
 
@@ -164,21 +163,21 @@ Responsibility split:
 - Cron job prompt/config: when to run, which wrapper CLI command to call, delivery target, report framing, attached skills, script/workdir/toolsets, and a short human-readable policy summary/reference.
 - Plugin CLI/config/policy: execution mode, allowlists, thresholds, approval gates, apply-plan generation, ledgers, apply-attempts, approvals, and safe apply enforcement.
 
-For `custom-skill-maintenance`, prefer this sequence:
+For scheduled skill maintenance, prefer this sequence:
 
-1. Read the report template under `~/.hermes/automations/custom-skill-maintenance/templates/`.
-2. Read `~/.hermes/plugins/hermes-self-improvement/README.md` and the active repo-tracked plan/docs if the task touches auto-apply policy.
-3. Run:
+1. Read the automation prompt/template for the deployment, if one exists.
+2. Read `README.md` and the active repo-tracked plan/docs if the task touches auto-apply policy.
+3. From the repository root, run:
 
 ```bash
-/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve report --since-hours 24 --scorer llm
+bin/hermes-self-improve report --since-hours 24 --scorer llm
 ```
 
 Confirm proposal rows show `scorer: llm-v0.1`; if they show `heuristic-v0.1` with `llm_scorer_error`, record the fallback reason in the maintenance report.
 
-4. Read `~/.hermes/reports/self-improvement/daily/latest.md`.
-5. Inspect `~/.hermes/skills/hermes-custom/**/SKILL.md` only as needed to ground high-value proposals.
-6. Use `session_search` for recent sessions. If `session_search` fails (for example `database disk image is malformed`), do not block the cron job; record the failure and use plugin telemetry (`~/.hermes/reports/self-improvement/state/events.jsonl`) to extract recent `session_id`, platform, `user_message_preview`, and tool summaries as a fallback.
+4. Read `${HERMES_HOME:-~/.hermes}/reports/self-improvement/daily/latest.md`.
+5. Inspect configured custom skill roots such as `${HERMES_HOME:-~/.hermes}/skills/**/SKILL.md` only as needed to ground high-value proposals.
+6. Use `session_search` for recent sessions. If `session_search` fails (for example `database disk image is malformed`), do not block the cron job; record the failure and use plugin telemetry (`${HERMES_HOME:-~/.hermes}/reports/self-improvement/state/events.jsonl`) to extract recent `session_id`, platform, `user_message_preview`, and tool summaries as a fallback.
 7. If the Markdown report does not show proposal `scorer` fields, run `analyze --since-hours 24 --scorer llm --json` and confirm each proposal uses `scorer: "llm-v0.1"`, or `scorer: "heuristic-v0.1"` with `llm_scorer_error` when LLM scoring failed.
 8. Until the plugin has explicit apply-plan/ledger/approval enforcement, apply only low-risk fixes with `skill_manage`; do not directly edit `SKILL.md`.
 9. Include evidence, risk, score/confidence, auto-apply reason, and deferral reason in the final maintenance report.
@@ -199,7 +198,7 @@ GEPA manual-eval assets:
 
 Good first eval targets:
 
-- `custom-skill-maintenance` prompt and policy quality.
+- scheduled skill maintenance prompt and policy quality.
 - Whether a proposed skill change has enough evidence.
 - Whether a new skill candidate is actually reusable or should be merged into an existing skill.
 
@@ -210,17 +209,17 @@ When the user asks whether current memory or custom skills look healthy, run the
 1. Run compare scoring and save JSON for inspection:
 
 ```bash
-/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json > /tmp/hermes-review-compare.json
+bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json > /tmp/hermes-review-compare.json
 ```
 
 2. Summarize proposal count, tool error kinds, and each proposal's `llm_score`, `gepa_score`, `score_delta`, and `scorer_disagreements`. Treat large LLM/GEPA gaps as review signals, not as permission to patch.
 3. Read active built-in memory files and measure size / entry count:
-   - `/Users/ryo.nakae/.hermes/memories/USER.md`
-   - `/Users/ryo.nakae/.hermes/memories/MEMORY.md`
+   - `${HERMES_HOME:-~/.hermes}/memories/USER.md`
+   - `${HERMES_HOME:-~/.hermes}/memories/MEMORY.md`
    Compare them against the official approximate limits (`USER.md` 1375 chars, `MEMORY.md` 2200 chars). If near full, recommend compression before adding new entries.
-4. List custom skills under `/Users/ryo.nakae/.hermes/skills/hermes-custom/*/SKILL.md`, then inspect only the skills related to high-value proposals. Avoid reading every large skill unless the evidence points there.
+4. List custom skills under configured custom skill roots, for example `${HERMES_HOME:-~/.hermes}/skills/*/SKILL.md`, then inspect only the skills related to high-value proposals. Avoid reading every large skill unless the evidence points there.
 5. Cross-check proposal claims against actual skill content. For example:
-   - Safehouse permission-denied proposals should be checked against `hermes-safehouse-access-audit` and related auth skills.
+   - sandbox / permission-denied proposals should be checked against the relevant access-policy and auth guidance for the deployment.
    - skill lookup namespace misses should be checked against skill preload / self-improvement guidance.
    - terminal timeout and patch validation proposals should be treated as small pitfall additions unless repeated evidence is strong.
 6. Report separately:
@@ -232,11 +231,11 @@ When the user asks whether current memory or custom skills look healthy, run the
 
 ## Pitfalls
 
-- When invoking `skill_view` / `skill_manage`, use the actual skill name from `available_skills` (for example `hermes-memory-hygiene`), not display/category prefixes like `hermes-custom:hermes-memory-hygiene`, `hermes-custom/hermes-memory-hygiene`, or `software-development:systematic-debugging`. If a category-qualified lookup returns `not_found`, immediately retry the bare skill name before treating it as a missing skill.
+- When invoking `skill_view` / `skill_manage`, use the actual skill name from `available_skills`, not display/category prefixes such as `category:skill-name` or `category/skill-name`. If a category-qualified lookup returns `not_found`, immediately retry the bare skill name before treating it as a missing skill.
 - Do not let this skill become the primary policy/design document. For auto-apply policy, rollout phases, ledger schema, approval gates, and open design questions, create or update a repo-tracked `/plan` / docs file under the active plugin repository, then keep this skill as a concise operational index that points to those docs.
 - Do not use `dojo` as a directory or feature name here; prior investigation treated hermes-dojo as a reference only.
 - Do not copy hermes-dojo `fixer.py --apply` behavior; direct appending to `SKILL.md` is unsafe.
-- Do not rely on `state.db.messages.tool_name`; in this environment older logs may have `tool_name` empty. For future data, prefer plugin telemetry from `post_tool_call`.
+- Do not rely on `state.db.messages.tool_name`; older Hermes logs may have `tool_name` empty. Prefer plugin telemetry from `post_tool_call` when available.
 - Hermes can emit an early/partial `pre_tool_call` without `session_id` / `tool_call_id`, followed by the complete event. Drop those partial `pre_tool_call` rows at write time and defensively filter historical partial rows in `analyze_events`; otherwise report counts get inflated and empty-session noise appears.
-- Remember that enabling or changing plugin hook code may require gateway restart before live Slack/Telegram sessions use the new observer. CLI `analyze` / `report` reads current files immediately, but the running gateway may still hold the old plugin instance.
+- Remember that enabling or changing plugin hook code may require gateway restart before live messaging sessions use the new observer. CLI `analyze` / `report` reads current files immediately, but the running gateway may still hold the old plugin instance.
 - When unit-testing this plugin with `importlib.util.module_from_spec`, insert the module into `sys.modules[spec.name]` before `exec_module`; otherwise the `@dataclass` processing can fail with `AttributeError: 'NoneType' object has no attribute '__dict__'`.
