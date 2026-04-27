@@ -83,6 +83,7 @@ If no matching existing section is present for section additions, fail closed wi
 - checks eligibility and target hash
 - writes an apply-attempt artifact
 - records `planned_diff` and `validation_plan` for `would_apply_low_risk`
+- includes `before_snapshot` plus `rollback_patch` in rollback preview / ledger data; snippets are preview-only and must not be used as restore input
 - without confirmation, leaves target files unchanged and writes a dry-run pending ledger
 - with `--confirm-apply --expected-item-hash <item_hash>`, mutates only the planned target after item-hash confirmation, before-hash validation, rollback-preview after-hash validation, and post-write hash validation
 - writes an applied ledger only for confirmed successful guarded mutation
@@ -92,12 +93,12 @@ If no matching existing section is present for section additions, fail closed wi
 `rollback-low-risk <ledger-id>` currently:
 
 - loads an explicit applied ledger
-- checks ledger status, ledger hash confirmation, current target hash, and rollback snapshot availability
+- checks ledger status, ledger hash confirmation, current target hash, `before_snapshot` availability, and before-snapshot hash integrity
 - without confirmation, records `would_rollback_low_risk` and leaves the target unchanged
-- with `--confirm-rollback --expected-ledger-hash <ledger_hash>`, restores the target from the ledger before snapshot only if the current target hash still matches the applied hash
+- with `--confirm-rollback --expected-ledger-hash <ledger_hash>`, restores the target from the ledger `before_snapshot` only if the current target hash still matches the applied hash
 - appends a `rolled_back` event to the same ledger and recomputes `ledger_hash` on success
 
-Rollback must fail closed for stale targets, missing/truncated rollback snapshots, non-applied ledgers, and ledger-hash confirmation mismatch.
+Rollback must fail closed for stale targets, missing rollback snapshots, before-snapshot hash mismatch, non-applied ledgers, and ledger-hash confirmation mismatch.
 
 ## Verification commands
 

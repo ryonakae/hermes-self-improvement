@@ -497,6 +497,12 @@ def test_build_apply_plan_includes_rollback_preview_for_eligible_append_mutation
     assert rollback["after_hash"]
     assert rollback["after_hash"] != rollback["before_hash"]
     assert rollback["before_snippet"] == original
+    assert rollback["before_snapshot"] == original
+    assert rollback["rollback_patch"] == {
+        "type": "remove_text_once",
+        "text": "- Observed repeated sandbox permission-denied events.\n",
+        "section_heading": "## Pitfalls",
+    }
     assert "- Existing note" in rollback["after_snippet"]
     assert "Observed repeated sandbox permission-denied events." in rollback["after_snippet"]
     assert item["ledger_preview"]["rollback_data"] == "inline_rollback_preview_available"
@@ -504,6 +510,27 @@ def test_build_apply_plan_includes_rollback_preview_for_eligible_append_mutation
         json.dumps(rollback, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
 
+
+
+def test_build_apply_plan_includes_full_before_snapshot_even_when_preview_is_truncated(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    original = "# Skill\n\n## Pitfalls\n" + "- Existing note\n" * 500
+    target.write_text(original, encoding="utf-8")
+    proposal = sample_pitfall_proposal()
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    rollback = plan["items"][0]["rollback_preview"]
+    assert rollback["before_snippet"].endswith("...<truncated>")
+    assert rollback["before_snapshot"] == original
+    assert hashlib.sha256(rollback["before_snapshot"].encode("utf-8")).hexdigest() == rollback["before_hash"]
 
 def test_write_apply_plan_uses_configurable_reports_dir_and_date_partition(tmp_path):
     mod = load_plugin_module()

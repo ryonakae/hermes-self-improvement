@@ -162,6 +162,12 @@ def write_applied_typo_ledger(tmp_path):
     )
     ledger_path = Path(applied["ledger_path"])
     ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert ledger["rollback_data"]["before_snapshot"] == original
+    assert ledger["rollback_data"]["rollback_patch"] == {
+        "type": "replace_text_once",
+        "old_text": "the",
+        "new_text": "teh",
+    }
     return mod, ledger, ledger_path, target, original
 
 

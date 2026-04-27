@@ -282,6 +282,33 @@ def _preview_content(text: str, max_chars: int = 4000) -> str:
     return text[:max_chars] + "\n...<truncated>"
 
 
+def _rollback_patch_for_mutation(mutation: dict[str, Any]) -> dict[str, Any] | None:
+    mutation_type = mutation.get("type")
+    if mutation_type == "append_to_existing_section":
+        text = str(mutation.get("text") or "").rstrip()
+        if not text:
+            return None
+        patch: dict[str, Any] = {
+            "type": "remove_text_once",
+            "text": text + "\n",
+        }
+        heading = str(mutation.get("section_heading") or mutation.get("section") or "").strip()
+        if heading:
+            patch["section_heading"] = heading
+        return patch
+    if mutation_type == "replace_text_once":
+        old_text = str(mutation.get("old_text") or "")
+        new_text = str(mutation.get("new_text") or "")
+        if not old_text or not new_text:
+            return None
+        return {
+            "type": "replace_text_once",
+            "old_text": new_text,
+            "new_text": old_text,
+        }
+    return None
+
+
 def _rollback_preview_for_item(
     *,
     target_path: str | None,
@@ -299,6 +326,7 @@ def _rollback_preview_for_item(
         after_content = _apply_replace_text_once(target_content, mutation)
     if after_content is None:
         return None
+    rollback_patch = _rollback_patch_for_mutation(mutation)
     return {
         "rollback_strategy": "restore_full_file_from_before_content",
         "target_path": target_path,
@@ -306,6 +334,8 @@ def _rollback_preview_for_item(
         "after_hash": _sha256_text(after_content),
         "before_snippet": _preview_content(target_content),
         "after_snippet": _preview_content(after_content),
+        "before_snapshot": target_content,
+        "rollback_patch": rollback_patch,
     }
 
 

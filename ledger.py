@@ -181,9 +181,12 @@ def rollback_low_risk(
         reasons.append("target_hash_mismatch")
         status = "stale_target"
     rollback_data = ledger.get("rollback_data") if isinstance(ledger.get("rollback_data"), dict) else {}
-    before_snapshot = rollback_data.get("before_snippet")
-    if not isinstance(before_snapshot, str) or "...<truncated>" in before_snapshot:
+    before_snapshot = rollback_data.get("before_snapshot")
+    if not isinstance(before_snapshot, str):
         reasons.append("rollback_before_snapshot_unavailable")
+        status = "rejected" if status != "stale_target" else status
+    elif _sha256_text(before_snapshot) != ledger.get("target_before_hash"):
+        reasons.append("rollback_before_snapshot_hash_mismatch")
         status = "rejected" if status != "stale_target" else status
     if confirm_rollback and expected_ledger_hash != ledger.get("ledger_hash"):
         reasons.append("ledger_hash_confirmation_mismatch")
