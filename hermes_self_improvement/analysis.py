@@ -186,6 +186,48 @@ def scan_memory_compression_candidates(memory_paths: list[str | Path], *, create
     return events
 
 
+_DEPRECATED_SKILL_MARKERS = (
+    "deprecated: true",
+    "status: deprecated",
+    "status: obsolete",
+    "obsolete: true",
+)
+
+
+def _skill_delete_candidate_reason(content: str) -> str | None:
+    lowered = content.lower()
+    for marker in _DEPRECATED_SKILL_MARKERS:
+        if marker in lowered:
+            return f"Skill file contains explicit lifecycle marker `{marker}`."
+    return None
+
+
+def scan_skill_lifecycle_candidates(skill_paths: list[str | Path], *, created_at: datetime | None = None) -> list[dict[str, Any]]:
+    """Return dry-run candidate events for explicit deprecated/obsolete skill files."""
+    ts = (created_at or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    events: list[dict[str, Any]] = []
+    for path_value in skill_paths:
+        path = Path(path_value).expanduser()
+        if not path.is_file():
+            continue
+        before = path.read_text(encoding="utf-8", errors="replace")
+        reason = _skill_delete_candidate_reason(before)
+        if reason is None:
+            continue
+        events.append({
+            "ts": ts.isoformat(),
+            "event": "self_improvement_candidate",
+            "candidate_kind": "skill_lifecycle_candidate",
+            "action": "skill_delete",
+            "target_path": str(path),
+            "before_hash": _sha256_text(before),
+            "reason": reason,
+            "count": 1,
+            "auto_apply": False,
+        })
+    return events
+
+
 def propose_from_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     proposals: list[dict[str, Any]] = []
     for f in findings:

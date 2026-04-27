@@ -28,7 +28,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `hermes_self_improvement/tool_handlers.py`: CLI parity tool handler。root 直下の `tools.py` は Hermes core `tools.registry` を shadow するため使わない。
 - `hermes_self_improvement/config.py`: default config、config precedence、execution mode、policy gate。
 - `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry、retention。
-- `hermes_self_improvement/analysis.py`: event aggregation、finding 抽出、proposal 生成。explicit `memory_compression_candidate` / `skill_lifecycle_candidate` finding と `self_improvement_candidate` event は approval-required proposal に変換するが、auto-apply 許可にはしない。`scan_memory_compression_candidates()` は dry-run candidate event だけを作る。
+- `hermes_self_improvement/analysis.py`: event aggregation、finding 抽出、proposal 生成。explicit `memory_compression_candidate` / `skill_lifecycle_candidate` finding と `self_improvement_candidate` event は approval-required proposal に変換するが、auto-apply 許可にはしない。`scan_memory_compression_candidates()` / `scan_skill_lifecycle_candidates()` は dry-run candidate event だけを作る。
 - `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer。
 - `hermes_self_improvement/dspy_program.py`: DSPy-compatible scoring contract と offline baseline。
 - `hermes_self_improvement/gepa_adapter.py`: GEPA payload、offline eval、optimizer fail-closed 境界。

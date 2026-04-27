@@ -141,7 +141,7 @@ Policy は `hermes_self_improvement/config.py` で検証します。prompt だ�
 
 `memory_delete` は configured `memory_roots` 配下の既存 file だけに `delete_file` mutation を作ります。rollback は before snapshot の復元です。root 外の target は `memory_target_outside_allowed_roots` で拒否します。
 
-Proposal generation は、明示的な `memory_compression_candidate` finding を `memory_compress` proposal に、明示的な `skill_lifecycle_candidate` finding を `skill_create` / `skill_delete` / `skill_rename` / `skill_merge` proposal に変換できます。`self_improvement_candidate` event も同じ finding として passthrough します。`scan_memory_compression_candidates()` は memory file の単純な重複行を dry-run candidate event として出せます。どれも `recommendation=approval_required` / `auto_apply=false` のままです。実際の変更は apply-plan と approval gate を通します。
+Proposal generation は、明示的な `memory_compression_candidate` finding を `memory_compress` proposal に、明示的な `skill_lifecycle_candidate` finding を `skill_create` / `skill_delete` / `skill_rename` / `skill_merge` proposal に変換できます。`self_improvement_candidate` event も同じ finding として passthrough します。`scan_memory_compression_candidates()` は memory file の単純な重複行を、`scan_skill_lifecycle_candidates()` は明示的に deprecated / obsolete と印がある skill file を dry-run candidate event として出せます。どれも `recommendation=approval_required` / `auto_apply=false` のままです。実際の変更は apply-plan と approval gate を通します。
 
 ### Retention prune
 

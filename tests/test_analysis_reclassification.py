@@ -272,3 +272,51 @@ def test_memory_compression_scanner_events_flow_into_analysis_proposals(tmp_path
     assert result.proposals[0]["change_type"] == "memory_compress"
     assert result.proposals[0]["target_path"] == str(memory_file)
     assert result.proposals[0]["auto_apply"] is False
+
+
+
+def test_scan_skill_lifecycle_candidates_emits_delete_event_for_deprecated_skill(tmp_path):
+    mod = load_plugin_module()
+    skill_file = tmp_path / "skills" / "old-skill" / "SKILL.md"
+    before = "---\nname: old-skill\ndescription: Old skill.\ndeprecated: true\n---\n\n# Old skill\n"
+    skill_file.parent.mkdir(parents=True)
+    skill_file.write_text(before, encoding="utf-8")
+
+    events = mod.scan_skill_lifecycle_candidates([str(skill_file)])
+
+    assert len(events) == 1
+    event = events[0]
+    assert event["event"] == "self_improvement_candidate"
+    assert event["candidate_kind"] == "skill_lifecycle_candidate"
+    assert event["action"] == "skill_delete"
+    assert event["target_path"] == str(skill_file)
+    assert event["before_hash"] == mod._sha256_text(before)
+    assert event["auto_apply"] is False
+
+
+def test_scan_skill_lifecycle_candidates_skips_active_skill(tmp_path):
+    mod = load_plugin_module()
+    skill_file = tmp_path / "skills" / "active-skill" / "SKILL.md"
+    skill_file.parent.mkdir(parents=True)
+    skill_file.write_text("---\nname: active-skill\ndescription: Active.\n---\n\n# Active\n", encoding="utf-8")
+
+    events = mod.scan_skill_lifecycle_candidates([str(skill_file)])
+
+    assert events == []
+
+
+def test_skill_lifecycle_scanner_events_flow_into_analysis_proposals(tmp_path):
+    mod = load_plugin_module()
+    now = datetime(2026, 4, 28, 23, 30, tzinfo=timezone.utc)
+    skill_file = tmp_path / "skills" / "old-skill" / "SKILL.md"
+    skill_file.parent.mkdir(parents=True)
+    skill_file.write_text("# Old skill\n\nStatus: obsolete\n", encoding="utf-8")
+
+    events = mod.scan_skill_lifecycle_candidates([str(skill_file)], created_at=now)
+    result = mod.analyze_events(events, now, now)
+
+    assert result.summary["explicit_candidate_count"] == 1
+    assert result.findings[0]["kind"] == "skill_lifecycle_candidate"
+    assert result.proposals[0]["change_type"] == "skill_delete"
+    assert result.proposals[0]["target_path"] == str(skill_file)
+    assert result.proposals[0]["auto_apply"] is False
