@@ -53,7 +53,7 @@ Top-level `hermes self-improvement ...` は Hermes version / plugin discovery �
 
 ## 変更時の進め方
 
-1. `README.md`, `AGENTS.md`, 関連 reference を読んで、今回の変更が docs / runtime / scorer / apply-policy のどこに属するか切り分ける。
+1. `README.md`, `AGENTS.md`, 関連 reference を読む。auto-apply / apply-policy / roadmap を続ける作業では、必ず repo-tracked plan（例: `.hermes/plans/*self-improvement-auto-apply-policy.md`）も読んでから、今回の変更が docs / runtime / scorer / apply-policy のどこに属するか切り分ける。
 2. 新しい policy / apply / scorer 挙動は TDD で fail-closed を先に固定してから実装する。
 3. Hook path を触る場合は、redaction・retention・partial event filtering が壊れないか確認する。
 4. Scorer path を触る場合は、advisory-only と `auto_apply: false` を崩さない。
