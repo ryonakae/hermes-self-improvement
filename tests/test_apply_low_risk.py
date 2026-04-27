@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -268,10 +269,39 @@ def test_apply_low_risk_confirmed_mutates_target_and_records_applied_ledger(tmp_
     ledger_path = Path(attempt["ledger_path"])
     assert ledger_path.is_file()
     ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    applied_diff = attempt["applied_diff"]
+    assert applied_diff["format"] == "low_risk_applied_diff_v1"
+    assert applied_diff["target_path"] == str(target)
+    assert applied_diff["before_hash"] == item["before_hash"]
+    assert applied_diff["after_hash"] == item["rollback_preview"]["after_hash"]
+    assert applied_diff["mutation"] == item["mutation"]
+    assert "Observed repeated sandbox permission-denied events." in applied_diff["after_snippet"]
+    review = attempt["review_summary"]
+    assert review == {
+        "status": "applied_low_risk",
+        "target_changed": True,
+        "title": item["title"],
+        "change_type": "pitfall_addition_existing_section",
+        "risk": "low",
+        "confidence": "high",
+        "score": 86,
+        "scorer": "heuristic-v0.1",
+        "recommendation": "review_for_possible_low_risk_apply",
+        "validation_status": "passed",
+        "git_commit_created": False,
+        "evidence_summary": "terminal permission_denied x19",
+    }
+    assert attempt["git_metadata"]["commit_created"] is False
+    assert "is_git_managed" in attempt["git_metadata"]
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
     assert ledger["current_status"] == "applied"
     assert ledger["dry_run"] is False
     assert ledger["target_after_hash"] == item["rollback_preview"]["after_hash"]
     assert ledger["validation_result"]["status"] == "passed"
+    assert ledger["applied_diff"] == applied_diff
+    assert ledger["review_summary"] == review
+    assert ledger["git_metadata"] == attempt["git_metadata"]
+    assert ledger["git_commit"] is None
 
 
 
@@ -318,6 +348,70 @@ def test_apply_low_risk_confirmed_mutates_typo_fix_target(tmp_path):
     assert attempt["change_type"] == "typo_fix"
     assert attempt["target_after_hash"] == item["rollback_preview"]["after_hash"]
     assert attempt["validation_result"]["status"] == "passed"
+
+
+def test_apply_low_risk_records_git_metadata_without_creating_commit(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    subprocess.run(["git", "config", "user.email", "hermes@example.invalid"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Hermes Test"], cwd=repo, check=True)
+
+    mod = load_plugin_module()
+    target = repo / "SKILL.md"
+    original = "# Skill\n\nUse teh browser carefully.\n"
+    target.write_text(original, encoding="utf-8")
+    subprocess.run(["git", "add", "SKILL.md"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-m", "seed skill"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    before_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
+
+    proposal = {
+        "id": "proposal-git",
+        "title": "Fix typo in skill prose",
+        "target": "file_workflow_skills",
+        "target_path": str(target),
+        "action": "typo_fix",
+        "risk": "low",
+        "confidence": "high",
+        "score": 91,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "scorer": "heuristic-v0.1",
+        "count": 3,
+        "tool_name": "read_file",
+        "error_kind": "typo_detected",
+        "reason": "Replace teh with the in prose.",
+        "old_text": "teh",
+        "new_text": "the",
+    }
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={"event_count": 10},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+    mod.write_apply_plan(plan, {"reports_dir": str(tmp_path / "reports")})
+    item = plan["items"][0]
+
+    result = mod.apply_low_risk_skeleton(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config={"reports_dir": str(tmp_path / "reports")},
+        created_at=datetime(2026, 4, 26, 16, 30, tzinfo=timezone.utc),
+        confirm_apply=True,
+        expected_item_hash=item["item_hash"],
+    )
+
+    after_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
+    assert after_head == before_head
+    git_meta = result["apply_attempt"]["git_metadata"]
+    assert git_meta["is_git_managed"] is True
+    assert git_meta["repo_root"] == str(repo)
+    assert git_meta["target_relative_path"] == "SKILL.md"
+    assert git_meta["target_status_short"] == " M SKILL.md"
+    assert git_meta["commit_created"] is False
+    assert git_meta["commit_hash"] is None
+    assert git_meta["commit_ownership"] == "target_repository_workflow"
+    assert result["apply_attempt"]["review_summary"]["git_commit_created"] is False
 
 def test_apply_low_risk_confirmed_rejects_item_hash_mismatch_without_mutating_target(tmp_path):
     mod, plan, item, _plan_path, target, original = write_eligible_plan(tmp_path)

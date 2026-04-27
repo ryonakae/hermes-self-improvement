@@ -87,6 +87,7 @@ If no matching existing section is present for section additions, fail closed wi
 - without confirmation, leaves target files unchanged and writes a dry-run pending ledger
 - with `--confirm-apply --expected-item-hash <item_hash>`, mutates only the planned target after item-hash confirmation, before-hash validation, rollback-preview after-hash validation, and post-write hash validation
 - writes an applied ledger only for confirmed successful guarded mutation
+- records `applied_diff`, `validation_result`, `review_summary`, and `git_metadata` on confirmed apply attempts and applied ledgers so humans can review what changed without reconstructing context from the plan artifact
 - does not create git commits for git-managed targets; commit ownership stays with the target repository workflow, while self-improvement artifacts should record enough metadata for review
 
 `stale_plan`, `rejected`, and confirmation-hash mismatch attempts should not create ledgers or planned diffs beyond the safe preview metadata.

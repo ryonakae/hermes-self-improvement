@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -295,6 +296,17 @@ def _planned_diff_for_item(item: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _applied_diff_for_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    planned = _planned_diff_for_item(item)
+    if planned is None:
+        return None
+    return {
+        **planned,
+        "format": "low_risk_applied_diff_v1",
+        "status": "applied",
+    }
+
+
 def _validation_plan_for_item(item: dict[str, Any]) -> dict[str, Any] | None:
     rollback = item.get("rollback_preview")
     ledger_preview = item.get("ledger_preview") if isinstance(item.get("ledger_preview"), dict) else {}
@@ -339,6 +351,84 @@ def _content_after_item_mutation(item: dict[str, Any], before_content: str) -> s
 
 def _mark_hash(payload: dict[str, Any], hash_key: str) -> None:
     payload[hash_key] = _sha256_text(_stable_json({k: v for k, v in payload.items() if k != hash_key}))
+
+
+def _evidence_summary(item: dict[str, Any]) -> str | None:
+    evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
+    tool_name = evidence.get("tool_name")
+    error_kind = evidence.get("error_kind")
+    count = evidence.get("count")
+    parts = [str(part) for part in (tool_name, error_kind) if part]
+    if count is not None:
+        parts.append(f"x{count}")
+    return " ".join(parts) if parts else None
+
+
+def _git_metadata_for_target(target_path_text: str | None) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "is_git_managed": False,
+        "commit_created": False,
+        "commit_hash": None,
+    }
+    if not target_path_text:
+        return metadata
+    target_path = Path(target_path_text).expanduser()
+    cwd = target_path.parent if target_path.parent.exists() else Path.cwd()
+    try:
+        root = subprocess.run(
+            ["git", "-C", str(cwd), "rev-parse", "--show-toplevel"],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        ).stdout.strip()
+    except Exception:
+        return metadata
+    try:
+        rel_path = str(target_path.resolve().relative_to(Path(root).resolve()))
+    except Exception:
+        rel_path = str(target_path)
+    status = subprocess.run(
+        ["git", "-C", root, "status", "--short", "--", rel_path],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        timeout=5,
+    ).stdout.rstrip("\n")
+    metadata.update({
+        "is_git_managed": True,
+        "repo_root": root,
+        "target_relative_path": rel_path,
+        "target_status_short": status,
+        "commit_ownership": "target_repository_workflow",
+    })
+    return metadata
+
+
+def _review_summary_for_item(
+    *,
+    item: dict[str, Any],
+    status: str,
+    target_changed: bool,
+    validation_result: dict[str, Any] | None,
+    git_metadata: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "target_changed": bool(target_changed),
+        "title": item.get("title"),
+        "change_type": item.get("change_type"),
+        "risk": item.get("risk"),
+        "confidence": item.get("confidence"),
+        "score": item.get("score"),
+        "scorer": item.get("scorer"),
+        "recommendation": item.get("recommendation"),
+        "validation_status": (validation_result or {}).get("status"),
+        "git_commit_created": bool((git_metadata or {}).get("commit_created")),
+        "evidence_summary": _evidence_summary(item),
+    }
 
 
 def build_apply_attempt(
@@ -498,10 +588,22 @@ def apply_low_risk_skeleton(
                     target_path.write_text(after_content, encoding="utf-8")
                     target_changed = True
                     validation_result = _validation_result_for_item(item=item, before_hash=current_hash, after_hash=_current_file_hash(str(target_path)))
+                    applied_diff = _applied_diff_for_item(item)
+                    git_metadata = _git_metadata_for_target(item.get("target_path"))
+                    review_summary = _review_summary_for_item(
+                        item=item,
+                        status="applied_low_risk",
+                        target_changed=True,
+                        validation_result=validation_result,
+                        git_metadata=git_metadata,
+                    )
                     attempt["current_status"] = "applied_low_risk"
                     attempt["target_changed"] = True
                     attempt["target_after_hash"] = after_hash
                     attempt["validation_result"] = validation_result
+                    attempt["applied_diff"] = applied_diff
+                    attempt["git_metadata"] = git_metadata
+                    attempt["review_summary"] = review_summary
                     attempt["events"][0].update({
                         "status": "applied_low_risk",
                         "target_changed": True,
@@ -510,6 +612,9 @@ def apply_low_risk_skeleton(
                     ledger = build_pending_ledger(plan=plan, item=item, created_at=created_at, dry_run=False)
                     ledger["current_status"] = "applied"
                     ledger["validation_result"] = validation_result
+                    ledger["applied_diff"] = applied_diff
+                    ledger["git_metadata"] = git_metadata
+                    ledger["review_summary"] = review_summary
                     ledger["events"].append({
                         "status": "applied",
                         "ts": attempt.get("created_at"),

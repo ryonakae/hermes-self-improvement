@@ -319,8 +319,8 @@ Executor requirements:
 - target skill must be read immediately before patching;
 - patch must be generated against the current content;
 - use `skill_manage` for skill edits where possible;
-- write report entry with evidence, score, risk, applied diff, and validation result;
-- if target is git-managed, record repository metadata such as repo root, dirty-before/after status, and suggested commit summary when available, but do not create commits; ownership of commits belongs to the target repository workflow;
+- write report entry with evidence, score, risk, applied diff, validation result, and a short review summary;
+- if target is git-managed, record repository metadata such as repo root, target status, and commit ownership metadata when available, but do not create commits; ownership of commits belongs to the target repository workflow;
 - if target is not git-managed, ensure ledger exists before applying.
 
 ### Phase 5 — Approval gates for broader C/D
