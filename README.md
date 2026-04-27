@@ -30,7 +30,7 @@
 
 DSPy は、LLM を使う処理を「プロンプト文字列の寄せ集め」ではなく、入出力 schema と評価指標を持つ program として組み立てるための Python framework です。
 
-GEPA は DSPy 周辺で使われる optimizer / evaluation approach で、LLM program の候補を評価しながら改善するための仕組みです。この plugin では、将来 proposal scorer を GEPA で最適化できるように `dspy_program.py` と `gepa_adapter.py` に契約を置いています。
+GEPA は DSPy 周辺で使われる optimizer / evaluation approach で、LLM program の候補を評価しながら改善するための仕組みです。この plugin では、将来 proposal scorer を GEPA で最適化できるように `hermes_self_improvement/dspy_program.py` と `hermes_self_improvement/gepa_adapter.py` に契約を置いています。
 
 ただし、現在の `--scorer gepa` は本物の optimizer run ではありません。既定では dependency-free の offline scorer を使い、`evals/rubric.json` と `evals/proposal_eval_cases.jsonl` に基づいて proposal を advisory に採点します。`max_iterations > 0` の optimizer 実行は、project-specific metric / invocation が未実装なので fail closed します。
 
@@ -69,27 +69,30 @@ bin/hermes-self-improve gepa-eval --json
 
 - `heuristic`: 既定。依存なしの deterministic scorer。
 - `llm`: Hermes auxiliary LLM 経路で proposal を採点する。失敗時は heuristic にフォールバックする。
-- `gepa`: `gepa_adapter.py` 経由。既定では offline DSPy-compatible scorer を実行する。
+- `gepa`: `hermes_self_improvement/gepa_adapter.py` 経由。既定では offline DSPy-compatible scorer を実行する。
 - `compare`: LLM と GEPA の採点を比較し、disagreement を report に出す。
 
 どの scorer でも `auto_apply` は常に `false` として扱います。採点は優先順位付けであり、変更許可ではありません。
 
 ## ディレクトリ構成
 
+Hermes が discovery する `plugin.yaml` と root `__init__.py` は plugin root に残し、実装は Python package `hermes_self_improvement/` に集約しています。これは公式 docs の最小構成を、大きくなった plugin 向けに整理した形です。
+
+
 - `plugin.yaml`: Hermes plugin manifest。
 - `__init__.py`: plugin registration、hook / CLI / slash command / tool 登録、互換 export。
-- `schemas.py`: plugin tool schema。
-- `plugin_tools.py`: CLI と同じ core function / policy gate を使う tool handler。`tools.py` という名前は Hermes core `tools.registry` を shadow するため使わない。
-- `config.py`: default config、execution mode、policy gate。
-- `observer.py`: hook observer、redaction、JSONL telemetry、retention。
-- `analysis.py`: telemetry aggregation、finding 抽出、proposal 生成。
-- `scoring.py`: heuristic / LLM / GEPA / compare scorer。
-- `dspy_program.py`: DSPy-compatible な proposal scoring contract と offline baseline。
-- `gepa_adapter.py`: GEPA scorer payload、offline eval、optimizer fail-closed 境界。
-- `apply_plan.py`: dry-run apply plan と低リスク mutation plan の生成。
-- `ledger.py`: pending ledger / apply attempt artifact。
-- `approvals.py`: approval artifact generation / validation / report helpers。
-- `cli.py`: CLI parser、report rendering、pipeline orchestration。
+- `hermes_self_improvement/schemas.py`: plugin tool schema。
+- `hermes_self_improvement/tool_handlers.py`: CLI と同じ core function / policy gate を使う tool handler。root 直下の `tools.py` は Hermes core `tools.registry` を shadow するため使わない。
+- `hermes_self_improvement/config.py`: default config、execution mode、policy gate。
+- `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry、retention。
+- `hermes_self_improvement/analysis.py`: telemetry aggregation、finding 抽出、proposal 生成。
+- `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer。
+- `hermes_self_improvement/dspy_program.py`: DSPy-compatible な proposal scoring contract と offline baseline。
+- `hermes_self_improvement/gepa_adapter.py`: GEPA scorer payload、offline eval、optimizer fail-closed 境界。
+- `hermes_self_improvement/apply_plan.py`: dry-run apply plan と低リスク mutation plan の生成。
+- `hermes_self_improvement/ledger.py`: pending ledger / apply attempt artifact。
+- `hermes_self_improvement/approvals.py`: approval artifact generation / validation / report helpers。
+- `hermes_self_improvement/cli.py`: CLI parser、report rendering、pipeline orchestration。
 - `bin/hermes-self-improve`: standalone wrapper CLI。
 - `evals/`: GEPA offline scorer の rubric と regression cases。
 - `skills/operations/SKILL.md`: plugin に同梱する運用 skill。
@@ -138,7 +141,7 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 
 ## Plugin tools
 
-`plugin.yaml` は次の agent-native tools を宣言します。いずれも `plugin_tools.py` の handler から CLI と同じ core function を呼び、`validate_mode_action(...)` / `_required_capability_for_command(...)` による policy gate を通します。wrapper CLI への shell out はしません。
+`plugin.yaml` は次の agent-native tools を宣言します。いずれも `hermes_self_improvement/tool_handlers.py` の handler から CLI と同じ core function を呼び、`validate_mode_action(...)` / `_required_capability_for_command(...)` による policy gate を通します。wrapper CLI への shell out はしません。
 
 - `self_improvement_status`
 - `self_improvement_generate_apply_plan`

@@ -196,7 +196,7 @@ def load_config(default_path: Path | None = None, *, cli_config_path: str | Path
     required to exist and be valid JSON so operator intent never silently falls
     back to a safer-looking but wrong config.
     """
-    default_path = Path(default_path or Path(__file__).with_name("config.json"))
+    default_path = Path(default_path or Path(__file__).resolve().parents[1] / "config.json")
     config = _default_config()
     sources: list[str] = []
 

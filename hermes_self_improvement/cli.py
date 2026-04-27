@@ -457,7 +457,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 
 
 def _handle_cli(args: argparse.Namespace) -> None:
-    config = load_config(Path(__file__).with_name("config.json"), cli_config_path=getattr(args, "config_path", None))
+    config = load_config(Path(__file__).resolve().parents[1] / "config.json", cli_config_path=getattr(args, "config_path", None))
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
     execution_mode = resolve_execution_mode(config, getattr(args, "mode", None))
     mode_decision = validate_mode_action(
@@ -623,7 +623,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
 
 
 def _handle_slash(raw_args: str = "") -> str:
-    config = load_config(Path(__file__).with_name("config.json"))
+    config = load_config(Path(__file__).resolve().parents[1] / "config.json")
     text = (raw_args or "").strip().lower()
     if text.startswith("analyze") or text.startswith("report") or text.startswith("run"):
         use_llm = "--scorer llm" in text or "llm" in text.split()

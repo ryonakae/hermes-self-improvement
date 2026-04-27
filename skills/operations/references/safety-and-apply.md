@@ -152,4 +152,4 @@ Mutation tools remain fail-closed:
 - missing confirmation, hash mismatch, stale target, unsupported mutation, missing rollback snapshot, or policy denial must return a rejected/would-apply/would-rollback payload with `target_changed: false`.
 
 
-Implementation note: do not name the handler module `tools.py`; in the active Hermes runtime that shadows the core `tools.registry` package during plugin discovery. Use `plugin_tools.py` instead.
+Implementation note: do not place a handler module named `tools.py` at the plugin root; in the active Hermes runtime that shadows the core `tools.registry` package during plugin discovery. Keep tool handlers under `hermes_self_improvement/tool_handlers.py`.

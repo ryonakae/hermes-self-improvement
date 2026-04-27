@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-GEPA_ADAPTER = PLUGIN_DIR / "gepa_adapter.py"
-DSPY_PROGRAM = PLUGIN_DIR / "dspy_program.py"
+GEPA_ADAPTER = PLUGIN_DIR / "hermes_self_improvement" / "gepa_adapter.py"
+DSPY_PROGRAM = PLUGIN_DIR / "hermes_self_improvement" / "dspy_program.py"
 
 
 def load_module(path: Path, name: str):

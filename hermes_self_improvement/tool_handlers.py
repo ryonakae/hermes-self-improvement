@@ -36,10 +36,10 @@ PLUGIN_VERSION = "0.1.0"
 
 def _config_from_args(args: dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(args, dict) and isinstance(args.get("config"), dict):
-        defaults = load_config(Path(__file__).with_name("config.json"), cli_config_path=args.get("config_path"))
+        defaults = load_config(Path(__file__).resolve().parents[1] / "config.json", cli_config_path=args.get("config_path"))
         return {**defaults, **args["config"]}
     config_path = args.get("config_path") if isinstance(args, dict) else None
-    return load_config(Path(__file__).with_name("config.json"), cli_config_path=config_path)
+    return load_config(Path(__file__).resolve().parents[1] / "config.json", cli_config_path=config_path)
 
 
 def _mode_from_args(config: dict[str, Any], args: dict[str, Any] | None) -> str:

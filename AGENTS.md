@@ -97,7 +97,7 @@ The integration is read-only. It does not create, approve, apply, rollback, or p
 
 ## Plugin tools
 
-`plugin.yaml` / `schemas.py` / `plugin_tools.py` で CLI parity の tools を登録しています。`tools.py` という名前は Hermes core `tools.registry` を shadow するため使いません。tool handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を使います。
+`plugin.yaml` / `hermes_self_improvement/schemas.py` / `hermes_self_improvement/tool_handlers.py` で CLI parity の tools を登録しています。`tools.py` という名前は Hermes core `tools.registry` を shadow するため使いません。tool handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を使います。
 
 登録 tools:
 
@@ -115,20 +115,23 @@ The integration is read-only. It does not create, approve, apply, rollback, or p
 
 ## 重要パス
 
+実装は `hermes_self_improvement/` package 配下に集約しています。root `__init__.py` は Hermes plugin discovery 用の thin entrypoint です。root 直下に `tools.py` は置きません。
+
+
 - `plugin.yaml`: plugin manifest。
-- `__init__.py`: registration、hook / CLI / slash command / tool 登録、互換 export。
-- `schemas.py`: plugin tool schema。
-- `plugin_tools.py`: CLI parity tool handler。
-- `config.py`: default config、execution mode、deny-by-default policy。
-- `observer.py`: hook observer、redaction、JSONL telemetry、retention。
-- `analysis.py`: event aggregation、finding 抽出、proposal 生成。
-- `scoring.py`: heuristic / LLM / GEPA / compare scorer。
-- `dspy_program.py`: DSPy-compatible scoring contract と dependency-free baseline。
-- `gepa_adapter.py`: GEPA payload、offline eval、optimizer fail-closed 境界。
-- `apply_plan.py`: dry-run apply plan と low-risk mutation planning。
-- `ledger.py`: pending ledger と apply attempt artifact。
-- `approvals.py`: approval artifact generation / validation / report helpers。
-- `cli.py`: CLI parser、report rendering、pipeline orchestration。
+- `__init__.py`: thin plugin entrypoint。Hermes discovery 用に root に残し、実装 package を re-export。
+- `hermes_self_improvement/schemas.py`: plugin tool schema。
+- `hermes_self_improvement/tool_handlers.py`: CLI parity tool handler。
+- `hermes_self_improvement/config.py`: default config、execution mode、deny-by-default policy。
+- `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry、retention。
+- `hermes_self_improvement/analysis.py`: event aggregation、finding 抽出、proposal 生成。
+- `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer。
+- `hermes_self_improvement/dspy_program.py`: DSPy-compatible scoring contract と dependency-free baseline。
+- `hermes_self_improvement/gepa_adapter.py`: GEPA payload、offline eval、optimizer fail-closed 境界。
+- `hermes_self_improvement/apply_plan.py`: dry-run apply plan と low-risk mutation planning。
+- `hermes_self_improvement/ledger.py`: pending ledger と apply attempt artifact。
+- `hermes_self_improvement/approvals.py`: approval artifact generation / validation / report helpers。
+- `hermes_self_improvement/cli.py`: CLI parser、report rendering、pipeline orchestration。
 - `evals/`: offline scorer の rubric / regression cases。
 - `skills/operations/SKILL.md`: plugin-bundled operational skill。
 - `skills/operations/references/`: skill 用の詳細 reference。
@@ -154,7 +157,7 @@ Runtime artifact の既定保存先:
 ## ワークフロー上の注意
 
 - hook は観測専用です。hook 内で LLM、GEPA optimizer、skill patch、memory edit、重い集計を実行しないでください。
-- `execution_mode` は prompt ではなく `config.py` / CLI policy で検証します。未知 mode / 未許可 command / 足りない capability は拒否します。
+- `execution_mode` は prompt ではなく `hermes_self_improvement/config.py` / CLI policy で検証します。未知 mode / 未許可 command / 足りない capability は拒否します。
 - `generate-apply-plan` は artifact 生成のみで、target file を変更しません。
 - `apply-low-risk` は既定では preview / apply-attempt / pending ledger だけを書きます。target file の実変更は `--confirm-apply --expected-item-hash <item_hash>` があり、eligibility・before hash・rollback preview・post-write validation が通る場合だけです。`rollback-low-risk` も既定では非破壊で、実 rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` と current target hash 検証が必要です。`apply-approved` は現時点では validation-only / preview-only で、target を変更しません。
 - 作業前に `git status --short` と該当 diff を確認し、無関係な変更を巻き戻さないでください。

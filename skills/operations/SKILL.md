@@ -19,20 +19,23 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 
 ## 主要パス
 
+実装 package は `hermes_self_improvement/`。root `__init__.py` は Hermes plugin discovery の thin entrypoint として残し、root 直下に `tools.py` は置かない。
+
+
 - `plugin.yaml`: plugin manifest。
-- `__init__.py`: registration、hook / CLI / slash command、bundled skill、tool 登録。
-- `schemas.py`: plugin tool schema。
-- `plugin_tools.py`: CLI parity tool handler。`tools.py` という名前は Hermes core `tools.registry` を shadow するため使わない。
-- `config.py`: default config、config precedence、execution mode、policy gate。
-- `observer.py`: hook observer、redaction、JSONL telemetry、retention。
-- `analysis.py`: event aggregation、finding 抽出、proposal 生成。
-- `scoring.py`: heuristic / LLM / GEPA / compare scorer。
-- `dspy_program.py`: DSPy-compatible scoring contract と offline baseline。
-- `gepa_adapter.py`: GEPA payload、offline eval、optimizer fail-closed 境界。
-- `apply_plan.py`: dry-run apply plan と low-risk mutation planning。
-- `ledger.py`: pending ledger と apply attempt artifact。
-- `approvals.py`: approval artifact generation / validation / report / `apply-approved` preview helpers。実 target mutation の許可ではなく、plan / item hash / expiry に束縛された承認メタデータを作り、後続 apply のために fail-closed 検証する。
-- `cli.py`: CLI parser、report rendering、ledger/approval report integration、pipeline orchestration。
+- `__init__.py`: thin plugin entrypoint。Hermes discovery 用に root に残し、実装 package を re-export。
+- `hermes_self_improvement/schemas.py`: plugin tool schema。
+- `hermes_self_improvement/tool_handlers.py`: CLI parity tool handler。root 直下の `tools.py` は Hermes core `tools.registry` を shadow するため使わない。
+- `hermes_self_improvement/config.py`: default config、config precedence、execution mode、policy gate。
+- `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry、retention。
+- `hermes_self_improvement/analysis.py`: event aggregation、finding 抽出、proposal 生成。
+- `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer。
+- `hermes_self_improvement/dspy_program.py`: DSPy-compatible scoring contract と offline baseline。
+- `hermes_self_improvement/gepa_adapter.py`: GEPA payload、offline eval、optimizer fail-closed 境界。
+- `hermes_self_improvement/apply_plan.py`: dry-run apply plan と low-risk mutation planning。
+- `hermes_self_improvement/ledger.py`: pending ledger と apply attempt artifact。
+- `hermes_self_improvement/approvals.py`: approval artifact generation / validation / report / `apply-approved` preview helpers。実 target mutation の許可ではなく、plan / item hash / expiry に束縛された承認メタデータを作り、後続 apply のために fail-closed 検証する。
+- `hermes_self_improvement/cli.py`: CLI parser、report rendering、ledger/approval report integration、pipeline orchestration。
 - `bin/hermes-self-improve`: standalone wrapper CLI。
 - `evals/`: GEPA offline scorer の rubric / regression cases。
 - `skills/operations/SKILL.md`: この bundled operational skill。

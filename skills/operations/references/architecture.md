@@ -29,7 +29,7 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 
 ## Telemetry and redaction
 
-`observer.py` writes JSONL telemetry under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/state/events.jsonl` by default.
+`hermes_self_improvement/observer.py` writes JSONL telemetry under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/state/events.jsonl` by default.
 
 - Store redacted previews and stable hashes, not full sensitive payloads.
 - Redact credential-looking values and sensitive paths before writing JSONL.
@@ -39,7 +39,7 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 
 ## Analysis and proposal generation
 
-`analysis.py` should:
+`hermes_self_improvement/analysis.py` should:
 
 - Reclassify historical `post_tool_call` rows from `result_preview` without rewriting the JSONL source.
 - Prefer structured success/error fields over raw text keyword matching.
@@ -49,11 +49,11 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 
 ## Scorer paths
 
-`scoring.py` supports:
+`hermes_self_improvement/scoring.py` supports:
 
 - `heuristic`: dependency-free deterministic baseline.
 - `llm`: Hermes auxiliary LLM scoring. Broken JSON, provider failure, or timeout falls back to heuristic with `llm_scorer_error`.
-- `gepa`: `gepa_adapter.py` path. The default safe configuration (`gepa_scorer.enabled=true`, `max_iterations=0`) runs the dependency-free offline `ProposalBatchScoringProgram` and returns `gepa-v0.1` advisory scores.
+- `gepa`: `hermes_self_improvement/gepa_adapter.py` path. The default safe configuration (`gepa_scorer.enabled=true`, `max_iterations=0`) runs the dependency-free offline `ProposalBatchScoringProgram` and returns `gepa-v0.1` advisory scores.
 - `compare`: runs LLM and GEPA scoring, records score deltas and disagreement reasons, and pushes disagreement cases to `human_review`.
 
 All scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does not grant mutation permission.
@@ -62,7 +62,7 @@ All scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does
 
 - `evals/proposal_eval_cases.jsonl`: regression cases for repeated tool failure, one-off low evidence, dangerous auto-apply denial, and stale memory review.
 - `evals/rubric.json`: `proposal-eval-v0.1` rubric. Hard constraint: `auto_apply: false`.
-- `dspy_program.py`: dependency-free `ProposalScoringProgram` / `ProposalBatchScoringProgram` scaffold.
-- `gepa_adapter.py`: payload builder, offline program evaluation, and fail-closed boundary for real optimizer runs.
+- `hermes_self_improvement/dspy_program.py`: dependency-free `ProposalScoringProgram` / `ProposalBatchScoringProgram` scaffold.
+- `hermes_self_improvement/gepa_adapter.py`: payload builder, offline program evaluation, and fail-closed boundary for real optimizer runs.
 
 `max_iterations > 0` optimizer runs are not production-wired. They require a concrete DSPy/GEPA metric and invocation; until then they should fail closed.

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
-GEPA_ADAPTER = PLUGIN_DIR / "gepa_adapter.py"
+GEPA_ADAPTER = PLUGIN_DIR / "hermes_self_improvement" / "gepa_adapter.py"
 CONFIG_PATH = PLUGIN_DIR / "config.json"
 
 

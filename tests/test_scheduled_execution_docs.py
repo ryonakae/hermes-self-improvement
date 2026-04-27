@@ -44,6 +44,6 @@ def test_scheduled_execution_docs_include_self_contained_prompt_template():
 def test_tool_handler_docs_use_non_shadowing_module_name():
     combined = "\n\n".join(read(path) for path in (README, AGENTS, OPERATIONS, PLAN, SKILL))
 
-    assert "plugin_tools.py" in combined
+    assert "tool_handlers.py" in combined
     assert "plugin_plugin_tools.py" not in combined
     assert "shadow" in combined

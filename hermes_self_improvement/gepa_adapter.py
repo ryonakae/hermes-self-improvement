@@ -8,7 +8,8 @@ from typing import Any
 
 
 ADAPTER_VERSION = "gepa-v0.1"
-PLUGIN_DIR = Path(__file__).resolve().parent
+PACKAGE_DIR = Path(__file__).resolve().parent
+PLUGIN_DIR = PACKAGE_DIR.parent
 EVAL_DIR = PLUGIN_DIR / "evals"
 RUBRIC_PATH = EVAL_DIR / "rubric.json"
 EVAL_CASES_PATH = EVAL_DIR / "proposal_eval_cases.jsonl"
@@ -223,7 +224,7 @@ def _confidence_rank(value: Any) -> int:
 
 
 def _load_dspy_program_module() -> Any:
-    path = PLUGIN_DIR / "dspy_program.py"
+    path = PACKAGE_DIR / "dspy_program.py"
     spec = importlib.util.spec_from_file_location("hermes_self_improvement_dspy_program_runtime", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Unable to load DSPy program scaffold: {path}")
