@@ -22,6 +22,37 @@ Move the hermes-self-improvement auto-apply policy out of ad-hoc skill edits and
 
 ## Policy decisions captured so far
 
+### Implementation order correction — plugin structure before more mutation work
+
+Decision from 2026-04-27 review against the official Hermes plugin docs: before continuing deeper auto-apply implementation, first refactor `hermes-self-improvement/__init__.py` into a more standard plugin layout. The current plugin is loaded correctly as a Hermes plugin, but `__init__.py` now contains observer, analysis, scoring, apply-plan, ledger, and CLI responsibilities. Continuing mutation work on top of that file would make the safety-critical executor harder to review.
+
+Preferred order from here:
+
+1. Refactor the plugin into focused modules while preserving behavior and green tests.
+2. Resume the existing auto-apply roadmap: low-risk mutation execution, validation, ledger status transitions, rollback path, and approval gates.
+3. After the auto-apply path is structurally sound, investigate plugin integration polish: why `ctx.register_cli_command()` is registered internally but `hermes self-improvement ...` is not exposed, and why `hermes plugins list` may omit the nested user plugin even though `discover_plugins(force=True)` loads it.
+
+Initial module split target:
+
+```text
+hermes-self-improvement/
+├── __init__.py          # thin register(ctx) and minimal compatibility exports
+├── config.py            # defaults, config loading, mode policy
+├── observer.py          # RuntimeObserver and hook recording
+├── analysis.py          # event loading, classifiers, proposal generation, reports
+├── scoring.py           # heuristic / LLM / GEPA / compare scoring glue
+├── apply_plan.py        # dry-run plan, target resolution, mutation planning, rollback preview
+├── ledger.py            # pending ledgers and apply-attempt artifacts
+├── cli.py               # argparse setup and command dispatch
+├── dspy_program.py
+├── gepa_adapter.py
+├── evals/
+├── tests/
+└── bin/hermes-self-improve
+```
+
+The refactor should be mechanical and TDD-guarded: move code in small slices, keep backward-compatible imports where tests or wrapper CLI currently import from `__init__.py`, and run the full plugin test suite after each meaningful slice. Do not add new mutation behavior during this refactor.
+
 ### Current auto-apply scope
 
 Allow only low-risk changes to existing custom skills:
@@ -234,6 +265,27 @@ Decision from Q7: use one JSON file per proposal with append-style `events[]`.
 
 The ledger should be immutable or append-only in spirit. The first implementation should use one JSON file per proposal, keep `current_status` at the top level for easy reading, and preserve each transition in an `events` array. Updating the same JSON file is acceptable only if prior events are never removed. If a rollback occurs, append a rollback event rather than silently overwriting history.
 
+### Phase 3.5 — Plugin module layout refactor
+
+Implementation priority update as of 2026-04-27: perform this refactor before adding real target mutation to `apply-low-risk`. The current plugin already loads and records hooks, but its implementation is concentrated in `__init__.py`. Before the executor becomes mutating, split the code into focused modules so review and rollback-critical logic are easier to reason about.
+
+Refactor constraints:
+
+- keep `plugin.yaml` stable unless a new official plugin capability is actually added;
+- keep `register(ctx)` behavior unchanged: register the same hooks, slash command, and CLI command;
+- keep the wrapper CLI working at `hermes-self-improvement/bin/hermes-self-improve`;
+- keep existing tests importing from `__init__.py` green by preserving compatibility exports during the transition;
+- no new mutation behavior in this phase;
+- verify after each slice with `python3 -m pytest hermes-self-improvement/tests -q` and at least one wrapper CLI status smoke.
+
+Suggested slice order:
+
+1. Extract config/mode policy helpers to `config.py`.
+2. Extract `RuntimeObserver` and telemetry write helpers to `observer.py`.
+3. Extract CLI parser/handler to `cli.py`, keeping `__main__` and wrapper behavior intact.
+4. Extract apply-plan and ledger helpers to `apply_plan.py` / `ledger.py`.
+5. Extract analysis/report/scoring glue last, because these have the broadest dependencies.
+
 ### Phase 4 — Low-risk executor
 
 Implementation progress as of 2026-04-27: `apply-low-risk <plan-id> <item-id>` now has a non-mutating skeleton. It loads an explicit apply plan item, checks eligibility and target hash, writes `would_apply_low_risk`, `stale_plan`, or `rejected` apply-attempt artifacts, and leaves target files unchanged. `would_apply_low_risk` attempts now also create a pending ledger and record its path/hash on the same apply-attempt; stale or rejected attempts do not create ledgers.
@@ -295,8 +347,9 @@ Suggested commands once implementation begins:
 
 ```bash
 cd /Users/ryo.nakae/.hermes/plugins/hermes-plugins
-python -m pytest hermes-self-improvement/tests -q
-python -m py_compile hermes-self-improvement/__init__.py hermes-self-improvement/gepa_adapter.py hermes-self-improvement/dspy_program.py
+python3 -m pytest hermes-self-improvement/tests -q
+python3 -m py_compile hermes-self-improvement/__init__.py hermes-self-improvement/*.py
+/Users/ryo.nakae/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve status --mode report_only
 /Users/ryo.nakae/.hermes/plugins/hermes-plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
 ```
 
