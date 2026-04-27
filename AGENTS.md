@@ -96,6 +96,7 @@ Mutation の条件です。
 - `replace_entire_file`: `skill_large_rewrite` / `memory_compress` 用の approval-gated mutation。low-risk unattended apply には入れない。
 - `create_file` / `delete_file`: `skill_create` / `skill_delete` 用の approval-gated mutation。create は rollback で作成ファイルを削除し、delete は before snapshot から復元する。
 - `rename_file` / `merge_files`: `skill_rename` / `skill_merge` 用の approval-gated mutation。rename は source exists + destination missing を必須にし、merge は destination 置換 + source 削除を multi-target rollback data で復元する。
+- `memory_delete`: configured `memory_roots` 配下の既存 file だけを approval-gated `delete_file` で扱う。root 外 target は拒否する。
 
 ## Plugin tools
 

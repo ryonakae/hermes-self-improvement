@@ -1306,3 +1306,71 @@ def test_skill_merge_rollback_rejects_recreated_source(tmp_path):
     assert "rollback_source_hash_mismatch" in rollback["rollback_result"]["reasons"]
     assert source.read_text(encoding="utf-8") == "# Recreated source\n"
     assert destination.read_text(encoding="utf-8") == merged
+
+
+
+def test_apply_approved_confirmed_supports_memory_delete_file_and_rollback_restores_file(tmp_path):
+    mod = load_plugin_module()
+    memory_root = tmp_path / "memories"
+    target = memory_root / "obsolete-memory.md"
+    before = "# Obsolete memory\n\nThis memory is no longer valid.\n"
+    target.parent.mkdir(parents=True)
+    target.write_text(before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-memory-delete",
+        "title": "Delete obsolete memory after approval",
+        "target": "memory",
+        "target_path": str(target),
+        "action": "memory_delete",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 66,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+    }
+    config = {"reports_dir": str(tmp_path / "reports"), "memory_roots": [str(memory_root)]}
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config=config,
+        created_at=datetime(2026, 4, 28, 18, 0, tzinfo=timezone.utc),
+    )
+    mod.write_apply_plan(plan, config)
+    item = plan["items"][0]
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 28, 19, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    result = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 28, 20, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert result["current_status"] == "applied_approved"
+    assert result["target_changed"] is True
+    assert not target.exists()
+    assert result["target_after_hash"] is None
+    ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
+    assert ledger["change_type"] == "memory_delete"
+    assert ledger["rollback_data"]["before_snapshot"] == before
+    assert ledger["target_after_hash"] is None
+
+    rollback = mod.rollback_low_risk(
+        ledger_id=ledger["ledger_id"],
+        config=config,
+        created_at=datetime(2026, 4, 28, 21, 0, tzinfo=timezone.utc),
+        confirm_rollback=True,
+        expected_ledger_hash=ledger["ledger_hash"],
+    )
+    assert rollback["rollback_result"]["current_status"] == "rolled_back"
+    assert rollback["target_changed"] is True
+    assert target.read_text(encoding="utf-8") == before

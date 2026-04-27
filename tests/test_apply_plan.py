@@ -1001,3 +1001,73 @@ def test_build_apply_plan_supports_approval_required_skill_merge_files(tmp_path)
     assert item["rollback_preview"]["source_before_snapshot"] == source_before
     assert item["rollback_preview"]["after_hash"] == mod._sha256_text(merged)
     assert item["rollback_preview"]["source_after_hash"] is None
+
+
+
+def test_build_apply_plan_supports_approval_required_memory_delete_file(tmp_path):
+    mod = load_plugin_module()
+    memory_root = tmp_path / "memories"
+    target = memory_root / "obsolete-memory.md"
+    before = "# Obsolete memory\n\nThis memory is no longer valid.\n"
+    target.parent.mkdir(parents=True)
+    target.write_text(before, encoding="utf-8")
+    proposal = {
+        "id": "proposal-memory-delete",
+        "title": "Delete obsolete memory after approval",
+        "target": "memory",
+        "target_path": str(target),
+        "action": "memory_delete",
+        "risk": "high",
+        "confidence": "medium",
+        "score": 66,
+        "recommendation": "approval_required",
+        "scorer": "heuristic-v0.1",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"memory_roots": [str(memory_root)]},
+        created_at=datetime(2026, 4, 28, 18, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "memory_delete"
+    assert item["target_path"] == str(target)
+    assert item["target_exists"] is True
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
+    assert item["mutation"]["type"] == "delete_file"
+    assert item["rollback_preview"]["rollback_strategy"] == "restore_full_file_from_before_content"
+    assert item["rollback_preview"]["before_snapshot"] == before
+    assert item["rollback_preview"]["after_hash"] is None
+
+
+def test_build_apply_plan_rejects_memory_delete_outside_allowed_roots(tmp_path):
+    mod = load_plugin_module()
+    memory_root = tmp_path / "memories"
+    outside = tmp_path / "outside" / "MEMORY.md"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("# Outside\n", encoding="utf-8")
+    proposal = {
+        "id": "proposal-memory-delete-outside",
+        "target": "memory",
+        "target_path": str(outside),
+        "action": "memory_delete",
+        "risk": "high",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"memory_roots": [str(memory_root)]},
+        created_at=datetime(2026, 4, 28, 18, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["change_type"] == "memory_delete"
+    assert item["mutation"] is None
+    assert "memory_target_outside_allowed_roots" in item["eligibility"]["reasons"]

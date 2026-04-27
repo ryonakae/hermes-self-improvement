@@ -139,6 +139,8 @@ Policy は `hermes_self_improvement/config.py` で検証します。prompt だ�
 
 `skill_rename` は source が存在し、destination が存在しない場合だけ `rename_file` mutation を作ります。rollback は destination を source へ戻します。`skill_merge` は source と destination の両方が存在し、replacement content がある場合だけ `merge_files` mutation を作ります。実適用では destination を置換して source を削除し、rollback は両方の before snapshot を復元します。これらは multi-target rollback data を ledger に残し、low-risk unattended apply には入れません。
 
+`memory_delete` は configured `memory_roots` 配下の既存 file だけに `delete_file` mutation を作ります。rollback は before snapshot の復元です。root 外の target は `memory_target_outside_allowed_roots` で拒否します。
+
 ### Retention prune
 
 `retention-report` は read-only preview です。`retention-prune` も既定では削除候補と `artifact_list_hash` を返すだけです。実削除には次が必要です。

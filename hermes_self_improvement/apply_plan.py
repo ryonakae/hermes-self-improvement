@@ -45,6 +45,8 @@ def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
         return "skill_large_rewrite"
     if "memory_compress" in haystack or "memory compression" in haystack or "compress_memory" in haystack:
         return "memory_compress"
+    if "memory_delete" in haystack or "memory delete" in haystack or "delete memory" in haystack:
+        return "memory_delete"
     return "unknown_or_unclassified"
 
 
@@ -77,6 +79,24 @@ def _custom_skill_roots(config: dict[str, Any] | None) -> list[Path]:
     if not isinstance(roots, list):
         return []
     return [Path(str(root)).expanduser() for root in roots if root]
+
+
+def _memory_roots(config: dict[str, Any] | None) -> list[Path]:
+    roots = (config or {}).get("memory_roots")
+    if roots is None:
+        roots = [get_hermes_home() / "memories"]
+    if isinstance(roots, (str, Path)):
+        roots = [roots]
+    if not isinstance(roots, list):
+        return []
+    return [Path(str(root)).expanduser() for root in roots if root]
+
+
+def _path_inside_any_root(path_text: str | None, roots: list[Path]) -> bool:
+    if not path_text:
+        return False
+    candidate = Path(path_text).expanduser()
+    return any(_path_inside_root(candidate, root) for root in roots)
 
 
 def _custom_skill_path_for_proposal(proposal: dict[str, Any], config: dict[str, Any] | None) -> str | None:
@@ -323,6 +343,17 @@ def _plan_delete_file_mutation(proposal: dict[str, Any], target_content: str | N
     return {"type": "delete_file"}, []
 
 
+def _plan_memory_delete_mutation(
+    proposal: dict[str, Any],
+    target_content: str | None,
+    target_path: str | None,
+    config: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    if not _path_inside_any_root(target_path, _memory_roots(config)):
+        return None, ["memory_target_outside_allowed_roots"]
+    return _plan_delete_file_mutation(proposal, target_content)
+
+
 def _plan_rename_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
     if target_content is None:
         return None, ["target_not_found"]
@@ -368,6 +399,8 @@ def _plan_mutation_for_item(
     change_type: str,
     proposal: dict[str, Any],
     target_content: str | None,
+    target_path: str | None = None,
+    config: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     explicit = proposal.get("mutation")
     if isinstance(explicit, dict):
@@ -384,6 +417,8 @@ def _plan_mutation_for_item(
         return _plan_rename_file_mutation(proposal, target_content)
     if change_type == "skill_merge":
         return _plan_merge_files_mutation(proposal, target_content)
+    if change_type == "memory_delete":
+        return _plan_memory_delete_mutation(proposal, target_content, target_path, config)
     if change_type in _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES:
         return _plan_replace_entire_file_mutation(proposal, target_content)
     heading_sets = {
@@ -407,7 +442,8 @@ def _plan_mutation_for_item(
 
 _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES = {"skill_large_rewrite", "memory_compress"}
 _APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES = {"skill_create", "skill_delete", "skill_rename", "skill_merge"}
-_APPROVAL_REQUIRED_CHANGE_TYPES = _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES | _APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES
+_APPROVAL_REQUIRED_MEMORY_TYPES = {"memory_delete"}
+_APPROVAL_REQUIRED_CHANGE_TYPES = _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES | _APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES | _APPROVAL_REQUIRED_MEMORY_TYPES
 _LOW_RISK_UNATTENDED_CHANGE_TYPES = {
     "pitfall_addition_existing_section",
     "validation_addition_existing_section",
@@ -648,6 +684,8 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         change_type=change_type,
         proposal=proposal,
         target_content=target_meta.get("content"),
+        target_path=target_path,
+        config=config,
     )
     scorer_disagreements = list(proposal.get("scorer_disagreements") or [])
     eligibility = _eligibility_for_apply_item(
