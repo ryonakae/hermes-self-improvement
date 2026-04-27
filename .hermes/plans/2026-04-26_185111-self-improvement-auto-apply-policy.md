@@ -236,7 +236,7 @@ The ledger should be immutable or append-only in spirit. The first implementatio
 
 ### Phase 4 — Low-risk executor
 
-Implementation progress as of 2026-04-27: `apply-low-risk <plan-id> <item-id>` now has a non-mutating skeleton. It loads an explicit apply plan item, checks eligibility and target hash, writes `would_apply_low_risk`, `stale_plan`, or `rejected` apply-attempt artifacts, and leaves target files unchanged.
+Implementation progress as of 2026-04-27: `apply-low-risk <plan-id> <item-id>` now has a non-mutating skeleton. It loads an explicit apply plan item, checks eligibility and target hash, writes `would_apply_low_risk`, `stale_plan`, or `rejected` apply-attempt artifacts, and leaves target files unchanged. `would_apply_low_risk` attempts now also create a pending ledger and record its path/hash on the same apply-attempt; stale or rejected attempts do not create ledgers.
 
 Decision from Q15: the first `apply-low-risk` implementation should only support typo fixes, validation step additions, and pitfall additions. Stale path / stale command corrections remain eligible in the broader policy, but should be deferred to a later implementation phase after the planner, ledger, hash checks, and evidence model are proven.
 

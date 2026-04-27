@@ -1887,13 +1887,25 @@ def apply_low_risk_skeleton(
         current_target_hash=current_hash,
         created_at=created_at,
     )
+    pending_ledger_path: Path | None = None
+    if status == "would_apply_low_risk":
+        pending_ledger = build_pending_ledger(plan=plan, item=item, created_at=created_at, dry_run=True)
+        pending_ledger_path = write_pending_ledger(pending_ledger, config)
+        attempt["pending_ledger_path"] = str(pending_ledger_path)
+        attempt["pending_ledger_hash"] = pending_ledger.get("ledger_hash")
+        attempt["events"][0]["pending_ledger_path"] = str(pending_ledger_path)
+        attempt["events"][0]["pending_ledger_hash"] = pending_ledger.get("ledger_hash")
+        attempt["attempt_hash"] = _sha256_text(_stable_json({k: v for k, v in attempt.items() if k != "attempt_hash"}))
     path = write_apply_attempt(attempt, config)
-    return {
+    result = {
         "apply_attempt": attempt,
         "apply_attempt_path": str(path),
         "apply_plan_path": str(plan_path),
         "target_changed": False,
     }
+    if pending_ledger_path is not None:
+        result["pending_ledger_path"] = str(pending_ledger_path)
+    return result
 
 
 def run_pipeline(

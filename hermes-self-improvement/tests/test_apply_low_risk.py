@@ -74,8 +74,20 @@ def test_apply_low_risk_skeleton_records_would_apply_attempt_without_mutating_ta
     assert attempt["reasons"] == []
     assert attempt["events"][0]["status"] == "would_apply_low_risk"
     assert Path(result["apply_attempt_path"]).is_file()
+    assert attempt["pending_ledger_path"]
+    assert attempt["pending_ledger_hash"]
+    ledger_path = Path(attempt["pending_ledger_path"])
+    assert ledger_path.is_file()
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert ledger["current_status"] == "pending"
+    assert ledger["plan_id"] == plan["plan_id"]
+    assert ledger["item_id"] == item["item_id"]
+    assert ledger["item_hash"] == item["item_hash"]
+    assert ledger["ledger_hash"] == attempt["pending_ledger_hash"]
+    assert attempt["events"][0]["pending_ledger_path"] == str(ledger_path)
     written = json.loads(Path(result["apply_attempt_path"]).read_text(encoding="utf-8"))
     assert written["attempt_id"] == attempt["attempt_id"]
+    assert written["pending_ledger_path"] == str(ledger_path)
 
 
 def test_apply_low_risk_skeleton_records_stale_plan_without_mutating_target(tmp_path):
@@ -96,6 +108,8 @@ def test_apply_low_risk_skeleton_records_stale_plan_without_mutating_target(tmp_
     assert attempt["target_changed"] is False
     assert "target_hash_mismatch" in attempt["reasons"]
     assert attempt["current_target_hash"] != item["before_hash"]
+    assert "pending_ledger_path" not in attempt
+    assert "pending_ledger_hash" not in attempt
     assert Path(result["apply_attempt_path"]).is_file()
 
 
@@ -120,6 +134,8 @@ def test_apply_low_risk_skeleton_records_rejected_for_ineligible_item(tmp_path):
     assert attempt["current_status"] == "rejected"
     assert "item_not_eligible" in attempt["reasons"]
     assert attempt["target_changed"] is False
+    assert "pending_ledger_path" not in attempt
+    assert "pending_ledger_hash" not in attempt
 
 
 def test_cli_accepts_apply_low_risk_command_shape():
