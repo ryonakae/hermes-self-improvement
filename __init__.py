@@ -251,6 +251,12 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 
 
 try:  # pragma: no cover - package import path
+    from .approvals import create_approval_artifact, write_approval_artifact
+except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
+    from approvals import create_approval_artifact, write_approval_artifact
+
+
+try:  # pragma: no cover - package import path
     from .apply_plan import (
         _PITFALL_SECTION_HEADINGS,
         _VALIDATION_SECTION_HEADINGS,

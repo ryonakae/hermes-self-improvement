@@ -10,6 +10,7 @@ from typing import Any
 
 try:  # pragma: no cover - package import path
     from .analysis import AnalysisResult, analyze_events
+    from .approvals import create_approval_artifact
     from .apply_plan import build_apply_plan, write_apply_plan
     from .config import (
         DEFAULT_RETENTION_DAYS,
@@ -24,6 +25,7 @@ try:  # pragma: no cover - package import path
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import AnalysisResult, analyze_events
+    from approvals import create_approval_artifact
     from apply_plan import build_apply_plan, write_apply_plan
     from config import (
         DEFAULT_RETENTION_DAYS,
@@ -360,6 +362,14 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_ledger_report.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_ledger_report)
     p_ledger_report.set_defaults(func=_handle_cli)
+    p_approve = sub.add_parser("approve", help="Create an approval artifact for one apply-plan item")
+    p_approve.add_argument("plan_id")
+    p_approve.add_argument("item_id")
+    p_approve.add_argument("--approver-source", default="manual_cli")
+    p_approve.add_argument("--ttl-hours", type=int, default=24)
+    p_approve.add_argument("--json", action="store_true", dest="as_json")
+    _add_mode_argument(p_approve)
+    p_approve.set_defaults(func=_handle_cli)
     p_apply_plan = sub.add_parser("generate-apply-plan", help="Generate a dry-run apply plan artifact")
     p_apply_plan.add_argument("--since-hours", type=int, default=24)
     p_apply_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
@@ -432,6 +442,24 @@ def _handle_cli(args: argparse.Namespace) -> None:
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
             print(render_ledger_report(payload))
+        return
+    if cmd == "approve":
+        payload = create_approval_artifact(
+            plan_id=str(getattr(args, "plan_id")),
+            item_id=str(getattr(args, "item_id")),
+            config=config,
+            approver_source=str(getattr(args, "approver_source", "manual_cli")),
+            ttl_hours=int(getattr(args, "ttl_hours", 24)),
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            approval = payload.get("approval") or {}
+            print(f"Approval status: {approval.get('current_status')}")
+            if payload.get("approval_path"):
+                print(f"Approval written: {payload.get('approval_path')}")
+            if approval.get("reasons"):
+                print("Reasons: " + ", ".join(approval.get("reasons") or []))
         return
     if cmd == "generate-apply-plan":
         out = run_pipeline(
