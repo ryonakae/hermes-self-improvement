@@ -20,7 +20,9 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 ## 主要パス
 
 - `plugin.yaml`: plugin manifest。
-- `__init__.py`: registration、hook / CLI / slash command、bundled skill 登録。
+- `__init__.py`: registration、hook / CLI / slash command、bundled skill、tool 登録。
+- `schemas.py`: plugin tool schema。
+- `plugin_plugin_tools.py`: CLI parity tool handler。
 - `config.py`: default config、execution mode、policy gate。
 - `observer.py`: hook observer、redaction、JSONL telemetry、retention。
 - `analysis.py`: event aggregation、finding 抽出、proposal 生成。
@@ -64,6 +66,7 @@ Top-level `hermes self-improvement ...` は Hermes version / plugin discovery �
 4. Scorer path を触る場合は、advisory-only と `auto_apply: false` を崩さない。
 5. Apply-plan / ledger path を触る場合は、target hash、rollback preview、explicit target resolution、scorer disagreement gate を確認する。
 6. `__init__.py` / registration / bundled skill discovery を触ったら、unit test だけでなく plugin manager loading も確認する。
+7. Tool handler を触る場合は、wrapper CLI に shell out せず、CLI と同じ core function と `validate_mode_action(...)` / `_required_capability_for_command(...)` を通す。
 
 ## 検証 checklist
 

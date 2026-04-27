@@ -76,7 +76,9 @@ bin/hermes-self-improve gepa-eval --json
 ## ディレクトリ構成
 
 - `plugin.yaml`: Hermes plugin manifest。
-- `__init__.py`: plugin registration、hook / CLI / slash command 登録、互換 export。
+- `__init__.py`: plugin registration、hook / CLI / slash command / tool 登録、互換 export。
+- `schemas.py`: plugin tool schema。
+- `plugin_plugin_tools.py`: CLI と同じ core function / policy gate を使う tool handler。
 - `config.py`: default config、execution mode、policy gate。
 - `observer.py`: hook observer、redaction、JSONL telemetry、retention。
 - `analysis.py`: telemetry aggregation、finding 抽出、proposal 生成。
@@ -110,10 +112,25 @@ bin/hermes-self-improve gepa-eval --json
 
 `execution_mode` は cron prompt ではなく plugin CLI / config / policy で検証します。未知の mode、許可されていない command、足りない capability は deny-by-default です。
 
-- `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval`, `ledger-report`, `approval-report` を許可する既定 mode。
-- `dry_run_plan`: `generate-apply-plan` と read-only の `ledger-report` / `approval-report` を許可するが、target file は変更しない。
-- `apply_low_risk`: 低リスク item の preview / attempt / rollback 記録と read-only の `ledger-report` / `approval-report` を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>`、rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` があり、hash・rollback preview・validation が通る場合だけ。
-- `apply_approved`: approval artifact 作成用の `approve` と read-only の `approval-report` を許可する。承認済み変更の実適用はまだ通常運用では使わない。
+- `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval`, `ledger-report`, `approval-report`, `validate-approval` を許可する既定 mode。
+- `dry_run_plan`: `generate-apply-plan` と read-only の `ledger-report` / `approval-report` / `validate-approval` を許可するが、target file は変更しない。
+- `apply_low_risk`: 低リスク item の preview / attempt / rollback 記録と read-only の `ledger-report` / `approval-report` / `validate-approval` を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>`、rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` があり、hash・rollback preview・validation が通る場合だけ。
+- `apply_approved`: approval artifact 作成用の `approve` と read-only の `approval-report` / `validate-approval` を許可する。承認済み変更の実適用はまだ通常運用では使わない。
+
+## Plugin tools
+
+`plugin.yaml` は次の agent-native tools を宣言します。いずれも `plugin_plugin_tools.py` の handler から CLI と同じ core function を呼び、`validate_mode_action(...)` / `_required_capability_for_command(...)` による policy gate を通します。wrapper CLI への shell out はしません。
+
+- `self_improvement_status`
+- `self_improvement_generate_apply_plan`
+- `self_improvement_ledger_report`
+- `self_improvement_approval_report`
+- `self_improvement_validate_approval`
+- `self_improvement_approve`
+- `self_improvement_apply_low_risk`
+- `self_improvement_rollback_low_risk`
+
+Mutation-capable tools は CLI と同じく fail-closed です。`self_improvement_apply_low_risk` の実変更には `mode="apply_low_risk"`, `confirm_apply=true`, `expected_item_hash` が必要です。`self_improvement_rollback_low_risk` の実 rollback には `mode="apply_low_risk"`, `confirm_rollback=true`, `expected_ledger_hash` が必要です。条件が揃わない場合は preview / rejected artifact に留め、target file は変更しません。
 
 ## 開発方針
 

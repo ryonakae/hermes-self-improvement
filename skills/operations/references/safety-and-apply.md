@@ -122,3 +122,17 @@ bin/hermes-self-improve approve missing-plan item-1 --mode apply_approved --json
 ```
 
 After `generate-apply-plan`, verify the artifact path exists and schema metadata is correct.
+
+
+## Plugin tools
+
+The plugin exposes CLI-parity tools for status, apply-plan generation, ledger reports, approval reports, approval validation, approval artifact creation, guarded low-risk apply, and guarded low-risk rollback. Tool handlers must call the same core Python functions as the CLI and must call `validate_mode_action(...)` with `_required_capability_for_command(...)` before invoking mutation-capable paths. They must not shell out to `bin/hermes-self-improve`.
+
+Mutation tools remain fail-closed:
+
+- `self_improvement_apply_low_risk` only mutates when mode policy allows `apply-low-risk`, `confirm_apply=true`, and `expected_item_hash` matches the selected item hash.
+- `self_improvement_rollback_low_risk` only mutates when mode policy allows `rollback-low-risk`, `confirm_rollback=true`, and `expected_ledger_hash` matches the ledger hash.
+- missing confirmation, hash mismatch, stale target, unsupported mutation, missing rollback snapshot, or policy denial must return a rejected/would-apply/would-rollback payload with `target_changed: false`.
+
+
+Implementation note: do not name the handler module `tools.py`; in the active Hermes runtime that shadows the core `tools.registry` package during plugin discovery. Use `plugin_tools.py` instead.

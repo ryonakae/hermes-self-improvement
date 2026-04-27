@@ -11,7 +11,7 @@ from typing import Any, Iterable
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
 if str(_PLUGIN_DIR) not in sys.path:
-    sys.path.insert(0, str(_PLUGIN_DIR))
+    sys.path.append(str(_PLUGIN_DIR))
 
 try:  # pragma: no cover - package import path
     from .config import (
@@ -47,6 +47,61 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
+
+try:  # pragma: no cover - package import path
+    from .schemas import SELF_IMPROVEMENT_TOOL_SPECS
+    from .plugin_tools import (
+        _handle_self_improvement_approval_report_tool,
+        _handle_self_improvement_approve_tool,
+        _handle_self_improvement_apply_low_risk_tool,
+        _handle_self_improvement_generate_apply_plan_tool,
+        _handle_self_improvement_ledger_report_tool,
+        _handle_self_improvement_rollback_low_risk_tool,
+        _handle_self_improvement_status_tool,
+        _handle_self_improvement_validate_approval_tool,
+    )
+except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
+    from schemas import SELF_IMPROVEMENT_TOOL_SPECS
+    _tools_spec = importlib.util.spec_from_file_location("hermes_self_improvement_local_tools", _PLUGIN_DIR / "plugin_tools.py")
+    if _tools_spec is None or _tools_spec.loader is None:
+        raise
+    _tools_mod = importlib.util.module_from_spec(_tools_spec)
+    sys.modules[_tools_spec.name] = _tools_mod
+    _tools_spec.loader.exec_module(_tools_mod)
+    _handle_self_improvement_approval_report_tool = _tools_mod._handle_self_improvement_approval_report_tool
+    _handle_self_improvement_approve_tool = _tools_mod._handle_self_improvement_approve_tool
+    _handle_self_improvement_apply_low_risk_tool = _tools_mod._handle_self_improvement_apply_low_risk_tool
+    _handle_self_improvement_generate_apply_plan_tool = _tools_mod._handle_self_improvement_generate_apply_plan_tool
+    _handle_self_improvement_ledger_report_tool = _tools_mod._handle_self_improvement_ledger_report_tool
+    _handle_self_improvement_rollback_low_risk_tool = _tools_mod._handle_self_improvement_rollback_low_risk_tool
+    _handle_self_improvement_status_tool = _tools_mod._handle_self_improvement_status_tool
+    _handle_self_improvement_validate_approval_tool = _tools_mod._handle_self_improvement_validate_approval_tool
+
+_SELF_IMPROVEMENT_TOOL_HANDLERS = {
+    "self_improvement_status": _handle_self_improvement_status_tool,
+    "self_improvement_generate_apply_plan": _handle_self_improvement_generate_apply_plan_tool,
+    "self_improvement_ledger_report": _handle_self_improvement_ledger_report_tool,
+    "self_improvement_approval_report": _handle_self_improvement_approval_report_tool,
+    "self_improvement_validate_approval": _handle_self_improvement_validate_approval_tool,
+    "self_improvement_approve": _handle_self_improvement_approve_tool,
+    "self_improvement_apply_low_risk": _handle_self_improvement_apply_low_risk_tool,
+    "self_improvement_rollback_low_risk": _handle_self_improvement_rollback_low_risk_tool,
+}
+
+
+def _register_tools(ctx) -> None:
+    register_tool = getattr(ctx, "register_tool", None)
+    if register_tool is None:
+        return
+    for name, schema in SELF_IMPROVEMENT_TOOL_SPECS:
+        register_tool(
+            name=name,
+            toolset="self_improvement",
+            schema=schema,
+            handler=_SELF_IMPROVEMENT_TOOL_HANDLERS[name],
+            description=schema.get("description", ""),
+            emoji="🛡️",
+        )
 try:  # pragma: no cover - package import path
     from .observer import (
         RuntimeObserver,
@@ -119,6 +174,7 @@ def register(ctx):
     observer = RuntimeObserver(config)
 
     _register_bundled_skills(ctx)
+    _register_tools(ctx)
 
     for hook_name, callback in observer.hooks().items():
         ctx.register_hook(hook_name, callback)

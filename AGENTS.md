@@ -63,10 +63,29 @@ PY
 
 期待値は plugin が enabled、error が null、hooks が登録されていることです。
 
+## Plugin tools
+
+`plugin.yaml` / `schemas.py` / `plugin_plugin_tools.py` で CLI parity の tools を登録しています。tool handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を使います。
+
+登録 tools:
+
+- `self_improvement_status`
+- `self_improvement_generate_apply_plan`
+- `self_improvement_ledger_report`
+- `self_improvement_approval_report`
+- `self_improvement_validate_approval`
+- `self_improvement_approve`
+- `self_improvement_apply_low_risk`
+- `self_improvement_rollback_low_risk`
+
+Mutation-capable tools は `apply_low_risk` mode と explicit confirmation/hash が揃わない限り target を変更しません。
+
 ## 重要パス
 
 - `plugin.yaml`: plugin manifest。
-- `__init__.py`: registration、hook / CLI / slash command 登録、互換 export。
+- `__init__.py`: registration、hook / CLI / slash command / tool 登録、互換 export。
+- `schemas.py`: plugin tool schema。
+- `plugin_plugin_tools.py`: CLI parity tool handler。
 - `config.py`: default config、execution mode、deny-by-default policy。
 - `observer.py`: hook observer、redaction、JSONL telemetry、retention。
 - `analysis.py`: event aggregation、finding 抽出、proposal 生成。

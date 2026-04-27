@@ -356,7 +356,29 @@ Decision from 2026-04-27: expose the same guarded self-improvement operations th
    - Cron examples should prefer dry-run/report operations and self-contained prompts.
    - Cron docs may mention `hermes cron create "..."`, but the scheduled task should invoke the plugin CLI / tools rather than embedding scheduler-specific logic into the plugin.
 
-Initial tool parity target:
+Implementation progress snapshot as of 2026-04-27:
+
+Completed:
+
+- low-risk apply plan generation for existing-section pitfall additions, existing-section validation additions, and guarded prose typo fixes;
+- guarded `apply-low-risk` with explicit `--confirm-apply --expected-item-hash <item_hash>` mutation path;
+- applied ledger review data (`applied_diff`, `validation_result`, `review_summary`, `git_metadata`), without target repository commits;
+- guarded `rollback-low-risk` with full `before_snapshot` restore and `--confirm-rollback --expected-ledger-hash <ledger_hash>`;
+- `ledger-report` for human-readable applied / rolled-back / rejected ledger review;
+- `approve` approval artifact creation and `approval-report` validation/reporting;
+- official `ctx.register_cli_command("self-improvement", ...)` registration and standalone `bin/hermes-self-improve` fallback;
+- interface strategy decision for CLI / wrapper / tools / cron boundaries;
+- plugin tool parity surface via `plugin.yaml` `provides_tools`, `schemas.py`, `plugin_plugin_tools.py`, and `register(ctx)` tool registration for status / apply-plan / ledger-report / approval-report / validate-approval / approve / apply-low-risk / rollback-low-risk.
+
+Remaining:
+
+- document recommended cron / scheduled-execution prompts and commands without embedding scheduler logic in the plugin;
+- add `apply-approved` validation-only / preview-only before any approved mutation path;
+- finish config / policy source precedence (`--config`, `HERMES_SELF_IMPROVE_CONFIG`, local config, explicit policy expansion guard);
+- add stale path / stale command dry-run planner support only when canonical replacements are independently verified;
+- later: approved mutation for broader C/D classes, retention/noise cleanup, and report integration.
+
+Implemented tool parity surface:
 
 - `self_improvement_status`
 - `self_improvement_generate_apply_plan`
@@ -366,6 +388,12 @@ Initial tool parity target:
 - `self_improvement_approve`
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
+
+Next implementation slice:
+
+- document recommended cron / scheduled-execution prompts and commands without embedding scheduler logic in the plugin;
+- or start `apply-approved` validation-only / preview-only, keeping actual approved mutation closed;
+- keep tool handlers aligned with CLI policy gates as new commands are added.
 
 ## Tests / validation
 
