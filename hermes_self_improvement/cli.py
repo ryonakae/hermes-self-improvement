@@ -694,10 +694,11 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_approve.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_approve)
     p_approve.set_defaults(func=_handle_cli)
-    p_apply_approved = sub.add_parser("apply-approved", help="Validate and preview one approved apply artifact without mutating targets")
+    p_apply_approved = sub.add_parser("apply-approved", help="Validate, preview, or explicitly apply one approved artifact")
     p_apply_approved.add_argument("approval_id")
-    p_apply_approved.add_argument("--expected-approval-hash", default=None, help="Optional binding hash for fail-closed approved apply preview")
-    p_apply_approved.add_argument("--expected-target-hash", default=None, help="Optional current target hash binding for fail-closed approved apply preview")
+    p_apply_approved.add_argument("--confirm-approved-apply", action="store_true", help="Actually mutate the target after approval and target hash guards pass")
+    p_apply_approved.add_argument("--expected-approval-hash", default=None, help="Required approval hash binding for --confirm-approved-apply")
+    p_apply_approved.add_argument("--expected-target-hash", default=None, help="Required current target hash binding for --confirm-approved-apply")
     p_apply_approved.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_apply_approved)
     p_apply_approved.set_defaults(func=_handle_cli)
@@ -822,6 +823,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             config=config,
             expected_approval_hash=getattr(args, "expected_approval_hash", None),
             expected_target_hash=getattr(args, "expected_target_hash", None),
+            confirm_approved_apply=bool(getattr(args, "confirm_approved_apply", False)),
         )
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))

@@ -112,13 +112,14 @@ SELF_IMPROVEMENT_APPROVE_SCHEMA = {
 
 SELF_IMPROVEMENT_APPLY_APPROVED_SCHEMA = {
     "name": "self_improvement_apply_approved",
-    "description": "Validate and preview one approved apply artifact without mutating targets. Actual approved mutation remains closed.",
+    "description": "Validate and preview one approved apply artifact. Actual mutation requires apply_approved mode, confirm_approved_apply=true, expected_approval_hash, and expected_target_hash.",
     "parameters": {
         "type": "object",
         "properties": {
             "mode": MODE_PROPERTY,
             "config_path": CONFIG_PATH_PROPERTY,
             "approval_id": STRING,
+            "confirm_approved_apply": BOOLEAN,
             "expected_approval_hash": STRING,
             "expected_target_hash": STRING,
         },

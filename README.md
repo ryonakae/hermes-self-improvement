@@ -52,6 +52,7 @@ bin/hermes-self-improve approval-report --status all --json
 bin/hermes-self-improve retention-report --mode report_only --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
 bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
+bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --confirm-approved-apply --expected-approval-hash <approval_hash> --expected-target-hash <current_hash> --json
 bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
 ```
 
@@ -138,7 +139,7 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 - `report_only`: `status`, `analyze`, `report`, `run`, `gepa-eval`, `ledger-report`, `approval-report`, `validate-approval`, `retention-report` を許可する既定 mode。
 - `dry_run_plan`: `generate-apply-plan` と read-only の `ledger-report` / `approval-report` / `validate-approval` / `retention-report` を許可するが、target file は変更しない。
 - `apply_low_risk`: 低リスク item の preview / attempt / rollback 記録と read-only の `ledger-report` / `approval-report` / `validate-approval` / `retention-report` を許可する。実適用は `--confirm-apply --expected-item-hash <item_hash>`、rollback は `--confirm-rollback --expected-ledger-hash <ledger_hash>` があり、hash・rollback preview・validation が通る場合だけ。
-- `apply_approved`: approval artifact 作成用の `approve`、read-only の `approval-report` / `validate-approval` / `retention-report`、非破壊 preview の `apply-approved` を許可する。`approval-report --include-previews` は各 approval の `apply-approved` preview status を集約するだけで target file は変更しない。`apply-approved --expected-approval-hash <approval_hash> --expected-target-hash <current_hash>` は operator が見ている approval と target 状態を束縛し、不一致なら fail-closed で `expected_approval_hash_mismatch` / `expected_target_hash_mismatch` を返す。valid preview では将来の実適用に備え、非永続の `approved_apply_attempt_preview` と `approved_apply_ledger_preview` も返して、必要 confirmation・expected hashes・rollback preview hash・validation plan を監査できる。`apply-approved` は approval hash / expiry / plan / item / target hash を再検証して `would_apply_approved` を返すだけで、承認済み変更の実適用はまだ閉じている。
+- `apply_approved`: approval artifact 作成用の `approve`、read-only の `approval-report` / `validate-approval` / `retention-report`、非破壊 preview の `apply-approved` を許可する。`approval-report --include-previews` は各 approval の `apply-approved` preview status を集約するだけで target file は変更しない。`apply-approved --expected-approval-hash <approval_hash> --expected-target-hash <current_hash>` は operator が見ている approval と target 状態を束縛し、不一致なら fail-closed で `expected_approval_hash_mismatch` / `expected_target_hash_mismatch` を返す。valid preview では非永続の `approved_apply_attempt_preview` と `approved_apply_ledger_preview` も返して、必要 confirmation・expected hashes・rollback preview hash・validation plan を監査できる。実適用は `--confirm-approved-apply --expected-approval-hash <approval_hash> --expected-target-hash <current_hash>` が揃い、approval hash / expiry / plan / item / target hash / rollback preview / post-write validation が通る場合だけ。成功時は approved apply attempt と applied ledger を書き、target repo の commit は作らない。
 
 ## Plugin tools
 
@@ -155,7 +156,7 @@ Explicit env / CLI config paths must exist and contain a JSON object; missing or
 - `self_improvement_apply_low_risk`
 - `self_improvement_rollback_low_risk`
 
-`self_improvement_apply_approved` は validation-only / preview-only で、valid preview には将来書き込む attempt / ledger の非永続 preview metadata が含まれます。actual approved mutation はまだ実装しません。
+`self_improvement_apply_approved` は既定では validation-only / preview-only で、valid preview には attempt / ledger の非永続 preview metadata が含まれます。実 mutation は `confirm_approved_apply=true` と `expected_approval_hash` / `expected_target_hash` が揃う場合だけです。
 
 Mutation-capable tools は CLI と同じく fail-closed です。`self_improvement_apply_low_risk` の実変更には `mode="apply_low_risk"`, `confirm_apply=true`, `expected_item_hash` が必要です。`self_improvement_rollback_low_risk` の実 rollback には `mode="apply_low_risk"`, `confirm_rollback=true`, `expected_ledger_hash` が必要です。条件が揃わない場合は preview / rejected artifact に留め、target file は変更しません。
 

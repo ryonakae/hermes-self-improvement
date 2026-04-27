@@ -667,3 +667,140 @@ def test_apply_approved_preview_omits_write_previews_when_guard_rejects(tmp_path
     assert "approved_apply_ledger_preview" not in preview
     assert preview["target_changed"] is False
     assert target.read_text(encoding="utf-8") == before
+
+
+def test_apply_approved_requires_confirmation_and_expected_hashes_for_mutation(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    target = Path(item["target_path"])
+    before = target.read_text(encoding="utf-8")
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    result = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+    )
+
+    assert result["current_status"] == "rejected"
+    assert "expected_target_hash_required" in result["reasons"]
+    assert result["target_changed"] is False
+    assert target.read_text(encoding="utf-8") == before
+    attempt_path = Path(result["apply_attempt_path"])
+    assert attempt_path.is_file()
+    attempt = result["apply_attempt"]
+    assert attempt["schema_name"] == "self_improvement_approved_apply_attempt"
+    assert attempt["current_status"] == "rejected"
+    assert attempt["target_changed"] is False
+    assert attempt["confirmation"]["confirmed"] is True
+    assert "ledger_path" not in result
+
+
+def test_apply_approved_confirmed_mutates_and_writes_attempt_and_ledger(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    target = Path(item["target_path"])
+    before = target.read_text(encoding="utf-8")
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+
+    result = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+
+    assert result["current_status"] == "applied_approved"
+    assert result["target_changed"] is True
+    assert target.read_text(encoding="utf-8") == before.replace("teh", "the")
+    assert result["target_after_hash"] == item["rollback_preview"]["after_hash"]
+    attempt = result["apply_attempt"]
+    assert attempt["current_status"] == "applied_approved"
+    assert attempt["approval_id"] == approval_result["approval"]["approval_id"]
+    assert attempt["approval_hash"] == approval_result["approval"]["approval_hash"]
+    assert attempt["target_changed"] is True
+    assert attempt["validation_result"]["status"] == "passed"
+    assert Path(result["apply_attempt_path"]).is_file()
+    ledger_path = Path(result["ledger_path"])
+    assert ledger_path.is_file()
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert ledger["current_status"] == "applied"
+    assert ledger["approval_id"] == approval_result["approval"]["approval_id"]
+    assert ledger["approval_hash"] == approval_result["approval"]["approval_hash"]
+    assert ledger["target_before_hash"] == item["before_hash"]
+    assert ledger["target_after_hash"] == item["rollback_preview"]["after_hash"]
+    assert ledger["validation_result"]["status"] == "passed"
+    assert ledger["git_metadata"]["commit_created"] is False
+    assert ledger["ledger_hash"]
+
+
+def test_cli_accepts_confirm_approved_apply_command_shape():
+    mod = load_plugin_module()
+    parser = __import__("argparse").ArgumentParser()
+    mod._setup_cli(parser)
+
+    args = parser.parse_args([
+        "apply-approved",
+        "approval-1",
+        "--mode",
+        "apply_approved",
+        "--confirm-approved-apply",
+        "--expected-approval-hash",
+        "sha256:approval",
+        "--expected-target-hash",
+        "sha256:target",
+        "--json",
+    ])
+
+    assert args.self_improvement_cmd == "apply-approved"
+    assert args.confirm_approved_apply is True
+    assert args.expected_approval_hash == "sha256:approval"
+    assert args.expected_target_hash == "sha256:target"
+
+
+def test_confirmed_apply_approved_ledger_can_be_rolled_back(tmp_path):
+    mod, config, plan, item = write_plan(tmp_path)
+    target = Path(item["target_path"])
+    before = target.read_text(encoding="utf-8")
+    approval_result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
+        ttl_hours=24,
+    )
+    applied = mod.preview_apply_approved(
+        approval_id=approval_result["approval"]["approval_id"],
+        config=config,
+        now=datetime(2026, 4, 26, 17, 0, tzinfo=timezone.utc),
+        confirm_approved_apply=True,
+        expected_approval_hash=approval_result["approval"]["approval_hash"],
+        expected_target_hash=item["before_hash"],
+    )
+    ledger = json.loads(Path(applied["ledger_path"]).read_text(encoding="utf-8"))
+
+    rollback = mod.rollback_low_risk(
+        ledger_id=ledger["ledger_id"],
+        config=config,
+        created_at=datetime(2026, 4, 26, 17, 30, tzinfo=timezone.utc),
+        confirm_rollback=True,
+        expected_ledger_hash=ledger["ledger_hash"],
+    )
+
+    assert rollback["rollback_result"]["current_status"] == "rolled_back"
+    assert rollback["target_changed"] is True
+    assert target.read_text(encoding="utf-8") == before

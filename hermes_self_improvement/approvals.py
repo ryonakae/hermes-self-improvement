@@ -6,10 +6,36 @@ from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover - package import path
-    from .ledger import _current_file_hash, _find_apply_plan_item, _load_apply_plan_by_id, _planned_diff_for_item, _validation_plan_for_item
+    from .ledger import (
+        _applied_diff_for_item,
+        _content_after_item_mutation,
+        _current_file_hash,
+        _find_apply_plan_item,
+        _git_metadata_for_target,
+        _load_apply_plan_by_id,
+        _planned_diff_for_item,
+        _review_summary_for_item,
+        _validation_plan_for_item,
+        _validation_result_for_item,
+        write_apply_attempt,
+        write_pending_ledger,
+    )
     from .observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from ledger import _current_file_hash, _find_apply_plan_item, _load_apply_plan_by_id, _planned_diff_for_item, _validation_plan_for_item
+    from ledger import (
+        _applied_diff_for_item,
+        _content_after_item_mutation,
+        _current_file_hash,
+        _find_apply_plan_item,
+        _git_metadata_for_target,
+        _load_apply_plan_by_id,
+        _planned_diff_for_item,
+        _review_summary_for_item,
+        _validation_plan_for_item,
+        _validation_result_for_item,
+        write_apply_attempt,
+        write_pending_ledger,
+    )
     from observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -367,6 +393,74 @@ def _approved_apply_write_previews(
     }
 
 
+def _approved_apply_attempt_payload(
+    *,
+    approval: dict[str, Any] | None,
+    plan: dict[str, Any] | None,
+    item: dict[str, Any] | None,
+    status: str,
+    reasons: list[str],
+    current_target_hash: str | None,
+    created_at: datetime,
+    expected_approval_hash: str | None,
+    expected_target_hash: str | None,
+    confirm_approved_apply: bool,
+) -> dict[str, Any]:
+    plan_id = (approval or {}).get("plan_id") or (plan or {}).get("plan_id")
+    item_id = (approval or {}).get("item_id") or (item or {}).get("item_id")
+    seed = _stable_json({
+        "approval_id": (approval or {}).get("approval_id"),
+        "plan_id": plan_id,
+        "item_id": item_id,
+        "status": status,
+        "created_at": created_at.isoformat(),
+    })
+    attempt = {
+        "schema_name": "self_improvement_approved_apply_attempt",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "attempt_id": f"approved-apply-attempt-{created_at.strftime('%Y%m%dT%H%M%SZ')}-{_sha256_text(seed)[:8]}",
+        "created_at": created_at.isoformat(),
+        "approval_id": (approval or {}).get("approval_id"),
+        "approval_hash": (approval or {}).get("approval_hash"),
+        "expected_approval_hash": expected_approval_hash,
+        "approval_hash_matches_expected": None if expected_approval_hash is None else (approval or {}).get("approval_hash") == expected_approval_hash,
+        "expected_target_hash": expected_target_hash,
+        "target_hash_matches_expected": None if expected_target_hash is None else current_target_hash == expected_target_hash,
+        "plan_id": plan_id,
+        "plan_hash": _sha256_text(_stable_json(plan)) if plan else (approval or {}).get("plan_hash"),
+        "item_id": item_id,
+        "item_hash": (approval or {}).get("item_hash") or (item or {}).get("item_hash"),
+        "proposal_id": (item or {}).get("proposal_id"),
+        "current_status": status,
+        "target_changed": False,
+        "target_path": (item or {}).get("target_path") or (approval or {}).get("target_path"),
+        "change_type": (item or {}).get("change_type") or (approval or {}).get("approved_change_type"),
+        "target_before_hash": (item or {}).get("before_hash"),
+        "current_target_hash": current_target_hash,
+        "reasons": reasons,
+        "confirmation": {
+            "required": True,
+            "confirmed": bool(confirm_approved_apply),
+            "expected_approval_hash": expected_approval_hash,
+            "expected_target_hash": expected_target_hash,
+        },
+        "events": [
+            {
+                "status": status,
+                "ts": created_at.isoformat(),
+                "target_changed": False,
+                "message": "Apply-approved checked approval guards and did not modify target files.",
+            }
+        ],
+    }
+    if item:
+        attempt["mutation"] = item.get("mutation")
+        attempt["rollback_preview_hash"] = (item.get("ledger_preview") or {}).get("rollback_preview_hash")
+    _mark_hash(attempt, "attempt_hash")
+    return attempt
+
+
 def preview_apply_approved(
     *,
     approval_id: str,
@@ -374,11 +468,13 @@ def preview_apply_approved(
     now: datetime | None = None,
     expected_approval_hash: str | None = None,
     expected_target_hash: str | None = None,
+    confirm_approved_apply: bool = False,
 ) -> dict[str, Any]:
     """Validate an approval artifact and return a non-mutating approved-apply preview.
 
-    This intentionally does not write ledgers and does not mutate targets. Actual
-    approved mutation remains closed until a later implementation slice.
+    This returns a non-mutating preview by default. Actual approved mutation is
+    opened only when `confirm_approved_apply=True` and both expected approval and
+    target hashes match the live artifacts.
     """
     ts = (now or datetime.now(UTC)).astimezone(UTC)
     validation = validate_approval_artifact(approval_id=approval_id, config=config, now=ts)
@@ -392,8 +488,8 @@ def preview_apply_approved(
         "expected_approval_hash": expected_approval_hash,
         "expected_target_hash": expected_target_hash,
         "target_changed": False,
-        "mutation_enabled": False,
-        "mutation_status": "closed",
+        "mutation_enabled": bool(confirm_approved_apply),
+        "mutation_status": "confirmed" if confirm_approved_apply else "closed",
     }
     if validation.get("current_status") != "valid":
         return {
@@ -418,9 +514,13 @@ def preview_apply_approved(
 
     reasons: list[str] = []
     approval_hash = approval.get("approval_hash")
+    if confirm_approved_apply and not expected_approval_hash:
+        reasons.append("expected_approval_hash_required")
     if expected_approval_hash is not None and approval_hash != expected_approval_hash:
         reasons.append("expected_approval_hash_mismatch")
     current_hash = _current_file_hash(item.get("target_path"))
+    if confirm_approved_apply and not expected_target_hash:
+        reasons.append("expected_target_hash_required")
     if expected_target_hash is not None and current_hash != expected_target_hash:
         reasons.append("expected_target_hash_mismatch")
     if current_hash != item.get("before_hash"):
@@ -470,6 +570,158 @@ def preview_apply_approved(
             expected_target_hash=expected_target_hash,
             created_at=ts,
         ))
+
+    if confirm_approved_apply:
+        attempt_status = "rejected" if reasons else "applied_approved"
+        attempt = _approved_apply_attempt_payload(
+            approval=approval,
+            plan=plan,
+            item=item,
+            status=attempt_status,
+            reasons=reasons,
+            current_target_hash=current_hash,
+            created_at=ts,
+            expected_approval_hash=expected_approval_hash,
+            expected_target_hash=expected_target_hash,
+            confirm_approved_apply=True,
+        )
+        if reasons:
+            attempt_path = write_apply_attempt(attempt, config)
+            payload.update({
+                "apply_attempt": attempt,
+                "apply_attempt_path": str(attempt_path),
+                "current_status": "rejected",
+                "target_changed": False,
+                "mutation_status": "rejected",
+            })
+            return payload
+
+        target_path = Path(str(item.get("target_path"))).expanduser()
+        before_content = target_path.read_text(encoding="utf-8", errors="replace")
+        after_content = _content_after_item_mutation(item, before_content)
+        if after_content is None:
+            reasons = ["mutation_not_supported"]
+            attempt = _approved_apply_attempt_payload(
+                approval=approval,
+                plan=plan,
+                item=item,
+                status="rejected",
+                reasons=reasons,
+                current_target_hash=current_hash,
+                created_at=ts,
+                expected_approval_hash=expected_approval_hash,
+                expected_target_hash=expected_target_hash,
+                confirm_approved_apply=True,
+            )
+            attempt_path = write_apply_attempt(attempt, config)
+            payload.update({
+                "current_status": "rejected",
+                "reasons": reasons,
+                "apply_attempt": attempt,
+                "apply_attempt_path": str(attempt_path),
+                "target_changed": False,
+                "mutation_status": "rejected",
+            })
+            return payload
+        after_hash = _sha256_text(after_content)
+        expected_after_hash = (item.get("rollback_preview") or {}).get("after_hash")
+        if after_hash != expected_after_hash:
+            reasons = ["planned_after_hash_mismatch"]
+            attempt = _approved_apply_attempt_payload(
+                approval=approval,
+                plan=plan,
+                item=item,
+                status="rejected",
+                reasons=reasons,
+                current_target_hash=current_hash,
+                created_at=ts,
+                expected_approval_hash=expected_approval_hash,
+                expected_target_hash=expected_target_hash,
+                confirm_approved_apply=True,
+            )
+            attempt_path = write_apply_attempt(attempt, config)
+            payload.update({
+                "current_status": "rejected",
+                "reasons": reasons,
+                "apply_attempt": attempt,
+                "apply_attempt_path": str(attempt_path),
+                "target_changed": False,
+                "mutation_status": "rejected",
+            })
+            return payload
+
+        target_path.write_text(after_content, encoding="utf-8")
+        final_hash = _current_file_hash(str(target_path))
+        validation_result = _validation_result_for_item(item=item, before_hash=current_hash, after_hash=final_hash)
+        applied_diff = _applied_diff_for_item(item)
+        git_metadata = _git_metadata_for_target(item.get("target_path"))
+        review_summary = _review_summary_for_item(
+            item=item,
+            status="applied_approved",
+            target_changed=True,
+            validation_result=validation_result,
+            git_metadata=git_metadata,
+        )
+        attempt.update({
+            "target_changed": True,
+            "target_after_hash": final_hash,
+            "validation_result": validation_result,
+            "applied_diff": applied_diff,
+            "git_metadata": git_metadata,
+            "review_summary": review_summary,
+            "ledger_status": "applied",
+        })
+        attempt["events"][0].update({
+            "target_changed": True,
+            "message": "Apply-approved confirmed approval and target hashes, mutated target, and validated target hash.",
+        })
+        ledger = dict(payload.get("approved_apply_ledger_preview") or {})
+        ledger.update({
+            "schema_name": "self_improvement_apply_ledger",
+            "ledger_id": f"ledger-{ts.strftime('%Y%m%dT%H%M%SZ')}-{_sha256_text(_stable_json({'approval_id': approval.get('approval_id'), 'item_hash': approval.get('item_hash'), 'created_at': ts.isoformat()}))[:8]}",
+            "created_at": ts.isoformat(),
+            "current_status": "applied",
+            "dry_run": False,
+            "target_changed": True,
+            "target_after_hash": final_hash,
+            "validation_result": validation_result,
+            "applied_diff": applied_diff,
+            "git_metadata": git_metadata,
+            "review_summary": review_summary,
+        })
+        ledger.pop("preview_hash", None)
+        ledger["events"] = list(ledger.get("events") or []) + [
+            {
+                "status": "applied",
+                "ts": ts.isoformat(),
+                "dry_run": False,
+                "target_changed": True,
+                "message": "Target file changed after explicit approved-apply confirmation and validation.",
+            }
+        ]
+        _mark_hash(ledger, "ledger_hash")
+        ledger_path = write_pending_ledger(ledger, config)
+        attempt["ledger_path"] = str(ledger_path)
+        attempt["ledger_hash"] = ledger.get("ledger_hash")
+        attempt["events"][0]["ledger_path"] = str(ledger_path)
+        attempt["events"][0]["ledger_hash"] = ledger.get("ledger_hash")
+        _mark_hash(attempt, "attempt_hash")
+        attempt_path = write_apply_attempt(attempt, config)
+        payload.update({
+            "schema_name": "self_improvement_apply_approved_result",
+            "current_status": "applied_approved",
+            "target_changed": True,
+            "mutation_status": "applied",
+            "target_after_hash": final_hash,
+            "validation_result": validation_result,
+            "applied_diff": applied_diff,
+            "git_metadata": git_metadata,
+            "review_summary": review_summary,
+            "apply_attempt": attempt,
+            "apply_attempt_path": str(attempt_path),
+            "ledger_path": str(ledger_path),
+            "ledger_hash": ledger.get("ledger_hash"),
+        })
     return payload
 
 
