@@ -25,6 +25,7 @@ Hermes の skill / memory / prompt / tool-use workflow を継続改善するた�
 - `observer.py`: runtime observer, telemetry JSONL helpers, redaction, retention pruning, partial hook filtering, and tool-result classification.
 - `analysis.py`: `AnalysisResult`, telemetry aggregation, finding extraction, and proposal generation/deduplication.
 - `scoring.py`: heuristic, LLM, GEPA, and compare scorer logic; `__init__.py` keeps a thin compatibility wrapper so existing monkeypatch-based tests and callers can still override scorer functions through the entrypoint.
+- `apply_plan.py`: dry-run apply plan generation, low-risk mutation planning, target metadata resolution, rollback previews, and apply-plan artifact writing.
 
 ## CLI
 
