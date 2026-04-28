@@ -3,8 +3,14 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
+
+try:
+    import yaml
+except Exception:  # pragma: no cover - PyYAML is expected in normal runtime
+    yaml = None
 
 try:
     from hermes_constants import get_hermes_home
@@ -84,6 +90,26 @@ def _default_config() -> dict[str, Any]:
         "execution_mode": DEFAULT_EXECUTION_MODE,
         "allow_policy_expansion": False,
         "mode_policy": copy.deepcopy(DEFAULT_MODE_POLICY),
+        "model": {
+            "llm": {
+                "provider": "auto",
+                "model": "",
+                "base_url": "",
+                "api_key": "",
+                "timeout": 60,
+                "max_tokens": 1800,
+                "extra_body": {},
+            },
+            "gepa": {
+                "provider": "auto",
+                "model": "",
+                "base_url": "",
+                "api_key": "",
+                "timeout": 120,
+                "max_tokens": 1800,
+                "extra_body": {},
+            },
+        },
         "llm_scorer": {
             "provider": "auto",
             "model": None,
@@ -142,6 +168,48 @@ def _default_config() -> dict[str, Any]:
     }
 
 
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = copy.deepcopy(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+
+_ENV_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _expand_env_vars(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _expand_env_vars(child) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(child) for child in value]
+    if isinstance(value, str):
+        def repl(match: re.Match[str]) -> str:
+            name = match.group(1)
+            return os.environ.get(name, match.group(0))
+
+        return _ENV_VAR_RE.sub(repl, value)
+    return value
+
+
+def _parse_config_text(path: Path, text: str) -> dict[str, Any]:
+    suffix = path.suffix.lower()
+    if suffix in {".yaml", ".yml"}:
+        if yaml is None:
+            raise ValueError("yaml_support_unavailable")
+        parsed = yaml.safe_load(text) or {}
+    elif suffix == ".json" or not suffix:
+        parsed = json.loads(text)
+    else:
+        raise ValueError(f"unsupported_config_extension:{suffix}")
+    if not isinstance(parsed, dict):
+        raise ValueError(f"config_not_object:{path}")
+    return _expand_env_vars(parsed)
+
+
 def _read_config_file(path: Path, *, required: bool = False) -> dict[str, Any]:
     path = Path(path).expanduser()
     if not path.exists():
@@ -149,20 +217,20 @@ def _read_config_file(path: Path, *, required: bool = False) -> dict[str, Any]:
             raise FileNotFoundError(f"config_not_found:{path}")
         return {}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = _parse_config_text(path, path.read_text(encoding="utf-8"))
     except Exception as exc:
         if required:
-            raise ValueError(f"config_invalid_json:{path}:{exc}") from exc
-        return {}
-    if not isinstance(data, dict):
-        if required:
-            raise ValueError(f"config_not_object:{path}")
+            raise ValueError(f"config_invalid:{path}:{exc}") from exc
         return {}
     return data
 
 
-def _local_config_path(default_path: Path) -> Path:
-    return default_path.with_name("config.local.json")
+def _local_config_paths(default_path: Path) -> list[Path]:
+    return [default_path.with_name("config.local.json"), default_path.with_name("config.local.yaml")]
+
+
+def _peer_yaml_config_path(default_path: Path) -> Path:
+    return default_path.with_suffix(".yaml")
 
 
 def _sanitize_mode_policy(policy: Any, *, allow_expansion: bool) -> dict[str, Any]:
@@ -209,8 +277,34 @@ def _sanitize_mode_policy(policy: Any, *, allow_expansion: bool) -> dict[str, An
     return merged
 
 
-def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
+def _normalize_model_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(config)
+    model = copy.deepcopy(normalized.get("model") if isinstance(normalized.get("model"), dict) else {})
+    defaults = _default_config()["model"]
+    model = _deep_merge(defaults, model)
+
+    llm_legacy = normalized.get("llm_scorer") if isinstance(normalized.get("llm_scorer"), dict) else {}
+    llm_model = model.setdefault("llm", {})
+    for legacy_key, model_key in [("provider", "provider"), ("model", "model"), ("timeout", "timeout"), ("max_tokens", "max_tokens")]:
+        legacy_value = llm_legacy.get(legacy_key)
+        current_value = llm_model.get(model_key)
+        if legacy_value not in (None, "") and current_value in (None, "", defaults["llm"].get(model_key)):
+            llm_model[model_key] = legacy_value
+
+    gepa_legacy = normalized.get("gepa_scorer") if isinstance(normalized.get("gepa_scorer"), dict) else {}
+    gepa_model = model.setdefault("gepa", {})
+    for legacy_key, model_key in [("task_model", "model"), ("reflection_model", "model"), ("timeout", "timeout")]:
+        legacy_value = gepa_legacy.get(legacy_key)
+        current_value = gepa_model.get(model_key)
+        if legacy_value not in (None, "") and current_value in (None, "", defaults["gepa"].get(model_key)):
+            gepa_model[model_key] = legacy_value
+
+    normalized["model"] = model
+    return normalized
+
+
+def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
+    normalized = _normalize_model_config(config)
     normalized["allow_policy_expansion"] = bool(normalized.get("allow_policy_expansion", False))
     normalized["mode_policy"] = _sanitize_mode_policy(
         normalized.get("mode_policy"),
@@ -227,39 +321,45 @@ def _load_config(path: Path) -> dict[str, Any]:
     """
     defaults = _default_config()
     data = _read_config_file(path, required=False)
-    return _normalize_config({**defaults, **data})
+    return _normalize_config(_deep_merge(defaults, data))
 
 
 def load_config(default_path: Path | None = None, *, cli_config_path: str | Path | None = None) -> dict[str, Any]:
     """Load config with fail-closed precedence.
 
-    Precedence, low to high: defaults, repo default config.json, config.local.json,
-    HERMES_SELF_IMPROVE_CONFIG, explicit CLI --config. Explicit CLI/env paths are
-    required to exist and be valid JSON so operator intent never silently falls
-    back to a safer-looking but wrong config.
+    Precedence, low to high: defaults, repo default config.json, plugin-local
+    config.yaml, config.local.json, config.local.yaml, HERMES_SELF_IMPROVE_CONFIG,
+    explicit CLI --config. Explicit CLI/env paths are required to exist and be
+    valid JSON/YAML so operator intent never silently falls back to a safer-looking
+    but wrong config.
     """
     default_path = Path(default_path or Path(__file__).resolve().parents[1] / "config.json")
     config = _default_config()
     sources: list[str] = []
 
-    for path, required in [
-        (default_path, False),
-        (_local_config_path(default_path), False),
-    ]:
+    candidate_paths: list[tuple[Path, bool]] = [(default_path, False)]
+    peer_yaml = _peer_yaml_config_path(default_path)
+    if peer_yaml != default_path:
+        candidate_paths.append((peer_yaml, False))
+    for local_path in _local_config_paths(default_path):
+        if local_path != default_path and local_path != peer_yaml:
+            candidate_paths.append((local_path, False))
+
+    for path, required in candidate_paths:
         data = _read_config_file(path, required=required)
         if data:
-            config.update(data)
+            config = _deep_merge(config, data)
             sources.append(str(Path(path).expanduser()))
 
     env_path = os.environ.get(ENV_CONFIG_PATH)
     if env_path:
         path = Path(env_path).expanduser()
-        config.update(_read_config_file(path, required=True))
+        config = _deep_merge(config, _read_config_file(path, required=True))
         sources.append(str(path))
 
     if cli_config_path:
         path = Path(cli_config_path).expanduser()
-        config.update(_read_config_file(path, required=True))
+        config = _deep_merge(config, _read_config_file(path, required=True))
         sources.append(str(path))
 
     config["config_sources"] = sources

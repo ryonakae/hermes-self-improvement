@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import sys
+import textwrap
 from pathlib import Path
 
 PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
@@ -20,6 +21,11 @@ def load_plugin_module():
 
 def write_json(path: Path, payload: dict) -> Path:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def write_yaml(path: Path, text: str) -> Path:
+    path.write_text(textwrap.dedent(text).strip() + "\n", encoding="utf-8")
     return path
 
 
@@ -52,6 +58,119 @@ def test_load_config_records_loaded_sources_and_missing_cli_rejects(tmp_path):
         assert "config_not_found" in str(exc)
     else:
         raise AssertionError("missing explicit CLI config should fail closed")
+
+
+def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    repo_default = write_json(
+        tmp_path / "config.json",
+        {"execution_mode": "report_only", "model": {"llm": {"provider": "auto", "timeout": 10}}},
+    )
+    plugin_yaml = write_yaml(
+        tmp_path / "config.yaml",
+        """
+        execution_mode: dry_run_plan
+        model:
+          llm:
+            provider: codex
+            model: gpt-test
+          gepa:
+            api_key: ${HERMES_SELF_IMPROVE_GEPA_API_KEY}
+        """,
+    )
+    local_yaml = write_yaml(
+        tmp_path / "config.local.yaml",
+        """
+        model:
+          llm:
+            timeout: 99
+        """,
+    )
+    monkeypatch.setenv("HERMES_SELF_IMPROVE_GEPA_API_KEY", "local-secret")
+
+    config = mod.load_config(repo_default)
+
+    assert config["execution_mode"] == "dry_run_plan"
+    assert config["model"]["llm"]["provider"] == "codex"
+    assert config["model"]["llm"]["model"] == "gpt-test"
+    assert config["model"]["llm"]["timeout"] == 99
+    assert config["model"]["gepa"]["api_key"] == "local-secret"
+    assert config["config_sources"] == [str(repo_default), str(plugin_yaml), str(local_yaml)]
+
+
+def test_unresolved_env_reference_remains_literal(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    repo_default = write_json(tmp_path / "config.json", {})
+    write_yaml(
+        tmp_path / "config.yaml",
+        """
+        model:
+          gepa:
+            api_key: ${MISSING_HERMES_SELF_IMPROVE_SECRET}
+        """,
+    )
+    monkeypatch.delenv("MISSING_HERMES_SELF_IMPROVE_SECRET", raising=False)
+
+    config = mod.load_config(repo_default)
+
+    assert config["model"]["gepa"]["api_key"] == "${MISSING_HERMES_SELF_IMPROVE_SECRET}"
+
+
+def test_explicit_yaml_config_paths_are_required_and_valid(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    repo_default = write_json(tmp_path / "config.json", {"execution_mode": "report_only"})
+    env_yaml = write_yaml(tmp_path / "env-config.yaml", "execution_mode: apply_low_risk")
+    cli_yaml = write_yaml(tmp_path / "cli-config.yaml", "execution_mode: apply_approved")
+    monkeypatch.setenv("HERMES_SELF_IMPROVE_CONFIG", str(env_yaml))
+
+    assert mod.load_config(repo_default)["execution_mode"] == "apply_low_risk"
+    assert mod.load_config(repo_default, cli_config_path=cli_yaml)["execution_mode"] == "apply_approved"
+
+    bad_yaml = write_yaml(tmp_path / "bad.yaml", "- not\n- an\n- object")
+    try:
+        mod.load_config(repo_default, cli_config_path=bad_yaml)
+    except ValueError as exc:
+        assert "config_invalid" in str(exc)
+    else:
+        raise AssertionError("invalid explicit YAML config should fail closed")
+
+
+def test_legacy_scorer_config_normalizes_into_model_config(tmp_path):
+    mod = load_plugin_module()
+    repo_default = write_json(
+        tmp_path / "config.json",
+        {
+            "llm_scorer": {"provider": "codex", "model": "gpt-legacy", "timeout": 33, "max_tokens": 444},
+            "gepa_scorer": {"task_model": "gepa-task", "timeout": 77},
+        },
+    )
+
+    config = mod.load_config(repo_default)
+
+    assert config["model"]["llm"]["provider"] == "codex"
+    assert config["model"]["llm"]["model"] == "gpt-legacy"
+    assert config["model"]["llm"]["timeout"] == 33
+    assert config["model"]["llm"]["max_tokens"] == 444
+    assert config["model"]["gepa"]["model"] == "gepa-task"
+    assert config["model"]["gepa"]["timeout"] == 77
+
+
+def test_config_example_yaml_is_parseable():
+    mod = load_plugin_module()
+    example = Path(__file__).resolve().parents[1] / "config.example.yaml"
+
+    config = mod.load_config(cli_config_path=example)
+
+    assert config["model"]["llm"]["provider"] == "auto"
+    assert config["model"]["gepa"]["timeout"] == 120
+
+
+def test_local_operator_configs_are_gitignored():
+    gitignore = (Path(__file__).resolve().parents[1] / ".gitignore").read_text(encoding="utf-8")
+
+    assert "config.yaml" in gitignore
+    assert "config.local.yaml" in gitignore
+    assert ".env.example" not in gitignore
 
 
 def test_policy_expansion_is_denied_by_default_even_if_config_requests_it():

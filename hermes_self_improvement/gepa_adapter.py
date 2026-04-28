@@ -33,8 +33,23 @@ def _reports_dir(config: dict[str, Any]) -> Path:
     return Path(str(raw)).expanduser()
 
 
+SENSITIVE_CONFIG_KEYS = {"api_key", "token", "password", "secret", "authorization", "cookie"}
+
+
+def _redact_config_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): ("[redacted]" if any(marker in str(key).lower() for marker in SENSITIVE_CONFIG_KEYS) else _redact_config_value(child))
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_config_value(child) for child in value]
+    return value
+
+
 def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
     gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
     allowed_keys = {
         "enabled",
         "mode",
@@ -47,7 +62,10 @@ def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
         "num_threads",
         "track_stats",
     }
-    return {key: gepa_config.get(key) for key in sorted(allowed_keys) if key in gepa_config}
+    summary = {key: gepa_config.get(key) for key in sorted(allowed_keys) if key in gepa_config}
+    if model_config:
+        summary["model"] = _redact_config_value(model_config)
+    return summary
 
 
 def _active_evaluator_pointer_path(config: dict[str, Any]) -> Path:

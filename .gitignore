@@ -6,3 +6,6 @@ __pycache__/
 # Local/runtime noise
 .DS_Store
 *.log
+config.yaml
+config.local.yaml
+config.local.json

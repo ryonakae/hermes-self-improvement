@@ -1,0 +1,61 @@
+# Example operator config for hermes-self-improvement.
+# Copy to config.yaml or config.local.yaml for local overrides.
+# Do not commit real API keys or provider secrets. For custom endpoints, prefer
+# ${ENV_VAR} references in the local file.
+
+model:
+  llm:
+    provider: auto
+    model: ""
+    base_url: ""
+    api_key: ""
+    timeout: 60
+    max_tokens: 1800
+    extra_body: {}
+
+  gepa:
+    provider: auto
+    model: ""
+    base_url: ""
+    api_key: ""
+    timeout: 120
+    max_tokens: 1800
+    extra_body: {}
+
+gepa_scorer:
+  enabled: true
+  mode: dspy_program_eval
+  compiled_program_path: null
+  active_evaluator_pointer_path: null
+  max_full_evals: 2
+  num_threads: 4
+  track_stats: true
+
+scorer_comparison_policy:
+  default:
+    block_on_risk_disagreement: true
+    block_on_recommendation_disagreement: true
+    score_delta_block_threshold: 15
+    confidence_rank_delta_block_threshold: 1
+  strict_change_types:
+    - memory_compress
+    - memory_delete
+    - skill_create
+    - skill_delete
+    - skill_rename
+    - skill_merge
+    - skill_trigger_change
+    - skill_large_rewrite
+    - config_policy_expansion
+    - evaluator_promote
+    - unknown_or_unclassified
+  strict:
+    score_delta_block_threshold: 5
+    confidence_rank_delta_block_threshold: 1
+  low_risk_prose:
+    change_types:
+      - typo_fix
+      - pitfall_addition_existing_section
+      - validation_addition_existing_section
+    score_delta_block_threshold: 20
+    confidence_rank_delta_block_threshold: 2

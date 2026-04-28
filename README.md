@@ -221,7 +221,7 @@ Compiled evaluator の active 化は `evaluator_promote` change type の approva
 - `apply-attempts/YYYY-MM-DD/`: apply attempt artifacts
 - `approvals/YYYY-MM-DD/`: approval artifacts
 
-`config.json`, `config.local.json`, `HERMES_SELF_IMPROVE_CONFIG`, `--config` で保存先や scorer 設定を上書きできます。precedence は defaults < `config.json` < `config.local.json` < env < CLI です。
+`config.json`, plugin-local `config.yaml`, `config.local.json`, `config.local.yaml`, `HERMES_SELF_IMPROVE_CONFIG`, `--config` で保存先や scorer 設定を上書きできます。precedence は defaults < `config.json` < `config.yaml` < `config.local.json` < `config.local.yaml` < env < CLI です。`config.example.yaml` は git-managed な雛形で、local `config.yaml` / `config.local.yaml` は gitignore されています。`model.llm` / `model.gepa` の `api_key` は local YAML で `${ENV}` 参照にできますが、`.env` / `.env.example` は使いません。
 
 ## 開発
 

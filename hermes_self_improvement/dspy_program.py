@@ -69,6 +69,14 @@ def build_dspy_program(*, lm_config: dict[str, Any] | None = None, dspy_module: 
     return ProposalScoringDspyProgram()
 
 
+def _gepa_model_config(config: dict[str, Any]) -> dict[str, Any]:
+    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
+    gepa_model = model_config.get("gepa") if isinstance(model_config.get("gepa"), dict) else {}
+    if gepa_model:
+        return gepa_model
+    return config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+
+
 def score_with_dspy_program(
     *,
     proposals: list[dict[str, Any]],
@@ -78,7 +86,7 @@ def score_with_dspy_program(
     dspy_module: Any | None = None,
 ) -> dict[str, Any]:
     """Score proposals with the DSPy module and return plugin scorer payload."""
-    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    gepa_config = _gepa_model_config(config)
     program = build_dspy_program(lm_config=gepa_config, dspy_module=dspy_module)
     dspy = dspy_module or require_dspy()
     return _score_with_program(
@@ -106,7 +114,7 @@ def score_with_compiled_dspy_program(
     The active evaluator pointer is managed outside this function. Loading a
     compiled candidate remains advisory and never changes apply authorization.
     """
-    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    gepa_config = _gepa_model_config(config)
     dspy = dspy_module or require_dspy()
     program = build_dspy_program(lm_config=gepa_config, dspy_module=dspy)
     load_fn = getattr(program, "load", None)

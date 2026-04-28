@@ -379,7 +379,10 @@ def _call_llm_scorer(
     findings: list[dict[str, Any]],
     config: dict[str, Any],
 ) -> dict[str, Any]:
-    llm_config = config.get("llm_scorer") if isinstance(config.get("llm_scorer"), dict) else {}
+    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
+    llm_config = model_config.get("llm") if isinstance(model_config.get("llm"), dict) else {}
+    if not llm_config:
+        llm_config = config.get("llm_scorer") if isinstance(config.get("llm_scorer"), dict) else {}
     provider = llm_config.get("provider") or "auto"
     model = llm_config.get("model") or None
     timeout = _coerce_int(llm_config.get("timeout"), default=60)

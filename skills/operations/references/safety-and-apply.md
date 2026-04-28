@@ -124,7 +124,7 @@ Do not infer a replacement merely because an old path or command failed. Missing
 
 ## Config and policy source precedence
 
-Config resolution is fail-closed. Precedence is built-in defaults < repo `config.json` < `config.local.json` < `HERMES_SELF_IMPROVE_CONFIG` < explicit CLI/tool `--config` / `config_path`. Explicit env / CLI paths are required to exist and parse as JSON objects; missing explicit config is an operator error. Loaded files are recorded in `config_sources`.
+Config resolution is fail-closed. Precedence is built-in defaults < repo `config.json` < plugin-local `config.yaml` < `config.local.json` < `config.local.yaml` < `HERMES_SELF_IMPROVE_CONFIG` < explicit CLI/tool `--config` / `config_path`. Explicit env / CLI paths are required to exist and parse as JSON or YAML objects; missing explicit config is an operator error. Loaded files are recorded in `config_sources`. Local `config.yaml` / `config.local.yaml` are ignored by git; `config.example.yaml` is the tracked placeholder-only template. `${ENV}` references are expanded recursively, and unresolved references remain literal for validation/reporting.
 
 Policy expansion is disabled by default. A custom `mode_policy` can narrow the default command/capability set, but cannot add commands or flip default-denied capabilities to true unless `allow_policy_expansion: true` is set explicitly. This prevents cron or local config from accidentally turning `report_only` into a mutation-capable mode.
 
