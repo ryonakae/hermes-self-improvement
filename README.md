@@ -44,13 +44,18 @@ apply plan と review 系です。
 
 ```bash
 bin/hermes-self-improve plan --since-hours 24
+bin/hermes-self-improve apply <plan-id>
+bin/hermes-self-improve apply <plan-id> --items step-001,step-002
+bin/hermes-self-improve apply <plan-id> --items step-001 --execute
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
 bin/hermes-self-improve ledger-report --mode report_only --status all --json
 bin/hermes-self-improve approval-report --mode report_only --status all --include-previews --json
 bin/hermes-self-improve retention-report --mode report_only --json
 ```
 
-実変更を伴う command は、preview を見てから hash を渡します。
+`apply` は既定で preview です。実変更は `--execute` を付けた場合だけ行い、item hash / target hash は内部で検証します。policy で許可されない item や review が必要な item は適用されません。
+
+旧 guarded command は互換用に残っています。直接使う場合は、preview を見てから hash を渡します。
 
 ```bash
 # low-risk item の preview または pending ledger 作成

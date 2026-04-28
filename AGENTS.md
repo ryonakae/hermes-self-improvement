@@ -31,15 +31,18 @@ Apply / approval / retention の確認です。
 ```bash
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
 bin/hermes-self-improve plan --since-hours 24
+bin/hermes-self-improve apply <plan-id>
+bin/hermes-self-improve apply <plan-id> --items step-001,step-002
 bin/hermes-self-improve ledger-report --mode report_only --status all --json
 bin/hermes-self-improve approval-report --mode report_only --status all --include-previews --json
 bin/hermes-self-improve retention-report --mode report_only --json
 bin/hermes-self-improve retention-prune --mode apply_approved --json
 ```
 
-実 mutation は preview を見てから hash を渡します。
+実 mutation は通常 `apply <plan-id> --execute` を使います。`apply` は hash を user-facing option に出さず、内部で plan item hash と target baseline を検証します。旧 guarded command を直接使う場合だけ preview を見て hash を渡します。
 
 ```bash
+bin/hermes-self-improve apply <plan-id> --items step-001 --execute
 bin/hermes-self-improve apply-low-risk <plan-id> <item-id> --mode apply_low_risk --confirm-apply --expected-item-hash <item_hash> --json
 bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --confirm-rollback --expected-ledger-hash <ledger_hash> --json
 bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
