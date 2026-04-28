@@ -134,10 +134,10 @@ def _register_tools(ctx) -> None:
         )
 try:  # pragma: no cover - package import path
     from .apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash
-    from .calibration import collect_calibration_evidence, run_calibration
+    from .calibration import collect_calibration_evidence, rollback_calibration, run_calibration
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash
-    from calibration import collect_calibration_evidence, run_calibration
+    from calibration import collect_calibration_evidence, rollback_calibration, run_calibration
 
 try:  # pragma: no cover - package import path
     from .observer import (

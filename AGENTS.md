@@ -125,6 +125,7 @@ root 直下に `tools.py` は置きません。Hermes core の `tools.registry` 
 - `hermes_self_improvement/analysis.py`: event aggregation と proposal generation。explicit `memory_compression_candidate` / `skill_lifecycle_candidate` finding と `self_improvement_candidate` event は approval-required proposal に変換するが、`auto_apply=false` のままにする。`scan_memory_compression_candidates()` / `scan_skill_lifecycle_candidates()` は dry-run candidate event だけを作る。
 - `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
+- `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、calibration rollback
 - `hermes_self_improvement/ledger.py`: apply attempt、ledger、rollback
 - `hermes_self_improvement/approvals.py`: approval artifact、validation、approved apply
 - `hermes_self_improvement/tool_handlers.py`: plugin tools

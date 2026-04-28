@@ -161,6 +161,121 @@ def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, An
     return candidate
 
 
+def _active_evaluator_pointer_path(config: dict[str, Any], calibration: dict[str, Any]) -> Path:
+    configured = calibration.get("active_evaluator_pointer_path")
+    if not configured and isinstance(config.get("gepa_scorer"), dict):
+        configured = config["gepa_scorer"].get("active_evaluator_pointer_path")
+    return Path(str(configured)).expanduser() if configured else _reports_dir(config) / "gepa" / "active-evaluator.json"
+
+
+def _current_pointer_content(path: Path) -> tuple[str | None, str | None]:
+    if not path.exists():
+        return None, None
+    content = path.read_text(encoding="utf-8")
+    return content, _sha256_text(content)
+
+
+def _run_calibration_regression(*, candidate: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    """Fail-closed default regression gate.
+
+    Real GEPA/DSPy promotion is wired later; tests may monkeypatch this helper to
+    exercise the guarded promotion path without live LLM/network calls.
+    """
+    return {"status": "failed", "reason": "regression_runner_not_configured"}
+
+
+def _write_active_pointer(
+    *,
+    pointer_path: Path,
+    candidate: dict[str, Any],
+    regression: dict[str, Any],
+    active_before_hash: str | None,
+) -> str:
+    payload = {
+        "schema_name": "self_improvement_active_evaluator_pointer",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "updated_at": datetime.now(UTC).isoformat(),
+        "candidate": candidate,
+        "candidate_hash": candidate.get("candidate_hash"),
+        "regression": regression,
+        "active_before_hash": active_before_hash,
+    }
+    pointer_path.parent.mkdir(parents=True, exist_ok=True)
+    content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n"
+    pointer_path.write_text(content, encoding="utf-8")
+    return _sha256_text(content)
+
+
+def _write_calibration_ledger(
+    *,
+    config: dict[str, Any],
+    result: dict[str, Any],
+    active_pointer_path: Path,
+    active_before_content: str | None,
+    active_before_hash: str | None,
+    active_after_hash: str | None,
+) -> Path:
+    ts = datetime.now(UTC)
+    stamp = ts.strftime("%Y%m%dT%H%M%SZ")
+    ledger_seed = _stable_json({"created_at": ts.isoformat(), "candidate": result.get("candidate"), "regression": result.get("regression")})
+    ledger_id = f"calibration-ledger-{stamp}-{_sha256_text(ledger_seed)[:8]}"
+    ledger = {
+        "schema_name": "self_improvement_calibration_ledger",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "ledger_id": ledger_id,
+        "operation": "calibrate",
+        "created_at": ts.isoformat(),
+        "candidate": result.get("candidate"),
+        "regression": result.get("regression"),
+        "active_pointer_path": str(active_pointer_path),
+        "active_before_hash": active_before_hash,
+        "active_after_hash": active_after_hash,
+        "rollback_data": {
+            "active_pointer_path": str(active_pointer_path),
+            "active_before_content": active_before_content,
+            "active_before_hash": active_before_hash,
+        },
+    }
+    ledger["ledger_hash"] = _sha256_text(_stable_json({k: v for k, v in ledger.items() if k != "ledger_hash"}))
+    out_dir = _reports_dir(config) / "ledgers" / ts.strftime("%Y-%m-%d")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{stamp}-{ledger_id}.json"
+    path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return path
+
+
+def _find_calibration_ledger_path(*, ledger_id: str, config: dict[str, Any]) -> Path | None:
+    root = _reports_dir(config) / "ledgers"
+    if not root.exists():
+        return None
+    matches = sorted(path for path in root.glob(f"**/*{ledger_id}*.json") if path.is_file())
+    return matches[-1] if matches else None
+
+
+def rollback_calibration(*, ledger_id: str, config: dict[str, Any]) -> dict[str, Any]:
+    path = _find_calibration_ledger_path(ledger_id=ledger_id, config=config)
+    if path is None:
+        return {"schema_name": "self_improvement_calibration_rollback_result", "current_status": "failed", "reasons": ["ledger_not_found"]}
+    ledger = _load_json_file(path) or {}
+    rollback = ledger.get("rollback_data") if isinstance(ledger.get("rollback_data"), dict) else {}
+    pointer_path = Path(str(rollback.get("active_pointer_path") or ledger.get("active_pointer_path") or "")).expanduser()
+    before_content = rollback.get("active_before_content")
+    if before_content is None:
+        if pointer_path.exists():
+            pointer_path.unlink()
+    else:
+        pointer_path.parent.mkdir(parents=True, exist_ok=True)
+        pointer_path.write_text(str(before_content), encoding="utf-8")
+    return {
+        "schema_name": "self_improvement_calibration_rollback_result",
+        "current_status": "rolled_back",
+        "ledger_path": str(path),
+        "active_evaluator_path": str(pointer_path),
+    }
+
+
 def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[str, Any]:
     calibration = normalize_calibration_config(config)
     evidence = collect_calibration_evidence(config)
@@ -176,6 +291,8 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         "candidate": None,
         "regression": None,
         "active_changed": False,
+        "active_evaluator_path": None,
+        "ledger_path": None,
     }
     if not calibration.get("enabled", True):
         result["reasons"].append("calibration_disabled")
@@ -188,9 +305,31 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
 
     result["candidate"] = candidate
     if execute:
-        result["current_status"] = "failed"
-        result["reasons"].append("execute_not_implemented")
-        result["regression"] = {"status": "not_run", "reason": "execute_not_implemented"}
+        regression = _run_calibration_regression(candidate=candidate, config=config)
+        result["regression"] = regression
+        if regression.get("status") != "passed":
+            result["current_status"] = "failed"
+            result["reasons"].append(str(regression.get("reason") or "regression_failed"))
+            return result
+        active_pointer_path = _active_evaluator_pointer_path(config, calibration)
+        active_before_content, active_before_hash = _current_pointer_content(active_pointer_path)
+        active_after_hash = _write_active_pointer(
+            pointer_path=active_pointer_path,
+            candidate=candidate,
+            regression=regression,
+            active_before_hash=active_before_hash,
+        )
+        result["current_status"] = "updated"
+        result["active_changed"] = True
+        result["active_evaluator_path"] = str(active_pointer_path)
+        result["ledger_path"] = str(_write_calibration_ledger(
+            config=config,
+            result=result,
+            active_pointer_path=active_pointer_path,
+            active_before_content=active_before_content,
+            active_before_hash=active_before_hash,
+            active_after_hash=active_after_hash,
+        ))
     else:
         result["current_status"] = "would_update"
         result["regression"] = {"status": "not_run", "reason": "preview"}

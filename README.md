@@ -56,7 +56,7 @@ bin/hermes-self-improve retention-report --mode report_only --json
 
 `apply` は既定で preview です。実変更は `--execute` を付けた場合だけ行い、item hash / target hash は内部で検証します。policy で許可されない item や review が必要な item は適用されません。
 
-`calibrate` は evaluator/scorer 改善の evidence を集め、既定では preview として `no_op` / `would_update` を返します。現段階の `--execute` は regression/promotion 実装前なので active evaluator は変更しません。
+`calibrate` は evaluator/scorer 改善の evidence を集め、既定では preview として `no_op` / `would_update` を返します。`--execute` は regression が pass した場合だけ active evaluator pointer を更新し、active-before snapshot を calibration ledger に残します。regression runner 未設定や regression failure は fail-closed で active evaluator を変更しません。
 
 旧 guarded command は互換用に残っています。直接使う場合は、preview を見てから hash を渡します。
 
@@ -199,7 +199,7 @@ python3 -m pip install -e .
 
 `gepa-eval` は repo-tracked eval case の dependency-free regression fixture として残します。本物の optimizer run ではありません。Runtime `gepa` scorer / `gepa-optimize` は DSPy program に plugin-local `model.gepa` を渡し、DSPy 側の LM call は Hermes `agent.auxiliary_client.call_llm(...)` を通る `BaseLM` bridge で行います。`model.gepa` の provider / model / base_url / api_key / timeout / max_tokens / extra_body は local `config.yaml` で指定でき、artifact では secret 系 key を redact します。GEPA は scorer の改善・比較・優先順位づけに使いますが、GEPA の点数だけで `auto_apply` は許可しません。
 
-Compiled evaluator の active 化は `evaluator_promote` change type の approval-gated apply-plan item として扱います。candidate path/hash と regression result hash を pointer payload に束縛し、`${reports_dir}/gepa/active-evaluator.json` または configured `active_evaluator_pointer_path` を `create_file` / `replace_entire_file` mutation で更新します。approval artifact は candidate id/path/hash、regression result hash、active-before pointer hash、rollback strategy も保持し、validation は candidate drift と active pointer drift を fail-closed にします。昇格は approval artifact、expected hash、rollback preview を通るまで実行されません。成功時は apply result / attempt / ledger に `evaluator_promotion` metadata を残します。
+Compiled evaluator の active 化は `calibrate --execute` で扱います。candidate hash、regression result、active-before pointer hash / snapshot を calibration ledger に束縛し、`${reports_dir}/gepa/active-evaluator.json` または configured `active_evaluator_pointer_path` を更新します。regression runner 未設定・regression failure・candidate 不足では fail-closed にして active pointer を変更しません。旧 approval-gated `evaluator_promote` path は互換用の内部実装として残る場合がありますが、新しい user-facing surface では expected hash や approval artifact を入力させません。
 
 ## ディレクトリ
 
@@ -207,6 +207,7 @@ Compiled evaluator の active 化は `evaluator_promote` change type の approva
 - `__init__.py`: root の thin plugin entrypoint
 - `hermes_self_improvement/`: 実装 package
 - `hermes_self_improvement/cli.py`: CLI parser と pipeline orchestration
+- `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、rollback
 - `hermes_self_improvement/config.py`: execution mode と policy gate
 - `hermes_self_improvement/observer.py`: hook observer、redaction、retention
 - `hermes_self_improvement/analysis.py`: event aggregation と proposal generation

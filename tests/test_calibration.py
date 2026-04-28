@@ -179,3 +179,79 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
     assert "Calibration: no_op" in out
     assert "Evidence: 8 events, 2 disagreements, 0 bad outcomes" in out
     assert "Reason: insufficient_evidence" in out
+
+
+def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
+    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    write_json(
+        plan_path,
+        {
+            "schema_name": "self_improvement_apply_plan",
+            "plan_id": "plan-disagree",
+            "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
+        },
+    )
+    cfg = base_config(tmp_path, active_evaluator_pointer_path=str(active_pointer))
+    monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "failed", "reason": "regression_failed"})
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert result["current_status"] == "failed"
+    assert result["active_changed"] is False
+    assert "regression_failed" in result["reasons"]
+    assert active_pointer.exists() is False
+
+
+def test_calibration_execute_promotes_active_pointer_after_regression_pass(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
+    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    write_json(
+        plan_path,
+        {
+            "schema_name": "self_improvement_apply_plan",
+            "plan_id": "plan-disagree",
+            "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
+        },
+    )
+    cfg = base_config(tmp_path, active_evaluator_pointer_path=str(active_pointer))
+    monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "passed", "cases": 3})
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert result["current_status"] == "updated"
+    assert result["active_changed"] is True
+    assert result["active_evaluator_path"] == str(active_pointer)
+    pointer = json.loads(active_pointer.read_text(encoding="utf-8"))
+    assert pointer["candidate_hash"] == result["candidate"]["candidate_hash"]
+    assert pointer["regression"]["status"] == "passed"
+    assert result["ledger_path"]
+    ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
+    assert ledger["operation"] == "calibrate"
+    assert ledger["rollback_data"]["active_before_content"] is None
+
+
+def test_calibration_rollback_restores_active_before_state(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
+    write_json(active_pointer, {"candidate_hash": "before", "regression": {"status": "passed"}})
+    before_content = active_pointer.read_text(encoding="utf-8")
+    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    write_json(
+        plan_path,
+        {
+            "schema_name": "self_improvement_apply_plan",
+            "plan_id": "plan-disagree",
+            "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
+        },
+    )
+    cfg = base_config(tmp_path, active_evaluator_pointer_path=str(active_pointer))
+    monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "passed", "cases": 3})
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    rollback = calibration.rollback_calibration(ledger_id=Path(result["ledger_path"]).stem, config=cfg)
+
+    assert rollback["current_status"] == "rolled_back"
+    assert active_pointer.read_text(encoding="utf-8") == before_content
