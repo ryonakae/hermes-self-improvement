@@ -1,6 +1,6 @@
 # hermes-self-improvement auto-apply policy plan
 
-> **Status: superseded / historical.** This plan has been reviewed and its still-relevant safety ideas were folded into `2026-04-28_133233-simplified-self-improvement-surface.md`. Do not implement this plan directly. In particular, its `execution_mode`, `apply-low-risk`, approval artifact, and user-facing expected-hash flows are superseded by the simplified `improve / calibrate / plan / apply / rollback` design with `--execute` as the mutation boundary. Keep this file only as historical rationale until any remaining details are promoted to repo docs.
+> **Status: superseded / historical.** This plan has been reviewed and its still-relevant safety ideas were folded into the completed simplified surface baseline in `2026-04-28_133233-simplified-self-improvement-surface.md`. Do not implement this plan directly. In particular, its `execution_mode`, `apply-low-risk`, approval artifact, and user-facing expected-hash flows are superseded by the simplified `improve / calibrate / plan / apply / rollback` design with `--execute` as the mutation boundary. Keep this file only as historical rationale.
 
 Created: 2026-04-26 18:51 JST
 Repository: `/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement`

@@ -1,8 +1,8 @@
 # DSPy / GEPA Integration Implementation Plan
 
-> **Status: partially superseded / historical.** This plan has been reviewed and folded into `2026-04-28_133233-simplified-self-improvement-surface.md`. Keep its dependency, lazy-import, Hermes-authenticated routing, plugin-local model config, regression, and active evaluator pointer ideas; do not implement its old user-facing `gepa-eval` / `gepa-optimize` / approval-gated promotion surface directly. The canonical next surface is `calibrate [--execute]` and `improve [--execute]`.
+> **Status: partially superseded / historical.** This plan has been reviewed and its still-relevant dependency, lazy-import, Hermes-authenticated routing, plugin-local model config, regression, and active evaluator pointer ideas were folded into the completed simplified surface baseline in `2026-04-28_133233-simplified-self-improvement-surface.md`. Do not implement its old user-facing `gepa-eval` / `gepa-optimize` / approval-gated promotion surface directly. The current canonical surface is `calibrate [--execute]` and `improve [--execute]`.
 
-> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
+> **For Hermes:** This plan is historical. Do not use it as an active implementation checklist unless a newer plan explicitly reopens DSPy/GEPA internals.
 
 **Goal:** Make real DSPy / GEPA optimization a first-class feature of `hermes-self-improvement`, not just an offline scorer scaffold.
 

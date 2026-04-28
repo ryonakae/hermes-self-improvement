@@ -1,6 +1,8 @@
 # hermes-self-improvement Simplified Surface Implementation Plan
 
-> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task. This plan intentionally simplifies the plugin surface and removes the current approval/mode/hash ceremony from user-facing CLI/tools.
+> **Status: completed / canonical historical baseline as of 2026-04-28.** The simplified surface has been implemented, tested, documented, committed, and pushed. Keep this plan as the completed implementation record and design baseline. Future work should start from repo docs and current code, not from the older approval/mode phases.
+>
+> **For Hermes:** This plan is no longer an active implementation checklist. Do not reintroduce approval/mode/hash ceremony from older plans. If new work conflicts with this baseline, create a new plan and update `.hermes/plans/README.md`.
 
 **Goal:** `hermes-self-improvement` を「観測 → 必要なら evaluator/scorer 調整 → 改善計画 → policy に従った適用 → 報告」の自己改善ループに整理し、CLI / command / tool / config / apply model を本質的で扱いやすい形へ単純化する。
 
@@ -12,14 +14,14 @@
 
 ## Plan status and relationship to older plans
 
-**Status:** canonical implementation plan for the next simplification work. When this plan conflicts with older `.hermes/plans/` documents, this plan wins.
+**Status:** completed / canonical historical baseline. When this plan conflicts with older `.hermes/plans/` documents, this plan wins unless a newer plan explicitly supersedes it.
 
 Older plans were reviewed and folded in as follows:
 
 - `2026-04-26_185111-self-improvement-auto-apply-policy.md` is superseded for user-facing safety model, command names, execution-mode policy, approval artifacts, and expected-hash UX. Its still-useful ideas are retained here as internal invariants: preview-first execution, ledger/rollback data, target hash drift checks, policy-controlled scope, and repo docs as source of truth rather than skills.
 - `2026-04-28_012243-dspy-gepa-integration.md` is superseded for command surface (`gepa-eval`, `gepa-optimize`, approval-gated evaluator promotion). Its still-useful ideas are retained here under `calibrate`: lazy DSPy imports, Hermes-authenticated model routing, plugin-local model config, GEPA/LLM comparison, regression cases, active evaluator pointer/rollback, and evaluator self-improvement from outcome evidence.
 
-The older plans should not drive new implementation directly. Keep them only as historical rationale until all still-relevant details have moved into docs or this simplified plan.
+The older plans should not drive new implementation directly. Keep them only as historical rationale. The current implementation baseline is the simplified surface documented in README, AGENTS.md, bundled operations skill, and this completed plan.
 
 ## 1. Current context / assumptions
 

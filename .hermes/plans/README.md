@@ -1,22 +1,40 @@
 # hermes-self-improvement plans index
 
-## Canonical plan
+## Current status
+
+The simplified self-improvement surface work is implementation-complete as of 2026-04-28.
+
+Completed baseline:
+
+- CLI / tool surface is `improve / calibrate / plan / apply / rollback / report / status`.
+- `--execute` is the only user-facing mutation boundary.
+- User-facing `execution_mode`, approval artifacts, low-risk / approved command split, and expected-hash flags are removed from the primary surface.
+- `report` includes recent plan, recent apply, calibration, retention summary, and needs-review highlights without approval gate sections.
+- `rollback` validates ledger integrity and all applied item targets before mutating; drift / tamper causes all-or-nothing failure.
+- Plugin tool surface is exactly seven simplified tools.
+
+Next work should be treated as operational hardening, real-runtime smoke, or new design work—not continuation of the old approval/mode implementation plan.
+
+## Completed canonical plan
 
 - `2026-04-28_133233-simplified-self-improvement-surface.md`
-  - **Status:** canonical next implementation plan.
-  - Covers simplified CLI/tool surface, `improve`, `calibrate`, unified `plan/apply`, `--execute` mutation boundary, internal hash checks, calibration config, unified apply engine, and migration from approval/mode-heavy implementation.
+  - **Status:** completed / canonical historical baseline.
+  - Completed through the simplified surface, `improve`, `calibrate`, unified `plan/apply`, `rollback`, `report` integration, plugin tool surface, approval/mode cleanup, docs update, and test cleanup.
+  - Keep this plan as the implementation record and design baseline for future changes.
 
 ## Historical / superseded plans
 
 - `2026-04-26_185111-self-improvement-auto-apply-policy.md`
   - **Status:** superseded / historical.
-  - Useful remaining ideas: preview-first mutation, ledger/rollback data, target drift checks, policy-controlled scope, repo docs as source of truth.
+  - Useful ideas retained in the completed baseline: preview-first mutation, ledger/rollback data, target drift checks, policy-controlled scope, repo docs as source of truth.
   - Superseded parts: `execution_mode`, `apply-low-risk`, approval artifacts, expected-hash UX, low-risk vs approved command split.
+  - Do not implement directly.
 
 - `2026-04-28_012243-dspy-gepa-integration.md`
   - **Status:** partially superseded / historical.
-  - Useful remaining ideas: lazy DSPy imports, Hermes-authenticated provider routing, plugin-local `model.llm` / `model.gepa`, regression cases, active evaluator pointer and rollback.
+  - Useful ideas retained in the completed baseline: lazy DSPy imports, Hermes-authenticated provider routing, plugin-local `model.llm` / `model.gepa`, regression cases, active evaluator pointer and rollback.
   - Superseded parts: user-facing `gepa-eval` / `gepa-optimize` surface and approval-gated evaluator promotion. Use `calibrate [--execute]` and `improve [--execute]` instead.
+  - Do not implement directly.
 
 ## Maintenance rule
 
