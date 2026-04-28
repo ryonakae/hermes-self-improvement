@@ -1,18 +1,18 @@
 # AGENTS.md
 
-`hermes-self-improvement` は、Hermes runtime の観測イベントから skill / memory / prompt / tool-use workflow の改善候補を作る user plugin です。
+`hermes-self-improvement` は、Hermes runtime の観測イベントから skill / memory / prompt / tool-use workflow の改善候補を作る user plugin です。hook は観測専用です。mutation は CLI または plugin tool の明示操作で扱います。
 
-hook は観測だけを行います。LLM call、GEPA optimizer、skill patch、memory edit、重い集計は hook で動かさないでください。mutation は CLI または plugin tool の明示操作で扱います。
+## 着手前チェック
 
-## 最初に見るもの
+```bash
+git status --short
+bin/hermes-self-improve status
+```
 
-- 全体像: `README.md`
-- 安全境界: `skills/operations/references/safety-and-apply.md`
-- 運用 index: `skills/operations/SKILL.md`
-- 長期方針: `.hermes/plans/2026-04-26_185111-self-improvement-auto-apply-policy.md`
-- runtime home migration: `.hermes/plans/2026-04-29_003219-self-improvement-runtime-home.md`
-
-作業前に `git status --short` と対象 diff を確認してください。無関係な変更を戻さないでください。
+- 無関係な変更を戻さないでください。
+- まず `README.md` で全体像を確認してください。
+- 安全境界を触る場合は `skills/operations/references/safety-and-apply.md` を先に読んでください。
+- repo-tracked plan に沿う作業では `.hermes/plans/` の該当 plan を確認してください。
 
 ## よく使うコマンド
 
@@ -35,9 +35,7 @@ bin/hermes-self-improve rollback <ledger-id>
 bin/hermes-self-improve rollback <ledger-id> --execute
 ```
 
-Primary surface は `improve / calibrate / plan / apply / rollback / report / status` です。実 mutation は `--execute` が唯一の user-facing boundary です。item hash / target hash / ledger hash は内部検証用で、user-facing option に戻さないでください。
-
-Legacy/debug command は primary surface に戻しません。`generate-apply-plan`, `apply-low-risk`, `apply-approved`, `approval-report`, `retention-*`, `gepa-*` は使わず、上の 7 command に寄せます。
+Primary surface は `improve / calibrate / plan / apply / rollback / report / status` です。Legacy/debug command は primary surface に戻しません。`generate-apply-plan`, `apply-low-risk`, `apply-approved`, `approval-report`, `retention-*`, `gepa-*` は使わず、上の 7 command に寄せます。
 
 ## 検証
 
@@ -75,33 +73,19 @@ PY
 
 ## 安全境界
 
-- hook は観測専用です。hook 内で mutation や optimizer を動かさないでください。
+- hook 内で LLM call、GEPA optimizer、skill patch、memory edit、重い集計を動かさないでください。
 - `--execute` なしの `improve`, `calibrate`, `apply`, `rollback` は preview-only です。
+- `--execute` は mutation intent ですが、実変更は policy と内部検証を通った item だけです。
 - `apply --execute` は `apply_policy`、internal item hash、target drift check を通った ready item だけ変更します。
-- `rollback --execute` は ledger hash と current target hash を検証してから restore します。1 item でも drift / tamper があれば rollback しません。
+- `rollback --execute` は ledger hash と current target hash を検証します。1 item でも drift / tamper があれば rollback しません。
 - `calibrate --execute` は evidence threshold と regression pass を通った場合だけ active evaluator pointer を更新します。
-- scorer は優先順位付けだけに使います。GEPA / LLM の点数だけで auto-apply を許可しないでください。
+- GEPA / LLM の点数だけで auto-apply を許可しないでください。
 - telemetry には全文や secret を保存しません。redacted preview と hash を使います。
 - plugin は target repo の commit を作りません。commit は target repo の workflow に委譲します。
 
-## Plugin tools
-
-`plugin.yaml`, `hermes_self_improvement/schemas.py`, `hermes_self_improvement/tool_handlers.py` で CLI parity の tools を登録しています。handler は wrapper CLI に shell out せず、CLI と同じ core function を使います。
-
-Primary tool surface は 7 個だけです。
-
-- `self_improvement_status`
-- `self_improvement_report`
-- `self_improvement_improve`
-- `self_improvement_calibrate`
-- `self_improvement_plan`
-- `self_improvement_apply`
-- `self_improvement_rollback`
-
-`execute=false` は preview-only、`execute=true` は mutation intent です。`mode` / `confirm_*` / `expected_*hash` は primary schema に出しません。
-
 ## 重要パス
 
+- `README.md`: 人間向けの全体説明
 - `plugin.yaml`: plugin manifest
 - `__init__.py`: root の thin plugin entrypoint
 - `hermes_self_improvement/cli.py`: CLI parser と pipeline orchestration
@@ -112,7 +96,6 @@ Primary tool surface は 7 個だけです。
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
 - `hermes_self_improvement/apply_engine.py`: mutation と rollback ledger
 - `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、calibration rollback
-- `hermes_self_improvement/ledger.py`: ledger helpers
 - `hermes_self_improvement/tool_handlers.py`: plugin tools
 - `evals/`: offline scorer の rubric / regression cases
 - `skills/operations/`: bundled operational skill
@@ -121,6 +104,20 @@ Primary tool surface は 7 個だけです。
 Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存します。保存場所の user-facing config override は提供しません。主な subdir は `state/`, `daily/`, `apply-plans/`, `ledgers/`, `gepa/`, `cache/` です。
 
 Repo 側の `evals/` は共通 seed / regression assets です。user-specific な evidence、report、ledger、active evaluator は runtime root に置きます。
+
+## Plugin tools
+
+Primary tool surface は 7 個だけです。`plugin.yaml`, `hermes_self_improvement/schemas.py`, `hermes_self_improvement/tool_handlers.py` を同時に確認してください。handler は wrapper CLI に shell out せず、CLI と同じ core function を使います。
+
+- `self_improvement_status`
+- `self_improvement_report`
+- `self_improvement_improve`
+- `self_improvement_calibrate`
+- `self_improvement_plan`
+- `self_improvement_apply`
+- `self_improvement_rollback`
+
+`mode` / `confirm_*` / `expected_*hash` は primary schema に出しません。
 
 ## コーディング / テスト規約
 
@@ -141,3 +138,11 @@ bin/hermes-self-improve improve --since-hours 24 --json
 ```
 
 Cron から `improve --execute` を使う場合も、許可範囲は `apply_policy` と internal validation に従います。候補を見つけたら plan path、risk、evidence、validation status を人間に渡してください。
+
+## 追加資料
+
+- `README.md`: plugin の目的、仕組み、DSPy / GEPA、自己改善の流れ
+- `skills/operations/SKILL.md`: 運用 skill
+- `skills/operations/references/safety-and-apply.md`: safety / apply 境界
+- `.hermes/plans/2026-04-26_185111-self-improvement-auto-apply-policy.md`: auto-apply 方針
+- `.hermes/plans/2026-04-29_003219-self-improvement-runtime-home.md`: runtime storage migration 方針
