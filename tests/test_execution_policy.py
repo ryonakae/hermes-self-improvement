@@ -83,14 +83,17 @@ def test_load_config_includes_default_execution_policy(tmp_path):
     assert "apply_low_risk" in config["mode_policy"]
 
 
-def test_cli_accepts_mode_flag_for_run_command():
+def test_cli_rejects_mode_flag_on_removed_run_command():
     mod = load_plugin_module()
     parser = argparse.ArgumentParser()
     mod._setup_cli(parser)
 
-    args = parser.parse_args(["run", "--mode", "dry_run_plan"])
-
-    assert args.mode == "dry_run_plan"
+    try:
+        parser.parse_args(["run", "--mode", "dry_run_plan"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy run command should not parse")
 
 def test_policy_allows_rollback_low_risk_only_in_apply_low_risk_mode():
     mod = load_plugin_module()

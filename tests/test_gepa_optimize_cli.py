@@ -167,11 +167,10 @@ def test_optimize_gepa_fails_closed_for_zero_budget(tmp_path):
         raise AssertionError("expected zero budget to fail closed")
 
 
-def test_gepa_optimize_cli_is_report_only_allowed_and_parseable():
+def test_gepa_optimize_cli_is_removed_from_primary_surface():
     sys.path.insert(0, str(PLUGIN_DIR))
     try:
         cli = importlib.import_module("hermes_self_improvement.cli")
-        config = importlib.import_module("hermes_self_improvement.config")
     finally:
         try:
             sys.path.remove(str(PLUGIN_DIR))
@@ -180,10 +179,9 @@ def test_gepa_optimize_cli_is_report_only_allowed_and_parseable():
 
     parser = argparse.ArgumentParser()
     cli._setup_cli(parser)
-    args = parser.parse_args(["gepa-optimize", "--mode", "report_only", "--max-full-evals", "2", "--json"])
-
-    assert args.self_improvement_cmd == "gepa-optimize"
-    assert args.mode == "report_only"
-    assert args.max_full_evals == 2
-    decision = config.validate_mode_action("report_only", "gepa-optimize", config=config._default_config())
-    assert decision["allowed"] is True
+    try:
+        parser.parse_args(["gepa-optimize", "--mode", "report_only", "--max-full-evals", "2", "--json"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy gepa-optimize command should not parse")

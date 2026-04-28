@@ -433,50 +433,26 @@ def test_apply_low_risk_confirmed_rejects_item_hash_mismatch_without_mutating_ta
     assert "ledger_path" not in attempt
 
 
-def test_cli_accepts_apply_low_risk_command_shape():
+def test_cli_rejects_apply_low_risk_command_shape():
     mod = load_plugin_module()
     parser = argparse.ArgumentParser()
     mod._setup_cli(parser)
 
-    args = parser.parse_args([
-        "apply-low-risk",
-        "apply-plan-1",
-        "item-1",
-        "--mode",
-        "apply_low_risk",
-        "--confirm-apply",
-        "--expected-item-hash",
-        "hash-1",
-        "--json",
-    ])
+    try:
+        parser.parse_args(['apply-low-risk', 'apply-plan-1', 'item-1', '--mode', 'apply_low_risk', '--confirm-apply', '--expected-item-hash', 'hash-1', '--json'])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy command should not parse")
 
-    assert args.self_improvement_cmd == "apply-low-risk"
-    assert args.plan_id == "apply-plan-1"
-    assert args.item_id == "item-1"
-    assert args.mode == "apply_low_risk"
-    assert args.confirm_apply is True
-    assert args.expected_item_hash == "hash-1"
-    assert args.as_json is True
-
-def test_cli_accepts_rollback_low_risk_command_shape():
+def test_cli_rejects_rollback_low_risk_command_shape():
     mod = load_plugin_module()
     parser = argparse.ArgumentParser()
     mod._setup_cli(parser)
 
-    args = parser.parse_args([
-        "rollback-low-risk",
-        "ledger-1",
-        "--mode",
-        "apply_low_risk",
-        "--confirm-rollback",
-        "--expected-ledger-hash",
-        "hash-1",
-        "--json",
-    ])
-
-    assert args.self_improvement_cmd == "rollback-low-risk"
-    assert args.ledger_id == "ledger-1"
-    assert args.mode == "apply_low_risk"
-    assert args.confirm_rollback is True
-    assert args.expected_ledger_hash == "hash-1"
-    assert args.as_json is True
+    try:
+        parser.parse_args(['rollback-low-risk', 'ledger-1', '--mode', 'apply_low_risk', '--confirm-rollback', '--expected-ledger-hash', 'hash-1', '--json'])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy command should not parse")

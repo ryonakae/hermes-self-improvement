@@ -11,7 +11,7 @@ from typing import Any
 try:  # pragma: no cover - package import path
     from .analysis import AnalysisResult, analyze_events
     from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
-    from .apply_engine import apply_plan
+    from .apply_engine import apply_plan, rollback_apply_ledger
     from .apply_plan import build_apply_plan, write_apply_plan
     from .calibration import run_calibration
     from .config import (
@@ -29,7 +29,7 @@ try:  # pragma: no cover - package import path
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import AnalysisResult, analyze_events
     from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
-    from apply_engine import apply_plan
+    from apply_engine import apply_plan, rollback_apply_ledger
     from apply_plan import build_apply_plan, write_apply_plan
     from calibration import run_calibration
     from config import (
@@ -847,102 +847,133 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def run_improve(
+    *,
+    config: dict[str, Any],
+    since_hours: int = 24,
+    execute: bool = False,
+    scorer: str = "compare",
+    item_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Run the simplified self-improvement loop.
+
+    `execute=False` is preview-only: calibration does not promote and apply does
+    not mutate. `execute=True` is the sole user-facing mutation boundary; policy
+    and internal hash checks still decide what can actually change.
+    """
+    calibration = run_calibration(config=config, execute=bool(execute))
+    pipeline = run_pipeline(
+        config,
+        since_hours=int(since_hours),
+        write_report=False,
+        scorer=scorer,
+    )
+    plan = build_apply_plan(
+        proposals=pipeline.get("proposals") or [],
+        summary=pipeline.get("summary") or {},
+        execution_mode="improve_execute" if execute else "preview",
+        config=config,
+    )
+    plan_path = write_apply_plan(plan, config)
+    apply_result = apply_plan(
+        plan_id=str(plan.get("plan_id")),
+        config=config,
+        item_ids=item_ids,
+        execute=bool(execute),
+    )
+    return {
+        "schema_name": "self_improvement_improve_result",
+        "schema_version": "1.0",
+        "execute": bool(execute),
+        "target_changed": bool(calibration.get("active_changed") or apply_result.get("target_changed")),
+        "calibration": calibration,
+        "plan": {
+            "plan_id": plan.get("plan_id"),
+            "apply_plan_path": str(plan_path),
+            "summary": _plan_status_counts(plan),
+        },
+        "apply": apply_result,
+    }
+
+
+def _plan_status_counts(plan: dict[str, Any]) -> dict[str, int]:
+    counts = {"ready": 0, "needs_review": 0, "rejected_by_planner": 0}
+    for item in plan.get("items") if isinstance(plan.get("items"), list) else []:
+        status = str(item.get("status") or "needs_review")
+        if status in counts:
+            counts[status] += 1
+    return counts
+
+
+def _render_improve_summary(result: dict[str, Any]) -> str:
+    plan = result.get("plan") if isinstance(result.get("plan"), dict) else {}
+    plan_summary = plan.get("summary") if isinstance(plan.get("summary"), dict) else {}
+    apply_result = result.get("apply") if isinstance(result.get("apply"), dict) else {}
+    apply_summary = apply_result.get("summary") if isinstance(apply_result.get("summary"), dict) else {}
+    title = "Self-improvement result" if result.get("execute") else "Self-improvement preview"
+    lines = [
+        title,
+        f"Calibration: {(result.get('calibration') or {}).get('current_status') if isinstance(result.get('calibration'), dict) else 'unknown'}",
+        "Plan: "
+        f"{plan.get('plan_id')} "
+        f"ready={int(plan_summary.get('ready') or 0)} "
+        f"needs_review={int(plan_summary.get('needs_review') or 0)} "
+        f"rejected_by_planner={int(plan_summary.get('rejected_by_planner') or 0)}",
+    ]
+    if result.get("execute"):
+        lines.extend([
+            f"Applied: {int(apply_summary.get('applied') or 0)}",
+            f"Skipped by policy: {int(apply_summary.get('skipped_by_policy') or 0)}",
+            f"Failed: {int(apply_summary.get('failed') or 0)}",
+        ])
+    else:
+        lines.append(
+            "Apply preview: "
+            f"would_apply={int(apply_summary.get('would_apply') or 0)} "
+            f"skipped_by_policy={int(apply_summary.get('skipped_by_policy') or 0)} "
+            f"failed={int(apply_summary.get('failed') or 0)}"
+        )
+    if apply_result.get("ledger_path"):
+        lines.append(f"Ledger: {apply_result.get('ledger_path')}")
+    return "\n".join(lines)
+
+
 def _setup_cli(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="self_improvement_cmd")
+
+    p_improve = sub.add_parser("improve", help="Preview or execute the full self-improvement loop")
+    p_improve.add_argument("--since-hours", type=int, default=24)
+    p_improve.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
+    p_improve.add_argument("--items", dest="item_ids", default=None, help="Comma-separated plan item ids to apply after planning")
+    p_improve.add_argument("--execute", action="store_true", help="Actually run mutation-capable phases; omit for preview")
+    p_improve.add_argument("--json", action="store_true", dest="as_json")
+    _add_config_argument(p_improve)
+    p_improve.set_defaults(func=_handle_cli)
+
     p_status = sub.add_parser("status", help="Show observer status")
-    _add_mode_argument(p_status)
+    _add_config_argument(p_status)
     p_status.set_defaults(func=_handle_cli)
-    p_analyze = sub.add_parser("analyze", help="Analyze observations")
-    p_analyze.add_argument("--since-hours", type=int, default=24)
-    p_analyze.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="heuristic")
-    p_analyze.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_analyze)
-    p_analyze.set_defaults(func=_handle_cli)
+
     p_report = sub.add_parser("report", help="Analyze and write Markdown report")
     p_report.add_argument("--since-hours", type=int, default=24)
     p_report.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
     p_report.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_report)
+    _add_config_argument(p_report)
     p_report.set_defaults(func=_handle_cli)
-    p_run = sub.add_parser("run", help="Analyze, score proposals, and write report")
-    p_run.add_argument("--since-hours", type=int, default=24)
-    p_run.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
-    p_run.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_run)
-    p_run.set_defaults(func=_handle_cli)
-    p_gepa_eval = sub.add_parser("gepa-eval", help="Run bundled offline GEPA scorer regression cases")
-    p_gepa_eval.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_gepa_eval)
-    p_gepa_eval.set_defaults(func=_handle_cli)
-    p_gepa_optimize = sub.add_parser("gepa-optimize", help="Run an explicit GEPA optimizer compile and write report artifacts")
-    p_gepa_optimize.add_argument("--trainset", default=None, help="JSONL trainset path; defaults to bundled proposal eval cases")
-    p_gepa_optimize.add_argument("--valset", default=None, help="JSONL validation set path; defaults to bundled proposal eval cases")
-    p_gepa_optimize.add_argument("--max-full-evals", type=int, default=None, help="Required positive GEPA full-evaluation budget")
-    p_gepa_optimize.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_gepa_optimize)
-    p_gepa_optimize.set_defaults(func=_handle_cli)
-    p_ledger_report = sub.add_parser("ledger-report", help="Summarize low-risk apply ledgers for human review")
-    p_ledger_report.add_argument("--status", choices=["all", "pending", "applied", "rolled_back", "failed", "rejected"], default="applied")
-    p_ledger_report.add_argument("--limit", type=int, default=20)
-    p_ledger_report.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_ledger_report)
-    p_ledger_report.set_defaults(func=_handle_cli)
-    p_approval_report = sub.add_parser("approval-report", help="Summarize approval artifacts and validation status")
-    p_approval_report.add_argument("--status", choices=["all", "approved", "rejected", "valid"], default="all")
-    p_approval_report.add_argument("--limit", type=int, default=20)
-    p_approval_report.add_argument("--include-previews", action="store_true", help="Include non-mutating apply-approved preview status for each approval")
-    p_approval_report.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_approval_report)
-    p_approval_report.set_defaults(func=_handle_cli)
-    p_retention_report = sub.add_parser("retention-report", help="Preview old self-improvement artifacts eligible for retention cleanup without deleting anything")
-    p_retention_report.add_argument("--limit", type=int, default=20)
-    p_retention_report.add_argument("--retention-days", type=int, default=None)
-    p_retention_report.add_argument("--category", choices=["all", *_RETENTION_ARTIFACT_CATEGORIES], default="all")
-    p_retention_report.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_retention_report)
-    p_retention_report.set_defaults(func=_handle_cli)
-    p_retention_prune = sub.add_parser("retention-prune", help="Preview or explicitly prune expired self-improvement artifacts")
-    p_retention_prune.add_argument("--limit", type=int, default=20)
-    p_retention_prune.add_argument("--retention-days", type=int, default=None)
-    p_retention_prune.add_argument("--category", choices=["all", *_RETENTION_ARTIFACT_CATEGORIES], default="all")
-    p_retention_prune.add_argument("--confirm-prune", action="store_true", help="Actually delete the listed expired artifacts after hash guard passes")
-    p_retention_prune.add_argument("--expected-artifact-list-hash", default=None, help="Required candidate-list hash for --confirm-prune")
-    p_retention_prune.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_retention_prune)
-    p_retention_prune.set_defaults(func=_handle_cli)
-    p_approve = sub.add_parser("approve", help="Create an approval artifact for one apply-plan item")
-    p_approve.add_argument("plan_id")
-    p_approve.add_argument("item_id")
-    p_approve.add_argument("--approver-source", default="manual_cli")
-    p_approve.add_argument("--ttl-hours", type=int, default=24)
-    p_approve.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_approve)
-    p_approve.set_defaults(func=_handle_cli)
-    p_apply_approved = sub.add_parser("apply-approved", help="Validate, preview, or explicitly apply one approved artifact")
-    p_apply_approved.add_argument("approval_id")
-    p_apply_approved.add_argument("--confirm-approved-apply", action="store_true", help="Actually mutate the target after approval and target hash guards pass")
-    p_apply_approved.add_argument("--expected-approval-hash", default=None, help="Required approval hash binding for --confirm-approved-apply")
-    p_apply_approved.add_argument("--expected-target-hash", default=None, help="Required current target hash binding for --confirm-approved-apply")
-    p_apply_approved.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_apply_approved)
-    p_apply_approved.set_defaults(func=_handle_cli)
-    p_apply_plan = sub.add_parser("generate-apply-plan", help="Generate a dry-run apply plan artifact")
-    p_apply_plan.add_argument("--since-hours", type=int, default=24)
-    p_apply_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
-    p_apply_plan.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_apply_plan)
-    p_apply_plan.set_defaults(func=_handle_cli)
+
     p_plan = sub.add_parser("plan", help="Generate an ordered improvement plan artifact")
     p_plan.add_argument("--since-hours", type=int, default=24)
     p_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
     p_plan.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_plan)
     p_plan.set_defaults(func=_handle_cli)
+
     p_calibrate = sub.add_parser("calibrate", help="Preview evaluator/scorer calibration from recent evidence")
-    p_calibrate.add_argument("--execute", action="store_true", help="Promote calibration only when implemented regression gates pass")
+    p_calibrate.add_argument("--execute", action="store_true", help="Promote calibration only when regression gates pass")
     p_calibrate.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_calibrate)
     p_calibrate.set_defaults(func=_handle_cli)
+
     p_apply = sub.add_parser("apply", help="Preview or execute an ordered improvement plan")
     p_apply.add_argument("plan_id")
     p_apply.add_argument("--items", dest="item_ids", default=None, help="Comma-separated plan item ids to apply, e.g. step-001,step-002")
@@ -950,41 +981,33 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_apply.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_apply)
     p_apply.set_defaults(func=_handle_cli)
-    p_apply_low_risk = sub.add_parser("apply-low-risk", help="Check or explicitly apply one low-risk apply-plan item")
-    p_apply_low_risk.add_argument("plan_id")
-    p_apply_low_risk.add_argument("item_id")
-    p_apply_low_risk.add_argument("--confirm-apply", action="store_true", help="Actually mutate the target after all guarded checks pass")
-    p_apply_low_risk.add_argument("--expected-item-hash", default=None, help="Required confirmation hash for --confirm-apply")
-    p_apply_low_risk.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_apply_low_risk)
-    p_apply_low_risk.set_defaults(func=_handle_cli)
-    p_rollback_low_risk = sub.add_parser("rollback-low-risk", help="Check or explicitly rollback one applied low-risk ledger")
-    p_rollback_low_risk.add_argument("ledger_id")
-    p_rollback_low_risk.add_argument("--confirm-rollback", action="store_true", help="Actually restore the target from ledger rollback data")
-    p_rollback_low_risk.add_argument("--expected-ledger-hash", default=None, help="Required confirmation hash for --confirm-rollback")
-    p_rollback_low_risk.add_argument("--json", action="store_true", dest="as_json")
-    _add_mode_argument(p_rollback_low_risk)
-    p_rollback_low_risk.set_defaults(func=_handle_cli)
+
+    p_rollback = sub.add_parser("rollback", help="Preview or execute rollback for a self-improvement apply ledger")
+    p_rollback.add_argument("ledger_id")
+    p_rollback.add_argument("--execute", action="store_true", help="Actually restore targets; omit for preview")
+    p_rollback.add_argument("--json", action="store_true", dest="as_json")
+    _add_config_argument(p_rollback)
+    p_rollback.set_defaults(func=_handle_cli)
 
 
 def _handle_cli(args: argparse.Namespace) -> None:
     config = load_config(Path(__file__).resolve().parents[1] / "config.json", cli_config_path=getattr(args, "config_path", None))
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
-    execution_mode = resolve_execution_mode(config, getattr(args, "mode", None))
-    mode_decision = {"allowed": True, "reason": "simplified_surface"} if cmd in {"plan", "apply", "calibrate"} else validate_mode_action(
-        execution_mode,
-        cmd,
-        required_capability=_required_capability_for_command(cmd),
-        config=config,
-    )
-    if not mode_decision.get("allowed"):
-        print(json.dumps({
-            "error": "execution_mode_denied",
-            "execution_mode": execution_mode,
-            "command": cmd,
-            "reason": mode_decision.get("reason"),
-        }, ensure_ascii=False, indent=2))
-        raise SystemExit(2)
+
+    if cmd == "improve":
+        payload = run_improve(
+            config=config,
+            since_hours=int(getattr(args, "since_hours", 24)),
+            execute=bool(getattr(args, "execute", False)),
+            scorer=str(getattr(args, "scorer", "compare")),
+            item_ids=_parse_item_ids(getattr(args, "item_ids", None)),
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(_render_improve_summary(payload))
+        return
+
     if cmd == "status":
         path = _event_path(config)
         events = _load_events(path, limit=1000)
@@ -992,7 +1015,6 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "plugin": PLUGIN_NAME,
             "enabled": bool(config.get("enabled", True)),
             "event_path": str(path),
-            "execution_mode": execution_mode,
             "retention_days": int(config.get("retention_days", DEFAULT_RETENTION_DAYS)),
             "event_count_sample": len(events),
             "last_event_ts": events[-1].get("ts") if events else None,
@@ -1001,126 +1023,18 @@ def _handle_cli(args: argparse.Namespace) -> None:
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
-    if cmd == "gepa-eval":
-        payload = _call_gepa_eval(config=config)
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(_render_gepa_eval(payload))
-        return
-    if cmd == "gepa-optimize":
-        payload = _call_gepa_optimize(
-            config=config,
-            trainset=getattr(args, "trainset", None),
-            valset=getattr(args, "valset", None),
-            max_full_evals=getattr(args, "max_full_evals", None),
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(f"GEPA compile status: {payload.get('current_status')}")
-            print(f"Artifact: {payload.get('artifact_path')}")
-            print(f"Compiled program: {payload.get('compiled_program_path')}")
-            print("Active evaluator promoted: false")
-        return
-    if cmd == "ledger-report":
-        payload = build_ledger_report_payload(
-            config=config,
-            status=str(getattr(args, "status", "applied")),
-            limit=int(getattr(args, "limit", 20)),
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(render_ledger_report(payload))
-        return
-    if cmd == "approval-report":
-        payload = build_approval_report_payload(
-            config=config,
-            status=str(getattr(args, "status", "all")),
-            limit=int(getattr(args, "limit", 20)),
-            include_previews=bool(getattr(args, "include_previews", False)),
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(render_approval_report(payload))
-        return
-    if cmd == "retention-report":
-        payload = build_retention_report_payload(
-            config=config,
-            retention_days=getattr(args, "retention_days", None),
-            limit=int(getattr(args, "limit", 20)),
-            category=str(getattr(args, "category", "all")),
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(render_retention_report(payload))
-        return
-    if cmd == "retention-prune":
-        payload = build_retention_prune_payload(
-            config=config,
-            retention_days=getattr(args, "retention_days", None),
-            limit=int(getattr(args, "limit", 20)),
-            category=str(getattr(args, "category", "all")),
-            confirm_prune=bool(getattr(args, "confirm_prune", False)),
-            expected_artifact_list_hash=getattr(args, "expected_artifact_list_hash", None),
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(f"Retention prune status: {payload.get('current_status')}")
-            print(f"Candidates: {payload.get('prune_candidate_count')}")
-            if payload.get("reasons"):
-                print("Reasons: " + ", ".join(payload.get("reasons") or []))
-        return
-    if cmd == "approve":
-        payload = create_approval_artifact(
-            plan_id=str(getattr(args, "plan_id")),
-            item_id=str(getattr(args, "item_id")),
-            config=config,
-            approver_source=str(getattr(args, "approver_source", "manual_cli")),
-            ttl_hours=int(getattr(args, "ttl_hours", 24)),
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            approval = payload.get("approval") or {}
-            print(f"Approval status: {approval.get('current_status')}")
-            if payload.get("approval_path"):
-                print(f"Approval written: {payload.get('approval_path')}")
-            if approval.get("reasons"):
-                print("Reasons: " + ", ".join(approval.get("reasons") or []))
-        return
-    if cmd == "apply-approved":
-        payload = preview_apply_approved(
-            approval_id=str(getattr(args, "approval_id")),
-            config=config,
-            expected_approval_hash=getattr(args, "expected_approval_hash", None),
-            expected_target_hash=getattr(args, "expected_target_hash", None),
-            confirm_approved_apply=bool(getattr(args, "confirm_approved_apply", False)),
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(f"Apply-approved preview status: {payload.get('current_status')}")
-            if payload.get("reasons"):
-                print("Reasons: " + ", ".join(payload.get("reasons") or []))
-            if payload.get("target_path"):
-                print(f"Target: {payload.get('target_path')}")
-        return
-    if cmd in {"generate-apply-plan", "plan"}:
+
+    if cmd == "plan":
         out = run_pipeline(
             config,
             since_hours=int(getattr(args, "since_hours", 24)),
             write_report=False,
-            scorer=getattr(args, "scorer", "heuristic"),
+            scorer=getattr(args, "scorer", "compare"),
         )
         plan = build_apply_plan(
             proposals=out.get("proposals") or [],
             summary=out.get("summary") or {},
-            execution_mode="preview" if cmd == "plan" else execution_mode,
+            execution_mode="preview",
             config=config,
         )
         path = write_apply_plan(plan, config)
@@ -1130,6 +1044,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
         else:
             print(_render_apply_plan_summary(plan, path))
         return
+
     if cmd == "calibrate":
         payload = run_calibration(config=config, execute=bool(getattr(args, "execute", False)))
         if getattr(args, "as_json", False):
@@ -1137,6 +1052,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
         else:
             print(_render_calibration_summary(payload))
         return
+
     if cmd == "apply":
         payload = apply_plan(
             plan_id=str(getattr(args, "plan_id")),
@@ -1149,56 +1065,41 @@ def _handle_cli(args: argparse.Namespace) -> None:
         else:
             print(_render_apply_result_summary(payload))
         return
-    if cmd == "apply-low-risk":
-        payload = apply_low_risk_skeleton(
-            plan_id=str(getattr(args, "plan_id")),
-            item_id=str(getattr(args, "item_id")),
-            config=config,
-            confirm_apply=bool(getattr(args, "confirm_apply", False)),
-            expected_item_hash=getattr(args, "expected_item_hash", None),
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            attempt = payload.get("apply_attempt") or {}
-            print(f"Apply attempt written: {payload.get('apply_attempt_path')}")
-            print(f"Status: {attempt.get('current_status')}")
-            if attempt.get("reasons"):
-                print("Reasons: " + ", ".join(attempt.get("reasons") or []))
-        return
-    if cmd == "rollback-low-risk":
-        payload = rollback_low_risk(
+
+    if cmd == "rollback":
+        payload = rollback_apply_ledger(
             ledger_id=str(getattr(args, "ledger_id")),
             config=config,
-            confirm_rollback=bool(getattr(args, "confirm_rollback", False)),
-            expected_ledger_hash=getattr(args, "expected_ledger_hash", None),
+            execute=bool(getattr(args, "execute", False)),
         )
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
-            rollback = payload.get("rollback_result") or {}
-            print(f"Rollback ledger: {payload.get('ledger_path')}")
-            print(f"Status: {rollback.get('current_status')}")
-            if rollback.get("reasons"):
-                print("Reasons: " + ", ".join(rollback.get("reasons") or []))
+            print(f"Rollback ledger: {payload.get('ledger_id')}")
+            print(f"Mode: {'execute' if payload.get('execute') else 'preview'}")
+            print(f"Status: {payload.get('current_status')}")
+            if payload.get("reasons"):
+                print("Reasons: " + ", ".join(payload.get("reasons") or []))
         return
-    write_report = cmd in {"report", "run"}
-    scorer = getattr(args, "scorer", "heuristic")
-    out = run_pipeline(
-        config,
-        since_hours=int(getattr(args, "since_hours", 24)),
-        write_report=write_report,
-        scorer=scorer,
-    )
-    if getattr(args, "as_json", False):
-        print(json.dumps({k: v for k, v in out.items() if k != "report"}, ensure_ascii=False, indent=2, default=str))
-    else:
-        print(out["report"])
-        if out.get("report_paths"):
-            print("\nReports written:")
-            for p in out["report_paths"]:
-                print(f"- {p}")
 
+    if cmd == "report":
+        out = run_pipeline(
+            config,
+            since_hours=int(getattr(args, "since_hours", 24)),
+            write_report=True,
+            scorer=getattr(args, "scorer", "compare"),
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps({k: v for k, v in out.items() if k != "report"}, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(out["report"])
+            if out.get("report_paths"):
+                print("\nReports written:")
+                for item in out["report_paths"]:
+                    print(f"- {item}")
+        return
+
+    raise SystemExit(f"unknown self-improvement command: {cmd}")
 
 def _handle_slash(raw_args: str = "") -> str:
     config = load_config(Path(__file__).resolve().parents[1] / "config.json")

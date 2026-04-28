@@ -46,7 +46,39 @@ def parse_tool_payload(raw: str) -> dict:
     return json.loads(raw)
 
 
-def test_register_exposes_self_improvement_tool_parity_surface():
+def _write_simple_plan(mod, tmp_path: Path):
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
+    proposal = {
+        "id": "proposal-tool-apply",
+        "title": "Fix typo in skill prose",
+        "target": "file_workflow_skills",
+        "target_path": str(target),
+        "action": "typo_fix",
+        "risk": "low",
+        "confidence": "high",
+        "score": 91,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "scorer": "compare-v0.1",
+        "old_text": "teh",
+        "new_text": "the",
+    }
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={"event_count": 10},
+        execution_mode="preview",
+        config={"reports_dir": str(tmp_path / "reports")},
+        created_at=datetime(2026, 4, 28, 15, 30, tzinfo=timezone.utc),
+    )
+    config = {
+        "reports_dir": str(tmp_path / "reports"),
+        "apply_policy": {"allowed_target_kinds": ["skill", "memory", "file_workflow_skills"]},
+    }
+    mod.write_apply_plan(plan, config)
+    return config, plan, target
+
+
+def test_register_exposes_simplified_self_improvement_tool_surface():
     mod = load_plugin_module()
     ctx = RecordingContext()
 
@@ -55,265 +87,123 @@ def test_register_exposes_self_improvement_tool_parity_surface():
     names = {name for name, _kwargs in ctx.tools}
     assert names == {
         "self_improvement_status",
-        "self_improvement_gepa_eval",
-        "self_improvement_gepa_optimize",
-        "self_improvement_generate_apply_plan",
-        "self_improvement_ledger_report",
-        "self_improvement_approval_report",
-        "self_improvement_validate_approval",
-        "self_improvement_retention_report",
-        "self_improvement_retention_prune",
+        "self_improvement_report",
+        "self_improvement_improve",
+        "self_improvement_calibrate",
+        "self_improvement_plan",
+        "self_improvement_apply",
+        "self_improvement_rollback",
+    }
+    assert not {
         "self_improvement_approve",
+        "self_improvement_apply_approved",
         "self_improvement_apply_low_risk",
         "self_improvement_rollback_low_risk",
-        "self_improvement_apply_approved",
-    }
+        "self_improvement_retention_prune",
+        "self_improvement_gepa_eval",
+        "self_improvement_gepa_optimize",
+    } & names
     for _name, kwargs in ctx.tools:
         assert kwargs["toolset"] == "self_improvement"
         assert kwargs["schema"]["parameters"]["type"] == "object"
         assert callable(kwargs["handler"])
+        assert "mode" not in kwargs["schema"]["parameters"].get("properties", {})
 
 
-def test_apply_low_risk_tool_denies_mutation_when_mode_policy_rejects(tmp_path):
+def test_simplified_apply_tool_preview_does_not_mutate(tmp_path):
     mod = load_plugin_module()
+    config, plan, target = _write_simple_plan(mod, tmp_path)
 
-    raw = mod._handle_self_improvement_apply_low_risk_tool({
-        "plan_id": "missing-plan",
-        "item_id": "item-1",
-        "mode": "report_only",
-        "confirm_apply": True,
-        "expected_item_hash": "sha256:anything",
-        "config": {"reports_dir": str(tmp_path / "reports")},
-    })
-
-    payload = parse_tool_payload(raw)
-    assert payload["error"] == "execution_mode_denied"
-    assert payload["command"] == "apply-low-risk"
-    assert payload["reason"] in {"command_not_allowed", "capability_not_allowed"}
-    assert payload["target_changed"] is False
-    assert not (tmp_path / "reports" / "apply-attempts").exists()
-
-
-def test_approval_report_tool_returns_read_only_payload(tmp_path):
-    mod = load_plugin_module()
-
-    raw = mod._handle_self_improvement_approval_report_tool({
-        "mode": "report_only",
-        "status": "all",
-        "limit": 5,
-        "config": {"reports_dir": str(tmp_path / "reports")},
-    })
-
-    payload = parse_tool_payload(raw)
-    assert payload["schema_name"] == "self_improvement_approval_report"
-    assert payload["approval_count"] == 0
-    assert payload["target_changed"] is False
-
-
-def test_validate_approval_tool_uses_fail_closed_validation(tmp_path):
-    mod = load_plugin_module()
-
-    raw = mod._handle_self_improvement_validate_approval_tool({
-        "mode": "report_only",
-        "approval_id": "missing-approval",
-        "config": {"reports_dir": str(tmp_path / "reports")},
-    })
-
-    payload = parse_tool_payload(raw)
-    assert payload["schema_name"] == "self_improvement_approval_validation"
-    assert payload["current_status"] == "rejected"
-    assert payload["reasons"] == ["approval_not_found"]
-    assert payload["target_changed"] is False
-
-
-def test_approve_tool_creates_artifact_without_target_mutation(tmp_path):
-    mod = load_plugin_module()
-    target = tmp_path / "SKILL.md"
-    target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
-    proposal = {
-        "id": "proposal-tool-approval",
-        "title": "Fix typo in skill prose",
-        "target": "file_workflow_skills",
-        "target_path": str(target),
-        "action": "typo_fix",
-        "risk": "low",
-        "confidence": "high",
-        "score": 91,
-        "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "compare-v0.1",
-        "old_text": "teh",
-        "new_text": "the",
-    }
-    plan = mod.build_apply_plan(
-        proposals=[proposal],
-        summary={"event_count": 10},
-        execution_mode="dry_run_plan",
-        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
-    )
-    config = {"reports_dir": str(tmp_path / "reports")}
-    mod.write_apply_plan(plan, config)
-
-    raw = mod._handle_self_improvement_approve_tool({
-        "mode": "apply_approved",
+    raw = mod._handle_self_improvement_apply_tool({
         "plan_id": plan["plan_id"],
-        "item_id": plan["items"][0]["item_id"],
-        "approver_source": "tool_test",
-        "ttl_hours": 24,
+        "execute": False,
         "config": config,
     })
 
     payload = parse_tool_payload(raw)
-    assert payload["approval"]["current_status"] == "approved"
-    assert payload["approval"]["approver_source"] == "tool_test"
+    assert payload["schema_name"] == "self_improvement_apply_result"
     assert payload["target_changed"] is False
+    assert payload["summary"]["would_apply"] == 1
     assert target.read_text(encoding="utf-8") == "# Skill\n\nUse teh browser carefully.\n"
-    assert Path(payload["approval_path"]).is_file()
 
 
-
-def test_apply_approved_tool_returns_preview_without_mutation(tmp_path):
+def test_simplified_apply_tool_execute_mutates_policy_allowed_item(tmp_path):
     mod = load_plugin_module()
-    target = tmp_path / "SKILL.md"
-    target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
-    proposal = {
-        "id": "proposal-tool-approved-preview",
-        "title": "Fix typo in skill prose",
-        "target": "file_workflow_skills",
-        "target_path": str(target),
-        "action": "typo_fix",
-        "risk": "low",
-        "confidence": "high",
-        "score": 91,
-        "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "compare-v0.1",
-        "old_text": "teh",
-        "new_text": "the",
-    }
-    plan = mod.build_apply_plan(
-        proposals=[proposal],
-        summary={"event_count": 10},
-        execution_mode="dry_run_plan",
-        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
-    )
-    config = {"reports_dir": str(tmp_path / "reports")}
-    mod.write_apply_plan(plan, config)
-    approval_result = mod.create_approval_artifact(
-        plan_id=plan["plan_id"],
-        item_id=plan["items"][0]["item_id"],
-        config=config,
-        created_at=datetime(2026, 4, 26, 16, 0, tzinfo=timezone.utc),
-        ttl_hours=24 * 365,
-    )
+    config, plan, target = _write_simple_plan(mod, tmp_path)
 
-    raw = mod._handle_self_improvement_apply_approved_tool({
-        "mode": "apply_approved",
-        "approval_id": approval_result["approval"]["approval_id"],
+    raw = mod._handle_self_improvement_apply_tool({
+        "plan_id": plan["plan_id"],
+        "execute": True,
         "config": config,
     })
 
     payload = parse_tool_payload(raw)
-    assert payload["schema_name"] == "self_improvement_apply_approved_preview"
-    assert payload["current_status"] == "would_apply_approved"
-    assert payload["target_changed"] is False
-    assert target.read_text(encoding="utf-8") == "# Skill\n\nUse teh browser carefully.\n"
+    assert payload["schema_name"] == "self_improvement_apply_result"
+    assert payload["target_changed"] is True
+    assert payload["summary"]["applied"] == 1
+    assert target.read_text(encoding="utf-8") == "# Skill\n\nUse the browser carefully.\n"
+    assert Path(payload["ledger_path"]).is_file()
 
 
-def test_apply_approved_tool_denies_wrong_mode(tmp_path):
+def test_simplified_calibrate_tool_preview_does_not_promote(tmp_path):
+    mod = load_plugin_module()
+    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
+
+    raw = mod._handle_self_improvement_calibrate_tool({
+        "execute": False,
+        "config": {"reports_dir": str(tmp_path / "reports"), "calibration": {"active_evaluator_pointer_path": str(active_pointer)}},
+    })
+
+    payload = parse_tool_payload(raw)
+    assert payload["schema_name"] == "self_improvement_calibration_result"
+    assert payload["active_changed"] is False
+    assert active_pointer.exists() is False
+
+
+def test_simplified_plan_tool_writes_artifact_without_target_mutation(tmp_path):
     mod = load_plugin_module()
 
-    raw = mod._handle_self_improvement_apply_approved_tool({
-        "mode": "report_only",
-        "approval_id": "approval-1",
+    raw = mod._handle_self_improvement_plan_tool({
+        "since_hours": 1,
+        "scorer": "heuristic",
         "config": {"reports_dir": str(tmp_path / "reports")},
     })
 
     payload = parse_tool_payload(raw)
-    assert payload["error"] == "execution_mode_denied"
-    assert payload["command"] == "apply-approved"
+    assert payload["schema_name"] == "self_improvement_plan_result"
     assert payload["target_changed"] is False
+    assert Path(payload["apply_plan_path"]).is_file()
 
 
-def test_gepa_eval_tool_uses_core_eval_path_without_target_mutation(tmp_path):
+def test_simplified_improve_tool_uses_core_loop(monkeypatch, tmp_path):
     mod = load_plugin_module()
     calls = []
 
-    def fake_gepa_eval(*, config):
-        calls.append(config)
-        return {
-            "adapter_version": "fake",
-            "mode": "offline_regression",
-            "all_passed": True,
-            "case_count": 1,
-            "passed_count": 1,
-        }
+    def fake_run_improve(**kwargs):
+        calls.append(kwargs)
+        return {"schema_name": "self_improvement_improve_result", "target_changed": False, "execute": kwargs["execute"]}
 
-    mod._handle_self_improvement_gepa_eval_tool.__globals__["_call_gepa_eval"] = fake_gepa_eval
-
-    raw = mod._handle_self_improvement_gepa_eval_tool({
-        "mode": "report_only",
+    mod._handle_self_improvement_improve_tool.__globals__["run_improve"] = fake_run_improve
+    raw = mod._handle_self_improvement_improve_tool({
+        "since_hours": 2,
+        "execute": False,
+        "scorer": "compare",
         "config": {"reports_dir": str(tmp_path / "reports")},
     })
 
     payload = parse_tool_payload(raw)
-    assert payload["schema_name"] == "self_improvement_gepa_eval"
-    assert payload["all_passed"] is True
+    assert payload["schema_name"] == "self_improvement_improve_result"
     assert payload["target_changed"] is False
-    assert calls and calls[0]["reports_dir"] == str(tmp_path / "reports")
+    assert calls[0]["since_hours"] == 2
+    assert calls[0]["execute"] is False
+    assert calls[0]["scorer"] == "compare"
 
 
-def test_gepa_optimize_tool_requires_report_only_positive_budget_and_preserves_target_boundary(tmp_path):
+def test_simplified_rollback_tool_requires_ledger_id(tmp_path):
     mod = load_plugin_module()
-    calls = []
 
-    def fake_gepa_optimize(*, config, trainset, valset, max_full_evals):
-        calls.append({
-            "config": config,
-            "trainset": trainset,
-            "valset": valset,
-            "max_full_evals": max_full_evals,
-        })
-        return {
-            "schema_name": "self_improvement_gepa_optimize",
-            "artifact_path": str(tmp_path / "reports" / "gepa" / "compiled.json"),
-            "max_full_evals": max_full_evals,
-        }
+    raw = mod._handle_self_improvement_rollback_tool({"config": {"reports_dir": str(tmp_path / "reports")}})
 
-    mod._handle_self_improvement_gepa_optimize_tool.__globals__["_call_gepa_optimize"] = fake_gepa_optimize
-
-    denied = parse_tool_payload(mod._handle_self_improvement_gepa_optimize_tool({
-        "mode": "dry_run_plan",
-        "max_full_evals": 1,
-        "config": {"reports_dir": str(tmp_path / "reports")},
-    }))
-    assert denied["error"] == "execution_mode_denied"
-    assert denied["command"] == "gepa-optimize"
-    assert denied["target_changed"] is False
-
-    bad_budget = parse_tool_payload(mod._handle_self_improvement_gepa_optimize_tool({
-        "mode": "report_only",
-        "max_full_evals": 0,
-        "config": {"reports_dir": str(tmp_path / "reports")},
-    }))
-    assert bad_budget["error"] == "max_full_evals must be positive"
-    assert bad_budget["target_changed"] is False
-
-    payload = parse_tool_payload(mod._handle_self_improvement_gepa_optimize_tool({
-        "mode": "report_only",
-        "trainset": "train.jsonl",
-        "valset": "val.jsonl",
-        "max_full_evals": "2",
-        "config": {"reports_dir": str(tmp_path / "reports")},
-    }))
-
-    assert payload["schema_name"] == "self_improvement_gepa_optimize"
-    assert payload["max_full_evals"] == 2
+    payload = parse_tool_payload(raw)
+    assert payload["error"] == "ledger_id is required"
     assert payload["target_changed"] is False
-    assert calls == [
-        {
-            "config": calls[0]["config"],
-            "trainset": "train.jsonl",
-            "valset": "val.jsonl",
-            "max_full_evals": 2,
-        }
-    ]
-    assert calls[0]["config"]["reports_dir"] == str(tmp_path / "reports")

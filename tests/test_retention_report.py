@@ -154,8 +154,7 @@ def test_policy_allows_retention_report_as_read_only_command():
     assert mod.validate_mode_action("report_only", "retention-report", required_capability="mutate_skills")["allowed"] is False
 
 
-def test_retention_report_cli_and_tool_return_read_only_payload(tmp_path):
-    mod = load_plugin_module()
+def test_retention_report_cli_is_removed_from_primary_surface(tmp_path):
     config = seed_artifacts(tmp_path)
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
@@ -166,28 +165,12 @@ def test_retention_report_cli_and_tool_return_read_only_payload(tmp_path):
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        check=True,
+        check=False,
     )
-    cli_payload = json.loads(completed.stdout)
-    assert cli_payload["target_changed"] is False
-    assert cli_payload["category_filter"] == "ledgers"
-    assert cli_payload["expired_candidate_count"] == 1
-    assert cli_payload["malformed_count"] == 1
+    assert completed.returncode == 2
+    assert "invalid choice" in completed.stderr
 
-    raw = mod._handle_self_improvement_retention_report_tool({
-        "mode": "report_only",
-        "config": config,
-        "limit": 5,
-        "category": "approvals",
-    })
-    tool_payload = json.loads(raw)
-    assert tool_payload["target_changed"] is False
-    assert tool_payload["category_filter"] == "approvals"
-    assert tool_payload["expired_candidate_count"] == 1
-    assert tool_payload["malformed_count"] == 0
-
-
-def test_plugin_registers_retention_report_tool():
+def test_plugin_does_not_register_retention_report_in_primary_tool_surface():
     mod = load_plugin_module()
 
     class Ctx:
@@ -216,8 +199,8 @@ def test_plugin_registers_retention_report_tool():
     mod.register(ctx)
 
     names = {tool["name"] for tool in ctx.tools}
-    assert "self_improvement_retention_report" in names
-    assert len([name for name in names if name.startswith("self_improvement_")]) == 13
+    assert "self_improvement_retention_report" not in names
+    assert len([name for name in names if name.startswith("self_improvement_")]) == 7
 
 
 def test_retention_prune_preview_requires_hash_and_does_not_delete(tmp_path):
@@ -304,8 +287,7 @@ def test_retention_prune_confirmed_deletes_only_expired_candidates(tmp_path):
     assert result["artifact_list_hash_matches_expected"] is True
 
 
-def test_retention_prune_cli_and_tool_are_guarded(tmp_path):
-    mod = load_plugin_module()
+def test_retention_prune_cli_is_removed_from_primary_surface(tmp_path):
     config = seed_artifacts(tmp_path)
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
@@ -316,26 +298,10 @@ def test_retention_prune_cli_and_tool_are_guarded(tmp_path):
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        check=True,
+        check=False,
     )
-    preview_payload = json.loads(preview.stdout)
-    assert preview_payload["current_status"] == "would_prune"
-    assert preview_payload["target_changed"] is False
-    assert preview_payload["category_filter"] == "approvals"
-
-    raw = mod._handle_self_improvement_retention_prune_tool({
-        "mode": "apply_approved",
-        "config": config,
-        "limit": 5,
-        "category": "approvals",
-        "confirm_prune": True,
-        "expected_artifact_list_hash": preview_payload["artifact_list_hash"],
-    })
-    tool_payload = json.loads(raw)
-    assert tool_payload["current_status"] == "pruned"
-    assert tool_payload["target_changed"] is True
-    assert tool_payload["pruned_count"] == 1
-
+    assert preview.returncode == 2
+    assert "invalid choice" in preview.stderr
 
 def test_policy_allows_retention_prune_only_in_apply_approved_mode():
     mod = load_plugin_module()
@@ -345,7 +311,7 @@ def test_policy_allows_retention_prune_only_in_apply_approved_mode():
         assert mod.validate_mode_action(mode, "retention-prune", required_capability="prune_artifacts")["allowed"] is False
 
 
-def test_plugin_registers_retention_prune_tool():
+def test_plugin_does_not_register_retention_prune_in_primary_tool_surface():
     mod = load_plugin_module()
 
     class Ctx:
@@ -374,5 +340,5 @@ def test_plugin_registers_retention_prune_tool():
     mod.register(ctx)
 
     names = {tool["name"] for tool in ctx.tools}
-    assert "self_improvement_retention_prune" in names
-    assert len([name for name in names if name.startswith("self_improvement_")]) == 13
+    assert "self_improvement_retention_prune" not in names
+    assert len([name for name in names if name.startswith("self_improvement_")]) == 7

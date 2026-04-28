@@ -19,37 +19,20 @@
 cd /path/to/hermes-self-improvement
 
 bin/hermes-self-improve status
-bin/hermes-self-improve analyze --since-hours 24 --json
-bin/hermes-self-improve report --since-hours 24
-bin/hermes-self-improve run --since-hours 24 --json
+bin/hermes-self-improve improve
+bin/hermes-self-improve improve --execute
 bin/hermes-self-improve calibrate
-bin/hermes-self-improve plan --since-hours 24
-bin/hermes-self-improve gepa-eval --json
-```
-
-Apply / approval / retention の確認です。
-
-```bash
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
+bin/hermes-self-improve calibrate --execute
 bin/hermes-self-improve plan --since-hours 24
 bin/hermes-self-improve apply <plan-id>
 bin/hermes-self-improve apply <plan-id> --items step-001,step-002
-bin/hermes-self-improve ledger-report --mode report_only --status all --json
-bin/hermes-self-improve approval-report --mode report_only --status all --include-previews --json
-bin/hermes-self-improve retention-report --mode report_only --json
-bin/hermes-self-improve retention-prune --mode apply_approved --json
-```
-
-実 mutation は通常 `apply <plan-id> --execute` を使います。`apply` は hash を user-facing option に出さず、内部で plan item hash と target baseline を検証します。旧 guarded command を直接使う場合だけ preview を見て hash を渡します。
-
-```bash
 bin/hermes-self-improve apply <plan-id> --items step-001 --execute
-bin/hermes-self-improve apply-low-risk <plan-id> <item-id> --mode apply_low_risk --confirm-apply --expected-item-hash <item_hash> --json
-bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --confirm-rollback --expected-ledger-hash <ledger_hash> --json
-bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
-bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --confirm-approved-apply --expected-approval-hash <approval_hash> --expected-target-hash <current_hash> --json
-bin/hermes-self-improve retention-prune --mode apply_approved --confirm-prune --expected-artifact-list-hash <artifact_list_hash> --json
+bin/hermes-self-improve rollback <ledger-id>
+bin/hermes-self-improve rollback <ledger-id> --execute
+bin/hermes-self-improve report --since-hours 24 --json
 ```
+
+Primary surface は `improve / calibrate / plan / apply / rollback / report / status` です。実 mutation は `--execute` が唯一の user-facing boundary で、item hash / target hash / ledger hash は内部検証用です。legacy `generate-apply-plan`, `apply-low-risk`, `apply-approved`, `approval-report`, `retention-*`, `gepa-*` は CLI / tool surface から外します。
 
 ## 検証
 
@@ -66,7 +49,7 @@ bin/hermes-self-improve status
 GEPA / scorer / eval assets を触った場合です。
 
 ```bash
-bin/hermes-self-improve gepa-eval --json
+bin/hermes-self-improve calibrate --json
 $PY -m pytest tests/test_gepa_eval_assets.py tests/test_gepa_eval_cli.py tests/test_gepa_offline_scorer.py -q
 ```
 
@@ -95,25 +78,20 @@ PY
 
 Mutation の条件です。
 
-- `generate-apply-plan`: dry-run artifact を作る。target file は変更しない。
-- `apply-low-risk`: 実変更には `--confirm-apply --expected-item-hash` と validation が必要。
-- `rollback-low-risk`: 実 rollback には `--confirm-rollback --expected-ledger-hash` と current target hash 検証が必要。
-- `apply-approved`: 実変更には `--confirm-approved-apply --expected-approval-hash --expected-target-hash` と approval / target / rollback / post-write validation が必要。
-- `retention-prune`: 実削除には `--confirm-prune --expected-artifact-list-hash` が必要。
-- `replace_entire_file`: `skill_large_rewrite` / `memory_compress` 用の approval-gated mutation。low-risk unattended apply には入れない。
-- `create_file` / `delete_file`: `skill_create` / `skill_delete` 用の approval-gated mutation。create は rollback で作成ファイルを削除し、delete は before snapshot から復元する。
-- `rename_file` / `merge_files`: `skill_rename` / `skill_merge` 用の approval-gated mutation。rename は source exists + destination missing を必須にし、merge は destination 置換 + source 削除を multi-target rollback data で復元する。
-- `memory_delete`: configured `memory_roots` 配下の既存 file だけを approval-gated `delete_file` で扱う。root 外 target は拒否する。
+- `plan`: ordered apply plan artifact を作る。target file は変更しない。
+- `apply`: `--execute` なしでは preview。`--execute` ありでも `apply_policy`、internal item hash、target drift checks を通った ready item だけ変更する。
+- `rollback`: `--execute` なしでは preview。`--execute` ありでも ledger hash と current target hash を内部検証してから restore する。
+- `calibrate`: `--execute` なしでは preview。`--execute` ありでも evidence threshold と regression pass を通った場合だけ active evaluator pointer を更新する。
 
 ## Plugin tools
 
-`plugin.yaml`, `hermes_self_improvement/schemas.py`, `hermes_self_improvement/tool_handlers.py` で CLI parity の tools を登録しています。handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を使います。
+`plugin.yaml`, `hermes_self_improvement/schemas.py`, `hermes_self_improvement/tool_handlers.py` で CLI parity の tools を登録しています。handler は wrapper CLI に shell out せず、CLI と同じ core function を使います。
 
-`self_improvement_status`, `self_improvement_gepa_eval`, `self_improvement_gepa_optimize`, `self_improvement_generate_apply_plan`, `self_improvement_ledger_report`, `self_improvement_approval_report`, `self_improvement_validate_approval`, `self_improvement_retention_report`, `self_improvement_retention_prune`, `self_improvement_approve`, `self_improvement_apply_approved`, `self_improvement_apply_low_risk`, `self_improvement_rollback_low_risk`
+Primary tool surface は 7 個だけです。
 
-`self_improvement_gepa_optimize` は `report_only` + positive `max_full_evals` 必須で、compile artifact は保存しても active evaluator pointer は更新しません。
+`self_improvement_status`, `self_improvement_report`, `self_improvement_improve`, `self_improvement_calibrate`, `self_improvement_plan`, `self_improvement_apply`, `self_improvement_rollback`
 
-root 直下に `tools.py` は置きません。Hermes core の `tools.registry` を shadow して plugin discovery を壊します。
+`mode` / `confirm_*` / `expected_*hash` は primary schema に出しません。`execute=false` は preview-only、`execute=true` は mutation intent ですが、実変更は `apply_policy`・target drift check・internal hash validation を通った item だけです。
 
 ## 重要パス
 
@@ -145,13 +123,28 @@ Runtime artifact は `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配�
 
 ## Cron / scheduled execution
 
+Cron は plugin 内の scheduler ではなく Hermes runtime / scheduler 側の責務です。safe cron は `report` または preview-only `improve` に限定します。実行ジョブで `improve --execute` を使う場合も、許可範囲は `apply_policy` と internal validation に従います。
+
+```bash
+bin/hermes-self-improve report --since-hours 24 --json
+bin/hermes-self-improve improve --since-hours 24 --json
+```
+
+## コーディング / テスト規約
+
+- Python 3.11 前提。runtime hook 側に重い依存を増やさない。
+- package import と direct file execution の両方に耐える import を保つ。
+- 新しい policy / apply / scorer 挙動は、先に test で fail-closed を固定してから実装する。
+- protected context、曖昧な target、複数一致、scorer disagreement、未検証 canonical replacement は mutation plan で拒否する。
+- `__pycache__/`, `.pytest_cache/`, runtime log は commit しない。
+
+## Cron / scheduled execution
+
 Cron は plugin 内の scheduler ではなく Hermes runtime / scheduler 側の責務です。safe cron は report / dry-run に限定します。
 
 ```bash
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
-bin/hermes-self-improve ledger-report --mode report_only --status applied --json
-bin/hermes-self-improve approval-report --mode report_only --status all --json
-bin/hermes-self-improve retention-report --mode report_only --json
+bin/hermes-self-improve report --since-hours 24 --json
+bin/hermes-self-improve improve --since-hours 24 --json
 ```
 
 cron では confirmation flag や expected hash を渡さないでください。候補を見つけたら plan path、item hash、ledger hash、risk、evidence、validation status を人間に渡します。

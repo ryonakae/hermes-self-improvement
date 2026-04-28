@@ -19,7 +19,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - Runtime scorer の `--scorer gepa` は real DSPy / GEPA path を使い、dependency-free offline baseline に黙って fallback しない。deterministic scaffold は必要なら tests / fixtures / private helper に閉じる。
 - LLM / GEPA scoring は advisory only。`auto_apply` は常に false 扱いにし、無人変更の許可として使わない。GEPA/LLM comparison を self-improvement decision の default input とし、score / recommendation / risk / confidence / target / rationale の material disagreement は human review / approval-required に倒して unattended apply を block する。material 判定は change type ごとの policy config で扱い、risk / recommendation disagreement は常に block、memory / lifecycle / destructive / broad change は厳しめ、typo / pitfall / validation addition は score / confidence threshold だけ少し緩めてもよい。`report` / `run` / `generate-apply-plan` は compare default、軽量 `analyze` は heuristic default でよい。
 - Evaluator 自体も自己改善対象にする。GEPA/LLM disagreement、human approval/rejection、rollback/failure ledger、regression eval cases から candidate evaluator を生成・評価してよいが、active evaluator への昇格は `calibrate --execute` の regression gate を通った場合だけにする。candidate hash / active-before pointer/hash / regression result / rollback data を calibration ledger に束縛して silent replacement を禁止する。
-- `execution_mode` と capability gate は prompt ではなく plugin CLI / config / policy code で検証する。
+- Primary surface では `--execute` を唯一の user-facing mutation boundary にする。legacy `execution_mode` と capability gate は互換・高度な診断用に残る場合だけ使う。
 - 変更前に `git status --short` と対象 diff を確認し、無関係な変更を巻き戻さない。
 
 ## 主要パス
@@ -54,32 +54,34 @@ Repository root から実行する。
 
 ```bash
 bin/hermes-self-improve status
-bin/hermes-self-improve analyze --since-hours 24
-bin/hermes-self-improve report --since-hours 24 --scorer compare
-bin/hermes-self-improve run --since-hours 24 --json --scorer compare
+bin/hermes-self-improve improve
+bin/hermes-self-improve improve --execute
 bin/hermes-self-improve calibrate
+bin/hermes-self-improve calibrate --execute
 bin/hermes-self-improve plan --since-hours 24 --scorer compare
 bin/hermes-self-improve apply <plan-id>
 bin/hermes-self-improve apply <plan-id> --items step-001,step-002
 bin/hermes-self-improve apply <plan-id> --items step-001 --execute
-bin/hermes-self-improve gepa-eval --json
-bin/hermes-self-improve gepa-optimize --mode report_only --trainset evals/proposal_eval_cases.jsonl --valset evals/proposal_eval_cases.jsonl --max-full-evals 2 --json
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
-
-# LLM / GEPA scorer health smoke checks
-bin/hermes-self-improve report --since-hours 1 --scorer llm --json
-bin/hermes-self-improve report --since-hours 1 --scorer gepa --json
-bin/hermes-self-improve report --since-hours 1 --scorer compare --json
-bin/hermes-self-improve ledger-report --status applied --json
-bin/hermes-self-improve approval-report --status all --json
-bin/hermes-self-improve retention-report --mode report_only --json
-bin/hermes-self-improve retention-prune --mode apply_approved --json
-bin/hermes-self-improve approve <plan-id> <item-id> --mode apply_approved --json
-bin/hermes-self-improve apply-approved <approval-id> --mode apply_approved --json
-bin/hermes-self-improve rollback-low-risk <ledger-id> --mode apply_low_risk --json
+bin/hermes-self-improve rollback <ledger-id>
+bin/hermes-self-improve rollback <ledger-id> --execute
+bin/hermes-self-improve report --since-hours 24 --scorer compare
 ```
 
-Top-level `hermes self-improvement ...` は Hermes version / plugin discovery 状態により露出しないことがある。運用では wrapper CLI を優先し、CLI discovery の挙動を変える作業では plugin manager と user-facing CLI の両方を確認する。
+Primary CLI / tool surface は `improve / calibrate / plan / apply / rollback / report / status`。`--execute` なしは preview-only。item hash / target hash / ledger hash は internal validation / drift detection / rollback 用で、user-facing option にしない。
+
+Legacy/debug commands (`generate-apply-plan`, `gepa-eval`, `gepa-optimize`, `ledger-report`, `approval-report`, `retention-report`, `retention-prune`, approval/low-risk commands) は CLI / tool surface から外す。内部 helper や古い module が残る場合も primary path から呼ばない。
+
+Primary plugin tools:
+
+```text
+self_improvement_status
+self_improvement_report
+self_improvement_improve
+self_improvement_calibrate
+self_improvement_plan
+self_improvement_apply
+self_improvement_rollback
+```
 
 ## 変更時の進め方
 
@@ -108,7 +110,7 @@ bin/hermes-self-improve status
 Scorer / GEPA / eval asset 変更後:
 
 ```bash
-bin/hermes-self-improve gepa-eval --json
+bin/hermes-self-improve calibrate --json
 $PY -m pytest tests/test_gepa_eval_assets.py tests/test_gepa_eval_cli.py tests/test_gepa_offline_scorer.py -q
 ```
 

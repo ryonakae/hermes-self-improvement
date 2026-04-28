@@ -56,7 +56,7 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 - `gepa`: `hermes_self_improvement/gepa_adapter.py` path. Runtime GEPA scoring requires DSPy and uses live/compiled DSPy program evaluation; it does not silently fall back to the dependency-free regression fixture.
 - `compare`: runs LLM and GEPA scoring, records score deltas and disagreement reasons, and pushes disagreement cases to `human_review`.
 
-`report`, `run`, and `generate-apply-plan` default to `compare`; `analyze` defaults to `heuristic`. Low-risk apply-plan items are unattended-eligible only when the scorer is `compare-v0.1` and all target hash, rollback, mutation, and disagreement gates pass.
+`improve`, `report`, and `plan` default to `compare`. Low-risk apply-plan items are unattended-eligible only when the scorer is `compare-v0.1` and all target hash, rollback, mutation, and disagreement gates pass.
 
 All scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does not grant mutation permission.
 
@@ -67,4 +67,4 @@ All scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does
 - `hermes_self_improvement/dspy_program.py`: real DSPy scoring contract / module boundary. Deterministic baseline is retained only for regression fixtures/tests.
 - `hermes_self_improvement/gepa_adapter.py`: payload builder, offline fixture evaluation, real DSPy/GEPA scorer/optimizer boundary, compiled evaluator artifact resolution, and fail-closed error reporting.
 
-Explicit `gepa-optimize` runs call DSPy/GEPA through this adapter and require a positive budget; they write report/candidate artifacts only and do not promote the active evaluator pointer.
+Calibration internals call DSPy/GEPA through this adapter. Active evaluator promotion is exposed through `calibrate --execute` and requires regression pass.

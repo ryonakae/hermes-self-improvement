@@ -686,19 +686,18 @@ def test_generate_apply_plan_command_is_allowed_only_in_dry_run_plan_mode():
     assert denied["allowed"] is False
 
 
-def test_cli_accepts_generate_apply_plan_command():
+def test_cli_rejects_generate_apply_plan_command():
     mod = load_plugin_module()
     import argparse
     parser = argparse.ArgumentParser()
     mod._setup_cli(parser)
 
-    args = parser.parse_args(["generate-apply-plan", "--mode", "dry_run_plan", "--since-hours", "1", "--json"])
-
-    assert args.self_improvement_cmd == "generate-apply-plan"
-    assert args.mode == "dry_run_plan"
-    assert args.since_hours == 1
-    assert args.as_json is True
-
+    try:
+        parser.parse_args(["generate-apply-plan", "--mode", "dry_run_plan", "--since-hours", "1", "--json"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy generate-apply-plan command should not parse")
 
 def test_build_apply_plan_plans_stale_path_fix_only_with_verified_canonical_replacement(tmp_path):
     mod = load_plugin_module()

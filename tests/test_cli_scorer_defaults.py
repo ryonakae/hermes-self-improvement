@@ -23,14 +23,18 @@ def parse_args(argv: list[str]):
 
 
 def test_decision_commands_default_to_compare_scorer():
+    assert parse_args(["improve"]).scorer == "compare"
     assert parse_args(["report"]).scorer == "compare"
-    assert parse_args(["run"]).scorer == "compare"
-    assert parse_args(["generate-apply-plan"]).scorer == "compare"
     assert parse_args(["plan"]).scorer == "compare"
 
 
-def test_analyze_default_stays_heuristic():
-    assert parse_args(["analyze"]).scorer == "heuristic"
+def test_legacy_analyze_command_is_removed():
+    try:
+        parse_args(["analyze"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy analyze command should not parse")
 
 
 def test_plan_command_uses_simplified_surface_without_mode_flag():

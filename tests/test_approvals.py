@@ -119,32 +119,17 @@ def test_create_approval_artifact_rejects_missing_item_without_writing_file(tmp_
     assert "approval_path" not in result
 
 
-def test_cli_accepts_approve_command_shape():
+def test_cli_rejects_approve_command_shape():
     mod = load_plugin_module()
     parser = __import__("argparse").ArgumentParser()
     mod._setup_cli(parser)
 
-    args = parser.parse_args([
-        "approve",
-        "apply-plan-1",
-        "item-1",
-        "--mode",
-        "apply_approved",
-        "--approver-source",
-        "manual_cli",
-        "--ttl-hours",
-        "48",
-        "--json",
-    ])
-
-    assert args.self_improvement_cmd == "approve"
-    assert args.plan_id == "apply-plan-1"
-    assert args.item_id == "item-1"
-    assert args.mode == "apply_approved"
-    assert args.approver_source == "manual_cli"
-    assert args.ttl_hours == 48
-    assert args.as_json is True
-
+    try:
+        parser.parse_args(['approve', 'apply-plan-1', 'item-1', '--mode', 'apply_approved', '--approver-source', 'manual', '--ttl-hours', '12', '--json'])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy approval command should not parse")
 
 def test_policy_allows_approve_only_in_apply_approved_mode():
     mod = load_plugin_module()
@@ -354,31 +339,17 @@ def test_approval_report_preview_surfaces_stale_target_without_mutating(tmp_path
     assert target.read_text(encoding="utf-8") == changed
 
 
-def test_cli_accepts_approval_report_command_shape():
+def test_cli_rejects_approval_report_command_shape():
     mod = load_plugin_module()
     parser = __import__("argparse").ArgumentParser()
     mod._setup_cli(parser)
 
-    args = parser.parse_args([
-        "approval-report",
-        "--mode",
-        "report_only",
-        "--status",
-        "valid",
-        "--limit",
-        "5",
-        "--include-previews",
-        "--json",
-    ])
-
-    assert args.self_improvement_cmd == "approval-report"
-    assert args.mode == "report_only"
-    assert args.status == "valid"
-    assert args.limit == 5
-    assert args.include_previews is True
-    assert args.as_json is True
-
-
+    try:
+        parser.parse_args(['approval-report', '--mode', 'report_only', '--status', 'valid', '--limit', '5', '--include-previews', '--json'])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy approval command should not parse")
 
 def test_apply_approved_preview_validates_and_returns_diff_without_mutating(tmp_path):
     mod, config, plan, item = write_plan(tmp_path)
@@ -558,30 +529,17 @@ def test_apply_approved_preview_rejects_stale_target(tmp_path):
     assert preview["target_changed"] is False
 
 
-def test_cli_accepts_apply_approved_preview_command_shape():
+def test_cli_rejects_apply_approved_preview_command_shape():
     mod = load_plugin_module()
     parser = __import__("argparse").ArgumentParser()
     mod._setup_cli(parser)
 
-    args = parser.parse_args([
-        "apply-approved",
-        "approval-1",
-        "--mode",
-        "apply_approved",
-        "--expected-approval-hash",
-        "sha256:expected",
-        "--expected-target-hash",
-        "sha256:target",
-        "--json",
-    ])
-
-    assert args.self_improvement_cmd == "apply-approved"
-    assert args.approval_id == "approval-1"
-    assert args.mode == "apply_approved"
-    assert args.expected_approval_hash == "sha256:expected"
-    assert args.expected_target_hash == "sha256:target"
-    assert args.as_json is True
-
+    try:
+        parser.parse_args(['apply-approved', 'approval-1', '--mode', 'apply_approved', '--json'])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy approval command should not parse")
 
 def test_policy_allows_apply_approved_preview_only_in_apply_approved_mode():
     mod = load_plugin_module()
@@ -748,29 +706,17 @@ def test_apply_approved_confirmed_mutates_and_writes_attempt_and_ledger(tmp_path
     assert ledger["ledger_hash"]
 
 
-def test_cli_accepts_confirm_approved_apply_command_shape():
+def test_cli_rejects_confirm_approved_apply_command_shape():
     mod = load_plugin_module()
     parser = __import__("argparse").ArgumentParser()
     mod._setup_cli(parser)
 
-    args = parser.parse_args([
-        "apply-approved",
-        "approval-1",
-        "--mode",
-        "apply_approved",
-        "--confirm-approved-apply",
-        "--expected-approval-hash",
-        "sha256:approval",
-        "--expected-target-hash",
-        "sha256:target",
-        "--json",
-    ])
-
-    assert args.self_improvement_cmd == "apply-approved"
-    assert args.confirm_approved_apply is True
-    assert args.expected_approval_hash == "sha256:approval"
-    assert args.expected_target_hash == "sha256:target"
-
+    try:
+        parser.parse_args(['apply-approved', 'approval-1', '--mode', 'apply_approved', '--confirm-approved-apply', '--expected-approval-hash', 'h1', '--expected-target-hash', 'h2', '--json'])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("legacy approval command should not parse")
 
 def test_confirmed_apply_approved_ledger_can_be_rolled_back(tmp_path):
     mod, config, plan, item = write_plan(tmp_path)

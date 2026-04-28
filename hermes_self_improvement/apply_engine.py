@@ -49,6 +49,26 @@ def _find_apply_plan_path(plan_id: str, config: dict[str, Any]) -> Path | None:
     return matches[-1] if matches else None
 
 
+def _find_apply_ledger_path(ledger_id: str, config: dict[str, Any]) -> Path | None:
+    root = _reports_dir(config) / "ledgers"
+    if not root.exists():
+        return None
+    matches = []
+    for path in root.glob("**/*.json"):
+        if not path.is_file():
+            continue
+        if ledger_id in path.name:
+            matches.append(path)
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(payload, dict) and payload.get("ledger_id") == ledger_id:
+            matches.append(path)
+    return sorted(matches)[-1] if matches else None
+
+
 def _load_apply_plan(plan_id: str, config: dict[str, Any]) -> tuple[dict[str, Any], Path]:
     path = _find_apply_plan_path(plan_id, config)
     if path is None:
@@ -238,3 +258,85 @@ def apply_plan(
     if execute:
         result["ledger_path"] = str(_write_apply_ledger(plan=plan, result=result, config=config))
     return result
+
+
+def rollback_apply_ledger(*, ledger_id: str, config: dict[str, Any], execute: bool = False) -> dict[str, Any]:
+    """Preview or execute rollback for unified apply ledgers.
+
+    This intentionally has the same single mutation boundary as apply: no target
+    changes occur unless `execute=True`. Ledger hashes remain internal integrity
+    checks; callers never provide expected hashes.
+    """
+    path = _find_apply_ledger_path(ledger_id, config)
+    if path is None:
+        return {
+            "schema_name": "self_improvement_rollback_result",
+            "schema_version": "1.0",
+            "ledger_id": ledger_id,
+            "execute": bool(execute),
+            "current_status": "failed",
+            "reasons": ["ledger_not_found"],
+            "target_changed": False,
+            "items": [],
+        }
+    ledger = json.loads(path.read_text(encoding="utf-8"))
+    expected_hash = ledger.get("ledger_hash")
+    actual_hash = _sha256_text(_stable_json({k: v for k, v in ledger.items() if k != "ledger_hash"}))
+    if expected_hash and expected_hash != actual_hash:
+        return {
+            "schema_name": "self_improvement_rollback_result",
+            "schema_version": "1.0",
+            "ledger_id": ledger.get("ledger_id") or ledger_id,
+            "execute": bool(execute),
+            "current_status": "failed",
+            "reasons": ["ledger_hash_mismatch"],
+            "target_changed": False,
+            "items": [],
+        }
+    result_items: list[dict[str, Any]] = []
+    target_changed = False
+    for item in reversed(ledger.get("items") if isinstance(ledger.get("items"), list) else []):
+        if item.get("status") != "applied":
+            continue
+        rollback = item.get("rollback_data") if isinstance(item.get("rollback_data"), dict) else {}
+        target_path = rollback.get("target_path") or item.get("target_path")
+        item_result = {"item_id": item.get("item_id"), "target_path": target_path, "status": None, "reasons": []}
+        current_content, current_hash = _current_content_and_hash(target_path)
+        if current_hash != item.get("after_hash"):
+            item_result["status"] = "failed"
+            item_result["reasons"].append("target_hash_mismatch")
+            item_result["current_hash"] = current_hash
+            item_result["expected_hash"] = item.get("after_hash")
+            result_items.append(item_result)
+            continue
+        strategy = rollback.get("rollback_strategy")
+        if strategy == "delete_created_file":
+            item_result["status"] = "would_rollback" if not execute else "rolled_back"
+            if execute and target_path:
+                Path(str(target_path)).expanduser().unlink()
+                target_changed = True
+        elif rollback.get("before_snapshot") is not None and target_path:
+            item_result["status"] = "would_rollback" if not execute else "rolled_back"
+            if execute:
+                target = Path(str(target_path)).expanduser()
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(str(rollback.get("before_snapshot")), encoding="utf-8")
+                target_changed = True
+        else:
+            item_result["status"] = "failed"
+            item_result["reasons"].append("rollback_data_missing")
+        result_items.append(item_result)
+    failed = sum(1 for item in result_items if item.get("status") == "failed")
+    rolled_back = sum(1 for item in result_items if item.get("status") == "rolled_back")
+    would = sum(1 for item in result_items if item.get("status") == "would_rollback")
+    return {
+        "schema_name": "self_improvement_rollback_result",
+        "schema_version": "1.0",
+        "ledger_id": ledger.get("ledger_id") or ledger_id,
+        "ledger_path": str(path),
+        "execute": bool(execute),
+        "current_status": "failed" if failed else "rolled_back" if execute else "would_rollback",
+        "target_changed": target_changed,
+        "summary": {"would_rollback": would, "rolled_back": rolled_back, "failed": failed},
+        "items": result_items,
+    }

@@ -230,14 +230,12 @@ def test_cli_accepts_config_flag_for_all_subcommands():
 
     for command in [
         ["status"],
-        ["run"],
-        ["generate-apply-plan"],
-        ["apply-low-risk", "plan", "item"],
-        ["rollback-low-risk", "ledger"],
-        ["approve", "plan", "item"],
-        ["apply-approved", "approval"],
-        ["ledger-report"],
-        ["approval-report"],
+        ["improve"],
+        ["report"],
+        ["plan"],
+        ["calibrate"],
+        ["apply", "plan"],
+        ["rollback", "ledger"],
     ]:
         args = parser.parse_args(command + ["--config", "/tmp/self-improve.json"])
         assert args.config_path == "/tmp/self-improve.json"

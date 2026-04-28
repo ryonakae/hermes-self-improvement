@@ -66,19 +66,13 @@ UTC = timezone.utc
 try:  # pragma: no cover - package import path
     from .schemas import SELF_IMPROVEMENT_TOOL_SPECS
     from .tool_handlers import (
-        _handle_self_improvement_approval_report_tool,
-        _handle_self_improvement_approve_tool,
-        _handle_self_improvement_apply_approved_tool,
-        _handle_self_improvement_apply_low_risk_tool,
-        _handle_self_improvement_generate_apply_plan_tool,
-        _handle_self_improvement_gepa_eval_tool,
-        _handle_self_improvement_gepa_optimize_tool,
-        _handle_self_improvement_ledger_report_tool,
-        _handle_self_improvement_rollback_low_risk_tool,
-        _handle_self_improvement_retention_report_tool,
-        _handle_self_improvement_retention_prune_tool,
+        _handle_self_improvement_apply_tool,
+        _handle_self_improvement_calibrate_tool,
+        _handle_self_improvement_improve_tool,
+        _handle_self_improvement_plan_tool,
+        _handle_self_improvement_report_tool,
+        _handle_self_improvement_rollback_tool,
         _handle_self_improvement_status_tool,
-        _handle_self_improvement_validate_approval_tool,
     )
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from hermes_self_improvement.schemas import SELF_IMPROVEMENT_TOOL_SPECS
@@ -88,34 +82,22 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     _tools_mod = importlib.util.module_from_spec(_tools_spec)
     sys.modules[_tools_spec.name] = _tools_mod
     _tools_spec.loader.exec_module(_tools_mod)
-    _handle_self_improvement_approval_report_tool = _tools_mod._handle_self_improvement_approval_report_tool
-    _handle_self_improvement_approve_tool = _tools_mod._handle_self_improvement_approve_tool
-    _handle_self_improvement_apply_approved_tool = _tools_mod._handle_self_improvement_apply_approved_tool
-    _handle_self_improvement_apply_low_risk_tool = _tools_mod._handle_self_improvement_apply_low_risk_tool
-    _handle_self_improvement_generate_apply_plan_tool = _tools_mod._handle_self_improvement_generate_apply_plan_tool
-    _handle_self_improvement_gepa_eval_tool = _tools_mod._handle_self_improvement_gepa_eval_tool
-    _handle_self_improvement_gepa_optimize_tool = _tools_mod._handle_self_improvement_gepa_optimize_tool
-    _handle_self_improvement_ledger_report_tool = _tools_mod._handle_self_improvement_ledger_report_tool
-    _handle_self_improvement_rollback_low_risk_tool = _tools_mod._handle_self_improvement_rollback_low_risk_tool
-    _handle_self_improvement_retention_report_tool = _tools_mod._handle_self_improvement_retention_report_tool
-    _handle_self_improvement_retention_prune_tool = _tools_mod._handle_self_improvement_retention_prune_tool
+    _handle_self_improvement_apply_tool = _tools_mod._handle_self_improvement_apply_tool
+    _handle_self_improvement_calibrate_tool = _tools_mod._handle_self_improvement_calibrate_tool
+    _handle_self_improvement_improve_tool = _tools_mod._handle_self_improvement_improve_tool
+    _handle_self_improvement_plan_tool = _tools_mod._handle_self_improvement_plan_tool
+    _handle_self_improvement_report_tool = _tools_mod._handle_self_improvement_report_tool
+    _handle_self_improvement_rollback_tool = _tools_mod._handle_self_improvement_rollback_tool
     _handle_self_improvement_status_tool = _tools_mod._handle_self_improvement_status_tool
-    _handle_self_improvement_validate_approval_tool = _tools_mod._handle_self_improvement_validate_approval_tool
 
 _SELF_IMPROVEMENT_TOOL_HANDLERS = {
     "self_improvement_status": _handle_self_improvement_status_tool,
-    "self_improvement_gepa_eval": _handle_self_improvement_gepa_eval_tool,
-    "self_improvement_gepa_optimize": _handle_self_improvement_gepa_optimize_tool,
-    "self_improvement_generate_apply_plan": _handle_self_improvement_generate_apply_plan_tool,
-    "self_improvement_ledger_report": _handle_self_improvement_ledger_report_tool,
-    "self_improvement_approval_report": _handle_self_improvement_approval_report_tool,
-    "self_improvement_validate_approval": _handle_self_improvement_validate_approval_tool,
-    "self_improvement_retention_report": _handle_self_improvement_retention_report_tool,
-    "self_improvement_retention_prune": _handle_self_improvement_retention_prune_tool,
-    "self_improvement_approve": _handle_self_improvement_approve_tool,
-    "self_improvement_apply_approved": _handle_self_improvement_apply_approved_tool,
-    "self_improvement_apply_low_risk": _handle_self_improvement_apply_low_risk_tool,
-    "self_improvement_rollback_low_risk": _handle_self_improvement_rollback_low_risk_tool,
+    "self_improvement_report": _handle_self_improvement_report_tool,
+    "self_improvement_improve": _handle_self_improvement_improve_tool,
+    "self_improvement_calibrate": _handle_self_improvement_calibrate_tool,
+    "self_improvement_plan": _handle_self_improvement_plan_tool,
+    "self_improvement_apply": _handle_self_improvement_apply_tool,
+    "self_improvement_rollback": _handle_self_improvement_rollback_tool,
 }
 
 
@@ -133,10 +115,10 @@ def _register_tools(ctx) -> None:
             emoji="🛡️",
         )
 try:  # pragma: no cover - package import path
-    from .apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash
+    from .apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash, rollback_apply_ledger
     from .calibration import collect_calibration_evidence, rollback_calibration, run_calibration
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash
+    from apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash, rollback_apply_ledger
     from calibration import collect_calibration_evidence, rollback_calibration, run_calibration
 
 try:  # pragma: no cover - package import path
@@ -331,6 +313,7 @@ try:  # pragma: no cover - package import path
         render_ledger_report,
         render_retention_report,
         render_report,
+        run_improve,
         run_pipeline,
     )
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
@@ -352,6 +335,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         render_ledger_report,
         render_retention_report,
         render_report,
+        run_improve,
         run_pipeline,
     )
 
