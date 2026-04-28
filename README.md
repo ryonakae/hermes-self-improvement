@@ -188,7 +188,7 @@ python3 -m pip install -e .
 
 `gepa-eval` は repo-tracked eval case の dependency-free regression fixture として残します。本物の optimizer run ではありません。GEPA は scorer の改善・比較・優先順位づけに使いますが、GEPA の点数だけで `auto_apply` は許可しません。
 
-Compiled evaluator の active 化は `evaluator_promote` change type の approval-gated apply-plan item として扱います。candidate path/hash と regression result hash を pointer payload に束縛し、`${reports_dir}/gepa/active-evaluator.json` または configured `active_evaluator_pointer_path` を `create_file` / `replace_entire_file` mutation で更新します。approval artifact は candidate id/path/hash、regression result hash、active-before pointer hash、rollback strategy も保持し、validation は candidate drift と active pointer drift を fail-closed にします。昇格は approval artifact、expected hash、rollback preview を通るまで実行されません。
+Compiled evaluator の active 化は `evaluator_promote` change type の approval-gated apply-plan item として扱います。candidate path/hash と regression result hash を pointer payload に束縛し、`${reports_dir}/gepa/active-evaluator.json` または configured `active_evaluator_pointer_path` を `create_file` / `replace_entire_file` mutation で更新します。approval artifact は candidate id/path/hash、regression result hash、active-before pointer hash、rollback strategy も保持し、validation は candidate drift と active pointer drift を fail-closed にします。昇格は approval artifact、expected hash、rollback preview を通るまで実行されません。成功時は apply result / attempt / ledger に `evaluator_promotion` metadata を残します。
 
 ## ディレクトリ
 

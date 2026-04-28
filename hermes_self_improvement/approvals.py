@@ -239,6 +239,23 @@ def _approval_summary(
     return summary
 
 
+def _evaluator_promotion_summary(*, approval: dict[str, Any] | None = None, item: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    approval = approval or {}
+    item = item or {}
+    if (approval.get("approved_change_type") or item.get("change_type")) != "evaluator_promote":
+        return None
+    pointer = _evaluator_promote_pointer_payload(item)
+    return {
+        "candidate_id": approval.get("evaluator_candidate_id") or pointer.get("candidate_id"),
+        "candidate_path": approval.get("evaluator_candidate_path") or pointer.get("compiled_program_path"),
+        "candidate_hash": approval.get("evaluator_candidate_hash") or pointer.get("compiled_program_hash"),
+        "regression_result_hash": approval.get("evaluator_regression_result_hash") or pointer.get("regression_result_hash"),
+        "active_pointer_path": approval.get("active_evaluator_pointer_path") or item.get("target_path"),
+        "active_before_hash": approval.get("active_evaluator_before_hash") or pointer.get("active_before_hash"),
+        "rollback_strategy": approval.get("evaluator_rollback_strategy") or pointer.get("rollback_strategy"),
+    }
+
+
 def _validate_evaluator_promote_binding(*, approval: dict[str, Any], item: dict[str, Any] | None) -> list[str]:
     reasons: list[str] = []
     if item is None:
@@ -456,6 +473,10 @@ def _approved_apply_write_previews(
             }
         ],
     }
+    evaluator_promotion = _evaluator_promotion_summary(approval=approval, item=item)
+    if evaluator_promotion:
+        attempt_preview["evaluator_promotion"] = evaluator_promotion
+        ledger_write_preview["evaluator_promotion"] = evaluator_promotion
     ledger_write_preview["preview_hash"] = _sha256_text(_stable_json({k: v for k, v in ledger_write_preview.items() if k != "preview_hash"}))
     attempt_preview["preview_hash"] = _sha256_text(_stable_json({k: v for k, v in attempt_preview.items() if k != "preview_hash"}))
     return {
@@ -528,6 +549,9 @@ def _approved_apply_attempt_payload(
     if item:
         attempt["mutation"] = item.get("mutation")
         attempt["rollback_preview_hash"] = (item.get("ledger_preview") or {}).get("rollback_preview_hash")
+        evaluator_promotion = _evaluator_promotion_summary(approval=approval, item=item)
+        if evaluator_promotion:
+            attempt["evaluator_promotion"] = evaluator_promotion
     _mark_hash(attempt, "attempt_hash")
     return attempt
 
@@ -652,6 +676,9 @@ def preview_apply_approved(
         "scorer": item.get("scorer"),
         "rollback_preview": item.get("rollback_preview"),
     }
+    evaluator_promotion = _evaluator_promotion_summary(approval=approval, item=item)
+    if evaluator_promotion:
+        payload["evaluator_promotion"] = evaluator_promotion
     if not reasons:
         payload["planned_diff"] = _planned_diff_for_item(item)
         payload["validation_plan"] = _validation_plan_for_item(item)
