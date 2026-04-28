@@ -15,6 +15,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - 問題抽出、proposal 生成、採点、report、apply-plan は CLI / cron / explicit evaluator command から明示的に実行する。
 - DSPy/GEPA は `hermes-self-improvement` plugin の evaluator path では必須依存として扱う。ただし hook / plugin discovery path では lazy import を維持し、Hermes runtime 全体の必須依存にはしない。
 - DSPy/GEPA evaluator の LLM call は Hermes で認証済みの provider routing を使う。default は Hermes auxiliary model。`reflection_model` / `task_model` は model name override のみで、`null` は Hermes auxiliary default を意味する。plugin 独自に OpenAI / Anthropic / LiteLLM API key や provider selector を持たせない。
+- LLM/GEPA scorer の model 設定は plugin-local `config.yaml` / tracked `config.example.yaml` に `model.llm` / `model.gepa` として置く。Hermes 本体 `~/.hermes/config.yaml` の root `model:` 配下に `llm` / `gepa` を増やさない。`model.llm` / `model.gepa` は Hermes auxiliary task config と同じ ergonomics（`provider`, `model`, `base_url`, `api_key`, `timeout`, `max_tokens`, `extra_body`）にし、呼び出し自体は `agent.auxiliary_client.call_llm(...)` 経由にする。local `config.yaml` は gitignore、`config.example.yaml` は placeholder のみ。`.env` / `.env.example` はこの用途では作らず、custom endpoint secret が必要なら local YAML の `${ENV}` 参照を使う。
 - Runtime scorer の `--scorer gepa` は real DSPy / GEPA path を使い、dependency-free offline baseline に黙って fallback しない。deterministic scaffold は必要なら tests / fixtures / private helper に閉じる。
 - LLM / GEPA scoring は advisory only。`auto_apply` は常に false 扱いにし、無人変更の許可として使わない。GEPA/LLM comparison を self-improvement decision の default input とし、score / recommendation / risk / confidence / target / rationale の material disagreement は human review / approval-required に倒して unattended apply を block する。material 判定は change type ごとの policy config で扱い、risk / recommendation disagreement は常に block、memory / lifecycle / destructive / broad change は厳しめ、typo / pitfall / validation addition は score / confidence threshold だけ少し緩めてもよい。`report` / `run` / `generate-apply-plan` は compare default、軽量 `analyze` は heuristic default でよい。
 - Evaluator 自体も自己改善対象にする。GEPA/LLM disagreement、human approval/rejection、rollback/failure ledger、regression eval cases から candidate evaluator を生成・評価してよいが、active evaluator への昇格は既存 approval artifact model に乗せた approval-gated `evaluator_promote` とし、candidate hash / active-before pointer/hash / regression result hash / rollback pointer を束縛して silent replacement を禁止する。
@@ -53,11 +54,16 @@ Repository root から実行する。
 ```bash
 bin/hermes-self-improve status
 bin/hermes-self-improve analyze --since-hours 24
-bin/hermes-self-improve report --since-hours 24 --scorer llm
+bin/hermes-self-improve report --since-hours 24 --scorer compare
 bin/hermes-self-improve run --since-hours 24 --json --scorer compare
 bin/hermes-self-improve gepa-eval --json
 bin/hermes-self-improve gepa-optimize --mode report_only --trainset evals/proposal_eval_cases.jsonl --valset evals/proposal_eval_cases.jsonl --max-full-evals 2 --json
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare
+
+# LLM / GEPA scorer health smoke checks
+bin/hermes-self-improve report --since-hours 1 --scorer llm --json
+bin/hermes-self-improve report --since-hours 1 --scorer gepa --json
+bin/hermes-self-improve report --since-hours 1 --scorer compare --json
 bin/hermes-self-improve ledger-report --status applied --json
 bin/hermes-self-improve approval-report --status all --json
 bin/hermes-self-improve retention-report --mode report_only --json
