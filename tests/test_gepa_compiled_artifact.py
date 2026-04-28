@@ -146,7 +146,8 @@ def test_gepa_adapter_compiled_mode_can_resolve_active_evaluator_pointer(monkeyp
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_compiled_pointer")
     artifact_path = tmp_path / "compiled-from-pointer.json"
     artifact_path.write_text(json.dumps({"compiled": True}), encoding="utf-8")
-    pointer_path = tmp_path / "active-evaluator.json"
+    pointer_path = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    pointer_path.parent.mkdir(parents=True, exist_ok=True)
     pointer_path.write_text(json.dumps({"compiled_program_path": str(artifact_path)}), encoding="utf-8")
 
     class FakeProgramModule:
@@ -166,7 +167,7 @@ def test_gepa_adapter_compiled_mode_can_resolve_active_evaluator_pointer(monkeyp
         proposals=[{"id": "proposal-compiled", "risk": "medium", "confidence": "medium"}],
         findings=[],
         config={
-            "active_evaluator_pointer_path": str(pointer_path),
+            "_self_improvement_root": str(tmp_path / "self-improvement"),
             "gepa_scorer": {"enabled": True, "mode": "compiled_program_eval", "compiled_program_path": None},
         },
     )

@@ -124,7 +124,7 @@ def test_default_config_uses_real_dspy_gepa_mode():
     assert gepa_config["task_model"] is None
     assert gepa_config["max_iterations"] == 0
     assert "compiled_program_path" in gepa_config
-    assert "active_evaluator_pointer_path" in gepa_config
+    assert "active_evaluator_pointer_path" not in gepa_config
 
 
 def test_evaluate_offline_program_reports_eval_case_results():

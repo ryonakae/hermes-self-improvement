@@ -27,7 +27,7 @@ def write_json(path: Path, payload: dict):
 
 
 def seed_artifacts(tmp_path: Path):
-    reports = tmp_path / "reports"
+    reports = tmp_path / "self-improvement"
     write_json(reports / "apply-plans" / "2026-03-01" / "old-plan.json", {
         "schema_name": "self_improvement_apply_plan",
         "plan_id": "old-plan",
@@ -58,7 +58,7 @@ def seed_artifacts(tmp_path: Path):
     })
     (reports / "ledgers" / "2026-03-03" / "malformed.json").parent.mkdir(parents=True, exist_ok=True)
     (reports / "ledgers" / "2026-03-03" / "malformed.json").write_text("{not json\n", encoding="utf-8")
-    return {"reports_dir": str(reports), "retention_days": 30}
+    return {"_self_improvement_root": str(reports), "retention_days": 30}
 
 
 def test_build_retention_report_payload_is_read_only_and_marks_expired_candidates(tmp_path):

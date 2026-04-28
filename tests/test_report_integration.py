@@ -82,13 +82,13 @@ def create_calibration_ledger(tmp_path: Path, config: dict) -> None:
         "active_after_hash": "after",
         "rollback_data": {"active_pointer_path": str(tmp_path / "active-evaluator.json"), "active_before_content": None},
     }
-    out = Path(config["reports_dir"]) / "ledgers" / "2026-04-27" / "20260427T170000Z-calibration-ledger-test.json"
+    out = Path(config["_self_improvement_root"]) / "ledgers" / "2026-04-27" / "20260427T170000Z-calibration-ledger-test.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(ledger, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def create_retention_candidates(tmp_path: Path, config: dict) -> None:
-    reports = Path(config["reports_dir"])
+    reports = Path(config["_self_improvement_root"])
     old_plan = reports / "apply-plans" / "2000-01-01" / "old-plan.json"
     old_plan.parent.mkdir(parents=True, exist_ok=True)
     old_plan.write_text(
@@ -103,9 +103,7 @@ def create_retention_candidates(tmp_path: Path, config: dict) -> None:
 def test_run_pipeline_report_includes_plan_apply_and_calibration_summaries(tmp_path):
     mod = load_plugin_module()
     config = {
-        "data_dir": str(tmp_path / "state"),
-        "reports_dir": str(tmp_path / "reports"),
-        "report_dir": str(tmp_path / "daily"),
+        "_self_improvement_root": str(tmp_path / "self-improvement"),
     }
     create_plan_and_apply_ledger(mod, tmp_path, config)
     create_needs_review_plan(mod, tmp_path, config)
@@ -141,9 +139,7 @@ def test_run_pipeline_report_includes_plan_apply_and_calibration_summaries(tmp_p
 def test_report_integration_is_quiet_when_no_artifacts(tmp_path):
     mod = load_plugin_module()
     config = {
-        "data_dir": str(tmp_path / "state"),
-        "reports_dir": str(tmp_path / "reports"),
-        "report_dir": str(tmp_path / "daily"),
+        "_self_improvement_root": str(tmp_path / "self-improvement"),
     }
 
     out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")

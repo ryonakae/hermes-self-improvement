@@ -29,7 +29,7 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 
 ## Telemetry and redaction
 
-`hermes_self_improvement/observer.py` writes JSONL telemetry under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/state/events.jsonl` by default.
+`hermes_self_improvement/observer.py` writes JSONL telemetry under `${HERMES_HOME:-~/.hermes}/self-improvement/state/events.jsonl` by default.
 
 - Store redacted previews and stable hashes, not full sensitive payloads.
 - Redact credential-looking values and sensitive paths before writing JSONL.

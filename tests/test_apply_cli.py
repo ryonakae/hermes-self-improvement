@@ -71,7 +71,7 @@ def test_apply_cli_handler_calls_unified_apply_engine_without_execution_mode(mon
     cli = load_cli_module()
     calls = []
 
-    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"reports_dir": str(tmp_path / "reports")})
+    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"_self_improvement_root": str(tmp_path / "self-improvement")})
 
     def fake_apply_plan(**kwargs):
         calls.append(kwargs)
@@ -93,7 +93,7 @@ def test_apply_cli_handler_calls_unified_apply_engine_without_execution_mode(mon
     assert calls == [
         {
             "plan_id": "plan-123",
-            "config": {"reports_dir": str(tmp_path / "reports")},
+            "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
             "item_ids": ["step-001", "step-002"],
             "execute": False,
         }

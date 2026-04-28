@@ -162,10 +162,7 @@ def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, An
 
 
 def _active_evaluator_pointer_path(config: dict[str, Any], calibration: dict[str, Any]) -> Path:
-    configured = calibration.get("active_evaluator_pointer_path")
-    if not configured and isinstance(config.get("gepa_scorer"), dict):
-        configured = config["gepa_scorer"].get("active_evaluator_pointer_path")
-    return Path(str(configured)).expanduser() if configured else _reports_dir(config) / "gepa" / "active-evaluator.json"
+    return _reports_dir(config) / "gepa" / "active-evaluator.json"
 
 
 def _current_pointer_content(path: Path) -> tuple[str | None, str | None]:

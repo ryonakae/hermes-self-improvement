@@ -112,7 +112,7 @@ def test_write_pending_ledger_uses_ledgers_date_partition(tmp_path):
         dry_run=True,
     )
 
-    path = mod.write_pending_ledger(ledger, {"reports_dir": str(tmp_path)})
+    path = mod.write_pending_ledger(ledger, {"_self_improvement_root": str(tmp_path)})
 
     assert path.parent == tmp_path / "ledgers" / "2026-04-26"
     assert path.name.endswith(f"-{ledger['ledger_id']}.json")

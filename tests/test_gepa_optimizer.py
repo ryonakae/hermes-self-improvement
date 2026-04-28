@@ -74,8 +74,8 @@ def test_gepa_adapter_require_dspy_sets_hermes_local_cache_dir(monkeypatch, tmp_
     monkeypatch.setattr(mod, "dspy_available", lambda: True)
 
     assert mod.require_dspy() is fake_dspy
-    assert Path(mod.os.environ["DSPY_CACHEDIR"]) == tmp_path / "hermes-home" / "cache" / "dspy"
-    assert (tmp_path / "hermes-home" / "cache" / "dspy").is_dir()
+    assert Path(mod.os.environ["DSPY_CACHEDIR"]) == tmp_path / "hermes-home" / "self-improvement" / "cache" / "dspy"
+    assert (tmp_path / "hermes-home" / "self-improvement" / "cache" / "dspy").is_dir()
 
 
 class FakeDspy:
@@ -115,7 +115,7 @@ def test_optimize_gepa_calls_dspy_gepa_compile_and_writes_artifact(tmp_path):
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_optimize_unit")
     FakeGEPA.calls.clear()
     config = {
-        "reports_dir": str(tmp_path / "reports"),
+        "_self_improvement_root": str(tmp_path / "self-improvement"),
         "gepa_scorer": {
             "enabled": True,
             "mode": "dspy_program_eval",
@@ -148,7 +148,7 @@ def test_optimize_gepa_uses_model_gepa_for_student_and_reflection_lm(tmp_path):
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_optimize_model_config")
     FakeGEPA.calls.clear()
     config = {
-        "reports_dir": str(tmp_path / "reports"),
+        "_self_improvement_root": str(tmp_path / "self-improvement"),
         "model": {
             "gepa": {
                 "provider": "codex",
@@ -172,7 +172,7 @@ def test_optimize_gepa_fails_closed_for_zero_budget(tmp_path):
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_optimize_budget")
 
     try:
-        adapter.optimize_gepa(config={"reports_dir": str(tmp_path)}, max_full_evals=0, dspy_module=FakeDspy)
+        adapter.optimize_gepa(config={"_self_improvement_root": str(tmp_path)}, max_full_evals=0, dspy_module=FakeDspy)
     except RuntimeError as exc:
         assert "greater than 0" in str(exc)
     else:  # pragma: no cover

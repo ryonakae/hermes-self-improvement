@@ -118,16 +118,28 @@ def _redact_value(value: Any, max_chars: int = DEFAULT_PREVIEW_CHARS) -> Any:
     return value
 
 
+def _self_improvement_root(config: dict[str, Any] | None = None) -> Path:
+    """Return the fixed user-specific runtime home for this plugin.
+
+    The public runtime layout is intentionally not configurable right now. Tests
+    may pass the private ``_self_improvement_root`` key to isolate artifacts.
+    """
+    cfg = config or {}
+    if cfg.get("_self_improvement_root"):
+        return Path(str(cfg["_self_improvement_root"])).expanduser()
+    return get_hermes_home() / "self-improvement"
+
+
 def _event_path(config: dict[str, Any]) -> Path:
-    return Path(config.get("data_dir") or (get_hermes_home() / "reports" / "self-improvement" / "state")) / "events.jsonl"
+    return _self_improvement_root(config) / "state" / "events.jsonl"
 
 
 def _report_dir(config: dict[str, Any]) -> Path:
-    return Path(config.get("report_dir") or (get_hermes_home() / "reports" / "self-improvement" / "daily"))
+    return _self_improvement_root(config) / "daily"
 
 
 def _reports_dir(config: dict[str, Any]) -> Path:
-    return Path(config.get("reports_dir") or (get_hermes_home() / "reports" / "self-improvement"))
+    return _self_improvement_root(config)
 
 
 def _append_jsonl(path: Path, event: dict[str, Any]) -> None:

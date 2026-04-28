@@ -45,7 +45,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `evals/`: GEPA offline scorer の rubric / regression cases。
 - `skills/operations/SKILL.md`: この bundled operational skill。
 
-Runtime artifact は既定で `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存する。主な subdirectory は `apply-plans/`, `ledgers/`, `state/`, `daily/`。
+Runtime artifact は既定で `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存する。保存場所の user-facing config override は現時点では提供しない。主な subdirectory は `apply-plans/`, `ledgers/`, `state/`, `daily/`, `gepa/`, `cache/`。
 
 ## 日常コマンド
 

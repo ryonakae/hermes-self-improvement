@@ -656,7 +656,7 @@ def test_build_apply_plan_includes_full_before_snapshot_even_when_preview_is_tru
     assert rollback["before_snapshot"] == original
     assert hashlib.sha256(rollback["before_snapshot"].encode("utf-8")).hexdigest() == rollback["before_hash"]
 
-def test_write_apply_plan_uses_configurable_reports_dir_and_date_partition(tmp_path):
+def test_write_apply_plan_uses_self_improvement_root_and_date_partition(tmp_path):
     mod = load_plugin_module()
     created_at = datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc)
     plan = mod.build_apply_plan(
@@ -666,7 +666,7 @@ def test_write_apply_plan_uses_configurable_reports_dir_and_date_partition(tmp_p
         created_at=created_at,
     )
 
-    path = mod.write_apply_plan(plan, {"reports_dir": str(tmp_path)})
+    path = mod.write_apply_plan(plan, {"_self_improvement_root": str(tmp_path)})
 
     assert path.parent == tmp_path / "apply-plans" / "2026-04-26"
     assert path.name.endswith(f"-{plan['plan_id']}.json")

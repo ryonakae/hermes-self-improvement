@@ -46,7 +46,6 @@ gepa_scorer:
   enabled: true
   mode: dspy_program_eval
   compiled_program_path: null
-  active_evaluator_pointer_path: null
   max_full_evals: 2
   num_threads: 4
   track_stats: true

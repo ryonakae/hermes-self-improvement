@@ -110,7 +110,7 @@ Primary tool surface は 7 個だけです。
 - `skills/operations/`: bundled operational skill
 - `tests/`: pytest suite
 
-Runtime artifact は `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存します。主な subdir は `state/`, `daily/`, `apply-plans/`, `ledgers/` です。旧 `apply-attempts/` と `approvals/` は過去 artifact 用に残る場合がありますが、primary flow では新規作成しません。
+Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存します。保存場所の user-facing config override は現時点では提供しません。主な subdir は `state/`, `daily/`, `apply-plans/`, `ledgers/`, `gepa/`, `cache/` です。
 
 ## コーディング / テスト規約
 

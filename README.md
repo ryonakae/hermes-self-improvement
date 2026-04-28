@@ -122,7 +122,7 @@ python3 -m pip install -e .
 
 GEPA regression / optimizer internals は `calibrate` の内部で扱います。Runtime `gepa` scorer は DSPy program に plugin-local `model.gepa` を渡し、DSPy 側の LM call は Hermes `agent.auxiliary_client.call_llm(...)` を通る `BaseLM` bridge で行います。`model.gepa` の provider / model / base_url / api_key / timeout / max_tokens / extra_body は local `config.yaml` で指定でき、artifact では secret 系 key を redact します。GEPA は scorer の改善・比較・優先順位づけに使いますが、GEPA の点数だけで `auto_apply` は許可しません。
 
-Compiled evaluator の active 化は `calibrate --execute` で扱います。candidate hash、regression result、active-before pointer hash / snapshot を calibration ledger に束縛し、`${reports_dir}/gepa/active-evaluator.json` または configured `active_evaluator_pointer_path` を更新します。regression runner 未設定・regression failure・candidate 不足では fail-closed にして active pointer を変更しません。新しい user-facing surface では expected hash や approval artifact を入力させません。
+Compiled evaluator の active 化は `calibrate --execute` で扱います。candidate hash、regression result、active-before pointer hash / snapshot を calibration ledger に束縛し、`${HERMES_HOME:-~/.hermes}/self-improvement/gepa/active-evaluator.json` を更新します。regression runner 未設定・regression failure・candidate 不足では fail-closed にして active pointer を変更しません。新しい user-facing surface では expected hash や approval artifact を入力させません。
 
 ## ディレクトリ
 
@@ -144,7 +144,7 @@ Compiled evaluator の active 化は `calibrate --execute` で扱います。can
 
 ## Artifact の保存先
 
-既定では `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存します。
+既定では `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存します。保存場所の user-facing config override は現時点では提供しません。
 
 - `state/events.jsonl`: observed events
 - `daily/latest.md`: daily report

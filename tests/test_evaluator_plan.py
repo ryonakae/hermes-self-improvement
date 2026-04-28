@@ -25,7 +25,7 @@ def test_evaluator_promote_plans_create_active_pointer_with_candidate_hash(tmp_p
     candidate = tmp_path / "candidate.json"
     candidate.write_text(json.dumps({"compiled": True}), encoding="utf-8")
     candidate_hash = mod._sha256_text(candidate.read_text(encoding="utf-8"))
-    pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
+    pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
 
     plan = mod.build_apply_plan(
         proposals=[
@@ -45,7 +45,7 @@ def test_evaluator_promote_plans_create_active_pointer_with_candidate_hash(tmp_p
         ],
         summary={},
         execution_mode="dry_run_plan",
-        config={"reports_dir": str(tmp_path / "reports")},
+        config={"_self_improvement_root": str(tmp_path / "self-improvement")},
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 

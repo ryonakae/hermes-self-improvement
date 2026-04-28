@@ -122,12 +122,7 @@ def _target_path_for_proposal(proposal: dict[str, Any], config: dict[str, Any] |
         if value:
             return str(Path(str(value)).expanduser())
     if str(proposal.get("change_type") or "") == "evaluator_promote":
-        cfg = config or {}
-        gepa_cfg = cfg.get("gepa_scorer") if isinstance(cfg.get("gepa_scorer"), dict) else {}
-        raw = cfg.get("active_evaluator_pointer_path") or gepa_cfg.get("active_evaluator_pointer_path")
-        if raw:
-            return str(Path(str(raw)).expanduser())
-        return str(_reports_dir(cfg) / "gepa" / "active-evaluator.json")
+        return str(_reports_dir(config or {}) / "gepa" / "active-evaluator.json")
     return _custom_skill_path_for_proposal(proposal, config)
 
 

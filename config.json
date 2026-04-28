@@ -14,7 +14,6 @@
     "timeout": 120,
     "max_iterations": 0,
     "compiled_program_path": null,
-    "active_evaluator_pointer_path": null,
     "llm_source": "hermes_auxiliary",
     "reflection_model": null,
     "task_model": null,

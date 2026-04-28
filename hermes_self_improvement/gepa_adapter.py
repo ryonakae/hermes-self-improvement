@@ -29,9 +29,19 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _hermes_home() -> Path:
+    return Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser()
+
+
+def _self_improvement_root(config: dict[str, Any] | None = None) -> Path:
+    cfg = config or {}
+    if cfg.get("_self_improvement_root"):
+        return Path(str(cfg["_self_improvement_root"])).expanduser()
+    return _hermes_home() / "self-improvement"
+
+
 def _reports_dir(config: dict[str, Any]) -> Path:
-    raw = config.get("reports_dir") or str(Path.home() / ".hermes" / "reports" / "self-improvement")
-    return Path(str(raw)).expanduser()
+    return _self_improvement_root(config)
 
 
 SENSITIVE_CONFIG_KEYS = {"api_key", "token", "password", "secret", "authorization", "cookie"}
@@ -62,7 +72,6 @@ def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
         "mode",
         "llm_source",
         "compiled_program_path",
-        "active_evaluator_pointer_path",
         "reflection_model",
         "task_model",
         "max_full_evals",
@@ -76,9 +85,6 @@ def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _active_evaluator_pointer_path(config: dict[str, Any]) -> Path:
-    raw = config.get("active_evaluator_pointer_path")
-    if raw:
-        return Path(str(raw)).expanduser()
     return _reports_dir(config) / "gepa" / "active-evaluator.json"
 
 
@@ -147,7 +153,7 @@ def _ensure_dspy_cache_dir() -> None:
     """Keep DSPy cache writes inside Hermes' writable runtime area by default."""
     if os.environ.get("DSPY_CACHEDIR"):
         return
-    cache_dir = Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "cache" / "dspy"
+    cache_dir = _self_improvement_root() / "cache" / "dspy"
     cache_dir.mkdir(parents=True, exist_ok=True)
     os.environ["DSPY_CACHEDIR"] = str(cache_dir)
 

@@ -67,11 +67,11 @@ def _write_simple_plan(mod, tmp_path: Path):
         proposals=[proposal],
         summary={"event_count": 10},
         execution_mode="preview",
-        config={"reports_dir": str(tmp_path / "reports")},
+        config={"_self_improvement_root": str(tmp_path / "self-improvement")},
         created_at=datetime(2026, 4, 28, 15, 30, tzinfo=timezone.utc),
     )
     config = {
-        "reports_dir": str(tmp_path / "reports"),
+        "_self_improvement_root": str(tmp_path / "self-improvement"),
         "apply_policy": {"allowed_target_kinds": ["skill", "memory", "file_workflow_skills"]},
     }
     mod.write_apply_plan(plan, config)
@@ -147,11 +147,11 @@ def test_simplified_apply_tool_execute_mutates_policy_allowed_item(tmp_path):
 
 def test_simplified_calibrate_tool_preview_does_not_promote(tmp_path):
     mod = load_plugin_module()
-    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
+    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
 
     raw = mod._handle_self_improvement_calibrate_tool({
         "execute": False,
-        "config": {"reports_dir": str(tmp_path / "reports"), "calibration": {"active_evaluator_pointer_path": str(active_pointer)}},
+        "config": {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {}},
     })
 
     payload = parse_tool_payload(raw)
@@ -166,7 +166,7 @@ def test_simplified_plan_tool_writes_artifact_without_target_mutation(tmp_path):
     raw = mod._handle_self_improvement_plan_tool({
         "since_hours": 1,
         "scorer": "heuristic",
-        "config": {"reports_dir": str(tmp_path / "reports")},
+        "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
     })
 
     payload = parse_tool_payload(raw)
@@ -188,7 +188,7 @@ def test_simplified_improve_tool_uses_core_loop(monkeypatch, tmp_path):
         "since_hours": 2,
         "execute": False,
         "scorer": "compare",
-        "config": {"reports_dir": str(tmp_path / "reports")},
+        "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
     })
 
     payload = parse_tool_payload(raw)
@@ -202,7 +202,7 @@ def test_simplified_improve_tool_uses_core_loop(monkeypatch, tmp_path):
 def test_simplified_rollback_tool_requires_ledger_id(tmp_path):
     mod = load_plugin_module()
 
-    raw = mod._handle_self_improvement_rollback_tool({"config": {"reports_dir": str(tmp_path / "reports")}})
+    raw = mod._handle_self_improvement_rollback_tool({"config": {"_self_improvement_root": str(tmp_path / "self-improvement")}})
 
     payload = parse_tool_payload(raw)
     assert payload["error"] == "ledger_id is required"

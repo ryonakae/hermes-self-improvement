@@ -59,7 +59,7 @@ def test_prune_events_keeps_recent_and_malformed_rows(tmp_path):
 
 def test_runtime_observer_prunes_once_before_recording(tmp_path):
     mod = load_plugin_module()
-    path = tmp_path / "state" / "events.jsonl"
+    path = tmp_path / "self-improvement" / "state" / "events.jsonl"
     old = datetime.now(timezone.utc) - timedelta(days=40)
     write_jsonl(path, [{"ts": old.isoformat(), "event": "post_tool_call", "id": "old"}])
 
@@ -68,7 +68,7 @@ def test_runtime_observer_prunes_once_before_recording(tmp_path):
             "enabled": True,
             "preview_chars": 1000,
             "retention_days": 30,
-            "data_dir": str(path.parent),
+            "_self_improvement_root": str(tmp_path / "self-improvement"),
             "observe_hooks": ["post_tool_call"],
         }
     )

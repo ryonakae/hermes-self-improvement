@@ -46,7 +46,7 @@ def write_applied_ledger(tmp_path):
         execution_mode="dry_run_plan",
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
-    config = {"reports_dir": str(tmp_path / "reports")}
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     mod.write_apply_plan(plan, config)
     result = mod.apply_plan(plan_id=plan["plan_id"], config=config, execute=True)
     return mod, config, Path(result["ledger_path"])

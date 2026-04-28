@@ -61,8 +61,8 @@ def test_require_dspy_sets_hermes_local_cache_dir_before_import(monkeypatch, tmp
     monkeypatch.setattr(mod, "dspy_available", lambda: True)
 
     assert mod.require_dspy() is fake_dspy
-    assert Path(mod.os.environ["DSPY_CACHEDIR"]) == tmp_path / "hermes-home" / "cache" / "dspy"
-    assert (tmp_path / "hermes-home" / "cache" / "dspy").is_dir()
+    assert Path(mod.os.environ["DSPY_CACHEDIR"]) == tmp_path / "hermes-home" / "self-improvement" / "cache" / "dspy"
+    assert (tmp_path / "hermes-home" / "self-improvement" / "cache" / "dspy").is_dir()
 
 
 def test_build_dspy_program_uses_structured_json_fields_without_importing_real_dspy():

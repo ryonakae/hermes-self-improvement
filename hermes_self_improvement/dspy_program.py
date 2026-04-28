@@ -114,7 +114,7 @@ def _ensure_dspy_cache_dir() -> None:
     """Keep DSPy cache writes inside Hermes' writable runtime area by default."""
     if os.environ.get("DSPY_CACHEDIR"):
         return
-    cache_dir = _hermes_home() / "cache" / "dspy"
+    cache_dir = _hermes_home() / "self-improvement" / "cache" / "dspy"
     cache_dir.mkdir(parents=True, exist_ok=True)
     os.environ["DSPY_CACHEDIR"] = str(cache_dir)
 

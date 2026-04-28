@@ -51,7 +51,7 @@ def base_config(tmp_path: Path, **calibration_overrides):
     }
     for key, value in calibration_overrides.items():
         calibration[key] = value
-    return {"reports_dir": str(tmp_path / "reports"), "calibration": calibration}
+    return {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": calibration}
 
 
 def test_calibration_disabled_returns_no_op(tmp_path):
@@ -77,7 +77,7 @@ def test_calibration_insufficient_evidence_returns_no_op(tmp_path):
 
 def test_calibration_disagreement_threshold_requests_candidate(tmp_path):
     mod = load_plugin_module()
-    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
     write_json(
         plan_path,
         {
@@ -99,7 +99,7 @@ def test_calibration_disagreement_threshold_requests_candidate(tmp_path):
 
 def test_calibration_bad_outcome_threshold_requests_candidate(tmp_path):
     mod = load_plugin_module()
-    ledger_path = tmp_path / "reports" / "ledgers" / "2026-04-28" / "ledger.json"
+    ledger_path = tmp_path / "self-improvement" / "ledgers" / "2026-04-28" / "ledger.json"
     write_json(
         ledger_path,
         {
@@ -122,8 +122,8 @@ def test_calibration_bad_outcome_threshold_requests_candidate(tmp_path):
 
 def test_calibration_preview_does_not_write_active_pointer(tmp_path):
     mod = load_plugin_module()
-    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
-    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
     write_json(
         plan_path,
         {
@@ -132,7 +132,7 @@ def test_calibration_preview_does_not_write_active_pointer(tmp_path):
             "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
         },
     )
-    cfg = base_config(tmp_path, active_evaluator_pointer_path=str(active_pointer))
+    cfg = base_config(tmp_path)
 
     result = mod.run_calibration(config=cfg, execute=False)
 
@@ -154,7 +154,7 @@ def test_calibrate_command_uses_simplified_surface_without_mode_or_hash_flags():
 def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, capsys):
     cli = load_cli_module()
     calls = []
-    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"reports_dir": str(tmp_path / "reports")})
+    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"_self_improvement_root": str(tmp_path / "self-improvement")})
 
     def fake_run_calibration(**kwargs):
         calls.append(kwargs)
@@ -174,7 +174,7 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
 
     cli._handle_cli(args)
 
-    assert calls == [{"config": {"reports_dir": str(tmp_path / "reports")}, "execute": False}]
+    assert calls == [{"config": {"_self_improvement_root": str(tmp_path / "self-improvement")}, "execute": False}]
     out = capsys.readouterr().out
     assert "Calibration: no_op" in out
     assert "Evidence: 8 events, 2 disagreements, 0 bad outcomes" in out
@@ -183,8 +183,8 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
 
 def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
-    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
     write_json(
         plan_path,
         {
@@ -193,7 +193,7 @@ def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
             "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
         },
     )
-    cfg = base_config(tmp_path, active_evaluator_pointer_path=str(active_pointer))
+    cfg = base_config(tmp_path)
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "failed", "reason": "regression_failed"})
 
     result = calibration.run_calibration(config=cfg, execute=True)
@@ -206,8 +206,8 @@ def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
 
 def test_calibration_execute_promotes_active_pointer_after_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
-    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
     write_json(
         plan_path,
         {
@@ -216,7 +216,7 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
             "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
         },
     )
-    cfg = base_config(tmp_path, active_evaluator_pointer_path=str(active_pointer))
+    cfg = base_config(tmp_path)
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "passed", "cases": 3})
 
     result = calibration.run_calibration(config=cfg, execute=True)
@@ -235,10 +235,10 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
 
 def test_calibration_rollback_restores_active_before_state(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
+    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
     write_json(active_pointer, {"candidate_hash": "before", "regression": {"status": "passed"}})
     before_content = active_pointer.read_text(encoding="utf-8")
-    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
     write_json(
         plan_path,
         {
@@ -247,7 +247,7 @@ def test_calibration_rollback_restores_active_before_state(monkeypatch, tmp_path
             "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
         },
     )
-    cfg = base_config(tmp_path, active_evaluator_pointer_path=str(active_pointer))
+    cfg = base_config(tmp_path)
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "passed", "cases": 3})
     result = calibration.run_calibration(config=cfg, execute=True)
 
