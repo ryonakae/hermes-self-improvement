@@ -4,6 +4,7 @@ import hashlib
 import json
 import importlib
 import importlib.util
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -142,12 +143,22 @@ def dspy_available() -> bool:
     return importlib.util.find_spec("dspy") is not None
 
 
+def _ensure_dspy_cache_dir() -> None:
+    """Keep DSPy cache writes inside Hermes' writable runtime area by default."""
+    if os.environ.get("DSPY_CACHEDIR"):
+        return
+    cache_dir = Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "cache" / "dspy"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["DSPY_CACHEDIR"] = str(cache_dir)
+
+
 def require_dspy() -> Any:
     """Import DSPy for explicit evaluator paths, failing with an actionable error."""
     if not dspy_available():
         raise ModuleNotFoundError(
             "No module named 'dspy'. Install the hermes-self-improvement evaluator dependencies with `python3 -m pip install -e .`."
         )
+    _ensure_dspy_cache_dir()
     return importlib.import_module("dspy")
 
 

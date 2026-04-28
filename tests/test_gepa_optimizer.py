@@ -64,6 +64,20 @@ class FakeGEPA:
         return FakeCompiled()
 
 
+def test_gepa_adapter_require_dspy_sets_hermes_local_cache_dir(monkeypatch, tmp_path):
+    mod = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_cache_unit")
+    fake_dspy = type(sys)("dspy")
+
+    monkeypatch.delenv("DSPY_CACHEDIR", raising=False)
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes-home"))
+    monkeypatch.setitem(sys.modules, "dspy", fake_dspy)
+    monkeypatch.setattr(mod, "dspy_available", lambda: True)
+
+    assert mod.require_dspy() is fake_dspy
+    assert Path(mod.os.environ["DSPY_CACHEDIR"]) == tmp_path / "hermes-home" / "cache" / "dspy"
+    assert (tmp_path / "hermes-home" / "cache" / "dspy").is_dir()
+
+
 class FakeDspy:
     __version__ = "fake-dspy-1.0"
     GEPA = FakeGEPA

@@ -110,12 +110,22 @@ def dspy_available() -> bool:
     return importlib.util.find_spec("dspy") is not None
 
 
+def _ensure_dspy_cache_dir() -> None:
+    """Keep DSPy cache writes inside Hermes' writable runtime area by default."""
+    if os.environ.get("DSPY_CACHEDIR"):
+        return
+    cache_dir = _hermes_home() / "cache" / "dspy"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["DSPY_CACHEDIR"] = str(cache_dir)
+
+
 def require_dspy() -> Any:
     """Import DSPy only for explicit evaluator paths."""
     if not dspy_available():
         raise ModuleNotFoundError(
             "No module named 'dspy'. Install the hermes-self-improvement evaluator dependencies with `python3 -m pip install -e .`."
         )
+    _ensure_dspy_cache_dir()
     return importlib.import_module("dspy")
 
 
@@ -253,7 +263,8 @@ def _score_with_program(
     rubric_json = json.dumps(rubric, ensure_ascii=False, sort_keys=True, default=str)
     for proposal in proposals:
         proposal_json = json.dumps(proposal, ensure_ascii=False, sort_keys=True, default=str)
-        score = program.forward(proposal_json=proposal_json, findings_json=findings_json, rubric_json=rubric_json)
+        invoke = program if callable(program) else program.forward
+        score = invoke(proposal_json=proposal_json, findings_json=findings_json, rubric_json=rubric_json)
         score["auto_apply"] = False
         scores.append(score)
     return {
