@@ -30,7 +30,7 @@ Relevant files:
 - `hermes_self_improvement/dspy_program.py`: dependency-free scoring contract and baseline implementation.
 - `evals/rubric.json`: scoring rubric.
 - `evals/proposal_eval_cases.jsonl`: regression cases.
-- `config.json` and `hermes_self_improvement/config.py`: `gepa_scorer` config exists but only supports offline behavior safely.
+- `config.json` and `hermes_self_improvement/config.py`: `gepa_scorer` config exists but only supports offline behavior safely. The plan now targets a local plugin YAML config: repo tracks `config.example.yaml`, while operator-specific `config.yaml` is ignored by git.
 - `README.md`: correctly says the current optimizer is not real, but the roadmap should now change.
 
 Current external docs check:
@@ -117,11 +117,11 @@ Evaluator self-improvement goal: the proposal evaluator itself should improve ov
 
 Decision from Q6: use **C**. Active evaluator promotion should reuse the existing approval artifact model. Evaluator promotion is a high-impact self-improvement change, so it should be represented as an approval-required operation with candidate id/path, active-before pointer/hash, candidate hash, regression result hash, expiry, and rollback pointer/config data.
 
-Decision from Q7: use **C**. Repo-tracked `config.json` may define defaults, but the active evaluator pointer should live as runtime state under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/gepa/active-evaluator.json`. Promotion updates this pointer through the approval-gated `evaluator_promote` path, with hash-bound rollback data. Do not frequently rewrite repo-tracked config just to change the active evaluator.
+Decision from Q7: use **C**. Repo-tracked defaults / `config.example.yaml` document evaluator defaults, but the active evaluator pointer should live as runtime state under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/gepa/active-evaluator.json`. Promotion updates this pointer through the approval-gated `evaluator_promote` path, with hash-bound rollback data. Do not frequently rewrite repo-tracked config just to change the active evaluator.
 
-Decision from Q8: use **Hermes-authenticated providers only**. The DSPy/GEPA evaluator should use the provider authentication already configured for Hermes Agent, not plugin-specific OpenAI/Anthropic/LiteLLM API key settings. The default LLM source is Hermes auxiliary model routing. Model names may be configurable for task/reflection roles, but `null` means “use the Hermes auxiliary default”. Do not expose provider selection as a first-class plugin option; if a different provider is desired, it should be configured in Hermes itself.
+Decision from Q8: use **plugin-local YAML model configuration backed by Hermes-authenticated routing**. Operator-facing model settings live in `~/.hermes/plugins/hermes-self-improvement/config.yaml`, with `config.example.yaml` tracked in git and `config.yaml` ignored. The config shape is `model.llm` and `model.gepa`, each supporting `provider`, `model`, `base_url`, `api_key`, `timeout`, `max_tokens`, and `extra_body`, matching Hermes auxiliary task config ergonomics. This is plugin-local config, not root `~/.hermes/config.yaml` `model.*`, to avoid colliding with Hermes' main model namespace. The default provider should remain `auto` / Hermes-authenticated routing; `provider: codex` and other Hermes-supported provider aliases are allowed because calls still go through `agent.auxiliary_client.call_llm(...)`. `${ENV}` expansion in YAML is allowed for `api_key`, but a separate plugin `.env` / `.env.example` is not part of the plan.
 
-Decision from Q9: package dependencies and runtime credentials are separate. `dspy` remains a required Python dependency for the evaluator path, but installing/importing the package must not imply that OpenAI or Anthropic API keys are required. Any LM call for DSPy program evaluation or GEPA optimization goes through Hermes' configured provider/auth path. Plugin artifacts and config must not store provider API keys.
+Decision from Q9: package dependencies and runtime credentials are separate. `dspy` remains a required Python dependency for the evaluator path, but installing/importing the package must not imply that OpenAI or Anthropic API keys are required. Any LM call for DSPy program evaluation or GEPA optimization goes through Hermes' configured provider/auth path via the plugin-local `model.llm` / `model.gepa` config. `api_key` may be present only as a local `config.yaml` value or `${ENV}` reference; `config.example.yaml`, artifacts, reports, and repo-tracked docs must not store real provider API keys.
 
 ### Task 1: Add package metadata with required DSPy / GEPA dependency
 
@@ -167,6 +167,103 @@ PY
 
 Expected before installation: plugin hook/import paths still avoid importing `dspy`, but the package metadata makes `dspy` required for a complete installed evaluator environment. In this current Hermes runtime, the built-in `dspy` skill exists, but the Python package check currently reports `dspy.spec=False`; implementing this task should make `importlib.util.find_spec('dspy') is not None` true after installation.
 
+### Task 1.5: Add plugin-local YAML config for scorer models
+
+**Objective:** Move operator model settings into local `config.yaml` while tracking only a safe `config.example.yaml` in git.
+
+**Files:**
+
+- Modify: `.gitignore`
+- Create: `config.example.yaml`
+- Modify: `hermes_self_improvement/config.py`
+- Test: `tests/test_config_precedence.py`
+
+**Design decisions:**
+
+- Track `config.example.yaml` in git.
+- Ignore local `config.yaml` and `config.local.yaml` in git.
+- Do not add `.env` or `.env.example`; they are unnecessary when YAML supports `${ENV}` expansion.
+- Preserve JSON compatibility for existing `config.json`, `config.local.json`, `HERMES_SELF_IMPROVE_CONFIG`, and `--config` during migration.
+- Add YAML support without making explicit config paths silently optional: if `HERMES_SELF_IMPROVE_CONFIG` or `--config` points to a missing/invalid file, fail closed as today.
+
+**Example config:**
+
+```yaml
+model:
+  llm:
+    provider: auto
+    model: ""
+    base_url: ""
+    api_key: ""
+    timeout: 60
+    max_tokens: 1800
+    extra_body: {}
+
+  gepa:
+    provider: auto
+    model: ""
+    base_url: ""
+    api_key: ""
+    timeout: 120
+    max_tokens: 1800
+    extra_body: {}
+```
+
+Local operator config may use Codex or another Hermes-supported provider:
+
+```yaml
+model:
+  llm:
+    provider: codex
+    model: gpt-5.4-mini
+    base_url: ""
+    api_key: ""
+    extra_body: {}
+  gepa:
+    provider: codex
+    model: gpt-5.4-mini
+    base_url: ""
+    api_key: ""
+    extra_body: {}
+```
+
+For custom endpoints, prefer `${ENV}` instead of committing secrets:
+
+```yaml
+model:
+  gepa:
+    provider: custom
+    model: my-model
+    base_url: https://example.invalid/v1
+    api_key: ${HERMES_SELF_IMPROVE_GEPA_API_KEY}
+    extra_body: {}
+```
+
+**Implementation notes:**
+
+- Extend the config reader to parse `.yaml` / `.yml` with `yaml.safe_load` and `.json` with `json.loads`.
+- Add recursive `${ENV}` expansion matching Hermes core behavior; unresolved variables remain literal so validation can report them.
+- Normalize legacy `llm_scorer.provider/model/timeout/max_tokens` into `model.llm` only when `model.llm` does not specify those keys.
+- Normalize legacy `gepa_scorer.task_model/reflection_model/timeout` into `model.gepa` only as compatibility fallback; keep `gepa_scorer` for evaluator mode/policy, not provider secrets.
+- Redact `api_key` and any sensitive nested keys in config summaries/artifacts.
+
+**Tests / verification:**
+
+```bash
+python3 -m pytest tests/test_config_precedence.py -q
+python3 -m py_compile hermes_self_improvement/config.py
+```
+
+Expected assertions:
+
+- `config.example.yaml` is parseable.
+- `config.yaml` overrides defaults and repo config.
+- `config.local.yaml` overrides `config.yaml` for local machine tweaks.
+- `HERMES_SELF_IMPROVE_CONFIG` and `--config` accept YAML and JSON.
+- `.env` is not required or loaded by plugin config.
+- `${HERMES_SELF_IMPROVE_GEPA_API_KEY}` expands when the environment variable exists and remains literal otherwise.
+- `config.yaml` and `config.local.yaml` are ignored by git; `.env.example` and plugin `.env` are not created.
+
 ### Task 2: Split offline baseline from real DSPy program
 
 **Objective:** Remove the deterministic baseline from runtime scorer behavior and replace it with a real DSPy implementation. Deterministic scoring may remain only in tests/fixtures to keep unit tests offline and stable.
@@ -181,7 +278,7 @@ Expected before installation: plugin hook/import paths still avoid importing `ds
 **Design:**
 
 - Move dependency-free deterministic scoring out of runtime scorer code into test fixtures/helpers, or keep it behind private test-only helpers if needed.
-- The default DSPy LM bridge must call Hermes' already-authenticated LLM path, preferably the same auxiliary model route used by the current `llm` scorer. Do not require plugin-specific provider API keys.
+- The default DSPy LM bridge must call Hermes' already-authenticated LLM path, using plugin-local `model.gepa` from `config.yaml` / `config.example.yaml` shape. Do not require a plugin `.env`, `.env.example`, or provider-specific API keys.
 - Add lazy helpers:
 
 ```python
@@ -280,23 +377,39 @@ bin/hermes-self-improve gepa-optimize \
 
 **Config additions:**
 
-```json
-{
-  "gepa_scorer": {
-    "enabled": true,
-    "mode": "compiled_program_eval",
-    "llm_source": "hermes_auxiliary",
-    "compiled_program_path": null,
-    "reflection_model": null,
-    "task_model": null,
-    "max_full_evals": 2,
-    "num_threads": 4,
-    "track_stats": true
-  }
-}
+Runtime/evaluator policy remains under `gepa_scorer`, while provider/model request settings live under plugin-local `model.gepa` and `model.llm`:
+
+```yaml
+model:
+  llm:
+    provider: auto
+    model: ""
+    base_url: ""
+    api_key: ""
+    timeout: 60
+    max_tokens: 1800
+    extra_body: {}
+
+  gepa:
+    provider: auto
+    model: ""
+    base_url: ""
+    api_key: ""
+    timeout: 120
+    max_tokens: 1800
+    extra_body: {}
+
+gepa_scorer:
+  enabled: true
+  mode: compiled_program_eval
+  compiled_program_path: null
+  active_evaluator_pointer_path: null
+  max_full_evals: 2
+  num_threads: 4
+  track_stats: true
 ```
 
-`llm_source` is intentionally not a provider selector. The only supported default is `hermes_auxiliary`, meaning Hermes Agent's configured/authenticated auxiliary LLM route. `reflection_model` and `task_model` are optional model-name overrides passed to Hermes' LLM client; `null` means use the Hermes auxiliary default. Do not store OpenAI/Anthropic/LiteLLM API keys in plugin config.
+`model.llm` is used by the regular LLM scorer. `model.gepa` is used by the DSPy LM bridge for `--scorer gepa` and `gepa-optimize`. The fields intentionally mirror Hermes auxiliary task config ergonomics, but they are plugin-local and do not modify root `~/.hermes/config.yaml`. Calls still route through Hermes' `agent.auxiliary_client.call_llm(...)`, so `provider: codex` uses Hermes Codex OAuth and `provider: auto` uses Hermes' existing authenticated provider resolution. Do not add `.env` / `.env.example`; use `${ENV}` inside local `config.yaml` if a custom endpoint needs a secret.
 
 **Artifact output:**
 
@@ -426,7 +539,7 @@ bin/hermes-self-improve gepa-optimize \
 - Evaluate each candidate against a pinned regression suite before it can become active.
 - Store candidate reports with schema metadata, input case hashes, scorer config, before/after metrics, and safety notes.
 - Promotion to active evaluator must be explicit, auditable, hash-bound, and approval-gated through the existing approval artifact model. The first implementation should add an approval-required operation such as `evaluator_promote` rather than hand-editing active config directly.
-- Repo-tracked `config.json` defines defaults only. The mutable active evaluator pointer should live under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/gepa/active-evaluator.json` as runtime state.
+- Repo-tracked defaults / `config.example.yaml` document evaluator defaults only. The mutable active evaluator pointer should live under `${HERMES_HOME:-~/.hermes}/reports/self-improvement/gepa/active-evaluator.json` as runtime state.
 - The approval artifact should bind candidate id/path, candidate hash, active-before pointer path/hash/content, regression result hash, approved evaluator operation, expiry, and rollback pointer data.
 - Never let a newly optimized evaluator silently replace the active scorer in the same run that produced it.
 
@@ -477,12 +590,13 @@ bin/hermes-self-improve gepa-optimize \
 **Docs should say:**
 
 - DSPy/GEPA is a required dependency for the full self-improvement evaluator path, not a nice-to-have optional feature.
-- DSPy/GEPA package dependencies are separate from provider credentials: the plugin uses Hermes-authenticated provider routing and should not ask users to configure OpenAI/Anthropic API keys in plugin config.
+- DSPy/GEPA package dependencies are separate from provider credentials: the plugin uses Hermes-authenticated provider routing through local `config.yaml` `model.llm` / `model.gepa`, and should not ask users to configure OpenAI/Anthropic API keys in repo-tracked files.
+- `config.example.yaml` is git-managed; operator `config.yaml` / `config.local.yaml` are ignored. Do not add `.env.example` / `.env` for this feature; use `${ENV}` references in local YAML if a custom endpoint secret is needed.
 - Hook/plugin discovery still lazy-imports DSPy so lightweight observation and safety gates do not depend on optimizer startup cost.
 - `--scorer gepa` should prefer compiled/live DSPy modes and report clearly if the required dependency is missing from the active runtime.
 - GEPA remains advisory and cannot authorize auto-apply.
 - GEPA/LLM comparison is the default decision input. `report`, `run`, and `generate-apply-plan` should default to compare for decision-producing output, while lightweight `analyze` may remain heuristic. Disagreement blocks unattended apply and routes the proposal to human review or approval gates.
-- The default LLM source for DSPy program eval / GEPA optimize is Hermes auxiliary model routing. `reflection_model` and `task_model` may override model names only; provider selection belongs to Hermes configuration, not this plugin.
+- The default LLM source for DSPy program eval / GEPA optimize is plugin-local `model.gepa` routed through Hermes `agent.auxiliary_client.call_llm(...)`; provider selection is allowed in local `config.yaml` but not in repo-tracked secrets or global Hermes root `model.*`.
 - Disagreement materiality is policy-configurable by change type. Risk/recommendation disagreement always blocks unattended apply; score/confidence thresholds can be looser for low-risk prose additions and stricter for memory / lifecycle / destructive / broad changes.
 
 **Progress (2026-04-28):** Documentation has been reconciled across `README.md`, `AGENTS.md`, `skills/operations/SKILL.md`, and safety/architecture references. The docs now describe DSPy/GEPA as evaluator-path required but lazy-imported, provider credentials as Hermes-owned, `compare` defaults for decision commands, `gepa-optimize` as report-only artifact generation, and active evaluator promotion as an approval-gated pointer update. Task 6.6 is also pinned in tests: parser defaults keep `report` / `run` / `generate-apply-plan` on `compare`, keep `analyze` on `heuristic`, and apply-plan eligibility now blocks low-risk unattended apply when the scorer is not `compare-v0.1`.
@@ -491,20 +605,22 @@ bin/hermes-self-improve gepa-optimize \
 
 1. Commit this plan.
 2. Add packaging / required dependency metadata.
-3. Refactor naming so `offline_program_eval` is clearly not the real optimizer.
-4. Add tests for dependency detection and clearer error modes.
-5. Add real DSPy module behind lazy import.
-6. Add metric and eval-case conversion.
-7. Add `gepa-optimize` CLI with fake-DSPy tests first.
-8. Run one real local optimizer smoke only after DSPy is installed and Hermes-authenticated LLM routing is confirmed.
-9. Wire compiled artifact into `--scorer gepa`.
-10. Update docs and tool parity.
+3. Add plugin-local YAML config support: track `config.example.yaml`, ignore `config.yaml` / `config.local.yaml`, support `${ENV}` expansion, and do not add `.env` / `.env.example`.
+4. Refactor naming so `offline_program_eval` is clearly not the real optimizer.
+5. Add tests for dependency detection and clearer error modes.
+6. Add real DSPy module behind lazy import.
+7. Add metric and eval-case conversion.
+8. Add `gepa-optimize` CLI with fake-DSPy tests first.
+9. Run one real local optimizer smoke only after DSPy is installed and Hermes-authenticated LLM routing is confirmed.
+10. Wire compiled artifact into `--scorer gepa`.
+11. Update docs and tool parity.
 
 ## Acceptance criteria
 
 - `python3 -m pytest tests -q` passes in the repository test environment, with unit tests avoiding live LLM/network by using fakes or dependency injection.
 - Hook/plugin discovery import paths do not import DSPy eagerly.
 - `python3 -m pip install -e .` installs `dspy` as a required project dependency.
+- `config.example.yaml` is tracked, `config.yaml` / `config.local.yaml` are ignored, plugin config supports YAML plus `${ENV}` expansion, and no `.env.example` / `.env` is required for the model config path.
 - `bin/hermes-self-improve gepa-eval --json` uses real DSPy when evaluating the user-facing GEPA path; deterministic behavior is confined to fake-DSPy tests / fixtures.
 - A fake-DSPy test proves `gepa-optimize` calls `dspy.GEPA(...).compile(student, trainset=..., valset=...)` with metric and budget.
 - A real-DSPy optional smoke can run when DSPy is installed and Hermes-authenticated LLM routing is available.
@@ -516,7 +632,7 @@ bin/hermes-self-improve gepa-optimize \
 
 - DSPy API surface may shift. Keep all DSPy imports and API calls in a small adapter boundary.
 - GEPA optimizer runs can be expensive. Require explicit budget and never call from hooks or default cron.
-- Provider credentials are managed by Hermes, not by this plugin. Artifact redaction should still treat config summaries as sensitive enough to redact any accidental key-like values.
+- Provider credentials are resolved through Hermes-authenticated routing and local `config.yaml`; repo-tracked `config.example.yaml` must contain placeholders only. Artifact redaction should still treat config summaries as sensitive enough to redact any accidental key-like values.
 - Optimized scorer output can look authoritative. Keep mutation gates independent of score.
 
 ## Immediate next slice
@@ -524,7 +640,7 @@ bin/hermes-self-improve gepa-optimize \
 Implementation progress as of 2026-04-28:
 
 - Added `pyproject.toml` with `dspy>=3.1,<4` as the plugin's only direct runtime dependency; OpenAI/Anthropic provider extras were removed so provider choice remains a Hermes configuration concern.
-- Changed repo default `gepa_scorer.mode` from `offline_program_eval` to `dspy_program_eval`, added compiled/evaluator config placeholders, and updated the plan to use `llm_source: "hermes_auxiliary"` with `reflection_model` / `task_model` as model-name overrides only.
+- Earlier work changed repo default `gepa_scorer.mode` from `offline_program_eval` to `dspy_program_eval`, added compiled/evaluator config placeholders, and used `llm_source: "hermes_auxiliary"` with `reflection_model` / `task_model` as model-name overrides only. This is superseded by the updated local YAML config direction: use `model.llm` / `model.gepa` in plugin `config.yaml`, track only `config.example.yaml`, and keep `gepa_scorer` focused on evaluator mode/policy.
 - User-facing `--scorer gepa` now fails closed for missing DSPy or unimplemented real DSPy/compiled paths instead of silently using the deterministic offline scaffold.
 - `gepa-eval` remains as a dependency-free regression fixture and reports `dspy_available` / `dspy_required_for_runtime_gepa` so operators can distinguish fixture checks from runtime evaluator readiness.
 - `status` reports `gepa_scorer_mode` and `dspy_available`.
