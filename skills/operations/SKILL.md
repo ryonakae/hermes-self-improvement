@@ -99,7 +99,7 @@ bin/hermes-self-improve gepa-eval --json
 $PY -m pytest tests/test_gepa_eval_assets.py tests/test_gepa_eval_cli.py tests/test_gepa_offline_scorer.py -q
 ```
 
-Registration / discovery 変更後:
+Registration / discovery / plugin tool surface 変更後:
 
 ```bash
 PY=${PYTHON:-python3}
@@ -113,7 +113,7 @@ print(json.dumps(info, ensure_ascii=False, indent=2))
 PY
 ```
 
-Expected: enabled true, error null, hooks > 0。
+Expected: enabled true, error null, hooks > 0。Tool を追加・削除した場合は `plugin.yaml`、`hermes_self_improvement/schemas.py`、`hermes_self_improvement/tool_handlers.py`、root/package `__init__.py` の handler map、`tests/test_plugin_tools.py` を同時に更新し、既存 tests に hard-coded tool count assertion がないか検索して期待値も合わせる。Discovery output の `tools` count も確認する。
 
 ## 詳細 reference
 
