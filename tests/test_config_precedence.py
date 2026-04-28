@@ -163,6 +163,9 @@ def test_config_example_yaml_is_parseable():
 
     assert config["model"]["llm"]["provider"] == "auto"
     assert config["model"]["gepa"]["timeout"] == 120
+    assert config["apply_policy"]["max_risk"] == "low"
+    assert config["apply_policy"]["allowed_target_kinds"] == ["skill", "memory"]
+    assert config["calibration"]["evidence"]["min_evidence_events"] == 20
 
 
 def test_local_operator_configs_are_gitignored():

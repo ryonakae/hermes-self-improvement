@@ -16,33 +16,45 @@ if str(_PLUGIN_DIR) not in sys.path:
 
 try:  # pragma: no cover - package import path
     from .config import (
+        DEFAULT_CALIBRATION,
         DEFAULT_EXECUTION_MODE,
+        DEFAULT_APPLY_POLICY,
         DEFAULT_MODE_POLICY,
         DEFAULT_PREVIEW_CHARS,
         DEFAULT_RETENTION_DAYS,
         RESERVED_EXECUTION_MODES,
+        RISK_ORDER,
         VALID_EXECUTION_MODES,
         _load_config,
         _mode_policy_from_config,
         _required_capability_for_command,
+        apply_policy_allows_item,
         get_hermes_home,
         load_config,
+        normalize_apply_policy,
+        normalize_calibration_config,
         resolve_execution_mode,
         validate_mode_action,
     )
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from config import (
+        DEFAULT_CALIBRATION,
         DEFAULT_EXECUTION_MODE,
+        DEFAULT_APPLY_POLICY,
         DEFAULT_MODE_POLICY,
         DEFAULT_PREVIEW_CHARS,
         DEFAULT_RETENTION_DAYS,
         RESERVED_EXECUTION_MODES,
+        RISK_ORDER,
         VALID_EXECUTION_MODES,
         _load_config,
         _mode_policy_from_config,
         _required_capability_for_command,
+        apply_policy_allows_item,
         get_hermes_home,
         load_config,
+        normalize_apply_policy,
+        normalize_calibration_config,
         resolve_execution_mode,
         validate_mode_action,
     )
@@ -120,6 +132,11 @@ def _register_tools(ctx) -> None:
             description=schema.get("description", ""),
             emoji="🛡️",
         )
+try:  # pragma: no cover - package import path
+    from .apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash
+except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
+    from apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash
+
 try:  # pragma: no cover - package import path
     from .observer import (
         RuntimeObserver,

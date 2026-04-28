@@ -23,6 +23,26 @@ DEFAULT_PREVIEW_CHARS = 1000
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_EXECUTION_MODE = "report_only"
 ENV_CONFIG_PATH = "HERMES_SELF_IMPROVE_CONFIG"
+RISK_ORDER = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+DEFAULT_APPLY_POLICY = {
+    "max_risk": "low",
+    "allow_destructive": False,
+    "allowed_target_kinds": ["skill", "memory"],
+    "allowed_change_types": [],
+    "denied_change_types": [],
+}
+DEFAULT_CALIBRATION = {
+    "enabled": True,
+    "evidence": {
+        "window_days": 30,
+        "min_evidence_events": 20,
+        "min_disagreements": 5,
+        "min_bad_outcomes": 2,
+    },
+    "optimizer": {
+        "max_full_evals": 2,
+    },
+}
 VALID_EXECUTION_MODES = {
     "report_only",
     "dry_run_plan",
@@ -89,6 +109,8 @@ def _default_config() -> dict[str, Any]:
         "custom_skill_roots": [str(get_hermes_home() / "skills")],
         "execution_mode": DEFAULT_EXECUTION_MODE,
         "allow_policy_expansion": False,
+        "apply_policy": copy.deepcopy(DEFAULT_APPLY_POLICY),
+        "calibration": copy.deepcopy(DEFAULT_CALIBRATION),
         "mode_policy": copy.deepcopy(DEFAULT_MODE_POLICY),
         "model": {
             "llm": {
@@ -277,6 +299,89 @@ def _sanitize_mode_policy(policy: Any, *, allow_expansion: bool) -> dict[str, An
     return merged
 
 
+def normalize_apply_policy(config: dict[str, Any] | None) -> dict[str, Any]:
+    """Return a normalized normal-apply policy with fail-closed defaults."""
+    raw_policy = config.get("apply_policy") if isinstance(config, dict) else config
+    if not isinstance(raw_policy, dict):
+        raw_policy = {}
+    policy = _deep_merge(copy.deepcopy(DEFAULT_APPLY_POLICY), raw_policy)
+
+    max_risk = str(policy.get("max_risk") or DEFAULT_APPLY_POLICY["max_risk"]).lower()
+    if max_risk not in RISK_ORDER:
+        max_risk = "low"
+    policy["max_risk"] = max_risk
+    policy["allow_destructive"] = bool(policy.get("allow_destructive", False))
+    for key in ("allowed_target_kinds", "allowed_change_types", "denied_change_types"):
+        values = policy.get(key)
+        if values is None:
+            values = []
+        if isinstance(values, (str, bytes)):
+            values = [values]
+        if not isinstance(values, list):
+            values = []
+        policy[key] = [str(value) for value in values if value not in (None, "")]
+    return policy
+
+
+def _item_field(item: dict[str, Any], *names: str, default: Any = None) -> Any:
+    for name in names:
+        if name in item:
+            return item.get(name)
+    return default
+
+
+def apply_policy_allows_item(item: dict[str, Any], policy: dict[str, Any] | None) -> tuple[bool, list[str]]:
+    """Evaluate whether a planned item is allowed by normal apply_policy.
+
+    This is deliberately independent from legacy execution modes. Missing or
+    unknown risk/target/change data fails closed so the planner/apply engine can
+    surface a clear skip reason instead of mutating ambiguous targets.
+    """
+    item = item if isinstance(item, dict) else {}
+    normalized_policy = normalize_apply_policy({"apply_policy": policy or {}})
+    reasons: list[str] = []
+
+    risk = str(_item_field(item, "risk", "risk_level", default="") or "").lower()
+    max_risk = normalized_policy["max_risk"]
+    if risk not in RISK_ORDER:
+        reasons.append("unknown_risk")
+    elif RISK_ORDER[risk] > RISK_ORDER[max_risk]:
+        reasons.append("risk_exceeds_max")
+
+    if bool(_item_field(item, "destructive", "is_destructive", default=False)) and not normalized_policy["allow_destructive"]:
+        reasons.append("destructive_not_allowed")
+
+    target_kind = str(_item_field(item, "target_kind", "kind", default="") or "")
+    allowed_target_kinds = set(normalized_policy.get("allowed_target_kinds") or [])
+    if allowed_target_kinds and target_kind not in allowed_target_kinds:
+        reasons.append("target_kind_not_allowed")
+
+    change_type = str(_item_field(item, "change_type", "type", default="") or "")
+    denied_change_types = set(normalized_policy.get("denied_change_types") or [])
+    allowed_change_types = set(normalized_policy.get("allowed_change_types") or [])
+    if change_type in denied_change_types:
+        reasons.append("change_type_denied")
+    elif allowed_change_types and change_type not in allowed_change_types:
+        reasons.append("change_type_not_allowed")
+
+    return not reasons, reasons
+
+
+def normalize_calibration_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    """Return calibration config normalized around evaluator/scorer tuning only."""
+    raw = config.get("calibration") if isinstance(config, dict) else config
+    if not isinstance(raw, dict):
+        raw = {}
+    calibration = _deep_merge(copy.deepcopy(DEFAULT_CALIBRATION), raw)
+    calibration["enabled"] = bool(calibration.get("enabled", True))
+    evidence = calibration.get("evidence") if isinstance(calibration.get("evidence"), dict) else {}
+    calibration["evidence"] = _deep_merge(copy.deepcopy(DEFAULT_CALIBRATION["evidence"]), evidence)
+    optimizer = calibration.get("optimizer") if isinstance(calibration.get("optimizer"), dict) else {}
+    calibration["optimizer"] = _deep_merge(copy.deepcopy(DEFAULT_CALIBRATION["optimizer"]), optimizer)
+    calibration.pop("regression", None)
+    return calibration
+
+
 def _normalize_model_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(config)
     model = copy.deepcopy(normalized.get("model") if isinstance(normalized.get("model"), dict) else {})
@@ -305,6 +410,8 @@ def _normalize_model_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = _normalize_model_config(config)
+    normalized["apply_policy"] = normalize_apply_policy(normalized)
+    normalized["calibration"] = normalize_calibration_config(normalized)
     normalized["allow_policy_expansion"] = bool(normalized.get("allow_policy_expansion", False))
     normalized["mode_policy"] = _sanitize_mode_policy(
         normalized.get("mode_policy"),

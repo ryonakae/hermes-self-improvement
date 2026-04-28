@@ -227,12 +227,12 @@ Compiled evaluator の active 化は `evaluator_promote` change type の approva
 
 ```bash
 cd /path/to/hermes-self-improvement
-PY=${PYTHON:-python3}
+uv sync --group dev
+PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
 bin/hermes-self-improve status
 bin/hermes-self-improve gepa-eval --json
-python3 -m pip install -e .  # full DSPy/GEPA evaluator path を使う環境では必要
 ```
 
 plugin registration、tool schema、bundled skill discovery を触ったら plugin manager loading も確認します。

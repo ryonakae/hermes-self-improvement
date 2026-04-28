@@ -11,5 +11,10 @@ dependencies = [
   "dspy>=3.1,<4",
 ]
 
+[dependency-groups]
+dev = [
+  "pytest>=9,<10",
+]
+
 [tool.setuptools]
 packages = ["hermes_self_improvement"]

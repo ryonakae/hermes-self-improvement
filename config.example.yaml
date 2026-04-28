@@ -3,6 +3,26 @@
 # Do not commit real API keys or provider secrets. For custom endpoints, prefer
 # ${ENV_VAR} references in the local file.
 
+apply_policy:
+  max_risk: low
+  allow_destructive: false
+  allowed_target_kinds:
+    - skill
+    - memory
+  # Empty allowed_change_types means all non-denied normal change types.
+  allowed_change_types: []
+  denied_change_types: []
+
+calibration:
+  enabled: true
+  evidence:
+    window_days: 30
+    min_evidence_events: 20
+    min_disagreements: 5
+    min_bad_outcomes: 2
+  optimizer:
+    max_full_evals: 2
+
 model:
   llm:
     provider: auto

@@ -92,7 +92,8 @@ Top-level `hermes self-improvement ...` は Hermes version / plugin discovery �
 通常変更後:
 
 ```bash
-PY=${PYTHON:-python3}
+uv sync --group dev
+PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
 bin/hermes-self-improve status
