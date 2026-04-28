@@ -22,6 +22,7 @@ bin/hermes-self-improve status
 bin/hermes-self-improve analyze --since-hours 24 --json
 bin/hermes-self-improve report --since-hours 24
 bin/hermes-self-improve run --since-hours 24 --json
+bin/hermes-self-improve calibrate
 bin/hermes-self-improve plan --since-hours 24
 bin/hermes-self-improve gepa-eval --json
 ```

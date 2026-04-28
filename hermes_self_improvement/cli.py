@@ -13,6 +13,7 @@ try:  # pragma: no cover - package import path
     from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
     from .apply_engine import apply_plan
     from .apply_plan import build_apply_plan, write_apply_plan
+    from .calibration import run_calibration
     from .config import (
         DEFAULT_RETENTION_DAYS,
         VALID_EXECUTION_MODES,
@@ -30,6 +31,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
     from apply_engine import apply_plan
     from apply_plan import build_apply_plan, write_apply_plan
+    from calibration import run_calibration
     from config import (
         DEFAULT_RETENTION_DAYS,
         VALID_EXECUTION_MODES,
@@ -825,6 +827,26 @@ def _render_apply_result_summary(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _render_calibration_summary(result: dict[str, Any]) -> str:
+    evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
+    lines = [
+        f"Calibration: {result.get('current_status')}",
+        "Evidence: "
+        f"{int(evidence.get('total_events') or 0)} events, "
+        f"{int(evidence.get('disagreements') or 0)} disagreements, "
+        f"{int(evidence.get('bad_outcomes') or 0)} bad outcomes",
+    ]
+    reasons = result.get("reasons") if isinstance(result.get("reasons"), list) else []
+    if reasons:
+        lines.append("Reason: " + ", ".join(str(reason) for reason in reasons))
+    regression = result.get("regression") if isinstance(result.get("regression"), dict) else None
+    if regression:
+        lines.append(f"Regression: {regression.get('status')}")
+    if result.get("active_evaluator_path"):
+        lines.append(f"Active evaluator: {result.get('active_evaluator_path')}")
+    return "\n".join(lines)
+
+
 def _setup_cli(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="self_improvement_cmd")
     p_status = sub.add_parser("status", help="Show observer status")
@@ -916,6 +938,11 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_plan.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_plan)
     p_plan.set_defaults(func=_handle_cli)
+    p_calibrate = sub.add_parser("calibrate", help="Preview evaluator/scorer calibration from recent evidence")
+    p_calibrate.add_argument("--execute", action="store_true", help="Promote calibration only when implemented regression gates pass")
+    p_calibrate.add_argument("--json", action="store_true", dest="as_json")
+    _add_config_argument(p_calibrate)
+    p_calibrate.set_defaults(func=_handle_cli)
     p_apply = sub.add_parser("apply", help="Preview or execute an ordered improvement plan")
     p_apply.add_argument("plan_id")
     p_apply.add_argument("--items", dest="item_ids", default=None, help="Comma-separated plan item ids to apply, e.g. step-001,step-002")
@@ -944,7 +971,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
     config = load_config(Path(__file__).resolve().parents[1] / "config.json", cli_config_path=getattr(args, "config_path", None))
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
     execution_mode = resolve_execution_mode(config, getattr(args, "mode", None))
-    mode_decision = {"allowed": True, "reason": "simplified_surface"} if cmd in {"plan", "apply"} else validate_mode_action(
+    mode_decision = {"allowed": True, "reason": "simplified_surface"} if cmd in {"plan", "apply", "calibrate"} else validate_mode_action(
         execution_mode,
         cmd,
         required_capability=_required_capability_for_command(cmd),
@@ -1102,6 +1129,13 @@ def _handle_cli(args: argparse.Namespace) -> None:
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
             print(_render_apply_plan_summary(plan, path))
+        return
+    if cmd == "calibrate":
+        payload = run_calibration(config=config, execute=bool(getattr(args, "execute", False)))
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(_render_calibration_summary(payload))
         return
     if cmd == "apply":
         payload = apply_plan(

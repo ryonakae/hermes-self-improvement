@@ -56,6 +56,7 @@ bin/hermes-self-improve status
 bin/hermes-self-improve analyze --since-hours 24
 bin/hermes-self-improve report --since-hours 24 --scorer compare
 bin/hermes-self-improve run --since-hours 24 --json --scorer compare
+bin/hermes-self-improve calibrate
 bin/hermes-self-improve plan --since-hours 24 --scorer compare
 bin/hermes-self-improve apply <plan-id>
 bin/hermes-self-improve apply <plan-id> --items step-001,step-002

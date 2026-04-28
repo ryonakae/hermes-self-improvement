@@ -38,6 +38,7 @@ bin/hermes-self-improve status
 bin/hermes-self-improve analyze --since-hours 24 --json
 bin/hermes-self-improve report --since-hours 24 --json
 bin/hermes-self-improve run --since-hours 24 --json
+bin/hermes-self-improve calibrate
 ```
 
 apply plan と review 系です。
@@ -54,6 +55,8 @@ bin/hermes-self-improve retention-report --mode report_only --json
 ```
 
 `apply` は既定で preview です。実変更は `--execute` を付けた場合だけ行い、item hash / target hash は内部で検証します。policy で許可されない item や review が必要な item は適用されません。
+
+`calibrate` は evaluator/scorer 改善の evidence を集め、既定では preview として `no_op` / `would_update` を返します。現段階の `--execute` は regression/promotion 実装前なので active evaluator は変更しません。
 
 旧 guarded command は互換用に残っています。直接使う場合は、preview を見てから hash を渡します。
 

@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+import argparse
+import importlib
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
+PLUGIN_DIR = Path(__file__).resolve().parents[1]
+
+
+def load_plugin_module():
+    spec = importlib.util.spec_from_file_location("hermes_self_improvement_calibration_under_test", PLUGIN_INIT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_cli_module():
+    parent = str(PLUGIN_DIR)
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+    return importlib.import_module("hermes_self_improvement.cli")
+
+
+def parse_args(argv: list[str]):
+    cli = load_cli_module()
+    parser = argparse.ArgumentParser()
+    cli._setup_cli(parser)
+    return parser.parse_args(argv)
+
+
+def write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def base_config(tmp_path: Path, **calibration_overrides):
+    calibration = {
+        "enabled": True,
+        "evidence": {
+            "window_days": 30,
+            "min_evidence_events": 1,
+            "min_disagreements": 2,
+            "min_bad_outcomes": 2,
+        },
+    }
+    for key, value in calibration_overrides.items():
+        calibration[key] = value
+    return {"reports_dir": str(tmp_path / "reports"), "calibration": calibration}
+
+
+def test_calibration_disabled_returns_no_op(tmp_path):
+    mod = load_plugin_module()
+
+    result = mod.run_calibration(config=base_config(tmp_path, enabled=False), execute=False)
+
+    assert result["schema_name"] == "self_improvement_calibration_result"
+    assert result["current_status"] == "no_op"
+    assert result["active_changed"] is False
+    assert "calibration_disabled" in result["reasons"]
+
+
+def test_calibration_insufficient_evidence_returns_no_op(tmp_path):
+    mod = load_plugin_module()
+
+    result = mod.run_calibration(config=base_config(tmp_path), execute=False)
+
+    assert result["current_status"] == "no_op"
+    assert result["evidence_summary"]["total_events"] == 0
+    assert "insufficient_evidence" in result["reasons"]
+
+
+def test_calibration_disagreement_threshold_requests_candidate(tmp_path):
+    mod = load_plugin_module()
+    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    write_json(
+        plan_path,
+        {
+            "schema_name": "self_improvement_apply_plan",
+            "plan_id": "plan-disagree",
+            "items": [
+                {"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]},
+            ],
+        },
+    )
+
+    result = mod.run_calibration(config=base_config(tmp_path), execute=False)
+
+    assert result["current_status"] == "would_update"
+    assert result["evidence_summary"]["disagreements"] == 2
+    assert result["candidate"]["reason"] == "scorer_disagreements"
+    assert result["active_changed"] is False
+
+
+def test_calibration_bad_outcome_threshold_requests_candidate(tmp_path):
+    mod = load_plugin_module()
+    ledger_path = tmp_path / "reports" / "ledgers" / "2026-04-28" / "ledger.json"
+    write_json(
+        ledger_path,
+        {
+            "schema_name": "self_improvement_apply_ledger",
+            "operation": "apply",
+            "summary": {"applied": 1, "skipped_by_policy": 0, "failed": 2},
+            "items": [
+                {"item_id": "step-001", "status": "failed"},
+                {"item_id": "step-002", "status": "failed"},
+            ],
+        },
+    )
+
+    result = mod.run_calibration(config=base_config(tmp_path), execute=False)
+
+    assert result["current_status"] == "would_update"
+    assert result["evidence_summary"]["bad_outcomes"] == 2
+    assert result["candidate"]["reason"] == "bad_outcomes"
+
+
+def test_calibration_preview_does_not_write_active_pointer(tmp_path):
+    mod = load_plugin_module()
+    active_pointer = tmp_path / "reports" / "gepa" / "active-evaluator.json"
+    plan_path = tmp_path / "reports" / "apply-plans" / "2026-04-28" / "plan.json"
+    write_json(
+        plan_path,
+        {
+            "schema_name": "self_improvement_apply_plan",
+            "plan_id": "plan-disagree",
+            "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
+        },
+    )
+    cfg = base_config(tmp_path, active_evaluator_pointer_path=str(active_pointer))
+
+    result = mod.run_calibration(config=cfg, execute=False)
+
+    assert result["current_status"] == "would_update"
+    assert active_pointer.exists() is False
+    assert result["active_changed"] is False
+
+
+def test_calibrate_command_uses_simplified_surface_without_mode_or_hash_flags():
+    args = parse_args(["calibrate", "--execute"])
+
+    assert args.self_improvement_cmd == "calibrate"
+    assert args.execute is True
+    assert not hasattr(args, "mode")
+    assert not hasattr(args, "expected_item_hash")
+    assert not hasattr(args, "confirm_apply")
+
+
+def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, capsys):
+    cli = load_cli_module()
+    calls = []
+    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"reports_dir": str(tmp_path / "reports")})
+
+    def fake_run_calibration(**kwargs):
+        calls.append(kwargs)
+        return {
+            "schema_name": "self_improvement_calibration_result",
+            "execute": kwargs["execute"],
+            "current_status": "no_op",
+            "reasons": ["insufficient_evidence"],
+            "evidence_summary": {"total_events": 8, "disagreements": 2, "bad_outcomes": 0},
+            "candidate": None,
+            "regression": None,
+            "active_changed": False,
+        }
+
+    monkeypatch.setattr(cli, "run_calibration", fake_run_calibration)
+    args = parse_args(["calibrate"])
+
+    cli._handle_cli(args)
+
+    assert calls == [{"config": {"reports_dir": str(tmp_path / "reports")}, "execute": False}]
+    out = capsys.readouterr().out
+    assert "Calibration: no_op" in out
+    assert "Evidence: 8 events, 2 disagreements, 0 bad outcomes" in out
+    assert "Reason: insufficient_evidence" in out
