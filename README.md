@@ -43,6 +43,7 @@ bin/hermes-self-improve run --since-hours 24 --json
 apply plan と review 系です。
 
 ```bash
+bin/hermes-self-improve plan --since-hours 24
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
 bin/hermes-self-improve ledger-report --mode report_only --status all --json
 bin/hermes-self-improve approval-report --mode report_only --status all --include-previews --json
@@ -180,7 +181,7 @@ Mutation-capable tools も CLI と同じ confirmation と expected hash を要�
 - `gepa`: DSPy / GEPA evaluator path。`dspy` はこの plugin の evaluator 依存として必須だが、hook / plugin discovery では lazy import する。dependency-free offline baseline には黙って戻さない。
 - `compare`: LLM と GEPA の disagreement を report に出す decision scorer。
 
-`report`、`run`、`generate-apply-plan` は、明示的に `--scorer` を渡さない限り `compare` を使います。`analyze` は観測・分類なので軽量な `heuristic` のままです。`--scorer gepa` は dependency-free offline baseline にフォールバックしません。active runtime に `dspy` が無い場合は `gepa_scorer_error` として明示します。`generate-apply-plan` では、disagreement がなくても non-compare scorer の低リスク item は unattended apply eligible にせず、review / approval 側に倒します。
+`report`、`run`、`plan`、`generate-apply-plan` は、明示的に `--scorer` を渡さない限り `compare` を使います。`analyze` は観測・分類なので軽量な `heuristic` のままです。`--scorer gepa` は dependency-free offline baseline にフォールバックしません。active runtime に `dspy` が無い場合は `gepa_scorer_error` として明示します。`plan` / `generate-apply-plan` では、disagreement がなくても non-compare scorer の低リスク item は unattended apply eligible にせず、review / approval 側に倒します。
 
 `compare` の disagreement 判定は `scorer_comparison_policy` で change type ごとに調整します。risk / recommendation mismatch は常に block、memory / lifecycle / destructive / broad change は strict threshold、`typo_fix` / `pitfall_addition_existing_section` / `validation_addition_existing_section` は少し緩い score / confidence threshold を使います。`generate-apply-plan` は `scorer_disagreements` と `scorer_comparison_policy` を item に残し、disagreement がある item は unattended eligible にしません。
 

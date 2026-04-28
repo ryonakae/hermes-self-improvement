@@ -56,6 +56,7 @@ bin/hermes-self-improve status
 bin/hermes-self-improve analyze --since-hours 24
 bin/hermes-self-improve report --since-hours 24 --scorer compare
 bin/hermes-self-improve run --since-hours 24 --json --scorer compare
+bin/hermes-self-improve plan --since-hours 24 --scorer compare
 bin/hermes-self-improve gepa-eval --json
 bin/hermes-self-improve gepa-optimize --mode report_only --trainset evals/proposal_eval_cases.jsonl --valset evals/proposal_eval_cases.jsonl --max-full-evals 2 --json
 bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json --scorer compare

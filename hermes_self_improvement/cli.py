@@ -755,6 +755,15 @@ def run_pipeline(
     return out
 
 
+def _add_config_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--config",
+        dest="config_path",
+        default=None,
+        help="Explicit config JSON/YAML path; overrides config.local.yaml and HERMES_SELF_IMPROVE_CONFIG",
+    )
+
+
 def _add_mode_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--mode",
@@ -762,12 +771,33 @@ def _add_mode_argument(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Execution mode enforced by the plugin policy validator",
     )
-    parser.add_argument(
-        "--config",
-        dest="config_path",
-        default=None,
-        help="Explicit config JSON path; overrides config.local.json and HERMES_SELF_IMPROVE_CONFIG",
-    )
+    _add_config_argument(parser)
+
+
+def _render_apply_plan_summary(plan: dict[str, Any], path: str | Path) -> str:
+    items = plan.get("items") if isinstance(plan.get("items"), list) else []
+    counts = {"ready": 0, "needs_review": 0, "rejected_by_planner": 0}
+    target_counts: dict[str, int] = {}
+    for item in items:
+        status = str(item.get("status") or "needs_review")
+        if status in counts:
+            counts[status] += 1
+        target_kind = str(item.get("target_kind") or item.get("target") or "unknown")
+        target_counts[target_kind] = target_counts.get(target_kind, 0) + 1
+    lines = [
+        f"Plan written: {path}",
+        f"Plan id: {plan.get('plan_id')}",
+        f"Ready improvements: {counts['ready']}",
+        f"Needs review: {counts['needs_review']}",
+        f"Rejected by planner: {counts['rejected_by_planner']}",
+        "Top targets:",
+    ]
+    if target_counts:
+        for target_kind, count in sorted(target_counts.items(), key=lambda pair: (-pair[1], pair[0]))[:5]:
+            lines.append(f"- {target_kind}: {count}")
+    else:
+        lines.append("- none: 0")
+    return "\n".join(lines)
 
 
 def _setup_cli(parser: argparse.ArgumentParser) -> None:
@@ -855,6 +885,12 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_apply_plan.add_argument("--json", action="store_true", dest="as_json")
     _add_mode_argument(p_apply_plan)
     p_apply_plan.set_defaults(func=_handle_cli)
+    p_plan = sub.add_parser("plan", help="Generate an ordered improvement plan artifact")
+    p_plan.add_argument("--since-hours", type=int, default=24)
+    p_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
+    p_plan.add_argument("--json", action="store_true", dest="as_json")
+    _add_config_argument(p_plan)
+    p_plan.set_defaults(func=_handle_cli)
     p_apply_low_risk = sub.add_parser("apply-low-risk", help="Check or explicitly apply one low-risk apply-plan item")
     p_apply_low_risk.add_argument("plan_id")
     p_apply_low_risk.add_argument("item_id")
@@ -876,7 +912,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
     config = load_config(Path(__file__).resolve().parents[1] / "config.json", cli_config_path=getattr(args, "config_path", None))
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
     execution_mode = resolve_execution_mode(config, getattr(args, "mode", None))
-    mode_decision = validate_mode_action(
+    mode_decision = {"allowed": True, "reason": "simplified_surface"} if cmd == "plan" else validate_mode_action(
         execution_mode,
         cmd,
         required_capability=_required_capability_for_command(cmd),
@@ -1015,7 +1051,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             if payload.get("target_path"):
                 print(f"Target: {payload.get('target_path')}")
         return
-    if cmd == "generate-apply-plan":
+    if cmd in {"generate-apply-plan", "plan"}:
         out = run_pipeline(
             config,
             since_hours=int(getattr(args, "since_hours", 24)),
@@ -1025,7 +1061,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
         plan = build_apply_plan(
             proposals=out.get("proposals") or [],
             summary=out.get("summary") or {},
-            execution_mode=execution_mode,
+            execution_mode="preview" if cmd == "plan" else execution_mode,
             config=config,
         )
         path = write_apply_plan(plan, config)
@@ -1033,9 +1069,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
-            print(f"Apply plan written: {path}")
-            print(f"Plan id: {plan.get('plan_id')}")
-            print(f"Items: {len(plan.get('items') or [])}")
+            print(_render_apply_plan_summary(plan, path))
         return
     if cmd == "apply-low-risk":
         payload = apply_low_risk_skeleton(

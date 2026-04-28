@@ -370,7 +370,7 @@ def _load_apply_plan_by_id(plan_id: str, config: dict[str, Any]) -> tuple[dict[s
 
 def _find_apply_plan_item(plan: dict[str, Any], item_id: str) -> dict[str, Any] | None:
     for item in plan.get("items") or []:
-        if item.get("item_id") == item_id:
+        if item.get("item_id") == item_id or item.get("legacy_item_id") == item_id:
             return item
     return None
 

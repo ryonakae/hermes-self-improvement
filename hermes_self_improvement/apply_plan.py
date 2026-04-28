@@ -15,6 +15,8 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
+PLAN_ITEM_STATUSES = {"ready", "needs_review", "rejected_by_planner"}
+APPLY_RESULT_STATUSES = {"would_apply", "applied", "skipped_by_policy", "failed", "needs_review"}
 
 def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
     explicit = str(proposal.get("change_type") or "").strip()
@@ -757,6 +759,7 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
     )
     approval_only = change_type in _APPROVAL_REQUIRED_CHANGE_TYPES
     eligible_for_unattended = eligibility["status"] == "eligible" and change_type in _LOW_RISK_UNATTENDED_CHANGE_TYPES
+    plan_status = "ready" if eligibility["status"] == "eligible" and mutation is not None and target_path else "needs_review"
     rollback_preview = _rollback_preview_for_item(
         target_path=target_path,
         target_content=target_meta.get("content"),
@@ -765,7 +768,11 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         eligible=eligibility["status"] == "eligible" and (eligible_for_unattended or approval_only),
     )
     item: dict[str, Any] = {
-        "item_id": f"item-{idx}",
+        "item_id": f"step-{idx:03d}",
+        "status": plan_status,
+        "order": idx,
+        "planner_reasons": [],
+        "legacy_item_id": f"item-{idx}",
         "proposal_id": proposal.get("id"),
         "proposal_hash": _sha256_text(_stable_json(proposal)),
         "title": proposal.get("title"),
@@ -800,8 +807,45 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         "mutation": mutation,
         "deferral_reason": "no_concrete_mutation_plan_yet" if mutation is None else None,
     }
-    item["item_hash"] = _sha256_text(_stable_json({k: v for k, v in item.items() if k != "item_hash"}))
+    item["item_hash"] = _hash_apply_plan_item(item)
     return item
+
+
+def _hash_apply_plan_item(item: dict[str, Any]) -> str:
+    return _sha256_text(_stable_json({k: v for k, v in item.items() if k != "item_hash"}))
+
+
+def _mutation_conflict_key(item: dict[str, Any]) -> tuple[Any, ...] | None:
+    if item.get("status") != "ready":
+        return None
+    mutation = item.get("mutation") if isinstance(item.get("mutation"), dict) else None
+    target_path = item.get("target_path")
+    if not target_path or not mutation:
+        return None
+    mutation_type = str(mutation.get("type") or "")
+    if mutation_type == "replace_text_once":
+        return (target_path, mutation_type, mutation.get("old_text"))
+    if mutation_type == "append_to_existing_section":
+        text = str(mutation.get("text") or "").strip()
+        return (target_path, mutation_type, mutation.get("section_heading") or mutation.get("section"), text)
+    return (target_path, mutation_type)
+
+
+def _resolve_plan_conflicts(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: dict[tuple[Any, ...], str] = {}
+    for item in items:
+        key = _mutation_conflict_key(item)
+        if key is None:
+            item["item_hash"] = _hash_apply_plan_item(item)
+            continue
+        if key in seen:
+            item["status"] = "rejected_by_planner"
+            item.setdefault("planner_reasons", []).append("duplicate_mutation_target")
+            item["conflicts_with_item_id"] = seen[key]
+        else:
+            seen[key] = str(item.get("item_id"))
+        item["item_hash"] = _hash_apply_plan_item(item)
+    return items
 
 
 def build_apply_plan(
@@ -820,7 +864,7 @@ def build_apply_plan(
         "proposal_ids": [p.get("id") for p in proposals],
     })
     plan_id = f"apply-plan-{ts.strftime('%Y%m%dT%H%M%SZ')}-{_sha256_text(plan_seed)[:8]}"
-    items = [_build_apply_plan_item(idx, proposal, config) for idx, proposal in enumerate(proposals, 1)]
+    items = _resolve_plan_conflicts([_build_apply_plan_item(idx, proposal, config) for idx, proposal in enumerate(proposals, 1)])
     return {
         "schema_name": "self_improvement_apply_plan",
         "schema_version": "1.0",

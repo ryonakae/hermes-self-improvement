@@ -154,7 +154,9 @@ def test_build_apply_plan_includes_versioned_metadata_and_safe_default_items(tmp
     assert plan["summary"] == {"event_count": 10}
     assert len(plan["items"]) == 1
     item = plan["items"][0]
-    assert item["item_id"] == "item-1"
+    assert item["item_id"] == "step-001"
+    assert item["status"] == "needs_review"
+    assert item["order"] == 1
     assert item["proposal_id"] == "proposal-1"
     assert item["change_type"] == "unknown_or_unclassified"
     assert item["target_kind"] == "skill_or_prompt"
@@ -178,6 +180,64 @@ def test_build_apply_plan_includes_versioned_metadata_and_safe_default_items(tmp
     assert item["proposed_change_summary"] == "Review terminal timeout handling"
     assert item["ledger_preview"]["would_create_pending_ledger"] is False
     assert item["mutation"] is None
+
+
+def test_build_apply_plan_marks_resolved_items_ready_and_orders_steps(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\nUse teh browser carefully. Also fix teh second typo.\n", encoding="utf-8")
+    first = sample_typo_proposal()
+    first["id"] = "proposal-typo-1"
+    first["target_path"] = str(target)
+    first["old_text"] = "teh browser"
+    first["new_text"] = "the browser"
+    second = sample_typo_proposal()
+    second["id"] = "proposal-typo-2"
+    second["target_path"] = str(target)
+    second["old_text"] = "teh second"
+    second["new_text"] = "the second"
+
+    plan = mod.build_apply_plan(
+        proposals=[second, first],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    assert [item["item_id"] for item in plan["items"]] == ["step-001", "step-002"]
+    assert [item["order"] for item in plan["items"]] == [1, 2]
+    assert [item["status"] for item in plan["items"]] == ["ready", "ready"]
+    assert {item["mutation"]["old_text"] for item in plan["items"]} == {"teh browser", "teh second"}
+
+
+def test_build_apply_plan_marks_duplicate_text_edits_rejected_by_planner(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
+    first = sample_typo_proposal()
+    first["id"] = "proposal-duplicate-1"
+    first["target_path"] = str(target)
+    second = sample_typo_proposal()
+    second["id"] = "proposal-duplicate-2"
+    second["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[first, second],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    assert [item["status"] for item in plan["items"]] == ["ready", "rejected_by_planner"]
+    assert "duplicate_mutation_target" in plan["items"][1]["planner_reasons"]
+
+
+def test_apply_result_status_vocabulary_excludes_ambiguous_rejected():
+    mod = load_plugin_module()
+
+    assert mod.PLAN_ITEM_STATUSES == {"ready", "needs_review", "rejected_by_planner"}
+    assert mod.APPLY_RESULT_STATUSES == {"would_apply", "applied", "skipped_by_policy", "failed", "needs_review"}
+    assert "rejected" not in mod.APPLY_RESULT_STATUSES
 
 
 def test_build_apply_plan_classifies_pitfall_proposals_but_keeps_them_ineligible_without_target_metadata():
