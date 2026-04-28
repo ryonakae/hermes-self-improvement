@@ -58,6 +58,8 @@ bin/hermes-self-improve report --since-hours 24 --json
 
 `calibrate` は evaluator/scorer 改善の evidence を集め、既定では preview として `no_op` / `would_update` を返します。`--execute` は regression が pass した場合だけ active evaluator pointer を更新し、active-before snapshot を calibration ledger に残します。regression runner 未設定や regression failure は fail-closed で active evaluator を変更しません。
 
+`report` は観測イベントと proposal 採点に加えて、recent plan summary、recent apply summary、calibration summary、needs-review highlights をまとめます。旧 approval gate summary は表示しません。
+
 ## Safety model
 
 Primary surface の安全境界は `--execute` です。

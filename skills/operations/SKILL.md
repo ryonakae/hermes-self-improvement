@@ -40,8 +40,8 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と low-risk mutation planning。
 - `hermes_self_improvement/calibration.py`: calibration evidence collection、regression-gated active evaluator promotion、calibration rollback。
 - `hermes_self_improvement/ledger.py`: pending ledger と apply attempt artifact。
-- `hermes_self_improvement/approvals.py`: approval artifact generation / validation / report / `apply-approved` preview and guarded apply helpers。plan / item hash / expiry に束縛された承認メタデータを作り、後続 apply のために fail-closed 検証する。実 mutation は explicit confirmation と expected approval/target hashes が揃う場合だけ。
-- `hermes_self_improvement/cli.py`: CLI parser、report rendering、ledger/approval/retention report integration、pipeline orchestration。
+- `hermes_self_improvement/approvals.py`: 旧 approval artifact generation / validation helpers。primary CLI / tool surface からは呼ばず、cleanup で削除候補。
+- `hermes_self_improvement/cli.py`: CLI parser、report rendering、recent plan/apply/calibration summary integration、pipeline orchestration。
 - `bin/hermes-self-improve`: standalone wrapper CLI。
 - `evals/`: GEPA offline scorer の rubric / regression cases。
 - `skills/operations/SKILL.md`: この bundled operational skill。
@@ -67,7 +67,7 @@ bin/hermes-self-improve rollback <ledger-id> --execute
 bin/hermes-self-improve report --since-hours 24 --scorer compare
 ```
 
-Primary CLI / tool surface は `improve / calibrate / plan / apply / rollback / report / status`。`--execute` なしは preview-only。item hash / target hash / ledger hash は internal validation / drift detection / rollback 用で、user-facing option にしない。
+Primary CLI / tool surface は `improve / calibrate / plan / apply / rollback / report / status`。`--execute` なしは preview-only。item hash / target hash / ledger hash は internal validation / drift detection / rollback 用で、user-facing option にしない。`report` は recent plan、recent apply、calibration、needs-review highlights を統合し、旧 approval gate summary は出さない。
 
 Legacy/debug commands (`generate-apply-plan`, `gepa-eval`, `gepa-optimize`, `ledger-report`, `approval-report`, `retention-report`, `retention-prune`, approval/low-risk commands) は CLI / tool surface から外す。内部 helper や古い module が残る場合も primary path から呼ばない。
 

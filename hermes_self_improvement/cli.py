@@ -13,7 +13,7 @@ try:  # pragma: no cover - package import path
     from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
     from .apply_engine import apply_plan, rollback_apply_ledger
     from .apply_plan import build_apply_plan, write_apply_plan
-    from .calibration import run_calibration
+    from .calibration import collect_calibration_evidence, run_calibration
     from .config import (
         DEFAULT_RETENTION_DAYS,
         VALID_EXECUTION_MODES,
@@ -31,7 +31,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
     from apply_engine import apply_plan, rollback_apply_ledger
     from apply_plan import build_apply_plan, write_apply_plan
-    from calibration import run_calibration
+    from calibration import collect_calibration_evidence, run_calibration
     from config import (
         DEFAULT_RETENTION_DAYS,
         VALID_EXECUTION_MODES,
@@ -120,16 +120,155 @@ def _load_ledger_file(path: Path) -> dict[str, Any] | None:
     return data
 
 
+def _load_json_artifact(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(data, dict):
+        return None
+    data["_artifact_path"] = str(path)
+    return data
+
+
+def _apply_plan_files(config: dict[str, Any]) -> list[Path]:
+    root = _reports_dir(config) / "apply-plans"
+    if not root.exists():
+        return []
+    return sorted((p for p in root.glob("**/*.json") if p.is_file()), reverse=True)
+
+
+def _status_counts(items: list[dict[str, Any]], statuses: tuple[str, ...]) -> dict[str, int]:
+    counts = {name: 0 for name in statuses}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("status") or "unknown")
+        if status in counts:
+            counts[status] += 1
+    return counts
+
+
+def _summarize_apply_plan_for_report(plan: dict[str, Any]) -> dict[str, Any]:
+    items = plan.get("items") if isinstance(plan.get("items"), list) else []
+    typed_items = [item for item in items if isinstance(item, dict)]
+    counts = _status_counts(typed_items, ("ready", "needs_review", "rejected_by_planner"))
+    highlights: list[dict[str, Any]] = []
+    for item in typed_items:
+        status = str(item.get("status") or "needs_review")
+        if status not in {"needs_review", "rejected_by_planner"}:
+            continue
+        highlights.append({
+            "item_id": item.get("item_id"),
+            "status": status,
+            "title": item.get("title") or item.get("proposal_title") or item.get("proposal_id"),
+            "target_path": item.get("target_path"),
+            "change_type": item.get("change_type"),
+            "risk": item.get("risk"),
+            "reasons": item.get("reasons") if isinstance(item.get("reasons"), list) else [],
+        })
+        if len(highlights) >= 5:
+            break
+    return {
+        "plan_id": plan.get("plan_id"),
+        "plan_path": plan.get("_artifact_path"),
+        "created_at": plan.get("created_at"),
+        "execution_mode": plan.get("execution_mode"),
+        "item_count": len(typed_items),
+        "status_counts": counts,
+        "needs_review_highlights": highlights,
+    }
+
+
+def build_recent_plan_report_payload(*, config: dict[str, Any], limit: int = 5) -> dict[str, Any]:
+    plans: list[dict[str, Any]] = []
+    for path in _apply_plan_files(config):
+        plan = _load_json_artifact(path)
+        if not plan or plan.get("schema_name") != "self_improvement_apply_plan":
+            continue
+        plans.append(_summarize_apply_plan_for_report(plan))
+        if len(plans) >= limit:
+            break
+    needs_review_count = sum(
+        int((plan.get("status_counts") or {}).get("needs_review") or 0)
+        + int((plan.get("status_counts") or {}).get("rejected_by_planner") or 0)
+        for plan in plans
+    )
+    return {
+        "schema_name": "self_improvement_recent_plan_report",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "limit": limit,
+        "plan_count": len(plans),
+        "needs_review_count": needs_review_count,
+        "plans": plans,
+    }
+
+
+def build_calibration_report_payload(*, config: dict[str, Any], limit: int = 5) -> dict[str, Any]:
+    ledgers: list[dict[str, Any]] = []
+    for path in _ledger_files(config):
+        ledger = _load_ledger_file(path)
+        if not ledger or ledger.get("schema_name") != "self_improvement_calibration_ledger":
+            continue
+        regression = ledger.get("regression") if isinstance(ledger.get("regression"), dict) else {}
+        candidate = ledger.get("candidate") if isinstance(ledger.get("candidate"), dict) else {}
+        ledgers.append({
+            "ledger_id": ledger.get("ledger_id"),
+            "ledger_path": ledger.get("_ledger_path"),
+            "created_at": ledger.get("created_at"),
+            "regression_status": regression.get("status"),
+            "candidate_reason": candidate.get("reason"),
+            "active_pointer_path": ledger.get("active_pointer_path"),
+            "active_before_hash": ledger.get("active_before_hash"),
+            "active_after_hash": ledger.get("active_after_hash"),
+        })
+        if len(ledgers) >= limit:
+            break
+    return {
+        "schema_name": "self_improvement_calibration_report",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "limit": limit,
+        "evidence_summary": collect_calibration_evidence(config),
+        "ledger_count": len(ledgers),
+        "ledgers": ledgers,
+    }
+
+
+def _ledger_current_status(ledger: dict[str, Any]) -> str:
+    if ledger.get("current_status"):
+        return str(ledger.get("current_status"))
+    summary = ledger.get("summary") if isinstance(ledger.get("summary"), dict) else {}
+    if int(summary.get("failed") or 0):
+        return "failed"
+    if int(summary.get("applied") or 0):
+        return "applied"
+    if int(summary.get("would_apply") or 0):
+        return "previewed"
+    if int(summary.get("needs_review") or 0):
+        return "needs_review"
+    if int(summary.get("skipped_by_policy") or 0):
+        return "skipped_by_policy"
+    return "unknown"
+
+
 def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
     review = ledger.get("review_summary") if isinstance(ledger.get("review_summary"), dict) else {}
     validation = ledger.get("validation_result") if isinstance(ledger.get("validation_result"), dict) else {}
     git_metadata = ledger.get("git_metadata") if isinstance(ledger.get("git_metadata"), dict) else {}
+    summary = ledger.get("summary") if isinstance(ledger.get("summary"), dict) else {}
+    items = ledger.get("items") if isinstance(ledger.get("items"), list) else []
+    typed_items = [item for item in items if isinstance(item, dict)]
+    item_status_counts = _status_counts(typed_items, ("would_apply", "applied", "skipped_by_policy", "failed", "needs_review"))
     return {
         "ledger_id": ledger.get("ledger_id"),
         "ledger_path": ledger.get("_ledger_path"),
         "created_at": ledger.get("created_at"),
-        "current_status": ledger.get("current_status"),
-        "title": review.get("title") or ledger.get("proposal_id"),
+        "operation": ledger.get("operation"),
+        "current_status": _ledger_current_status(ledger),
+        "plan_id": ledger.get("plan_id"),
+        "title": review.get("title") or ledger.get("proposal_id") or ledger.get("plan_id"),
         "target_path": ledger.get("target_path"),
         "change_type": review.get("change_type") or ledger.get("change_type"),
         "risk": review.get("risk") or ledger.get("risk"),
@@ -139,22 +278,26 @@ def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
         "recommendation": review.get("recommendation") or ledger.get("recommendation"),
         "validation_status": review.get("validation_status") or validation.get("status"),
         "evidence_summary": review.get("evidence_summary"),
+        "summary": summary,
+        "item_status_counts": item_status_counts,
         "git_commit_created": review.get("git_commit_created", bool(git_metadata.get("commit_created"))),
         "git_metadata": git_metadata,
         "target_before_hash": ledger.get("target_before_hash"),
         "target_after_hash": ledger.get("target_after_hash"),
         "applied_diff": ledger.get("applied_diff") if isinstance(ledger.get("applied_diff"), dict) else None,
-        "rollback_available": isinstance(ledger.get("rollback_data"), dict),
+        "rollback_available": isinstance(ledger.get("rollback_data"), dict) or any(isinstance(item.get("rollback_data"), dict) for item in typed_items),
     }
 
 
-def build_ledger_report_payload(*, config: dict[str, Any], status: str = "applied", limit: int = 20) -> dict[str, Any]:
+def build_ledger_report_payload(*, config: dict[str, Any], status: str = "applied", limit: int = 20, operation: str | None = None) -> dict[str, Any]:
     selected: list[dict[str, Any]] = []
     for path in _ledger_files(config):
         ledger = _load_ledger_file(path)
         if ledger is None:
             continue
-        current_status = str(ledger.get("current_status") or "unknown")
+        if operation is not None and str(ledger.get("operation") or "") != operation:
+            continue
+        current_status = _ledger_current_status(ledger)
         if status != "all" and current_status != status:
             continue
         selected.append(_summarize_ledger_for_report(ledger))
@@ -165,6 +308,7 @@ def build_ledger_report_payload(*, config: dict[str, Any], status: str = "applie
         "schema_version": "1.0",
         "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
         "status_filter": status,
+        "operation_filter": operation,
         "limit": limit,
         "ledger_count": len(selected),
         "ledgers": selected,
@@ -626,7 +770,7 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operatio
     lines.extend(_render_operational_report_sections(operational_reports))
     lines.extend([
         "## 注意",
-        "- 採点は `--scorer heuristic`、`--scorer llm`、`--scorer gepa`、`--scorer compare` で切り替えます。`report` / `run` / `generate-apply-plan` は既定で `compare`、`analyze` は既定で `heuristic` です。",
+        "- 採点は `--scorer heuristic`、`--scorer llm`、`--scorer gepa`、`--scorer compare` で切り替えます。`report` / `plan` / `improve` は既定で `compare` です。",
         "- LLM / GEPA / compare / heuristic scorer は proposal の優先順位づけだけを行い、skill / memory の変更許可にはなりません。GEPA が失敗した場合は `gepa_scorer_error` として明示し、unattended apply は許可しません。",
         "- plugin hook は観測専用で、skill / memory の変更は行いません。",
     ])
@@ -664,8 +808,9 @@ def _format_score_breakdown(raw: Any) -> str:
 
 def _build_operational_report_payloads(config: dict[str, Any]) -> dict[str, Any]:
     return {
-        "ledger": build_ledger_report_payload(config=config, status="all", limit=5),
-        "approval": build_approval_report_payload(config=config, status="all", limit=5),
+        "recent_plans": build_recent_plan_report_payload(config=config, limit=5),
+        "recent_apply": build_ledger_report_payload(config=config, status="all", limit=5, operation="apply"),
+        "calibration": build_calibration_report_payload(config=config, limit=5),
         "retention": build_retention_report_payload(config=config, limit=5),
     }
 
@@ -674,32 +819,74 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
     if not isinstance(payloads, dict):
         return []
     lines: list[str] = []
-    ledger_payload = payloads.get("ledger") if isinstance(payloads.get("ledger"), dict) else {}
-    ledgers = ledger_payload.get("ledgers") if isinstance(ledger_payload.get("ledgers"), list) else []
+
+    plan_payload = payloads.get("recent_plans") if isinstance(payloads.get("recent_plans"), dict) else {}
+    plans = plan_payload.get("plans") if isinstance(plan_payload.get("plans"), list) else []
+    if plans:
+        lines.extend(["", "## Recent plan summary"])
+        for plan in plans[:5]:
+            counts = plan.get("status_counts") if isinstance(plan.get("status_counts"), dict) else {}
+            lines.append(
+                f"- `{plan.get('plan_id')}`: "
+                f"items {int(plan.get('item_count') or 0)}, "
+                f"ready {int(counts.get('ready') or 0)}, "
+                f"needs_review {int(counts.get('needs_review') or 0)}, "
+                f"rejected {int(counts.get('rejected_by_planner') or 0)}"
+            )
+        highlights: list[dict[str, Any]] = []
+        for plan in plans:
+            for item in plan.get("needs_review_highlights") if isinstance(plan.get("needs_review_highlights"), list) else []:
+                if isinstance(item, dict):
+                    highlights.append(item)
+                if len(highlights) >= 5:
+                    break
+            if len(highlights) >= 5:
+                break
+        if highlights:
+            lines.append("- needs-review highlights:")
+            for item in highlights:
+                reason_suffix = ""
+                reasons = item.get("reasons") if isinstance(item.get("reasons"), list) else []
+                if reasons:
+                    reason_suffix = " reasons: " + ", ".join(str(reason) for reason in reasons[:3])
+                lines.append(
+                    f"  - `{item.get('item_id')}` {item.get('title') or item.get('change_type')}: "
+                    f"status `{item.get('status')}`, risk `{item.get('risk')}`{reason_suffix}"
+                )
+
+    apply_payload = payloads.get("recent_apply") if isinstance(payloads.get("recent_apply"), dict) else {}
+    ledgers = apply_payload.get("ledgers") if isinstance(apply_payload.get("ledgers"), list) else []
     if ledgers:
-        lines.extend(["", "## Apply ledger summary"])
+        lines.extend(["", "## Recent apply summary"])
         for ledger in ledgers[:5]:
+            counts = ledger.get("item_status_counts") if isinstance(ledger.get("item_status_counts"), dict) else {}
             lines.append(
-                f"- {ledger.get('title') or ledger.get('ledger_id')}: "
+                f"- `{ledger.get('ledger_id')}` for `{ledger.get('plan_id')}`: "
                 f"status `{ledger.get('current_status')}`, "
-                f"change `{ledger.get('change_type')}`, "
-                f"validation `{ledger.get('validation_status')}`"
+                f"applied {int(counts.get('applied') or 0)}, "
+                f"skipped {int(counts.get('skipped_by_policy') or 0)}, "
+                f"failed {int(counts.get('failed') or 0)}, "
+                f"rollback_available {bool(ledger.get('rollback_available'))}"
             )
-    approval_payload = payloads.get("approval") if isinstance(payloads.get("approval"), dict) else {}
-    approvals = approval_payload.get("approvals") if isinstance(approval_payload.get("approvals"), list) else []
-    if approvals:
-        lines.extend(["", "## Approval gate summary"])
-        for approval in approvals[:5]:
-            valid = approval.get("validation_status") == "valid"
-            reason_suffix = ""
-            if approval.get("reasons"):
-                reason_suffix = "; reasons: " + ", ".join(str(reason) for reason in approval.get("reasons") or [])
+
+    calibration_payload = payloads.get("calibration") if isinstance(payloads.get("calibration"), dict) else {}
+    evidence = calibration_payload.get("evidence_summary") if isinstance(calibration_payload.get("evidence_summary"), dict) else {}
+    calibration_ledgers = calibration_payload.get("ledgers") if isinstance(calibration_payload.get("ledgers"), list) else []
+    evidence_has_signal = any(int(evidence.get(key) or 0) for key in ("total_events", "disagreements", "bad_outcomes", "scorer_errors", "rollback_events"))
+    if evidence_has_signal or calibration_ledgers:
+        lines.extend(["", "## Calibration summary"])
+        lines.append(
+            f"- evidence: {int(evidence.get('total_events') or 0)} events, "
+            f"{int(evidence.get('disagreements') or 0)} disagreements, "
+            f"{int(evidence.get('bad_outcomes') or 0)} bad outcomes, "
+            f"{int(evidence.get('scorer_errors') or 0)} scorer errors"
+        )
+        for ledger in calibration_ledgers[:5]:
             lines.append(
-                f"- {approval.get('approval_id')}: "
-                f"valid: {valid}, "
-                f"status `{approval.get('current_status')}`, "
-                f"change `{approval.get('approved_change_type')}`{reason_suffix}"
+                f"- `{ledger.get('ledger_id')}`: regression `{ledger.get('regression_status')}`, "
+                f"reason `{ledger.get('candidate_reason')}`"
             )
+
     retention_payload = payloads.get("retention") if isinstance(payloads.get("retention"), dict) else {}
     expired_count = int(retention_payload.get("expired_candidate_count") or 0)
     malformed_count = int(retention_payload.get("malformed_count") or 0)
