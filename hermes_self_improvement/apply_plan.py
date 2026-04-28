@@ -515,6 +515,7 @@ def _eligibility_for_apply_item(
     target_exists: bool | None,
     mutation: dict[str, Any] | None,
     mutation_blockers: list[str],
+    scorer: str | None,
     scorer_disagreements: list[str],
 ) -> dict[str, Any]:
     reasons: list[str] = []
@@ -529,6 +530,8 @@ def _eligibility_for_apply_item(
         reasons.append("mutation_plan_missing")
     if scorer_disagreements:
         reasons.append("scorer_disagreement")
+    if change_type in _LOW_RISK_UNATTENDED_CHANGE_TYPES and str(scorer or "") != "compare-v0.1":
+        reasons.append("non_compare_scorer_for_unattended_apply")
     return {
         "status": "eligible" if not reasons else "not_eligible",
         "reasons": reasons,
@@ -749,6 +752,7 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         target_exists=target_meta["target_exists"],
         mutation=mutation,
         mutation_blockers=mutation_blockers,
+        scorer=proposal.get("scorer"),
         scorer_disagreements=scorer_disagreements,
     )
     approval_only = change_type in _APPROVAL_REQUIRED_CHANGE_TYPES

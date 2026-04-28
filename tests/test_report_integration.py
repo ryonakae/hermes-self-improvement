@@ -28,7 +28,7 @@ def typo_proposal(target: Path, proposal_id: str = "proposal-typo") -> dict:
         "confidence": "high",
         "score": 91,
         "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "count": 3,
         "tool_name": "read_file",
         "error_kind": "typo_detected",

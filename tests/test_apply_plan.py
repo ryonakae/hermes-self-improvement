@@ -30,7 +30,7 @@ def sample_proposals():
             "confidence": "medium",
             "score": 74,
             "recommendation": "review_for_possible_low_risk_apply",
-            "scorer": "heuristic-v0.1",
+            "scorer": "compare-v0.1",
             "auto_apply": False,
         }
     ]
@@ -66,7 +66,7 @@ def sample_validation_proposal():
         "confidence": "high",
         "score": 88,
         "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "auto_apply": False,
         "count": 7,
         "tool_name": "terminal",
@@ -85,7 +85,7 @@ def sample_typo_proposal():
         "confidence": "high",
         "score": 91,
         "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "auto_apply": False,
         "count": 3,
         "tool_name": "read_file",
@@ -106,7 +106,7 @@ def sample_stale_path_proposal(old_ref: str, new_ref: str, target: Path) -> dict
         "confidence": "high",
         "score": 90,
         "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "auto_apply": False,
         "count": 4,
         "tool_name": "read_file",
@@ -233,6 +233,30 @@ def test_build_apply_plan_records_scorer_disagreement_as_auto_apply_blocker():
     assert item["scorer_disagreements"] == ["score_gap"]
     assert item["eligible_for_unattended"] is False
     assert "scorer_disagreement" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_blocks_unattended_apply_for_non_compare_scorer(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("# Skill\n\n## Pitfalls\n- Existing note\n", encoding="utf-8")
+    proposal = sample_pitfall_proposal()
+    proposal["target_path"] = str(target)
+    proposal["scorer"] = "heuristic-v0.1"
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["scorer"] == "heuristic-v0.1"
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert "non_compare_scorer_for_unattended_apply" in item["eligibility"]["reasons"]
+    assert item["ledger_preview"]["would_create_pending_ledger"] is False
+    assert item["rollback_preview"] is None
 
 
 def test_build_apply_plan_resolves_existing_target_path_and_before_hash(tmp_path):
@@ -719,7 +743,7 @@ def test_build_apply_plan_supports_approval_required_large_rewrite_replace_entir
         "confidence": "medium",
         "score": 72,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "after_text": after,
     }
 
@@ -787,7 +811,7 @@ def test_build_apply_plan_supports_approval_required_skill_create_file(tmp_path)
         "confidence": "medium",
         "score": 70,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "new_content": new_content,
     }
 
@@ -857,7 +881,7 @@ def test_build_apply_plan_supports_approval_required_skill_delete_file(tmp_path)
         "confidence": "medium",
         "score": 68,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
     }
 
     plan = mod.build_apply_plan(
@@ -899,7 +923,7 @@ def test_build_apply_plan_supports_approval_required_skill_rename_file(tmp_path)
         "confidence": "medium",
         "score": 69,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
     }
 
     plan = mod.build_apply_plan(
@@ -975,7 +999,7 @@ def test_build_apply_plan_supports_approval_required_skill_merge_files(tmp_path)
         "confidence": "medium",
         "score": 67,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "after_text": merged,
     }
 
@@ -1021,7 +1045,7 @@ def test_build_apply_plan_supports_approval_required_memory_delete_file(tmp_path
         "confidence": "medium",
         "score": 66,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
     }
 
     plan = mod.build_apply_plan(

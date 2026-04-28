@@ -51,10 +51,12 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 
 `hermes_self_improvement/scoring.py` supports:
 
-- `heuristic`: dependency-free deterministic baseline.
-- `llm`: Hermes auxiliary LLM scoring. Broken JSON, provider failure, or timeout falls back to heuristic with `llm_scorer_error`.
-- `gepa`: `hermes_self_improvement/gepa_adapter.py` path. The default safe configuration (`gepa_scorer.enabled=true`, `max_iterations=0`) runs the dependency-free offline `ProposalBatchScoringProgram` and returns `gepa-v0.1` advisory scores.
+- `heuristic`: dependency-free deterministic scorer for lightweight observation/debugging.
+- `llm`: Hermes auxiliary LLM scoring. Broken JSON, provider failure, or timeout records `llm_scorer_error` and preserves a safe heuristic score.
+- `gepa`: `hermes_self_improvement/gepa_adapter.py` path. Runtime GEPA scoring requires DSPy and uses live/compiled DSPy program evaluation; it does not silently fall back to the dependency-free regression fixture.
 - `compare`: runs LLM and GEPA scoring, records score deltas and disagreement reasons, and pushes disagreement cases to `human_review`.
+
+`report`, `run`, and `generate-apply-plan` default to `compare`; `analyze` defaults to `heuristic`. Low-risk apply-plan items are unattended-eligible only when the scorer is `compare-v0.1` and all target hash, rollback, mutation, and disagreement gates pass.
 
 All scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does not grant mutation permission.
 
@@ -62,7 +64,7 @@ All scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does
 
 - `evals/proposal_eval_cases.jsonl`: regression cases for repeated tool failure, one-off low evidence, dangerous auto-apply denial, and stale memory review.
 - `evals/rubric.json`: `proposal-eval-v0.1` rubric. Hard constraint: `auto_apply: false`.
-- `hermes_self_improvement/dspy_program.py`: dependency-free `ProposalScoringProgram` / `ProposalBatchScoringProgram` scaffold.
-- `hermes_self_improvement/gepa_adapter.py`: payload builder, offline program evaluation, and fail-closed boundary for real optimizer runs.
+- `hermes_self_improvement/dspy_program.py`: real DSPy scoring contract / module boundary. Deterministic baseline is retained only for regression fixtures/tests.
+- `hermes_self_improvement/gepa_adapter.py`: payload builder, offline fixture evaluation, real DSPy/GEPA scorer/optimizer boundary, compiled evaluator artifact resolution, and fail-closed error reporting.
 
-`max_iterations > 0` optimizer runs are not production-wired. They require a concrete DSPy/GEPA metric and invocation; until then they should fail closed.
+Explicit `gepa-optimize` runs call DSPy/GEPA through this adapter and require a positive budget; they write report/candidate artifacts only and do not promote the active evaluator pointer.

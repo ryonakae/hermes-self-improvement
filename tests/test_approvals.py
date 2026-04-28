@@ -32,7 +32,7 @@ def write_plan(tmp_path):
         "confidence": "high",
         "score": 91,
         "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "count": 3,
         "tool_name": "read_file",
         "error_kind": "typo_detected",
@@ -898,7 +898,7 @@ def test_apply_approved_confirmed_supports_large_rewrite_replace_entire_file(tmp
         "confidence": "medium",
         "score": 72,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "after_text": after,
     }
     plan = mod.build_apply_plan(
@@ -951,7 +951,7 @@ def test_apply_approved_confirmed_supports_skill_create_file_and_rollback_delete
         "confidence": "medium",
         "score": 70,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "new_content": new_content,
     }
     plan = mod.build_apply_plan(
@@ -1015,7 +1015,7 @@ def test_apply_approved_confirmed_supports_skill_delete_file_and_rollback_restor
         "confidence": "medium",
         "score": 68,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
     }
     plan = mod.build_apply_plan(
         proposals=[proposal],
@@ -1083,7 +1083,7 @@ def test_apply_approved_confirmed_supports_skill_rename_file_and_rollback_rename
         "confidence": "medium",
         "score": 69,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
     }
     plan = mod.build_apply_plan(
         proposals=[proposal],
@@ -1155,7 +1155,7 @@ def test_apply_approved_confirmed_supports_skill_merge_files_and_rollback_restor
         "confidence": "medium",
         "score": 67,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "after_text": merged,
     }
     plan = mod.build_apply_plan(
@@ -1224,7 +1224,7 @@ def test_skill_rename_rollback_rejects_modified_destination(tmp_path):
         "confidence": "medium",
         "score": 69,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
     }
     plan = mod.build_apply_plan(proposals=[proposal], summary={}, execution_mode="dry_run_plan", created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc))
     config = {"reports_dir": str(tmp_path / "reports")}
@@ -1276,7 +1276,7 @@ def test_skill_merge_rollback_rejects_recreated_source(tmp_path):
         "confidence": "medium",
         "score": 67,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "after_text": merged,
     }
     plan = mod.build_apply_plan(proposals=[proposal], summary={}, execution_mode="dry_run_plan", created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc))
@@ -1326,7 +1326,7 @@ def test_apply_approved_confirmed_supports_memory_delete_file_and_rollback_resto
         "confidence": "medium",
         "score": 66,
         "recommendation": "approval_required",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
     }
     config = {"reports_dir": str(tmp_path / "reports"), "memory_roots": [str(memory_root)]}
     plan = mod.build_apply_plan(

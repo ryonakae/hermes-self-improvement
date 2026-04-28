@@ -140,7 +140,7 @@ def test_approve_tool_creates_artifact_without_target_mutation(tmp_path):
         "confidence": "high",
         "score": 91,
         "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "old_text": "teh",
         "new_text": "the",
     }
@@ -185,7 +185,7 @@ def test_apply_approved_tool_returns_preview_without_mutation(tmp_path):
         "confidence": "high",
         "score": 91,
         "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "old_text": "teh",
         "new_text": "the",
     }

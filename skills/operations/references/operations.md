@@ -82,10 +82,10 @@ For scheduled maintenance jobs that use this plugin:
 3. From the repository root, run:
 
 ```bash
-bin/hermes-self-improve report --since-hours 24 --scorer llm
+bin/hermes-self-improve report --since-hours 24 --scorer compare
 ```
 
-4. Confirm proposal rows show `scorer: llm-v0.1`; if they show `heuristic-v0.1` with `llm_scorer_error`, record the fallback reason.
+4. Confirm proposal rows show `scorer: compare-v0.1`; if `llm_scorer_error`, `gepa_scorer_error`, or `scorer_disagreements` appear, record the reason and treat the item as human-review / approval-gated rather than unattended.
 5. Read `${HERMES_HOME:-~/.hermes}/reports/self-improvement/daily/latest.md`.
 6. Inspect configured custom skill roots only as needed to ground high-value proposals. Avoid reading every large skill unless evidence points there.
 7. Use session recall for recent sessions when available. If recall fails, do not block the job; record the failure and use plugin telemetry from `events.jsonl` as a fallback.

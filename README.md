@@ -175,14 +175,14 @@ Mutation-capable tools も CLI と同じ confirmation と expected hash を要�
 
 ## Scorers
 
-- `heuristic`: 依存なしの deterministic scorer
-- `llm`: Hermes auxiliary LLM 経路。失敗時は heuristic に戻す
-- `gepa`: DSPy / GEPA evaluator path。`dspy` はこの plugin の evaluator 依存として必須だが、hook / plugin discovery では lazy import する
-- `compare`: LLM と GEPA の disagreement を report に出す
+- `heuristic`: 依存なしの deterministic scorer。軽量な observation / debugging 用。
+- `llm`: Hermes auxiliary LLM 経路。失敗時は `llm_scorer_error` を残して heuristic score を併記する。
+- `gepa`: DSPy / GEPA evaluator path。`dspy` はこの plugin の evaluator 依存として必須だが、hook / plugin discovery では lazy import する。dependency-free offline baseline には黙って戻さない。
+- `compare`: LLM と GEPA の disagreement を report に出す decision scorer。
 
-`report`、`run`、`generate-apply-plan` は、明示的に `--scorer` を渡さない限り `compare` を使います。`analyze` は観測・分類なので軽量な `heuristic` のままです。`--scorer gepa` は dependency-free offline baseline にフォールバックしません。active runtime に `dspy` が無い場合は `gepa_scorer_error` として明示し、unattended apply は許可しません。依存は次で入れます。
+`report`、`run`、`generate-apply-plan` は、明示的に `--scorer` を渡さない限り `compare` を使います。`analyze` は観測・分類なので軽量な `heuristic` のままです。`--scorer gepa` は dependency-free offline baseline にフォールバックしません。active runtime に `dspy` が無い場合は `gepa_scorer_error` として明示します。`generate-apply-plan` では、disagreement がなくても non-compare scorer の低リスク item は unattended apply eligible にせず、review / approval 側に倒します。
 
-`compare` の disagreement 判定は `scorer_comparison_policy` で change type ごとに調整します。risk / recommendation mismatch は常に block 寄り、memory / lifecycle / destructive / broad change は strict threshold、`typo_fix` / `pitfall_addition_existing_section` / `validation_addition_existing_section` は少し緩い score / confidence threshold を使います。`generate-apply-plan` は `scorer_disagreements` と `scorer_comparison_policy` を item に残し、disagreement がある item は unattended eligible にしません。
+`compare` の disagreement 判定は `scorer_comparison_policy` で change type ごとに調整します。risk / recommendation mismatch は常に block、memory / lifecycle / destructive / broad change は strict threshold、`typo_fix` / `pitfall_addition_existing_section` / `validation_addition_existing_section` は少し緩い score / confidence threshold を使います。`generate-apply-plan` は `scorer_disagreements` と `scorer_comparison_policy` を item に残し、disagreement がある item は unattended eligible にしません。
 
 ```bash
 python3 -m pip install -e .

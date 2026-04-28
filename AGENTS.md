@@ -82,7 +82,7 @@ PY
 
 - hook は観測専用です。hook 内で LLM、GEPA optimizer、skill patch、memory edit、重い集計を実行しないでください。
 - `execution_mode` は `hermes_self_improvement/config.py` と CLI / tool policy gate で検証します。未知 mode、未許可 command、足りない capability は拒否します。
-- scorer は優先順位付けだけに使います。`auto_apply` は scorer に関係なく false 扱いです。
+- scorer は優先順位付けだけに使います。`auto_apply` は scorer に関係なく false 扱いです。decision-producing command は既定で `compare` を使い、low-risk unattended apply は `compare-v0.1` かつ disagreement なしの場合だけ候補になります。
 - telemetry には全文や secret を保存しません。redacted preview と hash を使います。
 - plugin は target repo の commit を作りません。commit は target repo の workflow に委譲します。
 

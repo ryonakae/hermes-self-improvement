@@ -32,7 +32,7 @@ def write_applied_ledger(tmp_path):
         "confidence": "high",
         "score": 91,
         "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "heuristic-v0.1",
+        "scorer": "compare-v0.1",
         "count": 3,
         "tool_name": "read_file",
         "error_kind": "typo_detected",

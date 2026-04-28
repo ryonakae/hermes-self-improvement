@@ -54,6 +54,7 @@ Keep `eligible_for_unattended=false` when any of these are true:
 - mutation plan is missing
 - change type is unknown
 - scorer disagreement exists
+- the item is a low-risk unattended change type but the scorer is not `compare-v0.1`
 - target resolution attempts to escape configured roots
 
 ## Target resolution
@@ -135,8 +136,9 @@ For mode-policy or apply-plan changes, run:
 PY=${PYTHON:-python3}
 $PY -m pytest tests/test_execution_policy.py tests/test_apply_plan.py tests/test_apply_ledger.py tests/test_apply_low_risk.py -q
 bin/hermes-self-improve status --mode dry_run_plan
-bin/hermes-self-improve run --mode dry_run_plan --since-hours 1 --json --scorer heuristic
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 1 --json --scorer heuristic
+bin/hermes-self-improve run --mode dry_run_plan --since-hours 1 --json --scorer compare
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 1 --json
+bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 1 --json --scorer heuristic  # diagnostic only; low-risk items must not become unattended-eligible
 bin/hermes-self-improve ledger-report --mode report_only --status applied --json
 bin/hermes-self-improve approval-report --mode report_only --status all --json
 bin/hermes-self-improve approve missing-plan item-1 --mode apply_approved --json

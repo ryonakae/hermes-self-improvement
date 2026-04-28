@@ -485,6 +485,8 @@ bin/hermes-self-improve gepa-optimize \
 - The default LLM source for DSPy program eval / GEPA optimize is Hermes auxiliary model routing. `reflection_model` and `task_model` may override model names only; provider selection belongs to Hermes configuration, not this plugin.
 - Disagreement materiality is policy-configurable by change type. Risk/recommendation disagreement always blocks unattended apply; score/confidence thresholds can be looser for low-risk prose additions and stricter for memory / lifecycle / destructive / broad changes.
 
+**Progress (2026-04-28):** Documentation has been reconciled across `README.md`, `AGENTS.md`, `skills/operations/SKILL.md`, and safety/architecture references. The docs now describe DSPy/GEPA as evaluator-path required but lazy-imported, provider credentials as Hermes-owned, `compare` defaults for decision commands, `gepa-optimize` as report-only artifact generation, and active evaluator promotion as an approval-gated pointer update. Task 6.6 is also pinned in tests: parser defaults keep `report` / `run` / `generate-apply-plan` on `compare`, keep `analyze` on `heuristic`, and apply-plan eligibility now blocks low-risk unattended apply when the scorer is not `compare-v0.1`.
+
 ## Suggested implementation order
 
 1. Commit this plan.
