@@ -1,74 +1,144 @@
 # hermes-self-improvement
 
-`hermes-self-improvement` は、Hermes の実行ログから「skill、memory、prompt、tool の使い方をどこで直すべきか」を見つける user plugin です。
+`hermes-self-improvement` は、Hermes の実行ログから「次に直すと Hermes が少し賢くなる場所」を見つける user plugin です。
 
-hook は観測だけをします。skill や memory を会話中に勝手に書き換えません。通常操作は `improve` / `calibrate` / `plan` / `apply` / `rollback` / `report` / `status` に集約し、実変更は `--execute` を付けた場合だけ行います。
+たとえば、同じ tool error が何度も出る、古い skill の手順が失敗している、memory に圧縮できそうな繰り返し説明がある。そういう兆候を hook で観測し、改善候補としてまとめます。
 
-## できること
+この plugin は勝手に skill や memory を書き換えません。hook は観測だけをします。実変更は `apply` / `rollback` / `calibrate` などの明示コマンドで扱い、変更できる phase でも `--execute` が必要です。
+
+## 何をする plugin か
+
+この plugin は、Hermes の自己改善を「ログを見る」「候補を作る」「採点する」「人間が確認できる形にする」「安全に適用する」に分けます。
+
+できること:
 
 - Hermes runtime の hook event を JSONL に記録する
-- tool error や warning から改善候補を作る
-- proposal を heuristic / LLM / DSPy-backed GEPA scorer で採点する
+- tool error、warning、失敗した手順、繰り返し説明から改善候補を作る
+- 候補を heuristic / LLM / DSPy-backed GEPA scorer で採点する
 - report、apply plan、apply ledger、calibration ledger を artifact として残す
-- policy で許可された低リスクな text replacement を、内部 hash と validation 付きで適用する
-- evaluator/scorer の調整を `calibrate` で preview し、regression pass 時だけ `--execute` で active 化する
-- retention は `report` 内の read-only inventory として扱う。削除・prune 用 CLI/tool は primary surface に戻さない
+- policy で許可された低リスクな text replacement を、内部 hash と drift check 付きで適用する
+- evaluator/scorer の調整を `calibrate` で preview し、regression を通った場合だけ active 化する
 
-保存する event は redacted preview と hash が中心です。secret らしき値や sensitive path は保存前に伏せます。
+しないこと:
 
-## しないこと
+- hook 内で LLM や GEPA optimizer を呼ぶ
+- scorer の点数だけで unattended mutation を許可する
+- cron から confirmation 付き mutation を走らせる
+- target repo の commit を作る
+- secret、本文全文、sensitive path をそのまま保存する
 
-- hook 内で LLM や GEPA optimizer を呼ばない
-- scorer の点数だけで unattended mutation を許可しない
-- cron から confirmation 付き mutation を走らせない
-- target repo の commit を作らない
-- secret や本文全文を復元して保存しない
+保存する event は redacted preview と hash が中心です。secret らしき値は保存前に伏せます。
 
-mutation は preview-first です。primary surface では `--execute` が唯一の user-facing mutation boundary です。item hash / target hash はユーザーに渡させず、内部で検証します。
+## 大まかな仕組み
 
-## 使い方
+```text
+Hermes runtime
+  ↓ hooks
+observer.py
+  ↓ redacted events
+~/.hermes/self-improvement/state/events.jsonl
+  ↓ aggregate
+analysis.py
+  ↓ proposals
+scoring.py  (heuristic / LLM / GEPA / compare)
+  ↓
+plan / report / improve
+  ↓
+apply_engine.py  (--execute のときだけ mutation)
+  ↓
+ledgers / rollback data
+```
 
-現行環境では `hermes self-improvement ...` が常に使えるとは限りません。通常は同梱 wrapper を使います。
+主要な部品です。
+
+- `observer.py`: Hermes の hook event を受け取り、redact して保存する
+- `analysis.py`: event を集計し、改善候補を作る
+- `scoring.py`: 候補に score、risk、recommendation、confidence を付ける
+- `apply_plan.py`: 変更案を plan artifact にする
+- `apply_engine.py`: `--execute` 時にだけ検証済み item を適用する
+- `calibration.py`: scorer/evaluator の更新候補を作り、regression 後に active 化する
+- `tool_handlers.py`: agent-native tool surface を提供する
+
+hook は軽く保ちます。重い判断、LLM call、optimizer は CLI / tool command 側で動かします。
+
+## DSPy / GEPA とは
+
+### DSPy
+
+DSPy は、LLM を使う処理を「prompt の文字列」ではなく「入出力を持つ program」として書くための framework です。
+
+この plugin では、GEPA scorer の evaluator を DSPy program として扱います。DSPy 自体が勝手に Hermes を改善するわけではありません。候補をどう採点するか、どの evidence を見るか、どう regression するかを構造化するために使います。
+
+### GEPA
+
+GEPA は、DSPy program を改善する optimizer です。ここでは「改善候補を採点する evaluator」を育てるために使います。
+
+この plugin での GEPA の役割は、skill や memory を直接書き換えることではありません。GEPA は scorer/evaluator の改善候補を作ります。`calibrate --execute` は、十分な evidence と regression pass がある場合だけ active evaluator pointer を更新します。
+
+つまり流れはこうです。
+
+```text
+session logs / outcomes
+  ↓
+calibration evidence
+  ↓
+GEPA candidate evaluator
+  ↓ regression
+active evaluator
+  ↓
+future proposal scoring
+```
+
+GEPA の score が高くても、そのまま自動適用はしません。mutation は `apply_policy`、internal hash、target drift check を通った item だけです。
+
+## 自己改善の流れ
+
+普段は `improve` を使います。
 
 ```bash
-cd /path/to/hermes-self-improvement
-
-# 通常はこれを見る
-bin/hermes-self-improve status
 bin/hermes-self-improve improve
-bin/hermes-self-improve improve --execute
+```
 
-# 手動で分けて確認する場合
+`improve` は次をまとめて実行します。
+
+1. `calibrate`: scorer/evaluator を更新できるだけの evidence があるか見る
+2. `plan`: 直近 event から改善候補と apply plan を作る
+3. `apply`: plan を preview する
+4. `summary`: 何が見つかり、何を人間が見るべきか返す
+
+`--execute` を付けると mutation-capable phase まで進みます。
+
+```bash
+bin/hermes-self-improve improve --execute
+```
+
+ただし、`--execute` は「何でも変えてよい」という意味ではありません。実際に変更されるのは、policy と検証を通った item だけです。review が必要な item、drift した target、scorer disagreement がある item は止まります。
+
+手動で分けて確認したい場合:
+
+```bash
+bin/hermes-self-improve status
+bin/hermes-self-improve report --since-hours 24 --json
 bin/hermes-self-improve calibrate
 bin/hermes-self-improve calibrate --execute
 bin/hermes-self-improve plan --since-hours 24
 bin/hermes-self-improve apply <plan-id>
-bin/hermes-self-improve apply <plan-id> --items step-001,step-002
 bin/hermes-self-improve apply <plan-id> --items step-001 --execute
 bin/hermes-self-improve rollback <ledger-id>
 bin/hermes-self-improve rollback <ledger-id> --execute
-
-# read-only report
-bin/hermes-self-improve report --since-hours 24 --json
 ```
-
-`improve` は `calibrate → plan → apply → summary` をまとめて実行します。`improve` だけなら preview、`improve --execute` で mutation-capable phase を実行します。ただし実際に変更されるのは `apply_policy` と内部 hash / target drift checks を通った item だけです。
-
-`apply` は既定で preview です。実変更は `--execute` を付けた場合だけ行い、item hash / target hash は内部で検証します。policy で許可されない item や review が必要な item は適用されません。
-
-`calibrate` は evaluator/scorer 改善の evidence を集め、既定では preview として `no_op` / `would_update` を返します。`--execute` は regression が pass した場合だけ active evaluator pointer を更新し、active-before snapshot を calibration ledger に残します。regression runner 未設定や regression failure は fail-closed で active evaluator を変更しません。
-
-`report` は観測イベントと proposal 採点に加えて、recent plan summary、recent apply summary、calibration summary、needs-review highlights をまとめます。旧 approval gate summary は表示しません。
 
 ## Safety model
 
 Primary surface の安全境界は `--execute` です。
 
-- `improve`, `calibrate`, `apply`, `rollback` は `--execute` なしでは preview-only。
-- `apply_policy` が通常の skill/memory 改善の適用範囲を決めます。
-- `calibration` が evaluator/scorer 自己調整を決めます。`apply_policy` とは別です。
-- `item_hash`, `target_hash`, `ledger_hash` は内部整合性・drift 検知・rollback 用で、user-facing option ではありません。
-- `rollback --execute` は実変更前に ledger hash と全 applied item の current target hash / rollback data を検証します。1 item でも drift / tamper があれば、他 item も含めて rollback しません。
+- `improve`, `calibrate`, `apply`, `rollback` は `--execute` なしでは preview-only
+- `apply_policy` が通常の skill/memory 改善の適用範囲を決める
+- `calibration` が evaluator/scorer 自己調整を決める。`apply_policy` とは別
+- `item_hash`, `target_hash`, `ledger_hash` は内部整合性、drift 検知、rollback 用
+- `rollback --execute` は ledger hash と current target hash を検証する。1 item でも drift / tamper があれば rollback しない
+
+既定 policy の例です。
 
 ```yaml
 apply_policy:
@@ -89,11 +159,29 @@ calibration:
     max_full_evals: 2
 ```
 
-Legacy/debug commands such as `generate-apply-plan`, `gepa-eval`, `gepa-optimize`, `ledger-report`, `approval-report`, `retention-report`, and guarded approval/retention pruning are no longer part of the CLI or plugin tool surface. Use `improve`, `calibrate`, `plan`, `apply`, `rollback`, `report`, and `status`. Retention cleanup is intentionally read-only in `report`; legacy `approvals/` and `apply-attempts/` directories may be listed for manual review but are not automatically deleted.
+## CLI surface
+
+Primary command は 7 個だけです。
+
+```bash
+bin/hermes-self-improve improve
+bin/hermes-self-improve calibrate
+bin/hermes-self-improve plan
+bin/hermes-self-improve apply
+bin/hermes-self-improve rollback
+bin/hermes-self-improve report
+bin/hermes-self-improve status
+```
+
+現行環境では top-level の `hermes self-improvement ...` が安定して露出しているとは限りません。通常は repo 同梱 wrapper を使います。
+
+Legacy/debug command は primary surface に戻しません。`generate-apply-plan`, `gepa-eval`, `gepa-optimize`, `ledger-report`, `approval-report`, `retention-report`, guarded approval/retention pruning は使わず、上の 7 command に寄せます。
 
 ## Plugin tools
 
-`plugin.yaml` は agent-native tools を登録します。tool handler は wrapper CLI に shell out せず、CLI と同じ core function を通します。Primary tool surface は次の 7 個だけです。
+`plugin.yaml` は agent-native tools を登録します。tool handler は wrapper CLI に shell out せず、CLI と同じ core function を呼びます。
+
+Primary tool surface も 7 個だけです。
 
 - `self_improvement_status`
 - `self_improvement_report`
@@ -103,26 +191,55 @@ Legacy/debug commands such as `generate-apply-plan`, `gepa-eval`, `gepa-optimize
 - `self_improvement_apply`
 - `self_improvement_rollback`
 
-Tool も CLI と同じく、`execute=false` が preview-only、`execute=true` が唯一の mutation intent です。`mode` / `confirm_*` / `expected_*hash` は primary tool schema に出しません。
+Tool でも `execute=false` が preview-only、`execute=true` が mutation intent です。`mode` / `confirm_*` / `expected_*hash` は primary schema に出しません。
 
 ## Scorers
 
-- `heuristic`: 依存なしの deterministic scorer。軽量な observation / debugging 用。
-- `llm`: Hermes auxiliary LLM 経路。失敗時は `llm_scorer_error` を残して heuristic score を併記する。
-- `gepa`: DSPy / GEPA evaluator path。`dspy` はこの plugin の evaluator 依存として必須だが、hook / plugin discovery では lazy import する。dependency-free offline baseline には黙って戻さない。
-- `compare`: LLM と GEPA の disagreement を report に出す decision scorer。
+- `heuristic`: 依存なしの deterministic scorer。軽量な observation / debugging 用
+- `llm`: Hermes auxiliary LLM 経路。失敗時は `llm_scorer_error` を残し、heuristic score も併記する
+- `gepa`: DSPy / GEPA evaluator path。`dspy` が使えない場合は error として明示し、dependency-free baseline に黙って戻さない
+- `compare`: LLM と GEPA の disagreement を report に出す decision scorer
 
-`improve`、`report`、`plan` は、明示的に `--scorer` を渡さない限り `compare` を使います。`--scorer gepa` は dependency-free offline baseline にフォールバックしません。active runtime に `dspy` が無い場合は `gepa_scorer_error` として明示します。`plan` では、disagreement がなくても non-compare scorer の低リスク item は unattended apply eligible にせず、review 側に倒します。
+`improve`、`report`、`plan` は、明示的に `--scorer` を渡さない限り `compare` を使います。
 
-`compare` の disagreement 判定は `scorer_comparison_policy` で change type ごとに調整します。risk / recommendation mismatch は常に block、memory / lifecycle / destructive / broad change は strict threshold、`typo_fix` / `pitfall_addition_existing_section` / `validation_addition_existing_section` は少し緩い score / confidence threshold を使います。`plan` は `scorer_disagreements` と `scorer_comparison_policy` を item に残し、disagreement がある item は unattended eligible にしません。
+`compare` は disagreement を保守的に扱います。risk / recommendation mismatch は block、memory / lifecycle / destructive / broad change は strict threshold、typo や既存 section への validation 追加は少し緩い threshold を使います。disagreement がある item は unattended apply eligible にしません。
 
-```bash
-python3 -m pip install -e .
+GEPA regression / optimizer internals は `calibrate` の内部で扱います。Runtime `gepa` scorer は DSPy program に plugin-local `model.gepa` を渡し、DSPy 側の LM call は Hermes `agent.auxiliary_client.call_llm(...)` を通る `BaseLM` bridge で行います。`model.gepa` の provider / model / base_url / api_key / timeout / max_tokens / extra_body は local `config.yaml` で指定できます。artifact では secret 系 key を redact します。
+
+## Artifact の保存先
+
+Runtime artifact は固定で `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存します。保存場所の user-facing config override は提供しません。
+
+主な subdir:
+
+- `state/events.jsonl`: observed events
+- `daily/latest.md`: latest report
+- `daily/YYYY-MM-DD.md`: dated reports
+- `apply-plans/YYYY-MM-DD/`: dry-run apply plans
+- `ledgers/YYYY-MM-DD/`: apply / calibration ledgers
+- `gepa/active-evaluator.json`: active evaluator pointer
+- `gepa/programs/`: compiled evaluator artifacts
+- `cache/dspy/`: DSPy cache
+
+Repo 側の `evals/` は共通 seed / regression assets です。user-specific な evidence、report、ledger、active evaluator は runtime root に置きます。
+
+## 設定
+
+設定は plugin-local `config.yaml` / `config.local.yaml` などで扱います。保存場所は変えません。
+
+Precedence:
+
+```text
+defaults
+  < config.json
+  < config.yaml
+  < config.local.json
+  < config.local.yaml
+  < HERMES_SELF_IMPROVE_CONFIG
+  < --config
 ```
 
-GEPA regression / optimizer internals は `calibrate` の内部で扱います。Runtime `gepa` scorer は DSPy program に plugin-local `model.gepa` を渡し、DSPy 側の LM call は Hermes `agent.auxiliary_client.call_llm(...)` を通る `BaseLM` bridge で行います。`model.gepa` の provider / model / base_url / api_key / timeout / max_tokens / extra_body は local `config.yaml` で指定でき、artifact では secret 系 key を redact します。GEPA は scorer の改善・比較・優先順位づけに使いますが、GEPA の点数だけで `auto_apply` は許可しません。
-
-Compiled evaluator の active 化は `calibrate --execute` で扱います。candidate hash、regression result、active-before pointer hash / snapshot を calibration ledger に束縛し、`${HERMES_HOME:-~/.hermes}/self-improvement/gepa/active-evaluator.json` を更新します。regression runner 未設定・regression failure・candidate 不足では fail-closed にして active pointer を変更しません。新しい user-facing surface では expected hash や approval artifact を入力させません。
+`config.example.yaml` は git-managed な雛形です。local `config.yaml` / `config.local.yaml` は gitignore されています。`model.llm` / `model.gepa` の `api_key` は local YAML で `${ENV}` 参照にできます。`.env` / `.env.example` は使いません。
 
 ## ディレクトリ
 
@@ -130,30 +247,18 @@ Compiled evaluator の active 化は `calibrate --execute` で扱います。can
 - `__init__.py`: root の thin plugin entrypoint
 - `hermes_self_improvement/`: 実装 package
 - `hermes_self_improvement/cli.py`: CLI parser と pipeline orchestration
-- `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、rollback
 - `hermes_self_improvement/config.py`: apply_policy、calibration、model config、config precedence
 - `hermes_self_improvement/observer.py`: hook observer、redaction、retention
 - `hermes_self_improvement/analysis.py`: event aggregation と proposal generation
 - `hermes_self_improvement/scoring.py`: scorer 実装
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
-- `hermes_self_improvement/ledger.py`: pending ledger helpers（旧 low-risk apply/rollback は削除済み）
+- `hermes_self_improvement/apply_engine.py`: mutation と rollback ledger
+- `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、rollback
+- `hermes_self_improvement/ledger.py`: ledger helpers
 - `hermes_self_improvement/tool_handlers.py`: plugin tools。root 直下の `tools.py` は置かない
 - `evals/`: offline scorer の rubric と regression cases
 - `skills/operations/`: bundled operational skill
 - `tests/`: pytest suite
-
-## Artifact の保存先
-
-既定では `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存します。保存場所の user-facing config override は現時点では提供しません。
-
-- `state/events.jsonl`: observed events
-- `daily/latest.md`: daily report
-- `apply-plans/YYYY-MM-DD/`: dry-run apply plans
-- `ledgers/YYYY-MM-DD/`: apply / calibration ledgers
-
-Legacy directories from the pre-simplification flow, especially `apply-attempts/` and `approvals/`, are treated as read-only historical artifacts. They can appear in retention inventory, but this plugin no longer exposes a cleanup/prune command or tool. If they need to be removed, do it manually after reviewing the report output and backing up anything needed.
-
-`config.json`, plugin-local `config.yaml`, `config.local.json`, `config.local.yaml`, `HERMES_SELF_IMPROVE_CONFIG`, `--config` で保存先や scorer 設定を上書きできます。precedence は defaults < `config.json` < `config.yaml` < `config.local.json` < `config.local.yaml` < env < CLI です。`config.example.yaml` は git-managed な雛形で、local `config.yaml` / `config.local.yaml` は gitignore されています。`model.llm` / `model.gepa` の `api_key` は local YAML で `${ENV}` 参照にできますが、`.env` / `.env.example` は使いません。
 
 ## 開発
 
@@ -185,5 +290,5 @@ PY
 - hook は軽く保つ
 - safety gate は code と tests で守る
 - 新しい mutation は TDD で fail-closed を先に固定する
-- destructive / broad mutation は通常 apply で ready にせず human review / calibration gate に倒す
+- destructive / broad mutation は通常 apply で ready にせず、human review / calibration gate に倒す
 - target repo の commit は plugin では作らない
