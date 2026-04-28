@@ -106,3 +106,78 @@ def test_apply_plan_tracks_accepted_baseline_for_multiple_items_in_same_file(tmp
 
     assert target.read_text(encoding="utf-8") == "hello bye\n"
     assert result["summary"]["applied"] == 2
+
+def test_rollback_preview_does_not_mutate_applied_target(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "skill.md"
+    target.write_text("helo world\n", encoding="utf-8")
+    item = make_item(mod, item_id="step-001", target=target, old="helo", new="hello")
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-rollback-preview", "items": [item]})
+    apply_result = mod.apply_plan(plan_id="plan-rollback-preview", config={"reports_dir": str(tmp_path / "reports")}, execute=True)
+    ledger = json.loads(Path(apply_result["ledger_path"]).read_text(encoding="utf-8"))
+
+    result = mod.rollback_apply_ledger(ledger_id=ledger["ledger_id"], config={"reports_dir": str(tmp_path / "reports")}, execute=False)
+
+    assert result["current_status"] == "would_rollback"
+    assert result["summary"]["would_rollback"] == 1
+    assert result["target_changed"] is False
+    assert target.read_text(encoding="utf-8") == "hello world\n"
+
+
+def test_rollback_execute_restores_applied_target(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "skill.md"
+    target.write_text("helo world\n", encoding="utf-8")
+    item = make_item(mod, item_id="step-001", target=target, old="helo", new="hello")
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-rollback-exec", "items": [item]})
+    apply_result = mod.apply_plan(plan_id="plan-rollback-exec", config={"reports_dir": str(tmp_path / "reports")}, execute=True)
+    ledger = json.loads(Path(apply_result["ledger_path"]).read_text(encoding="utf-8"))
+
+    result = mod.rollback_apply_ledger(ledger_id=ledger["ledger_id"], config={"reports_dir": str(tmp_path / "reports")}, execute=True)
+
+    assert result["current_status"] == "rolled_back"
+    assert result["summary"]["rolled_back"] == 1
+    assert result["target_changed"] is True
+    assert target.read_text(encoding="utf-8") == "helo world\n"
+
+
+def test_rollback_rejects_tampered_ledger_hash(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "skill.md"
+    target.write_text("helo world\n", encoding="utf-8")
+    item = make_item(mod, item_id="step-001", target=target, old="helo", new="hello")
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-rollback-tamper", "items": [item]})
+    apply_result = mod.apply_plan(plan_id="plan-rollback-tamper", config={"reports_dir": str(tmp_path / "reports")}, execute=True)
+    ledger_path = Path(apply_result["ledger_path"])
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    ledger["summary"]["applied"] = 99
+    ledger_path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = mod.rollback_apply_ledger(ledger_id=ledger["ledger_id"], config={"reports_dir": str(tmp_path / "reports")}, execute=True)
+
+    assert result["current_status"] == "failed"
+    assert result["reasons"] == ["ledger_hash_mismatch"]
+    assert result["target_changed"] is False
+    assert target.read_text(encoding="utf-8") == "hello world\n"
+
+
+def test_rollback_execute_fails_all_when_any_applied_target_has_drift(tmp_path):
+    mod = load_plugin_module()
+    first_target = tmp_path / "first.md"
+    second_target = tmp_path / "second.md"
+    first_target.write_text("helo first\n", encoding="utf-8")
+    second_target.write_text("byee second\n", encoding="utf-8")
+    first = make_item(mod, item_id="step-001", target=first_target, old="helo", new="hello")
+    second = make_item(mod, item_id="step-002", target=second_target, old="byee", new="bye")
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-rollback-drift", "items": [first, second]})
+    apply_result = mod.apply_plan(plan_id="plan-rollback-drift", config={"reports_dir": str(tmp_path / "reports")}, execute=True)
+    ledger = json.loads(Path(apply_result["ledger_path"]).read_text(encoding="utf-8"))
+    first_target.write_text("external drift\n", encoding="utf-8")
+
+    result = mod.rollback_apply_ledger(ledger_id=ledger["ledger_id"], config={"reports_dir": str(tmp_path / "reports")}, execute=True)
+
+    assert result["current_status"] == "failed"
+    assert result["summary"]["failed"] == 1
+    assert result["target_changed"] is False
+    assert first_target.read_text(encoding="utf-8") == "external drift\n"
+    assert second_target.read_text(encoding="utf-8") == "bye second\n"

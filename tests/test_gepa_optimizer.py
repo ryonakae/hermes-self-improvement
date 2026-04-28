@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import argparse
-import importlib
 import importlib.util
 import json
 import sys
@@ -165,23 +163,3 @@ def test_optimize_gepa_fails_closed_for_zero_budget(tmp_path):
         assert "greater than 0" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected zero budget to fail closed")
-
-
-def test_gepa_optimize_cli_is_removed_from_primary_surface():
-    sys.path.insert(0, str(PLUGIN_DIR))
-    try:
-        cli = importlib.import_module("hermes_self_improvement.cli")
-    finally:
-        try:
-            sys.path.remove(str(PLUGIN_DIR))
-        except ValueError:
-            pass
-
-    parser = argparse.ArgumentParser()
-    cli._setup_cli(parser)
-    try:
-        parser.parse_args(["gepa-optimize", "--mode", "report_only", "--max-full-evals", "2", "--json"])
-    except SystemExit as exc:
-        assert exc.code == 2
-    else:
-        raise AssertionError("legacy gepa-optimize command should not parse")

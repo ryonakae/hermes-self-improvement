@@ -50,7 +50,7 @@ GEPA / scorer / eval assets を触った場合です。
 
 ```bash
 bin/hermes-self-improve calibrate --json
-$PY -m pytest tests/test_gepa_eval_assets.py tests/test_gepa_eval_cli.py tests/test_gepa_offline_scorer.py -q
+$PY -m pytest tests/test_gepa_eval_assets.py tests/test_gepa_optimizer.py tests/test_gepa_offline_scorer.py -q
 ```
 
 `__init__.py`, plugin registration, tool schema, bundled skill discovery を触った場合は plugin manager loading も確認します。

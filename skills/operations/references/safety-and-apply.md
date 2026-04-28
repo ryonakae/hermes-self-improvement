@@ -21,7 +21,7 @@ Internal safety checks remain mandatory:
 - `item_hash` is recomputed from the plan item before apply.
 - target hash drift is checked before each item.
 - batch apply tracks accepted per-target baseline so sequential edits to the same file can proceed safely.
-- ledger hash is checked before rollback.
+- ledger hash is checked before rollback; rollback execution first validates every applied item and refuses partial rollback if any target drift or rollback data issue is found.
 - calibration promotion requires evidence thresholds and regression pass.
 
 Users do not provide expected hashes. Hashes are audit / integrity / drift-detection data.

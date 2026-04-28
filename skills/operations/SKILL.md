@@ -45,7 +45,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `evals/`: GEPA offline scorer の rubric / regression cases。
 - `skills/operations/SKILL.md`: この bundled operational skill。
 
-Runtime artifact は既定で `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存する。主な subdirectory は `apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/`。
+Runtime artifact は既定で `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存する。主な subdirectory は `apply-plans/`, `ledgers/`, `state/`, `daily/`。
 
 ## 日常コマンド
 
@@ -66,7 +66,7 @@ bin/hermes-self-improve rollback <ledger-id> --execute
 bin/hermes-self-improve report --since-hours 24 --scorer compare
 ```
 
-Primary CLI / tool surface は `improve / calibrate / plan / apply / rollback / report / status`。`--execute` なしは preview-only。item hash / target hash / ledger hash は internal validation / drift detection / rollback 用で、user-facing option にしない。`report` は recent plan、recent apply、calibration、needs-review highlights を統合し、旧 approval gate summary は出さない。
+Primary CLI / tool surface は `improve / calibrate / plan / apply / rollback / report / status`。`--execute` なしは preview-only。item hash / target hash / ledger hash は internal validation / drift detection / rollback 用で、user-facing option にしない。`rollback --execute` は事前に ledger hash と全 applied item の current target hash / rollback data を検証し、drift / tamper が 1 件でもあれば partial rollback しない。`report` は recent plan、recent apply、calibration、needs-review highlights を統合し、旧 approval gate summary は出さない。
 
 Legacy/debug commands (`generate-apply-plan`, `gepa-eval`, `gepa-optimize`, `ledger-report`, `approval-report`, `retention-report`, `retention-prune`, approval/low-risk commands) は CLI / tool surface から外す。内部 helper や古い module が残る場合も primary path から呼ばない。
 
@@ -110,7 +110,7 @@ Scorer / GEPA / eval asset 変更後:
 
 ```bash
 bin/hermes-self-improve calibrate --json
-$PY -m pytest tests/test_gepa_eval_assets.py tests/test_gepa_eval_cli.py tests/test_gepa_offline_scorer.py -q
+$PY -m pytest tests/test_gepa_eval_assets.py tests/test_gepa_optimizer.py tests/test_gepa_offline_scorer.py -q
 ```
 
 Registration / discovery / plugin tool surface 変更後:

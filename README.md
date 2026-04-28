@@ -68,6 +68,7 @@ Primary surface の安全境界は `--execute` です。
 - `apply_policy` が通常の skill/memory 改善の適用範囲を決めます。
 - `calibration` が evaluator/scorer 自己調整を決めます。`apply_policy` とは別です。
 - `item_hash`, `target_hash`, `ledger_hash` は内部整合性・drift 検知・rollback 用で、user-facing option ではありません。
+- `rollback --execute` は実変更前に ledger hash と全 applied item の current target hash / rollback data を検証します。1 item でも drift / tamper があれば、他 item も含めて rollback しません。
 
 ```yaml
 apply_policy:
@@ -130,7 +131,7 @@ Compiled evaluator の active 化は `calibrate --execute` で扱います。can
 - `hermes_self_improvement/`: 実装 package
 - `hermes_self_improvement/cli.py`: CLI parser と pipeline orchestration
 - `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、rollback
-- `hermes_self_improvement/config.py`: execution mode と policy gate
+- `hermes_self_improvement/config.py`: apply_policy、calibration、model config、config precedence
 - `hermes_self_improvement/observer.py`: hook observer、redaction、retention
 - `hermes_self_improvement/analysis.py`: event aggregation と proposal generation
 - `hermes_self_improvement/scoring.py`: scorer 実装

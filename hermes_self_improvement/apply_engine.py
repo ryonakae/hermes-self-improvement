@@ -260,12 +260,151 @@ def apply_plan(
     return result
 
 
+def _rollback_item_plan(item: dict[str, Any]) -> dict[str, Any]:
+    rollback = item.get("rollback_data") if isinstance(item.get("rollback_data"), dict) else {}
+    target_path = rollback.get("target_path") or item.get("target_path")
+    item_result: dict[str, Any] = {
+        "item_id": item.get("item_id"),
+        "target_path": target_path,
+        "status": None,
+        "reasons": [],
+    }
+    if item.get("status") != "applied":
+        item_result["status"] = "ignored"
+        item_result["reasons"].append("item_not_applied")
+        return item_result
+
+    current_content, current_hash = _current_content_and_hash(target_path)
+    if current_hash != item.get("after_hash"):
+        item_result["status"] = "failed"
+        item_result["reasons"].append("target_hash_mismatch")
+        item_result["current_hash"] = current_hash
+        item_result["expected_hash"] = item.get("after_hash")
+        return item_result
+
+    strategy = rollback.get("rollback_strategy")
+    before_snapshot = rollback.get("before_snapshot")
+    if strategy == "delete_created_file":
+        if not target_path:
+            item_result["status"] = "failed"
+            item_result["reasons"].append("target_path_missing")
+            return item_result
+        item_result["status"] = "would_rollback"
+        item_result["rollback_action"] = {"type": "delete_created_file", "target_path": target_path}
+        return item_result
+
+    if strategy == "rename_file_back":
+        destination_path = rollback.get("destination_path")
+        if not target_path or not destination_path:
+            item_result["status"] = "failed"
+            item_result["reasons"].append("rollback_destination_path_missing")
+            return item_result
+        destination_content, destination_hash = _current_content_and_hash(destination_path)
+        if destination_hash != rollback.get("destination_after_hash"):
+            item_result["status"] = "failed"
+            item_result["reasons"].append("rollback_destination_hash_mismatch")
+            item_result["destination_current_hash"] = destination_hash
+            item_result["destination_expected_hash"] = rollback.get("destination_after_hash")
+            return item_result
+        if Path(str(target_path)).expanduser().exists():
+            item_result["status"] = "failed"
+            item_result["reasons"].append("rollback_source_path_already_exists")
+            return item_result
+        item_result["status"] = "would_rollback"
+        item_result["rollback_action"] = {
+            "type": "rename_file_back",
+            "target_path": target_path,
+            "destination_path": destination_path,
+        }
+        return item_result
+
+    if strategy == "restore_multiple_files":
+        source_path = rollback.get("source_path")
+        source_snapshot = rollback.get("source_before_snapshot")
+        if not target_path or not source_path or not isinstance(before_snapshot, str) or not isinstance(source_snapshot, str):
+            item_result["status"] = "failed"
+            item_result["reasons"].append("rollback_multiple_files_data_missing")
+            return item_result
+        _source_content, source_hash = _current_content_and_hash(source_path)
+        if source_hash != rollback.get("source_after_hash"):
+            item_result["status"] = "failed"
+            item_result["reasons"].append("rollback_source_hash_mismatch")
+            item_result["source_current_hash"] = source_hash
+            item_result["source_expected_hash"] = rollback.get("source_after_hash")
+            return item_result
+        if _sha256_text(before_snapshot) != item.get("before_hash"):
+            item_result["status"] = "failed"
+            item_result["reasons"].append("rollback_before_snapshot_hash_mismatch")
+            return item_result
+        if _sha256_text(source_snapshot) != rollback.get("source_before_hash"):
+            item_result["status"] = "failed"
+            item_result["reasons"].append("rollback_source_before_snapshot_hash_mismatch")
+            return item_result
+        item_result["status"] = "would_rollback"
+        item_result["rollback_action"] = {
+            "type": "restore_multiple_files",
+            "target_path": target_path,
+            "before_snapshot": before_snapshot,
+            "source_path": source_path,
+            "source_before_snapshot": source_snapshot,
+        }
+        return item_result
+
+    if isinstance(before_snapshot, str) and target_path:
+        if _sha256_text(before_snapshot) != item.get("before_hash"):
+            item_result["status"] = "failed"
+            item_result["reasons"].append("rollback_before_snapshot_hash_mismatch")
+            return item_result
+        item_result["status"] = "would_rollback"
+        item_result["rollback_action"] = {
+            "type": "restore_full_file_from_before_content",
+            "target_path": target_path,
+            "before_snapshot": before_snapshot,
+        }
+        return item_result
+
+    item_result["status"] = "failed"
+    item_result["reasons"].append("rollback_data_missing")
+    return item_result
+
+
+def _execute_rollback_action(action: dict[str, Any]) -> bool:
+    action_type = action.get("type")
+    if action_type == "delete_created_file":
+        target = Path(str(action.get("target_path"))).expanduser()
+        if target.exists():
+            target.unlink()
+        return True
+    if action_type == "rename_file_back":
+        target = Path(str(action.get("target_path"))).expanduser()
+        destination = Path(str(action.get("destination_path"))).expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        destination.replace(target)
+        return True
+    if action_type == "restore_multiple_files":
+        target = Path(str(action.get("target_path"))).expanduser()
+        source = Path(str(action.get("source_path"))).expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(str(action.get("before_snapshot")), encoding="utf-8")
+        source.write_text(str(action.get("source_before_snapshot")), encoding="utf-8")
+        return True
+    if action_type == "restore_full_file_from_before_content":
+        target = Path(str(action.get("target_path"))).expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(str(action.get("before_snapshot")), encoding="utf-8")
+        return True
+    return False
+
+
 def rollback_apply_ledger(*, ledger_id: str, config: dict[str, Any], execute: bool = False) -> dict[str, Any]:
     """Preview or execute rollback for unified apply ledgers.
 
     This intentionally has the same single mutation boundary as apply: no target
     changes occur unless `execute=True`. Ledger hashes remain internal integrity
-    checks; callers never provide expected hashes.
+    checks; callers never provide expected hashes. Rollback execution is validated
+    before any target is changed so drift in one applied item cannot produce a
+    partial rollback of another item.
     """
     path = _find_apply_ledger_path(ledger_id, config)
     if path is None:
@@ -282,60 +421,60 @@ def rollback_apply_ledger(*, ledger_id: str, config: dict[str, Any], execute: bo
     ledger = json.loads(path.read_text(encoding="utf-8"))
     expected_hash = ledger.get("ledger_hash")
     actual_hash = _sha256_text(_stable_json({k: v for k, v in ledger.items() if k != "ledger_hash"}))
-    if expected_hash and expected_hash != actual_hash:
+    if not expected_hash or expected_hash != actual_hash:
         return {
             "schema_name": "self_improvement_rollback_result",
             "schema_version": "1.0",
             "ledger_id": ledger.get("ledger_id") or ledger_id,
+            "ledger_path": str(path),
             "execute": bool(execute),
             "current_status": "failed",
-            "reasons": ["ledger_hash_mismatch"],
+            "reasons": ["ledger_hash_missing" if not expected_hash else "ledger_hash_mismatch"],
             "target_changed": False,
             "items": [],
         }
+    if ledger.get("operation") != "apply" or ledger.get("schema_name") != "self_improvement_apply_ledger":
+        return {
+            "schema_name": "self_improvement_rollback_result",
+            "schema_version": "1.0",
+            "ledger_id": ledger.get("ledger_id") or ledger_id,
+            "ledger_path": str(path),
+            "execute": bool(execute),
+            "current_status": "failed",
+            "reasons": ["unsupported_ledger_type"],
+            "target_changed": False,
+            "items": [],
+        }
+
     result_items: list[dict[str, Any]] = []
-    target_changed = False
     for item in reversed(ledger.get("items") if isinstance(ledger.get("items"), list) else []):
         if item.get("status") != "applied":
             continue
-        rollback = item.get("rollback_data") if isinstance(item.get("rollback_data"), dict) else {}
-        target_path = rollback.get("target_path") or item.get("target_path")
-        item_result = {"item_id": item.get("item_id"), "target_path": target_path, "status": None, "reasons": []}
-        current_content, current_hash = _current_content_and_hash(target_path)
-        if current_hash != item.get("after_hash"):
-            item_result["status"] = "failed"
-            item_result["reasons"].append("target_hash_mismatch")
-            item_result["current_hash"] = current_hash
-            item_result["expected_hash"] = item.get("after_hash")
-            result_items.append(item_result)
-            continue
-        strategy = rollback.get("rollback_strategy")
-        if strategy == "delete_created_file":
-            item_result["status"] = "would_rollback" if not execute else "rolled_back"
-            if execute and target_path:
-                Path(str(target_path)).expanduser().unlink()
-                target_changed = True
-        elif rollback.get("before_snapshot") is not None and target_path:
-            item_result["status"] = "would_rollback" if not execute else "rolled_back"
-            if execute:
-                target = Path(str(target_path)).expanduser()
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(str(rollback.get("before_snapshot")), encoding="utf-8")
-                target_changed = True
-        else:
-            item_result["status"] = "failed"
-            item_result["reasons"].append("rollback_data_missing")
-        result_items.append(item_result)
+        result_items.append(_rollback_item_plan(item))
+
     failed = sum(1 for item in result_items if item.get("status") == "failed")
-    rolled_back = sum(1 for item in result_items if item.get("status") == "rolled_back")
     would = sum(1 for item in result_items if item.get("status") == "would_rollback")
+    target_changed = False
+    rolled_back = 0
+    if execute and failed == 0:
+        for item in result_items:
+            action = item.get("rollback_action") if isinstance(item.get("rollback_action"), dict) else None
+            if not action:
+                continue
+            if _execute_rollback_action(action):
+                item["status"] = "rolled_back"
+                rolled_back += 1
+                target_changed = True
+        would = 0
+
+    current_status = "failed" if failed else "rolled_back" if execute else "would_rollback"
     return {
         "schema_name": "self_improvement_rollback_result",
         "schema_version": "1.0",
         "ledger_id": ledger.get("ledger_id") or ledger_id,
         "ledger_path": str(path),
         "execute": bool(execute),
-        "current_status": "failed" if failed else "rolled_back" if execute else "would_rollback",
+        "current_status": current_status,
         "target_changed": target_changed,
         "summary": {"would_rollback": would, "rolled_back": rolled_back, "failed": failed},
         "items": result_items,
