@@ -495,7 +495,14 @@ def build_retention_report_payload(
             "retained_file_count": max(0, category_total - category_expired - category_malformed),
             "malformed_count": category_malformed,
             "total_bytes": category_bytes,
+            "legacy_primary_flow": category in {"apply-attempts", "approvals"},
         }
+
+    legacy_categories = {
+        name: summary
+        for name, summary in categories.items()
+        if isinstance(summary, dict) and summary.get("legacy_primary_flow") and summary.get("total_files", 0)
+    }
 
     expired.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("path") or "")))
     malformed.sort(key=lambda item: str(item.get("path") or ""))
@@ -518,125 +525,20 @@ def build_retention_report_payload(
         "total_bytes": total_bytes,
         "expired_candidate_count": len(expired),
         "malformed_count": malformed_count,
+        "legacy_artifact_count": sum(int(summary.get("total_files", 0)) for summary in legacy_categories.values()),
+        "legacy_categories": legacy_categories,
+        "cleanup_policy": {
+            "primary_surface": "read_only_report_only",
+            "automatic_prune": False,
+            "manual_cleanup_required": True,
+            "reason": "retention cleanup is intentionally not exposed as CLI or plugin tool surface",
+        },
         "limit": int(limit),
         "categories": categories,
         "expired_candidates": limited,
         "malformed_artifacts": malformed_limited,
     }
 
-
-def _retention_artifact_list_hash(candidates: list[dict[str, Any]]) -> str:
-    bound = [
-        {
-            "category": item.get("category"),
-            "artifact_id": item.get("artifact_id"),
-            "created_at": item.get("created_at"),
-            "size_bytes": item.get("size_bytes"),
-            "path": item.get("path"),
-        }
-        for item in candidates
-    ]
-    return _sha256_text(_stable_json(bound))
-
-
-def _is_path_under(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except Exception:
-        return False
-
-
-def build_retention_prune_payload(
-    *,
-    config: dict[str, Any],
-    now: datetime | None = None,
-    retention_days: int | None = None,
-    limit: int = 20,
-    category: str = "all",
-    confirm_prune: bool = False,
-    expected_artifact_list_hash: str | None = None,
-) -> dict[str, Any]:
-    ts = (now or datetime.now(UTC)).astimezone(UTC)
-    report = build_retention_report_payload(
-        config=config,
-        now=ts,
-        retention_days=retention_days,
-        limit=limit,
-        category=category,
-    )
-    candidates = list(report.get("expired_candidates") or [])
-    artifact_list_hash = _retention_artifact_list_hash(candidates)
-    reasons: list[str] = []
-    if report.get("current_status") == "rejected":
-        reasons.extend(report.get("reasons") or ["retention_report_rejected"])
-    if confirm_prune and not expected_artifact_list_hash:
-        reasons.append("expected_artifact_list_hash_required")
-    if expected_artifact_list_hash is not None and expected_artifact_list_hash != artifact_list_hash:
-        reasons.append("artifact_list_hash_mismatch")
-
-    payload: dict[str, Any] = {
-        "schema_name": "self_improvement_retention_prune",
-        "schema_version": "1.0",
-        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
-        "created_at": ts.isoformat(),
-        "reports_dir": report.get("reports_dir"),
-        "retention_days": report.get("retention_days"),
-        "cutoff_at": report.get("cutoff_at"),
-        "category_filter": report.get("category_filter"),
-        "limit": int(limit),
-        "confirmation_required": True,
-        "confirmed": bool(confirm_prune),
-        "expected_artifact_list_hash": expected_artifact_list_hash,
-        "artifact_list_hash": artifact_list_hash,
-        "artifact_list_hash_matches_expected": None if expected_artifact_list_hash is None else expected_artifact_list_hash == artifact_list_hash,
-        "current_status": "rejected" if reasons else "would_prune",
-        "reasons": reasons,
-        "target_changed": False,
-        "prune_candidate_count": len(candidates),
-        "prune_candidates": candidates,
-        "malformed_count": report.get("malformed_count", 0),
-        "malformed_artifacts": report.get("malformed_artifacts") or [],
-        "pruned_count": 0,
-        "pruned_artifacts": [],
-    }
-    if not confirm_prune or reasons:
-        return payload
-
-    reports_root = _reports_dir(config)
-    pruned: list[dict[str, Any]] = []
-    prune_reasons: list[str] = []
-    for item in candidates:
-        path_text = item.get("path")
-        path = Path(str(path_text)).expanduser()
-        category_name = str(item.get("category") or "")
-        category_root = reports_root / category_name
-        if category_name not in _RETENTION_ARTIFACT_CATEGORIES or not _is_path_under(path, category_root):
-            prune_reasons.append("artifact_path_outside_category_root")
-            break
-        if not path.is_file():
-            prune_reasons.append("artifact_missing_before_prune")
-            break
-    if prune_reasons:
-        payload.update({
-            "current_status": "rejected",
-            "reasons": prune_reasons,
-            "target_changed": False,
-        })
-        return payload
-
-    for item in candidates:
-        path = Path(str(item.get("path"))).expanduser()
-        size = path.stat().st_size if path.exists() else 0
-        path.unlink()
-        pruned.append({**item, "size_bytes": size, "pruned_at": ts.isoformat()})
-    payload.update({
-        "current_status": "pruned",
-        "target_changed": bool(pruned),
-        "pruned_count": len(pruned),
-        "pruned_artifacts": pruned,
-    })
-    return payload
 
 
 def render_retention_report(payload: dict[str, Any]) -> str:
@@ -651,6 +553,8 @@ def render_retention_report(payload: dict[str, Any]) -> str:
         f"- total files: {payload.get('total_files')}",
         f"- expired candidates: {payload.get('expired_candidate_count')}",
         f"- malformed files: {payload.get('malformed_count')}",
+        f"- legacy artifacts: {payload.get('legacy_artifact_count', 0)}",
+        "- cleanup policy: read-only report only; no automatic artifact cleanup command/tool",
         "",
         "## Categories",
     ]
@@ -658,11 +562,19 @@ def render_retention_report(payload: dict[str, Any]) -> str:
     for name, summary in categories.items():
         if not isinstance(summary, dict):
             continue
+        legacy = " legacy-primary-flow" if summary.get("legacy_primary_flow") else ""
         lines.append(
             f"- `{name}`: total {summary.get('total_files')}, "
             f"expired candidates {summary.get('expired_candidate_count')}, "
-            f"malformed {summary.get('malformed_count')}"
+            f"malformed {summary.get('malformed_count')}{legacy}"
         )
+    legacy_categories = payload.get("legacy_categories") if isinstance(payload.get("legacy_categories"), dict) else {}
+    lines.extend(["", "## Legacy artifacts"])
+    if not legacy_categories:
+        lines.append("- legacy artifact はありません。")
+    for name, summary in legacy_categories.items():
+        if isinstance(summary, dict):
+            lines.append(f"- `{name}`: {summary.get('total_files')} files, {summary.get('total_bytes')} bytes")
     lines.extend(["", "## Expired candidates"])
     candidates = payload.get("expired_candidates") if isinstance(payload.get("expired_candidates"), list) else []
     if not candidates:

@@ -57,7 +57,7 @@ Do not reintroduce these as CLI or plugin tools:
 - `retention-report` / `retention-prune`
 - `expected_*hash` / `confirm_*` flags
 
-Legacy approval/mode modules and low-risk skeleton helpers have been removed from the implementation. Do not rebuild a parallel legacy gate; keep the simplified surface centered on `--execute`, internal hashes, target drift checks, rollback ledgers, and calibration gates.
+Legacy approval/mode modules, low-risk skeleton helpers, and destructive retention cleanup helpers have been removed from the implementation. Do not rebuild a parallel legacy gate; keep the simplified surface centered on `--execute`, internal hashes, target drift checks, rollback ledgers, calibration gates, and read-only retention inventory.
 
 ## Verification
 

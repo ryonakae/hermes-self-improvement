@@ -12,7 +12,7 @@ hook は観測だけをします。skill や memory を会話中に勝手に書�
 - report、apply plan、apply ledger、calibration ledger を artifact として残す
 - policy で許可された低リスクな text replacement を、内部 hash と validation 付きで適用する
 - evaluator/scorer の調整を `calibrate` で preview し、regression pass 時だけ `--execute` で active 化する
-- retention / approval / GEPA debug コマンドは互換・高度な診断用に残すが、primary tool surface には出さない
+- retention は `report` 内の read-only inventory として扱う。削除・prune 用 CLI/tool は primary surface に戻さない
 
 保存する event は redacted preview と hash が中心です。secret らしき値や sensitive path は保存前に伏せます。
 
@@ -89,7 +89,7 @@ calibration:
     max_full_evals: 2
 ```
 
-Legacy/debug commands such as `generate-apply-plan`, `gepa-eval`, `gepa-optimize`, `ledger-report`, `approval-report`, `retention-report`, and guarded approval/retention pruning are no longer part of the CLI or plugin tool surface. Use `improve`, `calibrate`, `plan`, `apply`, `rollback`, `report`, and `status`.
+Legacy/debug commands such as `generate-apply-plan`, `gepa-eval`, `gepa-optimize`, `ledger-report`, `approval-report`, `retention-report`, and guarded approval/retention pruning are no longer part of the CLI or plugin tool surface. Use `improve`, `calibrate`, `plan`, `apply`, `rollback`, `report`, and `status`. Retention cleanup is intentionally read-only in `report`; legacy `approvals/` and `apply-attempts/` directories may be listed for manual review but are not automatically deleted.
 
 ## Plugin tools
 
@@ -150,6 +150,8 @@ Compiled evaluator の active 化は `calibrate --execute` で扱います。can
 - `daily/latest.md`: daily report
 - `apply-plans/YYYY-MM-DD/`: dry-run apply plans
 - `ledgers/YYYY-MM-DD/`: apply / calibration ledgers
+
+Legacy directories from the pre-simplification flow, especially `apply-attempts/` and `approvals/`, are treated as read-only historical artifacts. They can appear in retention inventory, but this plugin no longer exposes a cleanup/prune command or tool. If they need to be removed, do it manually after reviewing the report output and backing up anything needed.
 
 `config.json`, plugin-local `config.yaml`, `config.local.json`, `config.local.yaml`, `HERMES_SELF_IMPROVE_CONFIG`, `--config` で保存先や scorer 設定を上書きできます。precedence は defaults < `config.json` < `config.yaml` < `config.local.json` < `config.local.yaml` < env < CLI です。`config.example.yaml` は git-managed な雛形で、local `config.yaml` / `config.local.yaml` は gitignore されています。`model.llm` / `model.gepa` の `api_key` は local YAML で `${ENV}` 参照にできますが、`.env` / `.env.example` は使いません。
 
