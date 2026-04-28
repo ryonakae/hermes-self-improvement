@@ -461,6 +461,8 @@ bin/hermes-self-improve gepa-optimize \
 - No mutation capabilities.
 - Secrets are redacted from artifacts and responses.
 
+**Progress (2026-04-28):** Implemented `self_improvement_gepa_eval` and `self_improvement_gepa_optimize` as plugin tools. Both call the same core Python functions as the CLI, use the same policy gate, and never shell out. `gepa-optimize` is constrained to `report_only` with explicit positive `max_full_evals`; it can write optimizer report artifacts but does not mutate skills, memories, or the active evaluator pointer. Registration is covered in `plugin.yaml`, `schemas.py`, `tool_handlers.py`, and `tests/test_plugin_tools.py`.
+
 ### Task 8: Update README / AGENTS / operations skill
 
 **Objective:** Make the docs honest and useful.

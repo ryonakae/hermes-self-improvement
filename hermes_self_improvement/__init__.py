@@ -59,6 +59,8 @@ try:  # pragma: no cover - package import path
         _handle_self_improvement_apply_approved_tool,
         _handle_self_improvement_apply_low_risk_tool,
         _handle_self_improvement_generate_apply_plan_tool,
+        _handle_self_improvement_gepa_eval_tool,
+        _handle_self_improvement_gepa_optimize_tool,
         _handle_self_improvement_ledger_report_tool,
         _handle_self_improvement_rollback_low_risk_tool,
         _handle_self_improvement_retention_report_tool,
@@ -79,6 +81,8 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     _handle_self_improvement_apply_approved_tool = _tools_mod._handle_self_improvement_apply_approved_tool
     _handle_self_improvement_apply_low_risk_tool = _tools_mod._handle_self_improvement_apply_low_risk_tool
     _handle_self_improvement_generate_apply_plan_tool = _tools_mod._handle_self_improvement_generate_apply_plan_tool
+    _handle_self_improvement_gepa_eval_tool = _tools_mod._handle_self_improvement_gepa_eval_tool
+    _handle_self_improvement_gepa_optimize_tool = _tools_mod._handle_self_improvement_gepa_optimize_tool
     _handle_self_improvement_ledger_report_tool = _tools_mod._handle_self_improvement_ledger_report_tool
     _handle_self_improvement_rollback_low_risk_tool = _tools_mod._handle_self_improvement_rollback_low_risk_tool
     _handle_self_improvement_retention_report_tool = _tools_mod._handle_self_improvement_retention_report_tool
@@ -88,6 +92,8 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 
 _SELF_IMPROVEMENT_TOOL_HANDLERS = {
     "self_improvement_status": _handle_self_improvement_status_tool,
+    "self_improvement_gepa_eval": _handle_self_improvement_gepa_eval_tool,
+    "self_improvement_gepa_optimize": _handle_self_improvement_gepa_optimize_tool,
     "self_improvement_generate_apply_plan": _handle_self_improvement_generate_apply_plan_tool,
     "self_improvement_ledger_report": _handle_self_improvement_ledger_report_tool,
     "self_improvement_approval_report": _handle_self_improvement_approval_report_tool,

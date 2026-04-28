@@ -7,14 +7,14 @@ from typing import Any
 try:  # pragma: no cover - package import path
     from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, validate_approval_artifact
     from .apply_plan import build_apply_plan, write_apply_plan
-    from .cli import build_ledger_report_payload, build_retention_prune_payload, build_retention_report_payload, run_pipeline
+    from .cli import _call_gepa_eval, _call_gepa_optimize, build_ledger_report_payload, build_retention_prune_payload, build_retention_report_payload, run_pipeline
     from .config import DEFAULT_RETENTION_DAYS, _load_config, _required_capability_for_command, load_config, resolve_execution_mode, validate_mode_action
     from .ledger import apply_low_risk_skeleton, rollback_low_risk
     from .observer import _event_path, _load_events
 except Exception:  # pragma: no cover - direct file import used by tests/plugin wrapper
     from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, validate_approval_artifact
     from apply_plan import build_apply_plan, write_apply_plan
-    from cli import build_ledger_report_payload, build_retention_prune_payload, build_retention_report_payload, run_pipeline
+    from cli import _call_gepa_eval, _call_gepa_optimize, build_ledger_report_payload, build_retention_prune_payload, build_retention_report_payload, run_pipeline
     from config import DEFAULT_RETENTION_DAYS, _load_config, _required_capability_for_command, load_config, resolve_execution_mode, validate_mode_action
     from ledger import apply_low_risk_skeleton, rollback_low_risk
     from observer import _event_path, _load_events
@@ -97,6 +97,53 @@ def _handle_self_improvement_status_tool(args: dict[str, Any] | None = None, **_
         "last_event_ts": events[-1].get("ts") if events else None,
         "target_changed": False,
     })
+
+
+def _handle_self_improvement_gepa_eval_tool(args: dict[str, Any] | None = None, **_kw) -> str:
+    args = args or {}
+    config = _config_from_args(args)
+    execution_mode = _mode_from_args(config, args)
+    command = "gepa-eval"
+    decision = _check_mode(config, execution_mode, command)
+    if not decision.get("allowed"):
+        return _deny_payload(execution_mode=execution_mode, command=command, decision=decision)
+    try:
+        payload = _call_gepa_eval(config=config)
+    except Exception as exc:
+        return tool_error("gepa_eval_failed", error_detail=str(exc), target_changed=False)
+    payload = dict(payload)
+    payload.setdefault("schema_name", "self_improvement_gepa_eval")
+    payload["target_changed"] = False
+    return tool_result(payload)
+
+
+def _handle_self_improvement_gepa_optimize_tool(args: dict[str, Any] | None = None, **_kw) -> str:
+    args = args or {}
+    config = _config_from_args(args)
+    execution_mode = _mode_from_args(config, args)
+    command = "gepa-optimize"
+    decision = _check_mode(config, execution_mode, command)
+    if not decision.get("allowed"):
+        return _deny_payload(execution_mode=execution_mode, command=command, decision=decision)
+    max_full_evals = args.get("max_full_evals")
+    if max_full_evals is None:
+        return tool_error("max_full_evals is required", target_changed=False)
+    max_full_evals = _coerce_int(max_full_evals, 0, 0)
+    if max_full_evals <= 0:
+        return tool_error("max_full_evals must be positive", target_changed=False)
+    try:
+        payload = _call_gepa_optimize(
+            config=config,
+            trainset=args.get("trainset"),
+            valset=args.get("valset"),
+            max_full_evals=max_full_evals,
+        )
+    except Exception as exc:
+        return tool_error("gepa_optimize_failed", error_detail=str(exc), target_changed=False)
+    payload = dict(payload)
+    payload.setdefault("schema_name", "self_improvement_gepa_optimize")
+    payload["target_changed"] = False
+    return tool_result(payload)
 
 
 def _handle_self_improvement_generate_apply_plan_tool(args: dict[str, Any] | None = None, **_kw) -> str:

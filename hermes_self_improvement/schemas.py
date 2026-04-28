@@ -34,6 +34,31 @@ SELF_IMPROVEMENT_GENERATE_APPLY_PLAN_SCHEMA = {
     },
 }
 
+SELF_IMPROVEMENT_GEPA_EVAL_SCHEMA = {
+    "name": "self_improvement_gepa_eval",
+    "description": "Run bundled GEPA regression/evaluator status checks. Read-only; does not mutate targets.",
+    "parameters": {
+        "type": "object",
+        "properties": {"mode": MODE_PROPERTY, "config_path": CONFIG_PATH_PROPERTY},
+    },
+}
+
+SELF_IMPROVEMENT_GEPA_OPTIMIZE_SCHEMA = {
+    "name": "self_improvement_gepa_optimize",
+    "description": "Run an explicit GEPA optimizer compile and write report artifacts only. Requires report_only mode and explicit positive budget; does not mutate skills, memories, or active evaluator pointer.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "mode": MODE_PROPERTY,
+            "config_path": CONFIG_PATH_PROPERTY,
+            "trainset": {"type": "string", "description": "JSONL trainset path; defaults to bundled proposal eval cases."},
+            "valset": {"type": "string", "description": "JSONL validation set path; defaults to bundled proposal eval cases."},
+            "max_full_evals": {"type": "integer", "description": "Required positive GEPA full-evaluation budget."},
+        },
+        "required": ["max_full_evals"],
+    },
+}
+
 SELF_IMPROVEMENT_LEDGER_REPORT_SCHEMA = {
     "name": "self_improvement_ledger_report",
     "description": "Summarize low-risk apply ledgers for human review. Read-only.",
@@ -179,6 +204,8 @@ SELF_IMPROVEMENT_ROLLBACK_LOW_RISK_SCHEMA = {
 
 SELF_IMPROVEMENT_TOOL_SPECS = (
     ("self_improvement_status", SELF_IMPROVEMENT_STATUS_SCHEMA),
+    ("self_improvement_gepa_eval", SELF_IMPROVEMENT_GEPA_EVAL_SCHEMA),
+    ("self_improvement_gepa_optimize", SELF_IMPROVEMENT_GEPA_OPTIMIZE_SCHEMA),
     ("self_improvement_generate_apply_plan", SELF_IMPROVEMENT_GENERATE_APPLY_PLAN_SCHEMA),
     ("self_improvement_ledger_report", SELF_IMPROVEMENT_LEDGER_REPORT_SCHEMA),
     ("self_improvement_approval_report", SELF_IMPROVEMENT_APPROVAL_REPORT_SCHEMA),

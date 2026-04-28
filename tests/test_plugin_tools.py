@@ -55,6 +55,8 @@ def test_register_exposes_self_improvement_tool_parity_surface():
     names = {name for name, _kwargs in ctx.tools}
     assert names == {
         "self_improvement_status",
+        "self_improvement_gepa_eval",
+        "self_improvement_gepa_optimize",
         "self_improvement_generate_apply_plan",
         "self_improvement_ledger_report",
         "self_improvement_approval_report",
@@ -229,3 +231,89 @@ def test_apply_approved_tool_denies_wrong_mode(tmp_path):
     assert payload["error"] == "execution_mode_denied"
     assert payload["command"] == "apply-approved"
     assert payload["target_changed"] is False
+
+
+def test_gepa_eval_tool_uses_core_eval_path_without_target_mutation(tmp_path):
+    mod = load_plugin_module()
+    calls = []
+
+    def fake_gepa_eval(*, config):
+        calls.append(config)
+        return {
+            "adapter_version": "fake",
+            "mode": "offline_regression",
+            "all_passed": True,
+            "case_count": 1,
+            "passed_count": 1,
+        }
+
+    mod._handle_self_improvement_gepa_eval_tool.__globals__["_call_gepa_eval"] = fake_gepa_eval
+
+    raw = mod._handle_self_improvement_gepa_eval_tool({
+        "mode": "report_only",
+        "config": {"reports_dir": str(tmp_path / "reports")},
+    })
+
+    payload = parse_tool_payload(raw)
+    assert payload["schema_name"] == "self_improvement_gepa_eval"
+    assert payload["all_passed"] is True
+    assert payload["target_changed"] is False
+    assert calls and calls[0]["reports_dir"] == str(tmp_path / "reports")
+
+
+def test_gepa_optimize_tool_requires_report_only_positive_budget_and_preserves_target_boundary(tmp_path):
+    mod = load_plugin_module()
+    calls = []
+
+    def fake_gepa_optimize(*, config, trainset, valset, max_full_evals):
+        calls.append({
+            "config": config,
+            "trainset": trainset,
+            "valset": valset,
+            "max_full_evals": max_full_evals,
+        })
+        return {
+            "schema_name": "self_improvement_gepa_optimize",
+            "artifact_path": str(tmp_path / "reports" / "gepa" / "compiled.json"),
+            "max_full_evals": max_full_evals,
+        }
+
+    mod._handle_self_improvement_gepa_optimize_tool.__globals__["_call_gepa_optimize"] = fake_gepa_optimize
+
+    denied = parse_tool_payload(mod._handle_self_improvement_gepa_optimize_tool({
+        "mode": "dry_run_plan",
+        "max_full_evals": 1,
+        "config": {"reports_dir": str(tmp_path / "reports")},
+    }))
+    assert denied["error"] == "execution_mode_denied"
+    assert denied["command"] == "gepa-optimize"
+    assert denied["target_changed"] is False
+
+    bad_budget = parse_tool_payload(mod._handle_self_improvement_gepa_optimize_tool({
+        "mode": "report_only",
+        "max_full_evals": 0,
+        "config": {"reports_dir": str(tmp_path / "reports")},
+    }))
+    assert bad_budget["error"] == "max_full_evals must be positive"
+    assert bad_budget["target_changed"] is False
+
+    payload = parse_tool_payload(mod._handle_self_improvement_gepa_optimize_tool({
+        "mode": "report_only",
+        "trainset": "train.jsonl",
+        "valset": "val.jsonl",
+        "max_full_evals": "2",
+        "config": {"reports_dir": str(tmp_path / "reports")},
+    }))
+
+    assert payload["schema_name"] == "self_improvement_gepa_optimize"
+    assert payload["max_full_evals"] == 2
+    assert payload["target_changed"] is False
+    assert calls == [
+        {
+            "config": calls[0]["config"],
+            "trainset": "train.jsonl",
+            "valset": "val.jsonl",
+            "max_full_evals": 2,
+        }
+    ]
+    assert calls[0]["config"]["reports_dir"] == str(tmp_path / "reports")

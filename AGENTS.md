@@ -102,7 +102,9 @@ Mutation の条件です。
 
 `plugin.yaml`, `hermes_self_improvement/schemas.py`, `hermes_self_improvement/tool_handlers.py` で CLI parity の tools を登録しています。handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を使います。
 
-`self_improvement_status`, `self_improvement_generate_apply_plan`, `self_improvement_ledger_report`, `self_improvement_approval_report`, `self_improvement_validate_approval`, `self_improvement_retention_report`, `self_improvement_retention_prune`, `self_improvement_approve`, `self_improvement_apply_approved`, `self_improvement_apply_low_risk`, `self_improvement_rollback_low_risk`
+`self_improvement_status`, `self_improvement_gepa_eval`, `self_improvement_gepa_optimize`, `self_improvement_generate_apply_plan`, `self_improvement_ledger_report`, `self_improvement_approval_report`, `self_improvement_validate_approval`, `self_improvement_retention_report`, `self_improvement_retention_prune`, `self_improvement_approve`, `self_improvement_apply_approved`, `self_improvement_apply_low_risk`, `self_improvement_rollback_low_risk`
+
+`self_improvement_gepa_optimize` は `report_only` + positive `max_full_evals` 必須で、compile artifact は保存しても active evaluator pointer は更新しません。
 
 root 直下に `tools.py` は置きません。Hermes core の `tools.registry` を shadow して plugin discovery を壊します。
 

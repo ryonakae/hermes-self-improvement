@@ -158,6 +158,8 @@ Proposal generation は、明示的な `memory_compression_candidate` finding �
 `plugin.yaml` は agent-native tools を登録します。tool handler は wrapper CLI に shell out せず、CLI と同じ core function と policy gate を通します。
 
 - `self_improvement_status`
+- `self_improvement_gepa_eval`
+- `self_improvement_gepa_optimize`（`report_only` + positive `max_full_evals` 必須。active evaluator pointer は更新しない）
 - `self_improvement_generate_apply_plan`
 - `self_improvement_ledger_report`
 - `self_improvement_approval_report`

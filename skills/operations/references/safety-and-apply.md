@@ -147,7 +147,7 @@ After `generate-apply-plan`, verify the artifact path exists and schema metadata
 
 ## Plugin tools
 
-The plugin exposes CLI-parity tools for status, apply-plan generation, ledger reports, approval reports, approval validation, approval artifact creation, approved-apply preview/apply, guarded low-risk apply, and guarded low-risk rollback. Tool handlers must call the same core Python functions as the CLI and must call `validate_mode_action(...)` with `_required_capability_for_command(...)` before invoking mutation-capable paths. They must not shell out to `bin/hermes-self-improve`.
+The plugin exposes CLI-parity tools for status, GEPA eval, explicit GEPA optimize, apply-plan generation, ledger reports, approval reports, approval validation, approval artifact creation, approved-apply preview/apply, guarded low-risk apply, and guarded low-risk rollback. Tool handlers must call the same core Python functions as the CLI and must call `validate_mode_action(...)` with `_required_capability_for_command(...)` before invoking mutation-capable paths. They must not shell out to `bin/hermes-self-improve`. `self_improvement_gepa_optimize` is `report_only` only, requires a positive `max_full_evals`, and must not update the active evaluator pointer.
 
 Mutation tools remain fail-closed:
 

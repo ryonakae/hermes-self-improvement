@@ -217,7 +217,7 @@ def test_plugin_registers_retention_report_tool():
 
     names = {tool["name"] for tool in ctx.tools}
     assert "self_improvement_retention_report" in names
-    assert len([name for name in names if name.startswith("self_improvement_")]) == 11
+    assert len([name for name in names if name.startswith("self_improvement_")]) == 13
 
 
 def test_retention_prune_preview_requires_hash_and_does_not_delete(tmp_path):
@@ -375,4 +375,4 @@ def test_plugin_registers_retention_prune_tool():
 
     names = {tool["name"] for tool in ctx.tools}
     assert "self_improvement_retention_prune" in names
-    assert len([name for name in names if name.startswith("self_improvement_")]) == 11
+    assert len([name for name in names if name.startswith("self_improvement_")]) == 13
