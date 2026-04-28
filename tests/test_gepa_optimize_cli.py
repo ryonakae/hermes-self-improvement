@@ -71,6 +71,12 @@ class FakeDspy:
     GEPA = FakeGEPA
     Example = FakeExample
 
+    class BaseLM:
+        def __init__(self, model, model_type="chat", temperature=0.0, max_tokens=1000, cache=True, **kwargs):
+            self.model = model
+            self.model_type = model_type
+            self.kwargs = {"temperature": temperature, "max_tokens": max_tokens, **kwargs}
+
     class Signature:
         pass
 
@@ -124,6 +130,30 @@ def test_optimize_gepa_calls_dspy_gepa_compile_and_writes_artifact(tmp_path):
     assert len(call["trainset"]) >= 4
     assert len(call["valset"]) >= 4
     assert call["trainset"][0]["inputs"] == ("proposal", "findings", "rubric")
+
+
+def test_optimize_gepa_uses_model_gepa_for_student_and_reflection_lm(tmp_path):
+    adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_optimize_model_config")
+    FakeGEPA.calls.clear()
+    config = {
+        "reports_dir": str(tmp_path / "reports"),
+        "model": {
+            "gepa": {
+                "provider": "codex",
+                "model": "gpt-gepa",
+                "timeout": 99,
+                "max_tokens": 321,
+            }
+        },
+        "gepa_scorer": {"enabled": True, "mode": "dspy_program_eval", "max_full_evals": 2},
+    }
+
+    payload = adapter.optimize_gepa(config=config, max_full_evals=2, dspy_module=FakeDspy)
+
+    call = FakeGEPA.calls[0]
+    assert call["kwargs"]["reflection_lm"].model == "gpt-gepa"
+    assert call["student"].lm.model == "gpt-gepa"
+    assert payload["config_summary"]["model"]["gepa"]["model"] == "gpt-gepa"
 
 
 def test_optimize_gepa_fails_closed_for_zero_budget(tmp_path):

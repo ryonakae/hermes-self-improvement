@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import types
 from pathlib import Path
 
 PROGRAM_PATH = Path(__file__).resolve().parents[1] / "hermes_self_improvement" / "dspy_program.py"
@@ -88,6 +89,106 @@ def test_score_with_dspy_program_returns_plugin_scorer_payload_and_forces_auto_a
     assert payload["rubric_version"] == "proposal-eval-v0.1"
     assert payload["scores"][0]["id"] == "proposal-1"
     assert payload["scores"][0]["auto_apply"] is False
+
+
+
+
+def test_hermes_auxiliary_lm_bridge_routes_through_agent_auxiliary_client(monkeypatch):
+    mod = load_program_module()
+    calls = []
+
+    fake_agent = types.ModuleType("agent")
+    fake_aux = types.ModuleType("agent.auxiliary_client")
+
+    def fake_call_llm(**kwargs):
+        calls.append(kwargs)
+        return {"content": '{"score_json":"ok"}'}
+
+    def fake_extract(response):
+        return response["content"]
+
+    fake_aux.call_llm = fake_call_llm
+    fake_aux.extract_content_or_reasoning = fake_extract
+    monkeypatch.setitem(sys.modules, "agent", fake_agent)
+    monkeypatch.setitem(sys.modules, "agent.auxiliary_client", fake_aux)
+
+    class FakeDspyWithBaseLM:
+        class BaseLM:
+            def __init__(self, model, model_type="chat", temperature=0.0, max_tokens=1000, cache=True, **kwargs):
+                self.model = model
+                self.model_type = model_type
+                self.kwargs = {"temperature": temperature, "max_tokens": max_tokens, **kwargs}
+
+    lm = mod.build_hermes_auxiliary_lm(
+        lm_config={
+            "provider": "codex",
+            "model": "gpt-test",
+            "base_url": "https://example.invalid/v1",
+            "api_key": "local-secret",
+            "timeout": 42,
+            "max_tokens": 123,
+            "extra_body": {"reasoning_effort": "low"},
+        },
+        dspy_module=FakeDspyWithBaseLM,
+    )
+
+    response = lm.forward(messages=[{"role": "user", "content": "score this"}], max_tokens=77)
+
+    assert calls[0]["task"] == "self_improvement_gepa"
+    assert calls[0]["provider"] == "codex"
+    assert calls[0]["model"] == "gpt-test"
+    assert calls[0]["base_url"] == "https://example.invalid/v1"
+    assert calls[0]["api_key"] == "local-secret"
+    assert calls[0]["messages"] == [{"role": "user", "content": "score this"}]
+    assert calls[0]["temperature"] is None
+    assert calls[0]["max_tokens"] == 77
+    assert calls[0]["timeout"] == 42
+    assert calls[0]["extra_body"] == {"reasoning_effort": "low"}
+    assert response.choices[0].message.content == '{"score_json":"ok"}'
+    assert response.model == "gpt-test"
+
+
+def test_build_dspy_program_uses_hermes_lm_context_when_real_dspy_shape_available(monkeypatch):
+    mod = load_program_module()
+    events = []
+
+    fake_agent = types.ModuleType("agent")
+    fake_aux = types.ModuleType("agent.auxiliary_client")
+    fake_aux.call_llm = lambda **kwargs: {"content": "unused"}
+    fake_aux.extract_content_or_reasoning = lambda response: response["content"]
+    monkeypatch.setitem(sys.modules, "agent", fake_agent)
+    monkeypatch.setitem(sys.modules, "agent.auxiliary_client", fake_aux)
+
+    class FakeContext:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def __enter__(self):
+            events.append(("enter", self.kwargs["lm"].model))
+
+        def __exit__(self, exc_type, exc, tb):
+            events.append(("exit", None))
+            return False
+
+    class FakeDspyWithContext(FakeDspy):
+        class BaseLM:
+            def __init__(self, model, model_type="chat", temperature=0.0, max_tokens=1000, cache=True, **kwargs):
+                self.model = model
+
+        @staticmethod
+        def context(**kwargs):
+            return FakeContext(**kwargs)
+
+    program = mod.build_dspy_program(lm_config={"model": "gpt-context"}, dspy_module=FakeDspyWithContext)
+    result = program.forward(
+        proposal_json='{"id":"proposal-ctx","risk":"low","confidence":"high"}',
+        findings_json='[]',
+        rubric_json='{}',
+    )
+
+    assert events == [("enter", "gpt-context"), ("exit", None)]
+    assert result["id"] == "proposal-ctx"
+    assert result["auto_apply"] is False
 
 
 def test_dspy_program_invalid_json_fails_closed():

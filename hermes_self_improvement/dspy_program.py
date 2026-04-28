@@ -3,6 +3,10 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
+import os
+import sys
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 ALLOWED_RECOMMENDATIONS = {
@@ -13,6 +17,92 @@ ALLOWED_RECOMMENDATIONS = {
 ALLOWED_RISKS = {"low", "medium", "high"}
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
 PROGRAM_NAME = "ProposalScoringDspyProgram"
+
+
+def _hermes_home() -> Path:
+    return Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser()
+
+
+def _ensure_hermes_agent_on_path() -> None:
+    candidates = [
+        _hermes_home() / "hermes-agent",
+        Path(__file__).resolve().parents[2] / "hermes-agent",
+    ]
+    for candidate in candidates:
+        if (candidate / "agent" / "auxiliary_client.py").exists():
+            path = str(candidate)
+            if path not in sys.path:
+                sys.path.insert(0, path)
+            return
+
+
+def _coerce_int_config(value: Any, *, default: int) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _openai_chat_response(*, content: str, model: str) -> Any:
+    return SimpleNamespace(
+        model=model,
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
+        usage={},
+        _hidden_params={},
+    )
+
+
+def build_hermes_auxiliary_lm(*, lm_config: dict[str, Any] | None = None, dspy_module: Any | None = None) -> Any:
+    """Build a DSPy BaseLM that routes calls through Hermes auxiliary_client.
+
+    The bridge keeps provider credentials in Hermes/local config. It returns an
+    OpenAI-chat-shaped response object so DSPy's BaseLM can process it normally.
+    """
+    dspy = dspy_module or require_dspy()
+    if not hasattr(dspy, "BaseLM"):
+        raise RuntimeError("DSPy BaseLM is unavailable; cannot build Hermes auxiliary LM bridge")
+    cfg = lm_config or {}
+    provider = cfg.get("provider") or "auto"
+    model = cfg.get("model") or ""
+    timeout = _coerce_int_config(cfg.get("timeout"), default=120)
+    max_tokens = _coerce_int_config(cfg.get("max_tokens"), default=1800)
+    base_url = cfg.get("base_url") or None
+    api_key = cfg.get("api_key") or None
+    extra_body = cfg.get("extra_body") if isinstance(cfg.get("extra_body"), dict) else None
+
+    class HermesAuxiliaryLM(dspy.BaseLM):
+        def __init__(self):
+            super().__init__(
+                model=model or "hermes-auxiliary",
+                model_type="chat",
+                temperature=None,
+                max_tokens=max_tokens,
+                cache=False,
+            )
+
+        def forward(self, prompt: str | None = None, messages: list[dict[str, Any]] | None = None, **kwargs):
+            _ensure_hermes_agent_on_path()
+            from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+
+            request_messages = messages or [{"role": "user", "content": prompt or ""}]
+            response = call_llm(
+                task="self_improvement_gepa",
+                provider=provider,
+                model=model or None,
+                base_url=base_url,
+                api_key=api_key,
+                messages=request_messages,
+                temperature=None,
+                max_tokens=_coerce_int_config(kwargs.get("max_tokens"), default=max_tokens),
+                timeout=_coerce_int_config(kwargs.get("timeout"), default=timeout),
+                extra_body=extra_body,
+            )
+            return _openai_chat_response(
+                content=str(extract_content_or_reasoning(response) or ""),
+                model=model or "hermes-auxiliary",
+            )
+
+    return HermesAuxiliaryLM()
 
 
 def dspy_available() -> bool:
@@ -32,12 +122,15 @@ def require_dspy() -> Any:
 def build_dspy_program(*, lm_config: dict[str, Any] | None = None, dspy_module: Any | None = None) -> Any:
     """Build the real DSPy proposal scorer module behind a lazy import boundary.
 
-    ``lm_config`` is accepted for the future Hermes auxiliary LM bridge. This
-    function intentionally does not configure provider credentials; provider
-    selection belongs to Hermes, not this plugin.
+    ``lm_config`` configures the Hermes auxiliary LM bridge for real DSPy.
+    Fake DSPy test doubles that do not expose ``BaseLM`` / ``context`` simply use
+    their local ``Predict`` implementation without touching global DSPy state.
     """
     dspy = dspy_module or require_dspy()
-    _ = lm_config or {}
+    lm_config = lm_config or {}
+    lm = None
+    if hasattr(dspy, "BaseLM"):
+        lm = build_hermes_auxiliary_lm(lm_config=lm_config, dspy_module=dspy)
 
     class ProposalScoringDspySignature(dspy.Signature):
         proposal_json = dspy.InputField(desc="One Hermes self-improvement proposal as JSON.")
@@ -55,13 +148,21 @@ def build_dspy_program(*, lm_config: dict[str, Any] | None = None, dspy_module: 
 
         def __init__(self):
             self.predict = dspy.Predict(ProposalScoringDspySignature)
+            self.lm = lm
 
         def forward(self, *, proposal_json: str, findings_json: str, rubric_json: str) -> dict[str, Any]:
-            prediction = self.predict(
-                proposal_json=proposal_json,
-                findings_json=findings_json,
-                rubric_json=rubric_json,
-            )
+            def run_predict():
+                return self.predict(
+                    proposal_json=proposal_json,
+                    findings_json=findings_json,
+                    rubric_json=rubric_json,
+                )
+
+            if self.lm is not None and hasattr(dspy, "context"):
+                with dspy.context(lm=self.lm):
+                    prediction = run_predict()
+            else:
+                prediction = run_predict()
             raw_score_json = _prediction_value(prediction, "score_json")
             proposal = _loads_json_object(proposal_json, label="proposal_json")
             return sanitize_score_output(raw_score_json, proposal_id=str(proposal.get("id") or ""))
@@ -229,10 +330,9 @@ def _sanitize_score_breakdown(raw: dict[str, Any]) -> dict[str, dict[str, Any]]:
 class ProposalScoringSignature:
     """DSPy-compatible scoring contract for Hermes self-improvement proposals.
 
-    A future DSPy implementation can replace `ProposalScoringProgram.forward` with
-    a ChainOfThought/Predict module using this same input/output schema. The
-    fallback implementation below is intentionally dependency-free so tests and
-    cron reports do not require DSPy just to load the scaffold.
+    The dependency-free scaffold below is kept only for bundled `gepa-eval`
+    regression fixtures. Runtime `--scorer gepa` uses the real DSPy program and
+    Hermes auxiliary LM bridge above.
     """
 
     input_fields = ["proposal", "findings", "rubric"]
@@ -240,11 +340,12 @@ class ProposalScoringSignature:
 
 
 class ProposalScoringProgram:
-    """Dependency-free scaffold for a future DSPy/GEPA proposal scorer.
+    """Dependency-free regression fixture for proposal scoring.
 
-    The method returns a deterministic baseline score. GEPA should optimize a
-    DSPy program/metric around this contract later, but the hard safety behavior
-    is already encoded here: external scoring never grants `auto_apply`.
+    Runtime GEPA scoring must not call this class. It exists so `gepa-eval` can
+    validate bundled rubric cases without a live LLM/network dependency. The hard
+    safety behavior is still mirrored here: external scoring never grants
+    `auto_apply`.
     """
 
     signature = ProposalScoringSignature

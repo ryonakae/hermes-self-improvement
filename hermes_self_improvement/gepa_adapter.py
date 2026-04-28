@@ -47,6 +47,12 @@ def _redact_config_value(value: Any) -> Any:
     return value
 
 
+def _model_config(config: dict[str, Any], key: str) -> dict[str, Any]:
+    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
+    value = model_config.get(key) if isinstance(model_config.get(key), dict) else {}
+    return value or {}
+
+
 def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
     gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
@@ -239,7 +245,8 @@ def optimize_gepa(
         raise RuntimeError("gepa-optimize requires a non-empty valset")
 
     program_module = _load_dspy_program_module()
-    student = program_module.build_dspy_program(lm_config=gepa_config, dspy_module=dspy)
+    gepa_model_config = _model_config(config, "gepa")
+    student = program_module.build_dspy_program(lm_config=gepa_model_config or gepa_config, dspy_module=dspy)
     metric_module = _load_dspy_metric_module()
     metric = getattr(metric_module, "gepa_feedback_metric")
 
@@ -248,6 +255,11 @@ def optimize_gepa(
         "max_full_evals": budget,
         "track_stats": bool(gepa_config.get("track_stats", True)),
     }
+    if gepa_model_config and hasattr(dspy, "BaseLM") and hasattr(program_module, "build_hermes_auxiliary_lm"):
+        optimizer_kwargs["reflection_lm"] = program_module.build_hermes_auxiliary_lm(
+            lm_config=gepa_model_config,
+            dspy_module=dspy,
+        )
     if gepa_config.get("num_threads") is not None:
         optimizer_kwargs["num_threads"] = int(gepa_config.get("num_threads") or 1)
     optimizer = dspy.GEPA(**optimizer_kwargs)
