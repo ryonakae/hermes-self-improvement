@@ -102,6 +102,131 @@ def test_evaluator_promote_plans_replace_existing_active_pointer(tmp_path):
     assert item["rollback_preview"]["before_snapshot"] == pointer.read_text(encoding="utf-8")
 
 
+def test_evaluator_promote_approval_binds_candidate_and_active_pointer_hashes(tmp_path):
+    sys.path.insert(0, str(PLUGIN_DIR))
+    try:
+        mod = importlib.import_module("hermes_self_improvement")
+    finally:
+        try:
+            sys.path.remove(str(PLUGIN_DIR))
+        except ValueError:
+            pass
+    candidate = tmp_path / "candidate.json"
+    candidate.write_text(json.dumps({"compiled": True}), encoding="utf-8")
+    candidate_hash = mod._sha256_text(candidate.read_text(encoding="utf-8"))
+    pointer = tmp_path / "active-evaluator.json"
+    before_pointer = {"operation": "evaluator_promote", "compiled_program_path": "old.json"}
+    pointer.write_text(json.dumps(before_pointer, sort_keys=True), encoding="utf-8")
+    before_hash = mod._sha256_text(pointer.read_text(encoding="utf-8"))
+    config = {"reports_dir": str(tmp_path / "reports")}
+    plan = mod.build_apply_plan(
+        proposals=[
+            {
+                "id": "promote-approval",
+                "change_type": "evaluator_promote",
+                "target_path": str(pointer),
+                "compiled_program_path": str(candidate),
+                "candidate_hash": candidate_hash,
+                "candidate_id": "candidate-1",
+                "regression_result_hash": "regression-hash-approval",
+                "risk": "high",
+                "confidence": "medium",
+                "recommendation": "human_review",
+            }
+        ],
+        summary={},
+        execution_mode="dry_run_plan",
+        config=config,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    mod.write_apply_plan(plan, config)
+    item = plan["items"][0]
+    result = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+    )
+
+    approval = result["approval"]
+    assert approval["approved_change_type"] == "evaluator_promote"
+    assert approval["evaluator_candidate_id"] == "candidate-1"
+    assert approval["evaluator_candidate_path"] == str(candidate)
+    assert approval["evaluator_candidate_hash"] == candidate_hash
+    assert approval["evaluator_regression_result_hash"] == "regression-hash-approval"
+    assert approval["active_evaluator_pointer_path"] == str(pointer)
+    assert approval["active_evaluator_before_hash"] == before_hash
+    assert approval["approval_hash"]
+    validation = mod.validate_approval_artifact(
+        approval_id=approval["approval_id"],
+        config=config,
+        now=datetime(2026, 1, 1, 2, tzinfo=timezone.utc),
+    )
+    assert validation["current_status"] == "valid"
+
+    candidate.write_text(json.dumps({"compiled": True, "changed": True}), encoding="utf-8")
+    validation_after_candidate_drift = mod.validate_approval_artifact(
+        approval_id=approval["approval_id"],
+        config=config,
+        now=datetime(2026, 1, 1, 2, tzinfo=timezone.utc),
+    )
+    assert validation_after_candidate_drift["current_status"] == "rejected"
+    assert "evaluator_candidate_hash_mismatch" in validation_after_candidate_drift["reasons"]
+
+
+def test_evaluator_promote_rejects_active_pointer_drift_after_approval(tmp_path):
+    sys.path.insert(0, str(PLUGIN_DIR))
+    try:
+        mod = importlib.import_module("hermes_self_improvement")
+    finally:
+        try:
+            sys.path.remove(str(PLUGIN_DIR))
+        except ValueError:
+            pass
+    candidate = tmp_path / "candidate.json"
+    candidate.write_text(json.dumps({"compiled": True}), encoding="utf-8")
+    candidate_hash = mod._sha256_text(candidate.read_text(encoding="utf-8"))
+    pointer = tmp_path / "active-evaluator.json"
+    pointer.write_text(json.dumps({"compiled_program_path": "old.json"}, sort_keys=True), encoding="utf-8")
+    config = {"reports_dir": str(tmp_path / "reports")}
+    plan = mod.build_apply_plan(
+        proposals=[
+            {
+                "id": "promote-drift",
+                "change_type": "evaluator_promote",
+                "target_path": str(pointer),
+                "compiled_program_path": str(candidate),
+                "candidate_hash": candidate_hash,
+                "regression_result_hash": "regression-hash-drift",
+                "risk": "high",
+                "confidence": "medium",
+            }
+        ],
+        summary={},
+        execution_mode="dry_run_plan",
+        config=config,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    mod.write_apply_plan(plan, config)
+    item = plan["items"][0]
+    approval = mod.create_approval_artifact(
+        plan_id=plan["plan_id"],
+        item_id=item["item_id"],
+        config=config,
+        created_at=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+    )["approval"]
+
+    pointer.write_text(json.dumps({"compiled_program_path": "other.json"}, sort_keys=True), encoding="utf-8")
+    validation = mod.validate_approval_artifact(
+        approval_id=approval["approval_id"],
+        config=config,
+        now=datetime(2026, 1, 1, 2, tzinfo=timezone.utc),
+    )
+
+    assert validation["current_status"] == "rejected"
+    assert "active_evaluator_before_hash_mismatch" in validation["reasons"]
+
+
 def test_evaluator_promote_rejects_candidate_hash_mismatch(tmp_path):
     mod = load_module()
     candidate = tmp_path / "candidate.json"

@@ -94,6 +94,35 @@ def write_approval_artifact(approval: dict[str, Any], config: dict[str, Any]) ->
     return path
 
 
+def _evaluator_promote_pointer_payload(item: dict[str, Any]) -> dict[str, Any]:
+    mutation = item.get("mutation") if isinstance(item.get("mutation"), dict) else {}
+    after_text = mutation.get("after_text")
+    if not isinstance(after_text, str):
+        return {}
+    try:
+        payload = json.loads(after_text)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _bind_evaluator_promote_approval_fields(approval: dict[str, Any], item: dict[str, Any]) -> None:
+    pointer = _evaluator_promote_pointer_payload(item)
+    if not pointer:
+        approval.setdefault("reasons", []).append("evaluator_pointer_payload_missing")
+        approval["current_status"] = "rejected"
+        return
+    approval.update({
+        "evaluator_candidate_id": pointer.get("candidate_id"),
+        "evaluator_candidate_path": pointer.get("compiled_program_path"),
+        "evaluator_candidate_hash": pointer.get("compiled_program_hash"),
+        "evaluator_regression_result_hash": pointer.get("regression_result_hash"),
+        "active_evaluator_pointer_path": item.get("target_path"),
+        "active_evaluator_before_hash": pointer.get("active_before_hash"),
+        "evaluator_rollback_strategy": pointer.get("rollback_strategy"),
+    })
+
+
 def create_approval_artifact(
     *,
     plan_id: str,
@@ -138,6 +167,8 @@ def create_approval_artifact(
         "approval_scope": "single_apply_plan_item",
         "target_changed": False,
     }
+    if item.get("change_type") == "evaluator_promote":
+        _bind_evaluator_promote_approval_fields(approval, item)
     _mark_hash(approval, "approval_hash")
     path = write_approval_artifact(approval, config)
     return {"approval": approval, "approval_path": str(path), "target_changed": False}
@@ -208,6 +239,42 @@ def _approval_summary(
     return summary
 
 
+def _validate_evaluator_promote_binding(*, approval: dict[str, Any], item: dict[str, Any] | None) -> list[str]:
+    reasons: list[str] = []
+    if item is None:
+        return reasons
+    pointer = _evaluator_promote_pointer_payload(item)
+    if not pointer:
+        return ["evaluator_pointer_payload_missing"]
+    candidate_path = approval.get("evaluator_candidate_path")
+    candidate_hash = approval.get("evaluator_candidate_hash")
+    regression_hash = approval.get("evaluator_regression_result_hash")
+    active_pointer_path = approval.get("active_evaluator_pointer_path")
+    active_before_hash = approval.get("active_evaluator_before_hash")
+    if candidate_path != pointer.get("compiled_program_path"):
+        reasons.append("evaluator_candidate_path_mismatch")
+    if candidate_hash != pointer.get("compiled_program_hash"):
+        reasons.append("evaluator_candidate_hash_binding_mismatch")
+    if regression_hash != pointer.get("regression_result_hash"):
+        reasons.append("evaluator_regression_result_hash_mismatch")
+    if active_pointer_path != item.get("target_path"):
+        reasons.append("active_evaluator_pointer_path_mismatch")
+    if active_before_hash != pointer.get("active_before_hash"):
+        reasons.append("active_evaluator_before_hash_binding_mismatch")
+    live_candidate_hash = _current_file_hash(str(candidate_path)) if candidate_path else None
+    if live_candidate_hash is None:
+        reasons.append("evaluator_candidate_not_found")
+    elif candidate_hash != live_candidate_hash:
+        reasons.append("evaluator_candidate_hash_mismatch")
+    live_active_hash = _current_file_hash(str(active_pointer_path)) if active_pointer_path else None
+    if active_before_hash is None:
+        if live_active_hash is not None:
+            reasons.append("active_evaluator_before_hash_mismatch")
+    elif live_active_hash != active_before_hash:
+        reasons.append("active_evaluator_before_hash_mismatch")
+    return reasons
+
+
 def validate_approval_artifact(
     *,
     approval_id: str,
@@ -260,6 +327,8 @@ def validate_approval_artifact(
             reasons.append("change_type_mismatch")
         if item.get("target_path") != approval.get("target_path"):
             reasons.append("target_path_mismatch")
+        if approval.get("approved_change_type") == "evaluator_promote":
+            reasons.extend(_validate_evaluator_promote_binding(approval=approval, item=item))
 
     status = "rejected" if reasons else "valid"
     return {
