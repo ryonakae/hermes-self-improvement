@@ -57,7 +57,7 @@ Do not reintroduce these as CLI or plugin tools:
 - `retention-report` / `retention-prune`
 - `expected_*hash` / `confirm_*` flags
 
-Old modules may remain temporarily only as unused internals while tests migrate; primary paths must not depend on them.
+Legacy approval/mode modules and low-risk skeleton helpers have been removed from the implementation. Do not rebuild a parallel legacy gate; keep the simplified surface centered on `--execute`, internal hashes, target drift checks, rollback ledgers, and calibration gates.
 
 ## Verification
 

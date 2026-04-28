@@ -68,7 +68,6 @@ Primary surface の安全境界は `--execute` です。
 - `apply_policy` が通常の skill/memory 改善の適用範囲を決めます。
 - `calibration` が evaluator/scorer 自己調整を決めます。`apply_policy` とは別です。
 - `item_hash`, `target_hash`, `ledger_hash` は内部整合性・drift 検知・rollback 用で、user-facing option ではありません。
-- legacy `execution_mode` / approval / expected hash command は互換・高度な診断用に残る場合がありますが、primary CLI/tool surface には追加しません。
 
 ```yaml
 apply_policy:
@@ -122,7 +121,7 @@ python3 -m pip install -e .
 
 GEPA regression / optimizer internals は `calibrate` の内部で扱います。Runtime `gepa` scorer は DSPy program に plugin-local `model.gepa` を渡し、DSPy 側の LM call は Hermes `agent.auxiliary_client.call_llm(...)` を通る `BaseLM` bridge で行います。`model.gepa` の provider / model / base_url / api_key / timeout / max_tokens / extra_body は local `config.yaml` で指定でき、artifact では secret 系 key を redact します。GEPA は scorer の改善・比較・優先順位づけに使いますが、GEPA の点数だけで `auto_apply` は許可しません。
 
-Compiled evaluator の active 化は `calibrate --execute` で扱います。candidate hash、regression result、active-before pointer hash / snapshot を calibration ledger に束縛し、`${reports_dir}/gepa/active-evaluator.json` または configured `active_evaluator_pointer_path` を更新します。regression runner 未設定・regression failure・candidate 不足では fail-closed にして active pointer を変更しません。旧 approval-gated `evaluator_promote` path は互換用の内部実装として残る場合がありますが、新しい user-facing surface では expected hash や approval artifact を入力させません。
+Compiled evaluator の active 化は `calibrate --execute` で扱います。candidate hash、regression result、active-before pointer hash / snapshot を calibration ledger に束縛し、`${reports_dir}/gepa/active-evaluator.json` または configured `active_evaluator_pointer_path` を更新します。regression runner 未設定・regression failure・candidate 不足では fail-closed にして active pointer を変更しません。新しい user-facing surface では expected hash や approval artifact を入力させません。
 
 ## ディレクトリ
 
@@ -136,8 +135,7 @@ Compiled evaluator の active 化は `calibrate --execute` で扱います。can
 - `hermes_self_improvement/analysis.py`: event aggregation と proposal generation
 - `hermes_self_improvement/scoring.py`: scorer 実装
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
-- `hermes_self_improvement/ledger.py`: apply attempt、ledger、rollback
-- `hermes_self_improvement/approvals.py`: approval artifact、validation、approved apply
+- `hermes_self_improvement/ledger.py`: pending ledger helpers（旧 low-risk apply/rollback は削除済み）
 - `hermes_self_improvement/tool_handlers.py`: plugin tools。root 直下の `tools.py` は置かない
 - `evals/`: offline scorer の rubric と regression cases
 - `skills/operations/`: bundled operational skill
@@ -150,9 +148,7 @@ Compiled evaluator の active 化は `calibrate --execute` で扱います。can
 - `state/events.jsonl`: observed events
 - `daily/latest.md`: daily report
 - `apply-plans/YYYY-MM-DD/`: dry-run apply plans
-- `ledgers/YYYY-MM-DD/`: apply ledgers
-- `apply-attempts/YYYY-MM-DD/`: apply attempt artifacts
-- `approvals/YYYY-MM-DD/`: approval artifacts
+- `ledgers/YYYY-MM-DD/`: apply / calibration ledgers
 
 `config.json`, plugin-local `config.yaml`, `config.local.json`, `config.local.yaml`, `HERMES_SELF_IMPROVE_CONFIG`, `--config` で保存先や scorer 設定を上書きできます。precedence は defaults < `config.json` < `config.yaml` < `config.local.json` < `config.local.yaml` < env < CLI です。`config.example.yaml` は git-managed な雛形で、local `config.yaml` / `config.local.yaml` は gitignore されています。`model.llm` / `model.gepa` の `api_key` は local YAML で `${ENV}` 参照にできますが、`.env` / `.env.example` は使いません。
 
@@ -186,5 +182,5 @@ PY
 - hook は軽く保つ
 - safety gate は code と tests で守る
 - 新しい mutation は TDD で fail-closed を先に固定する
-- destructive / broad mutation は approval-gated path から始める
+- destructive / broad mutation は通常 apply で ready にせず human review / calibration gate に倒す
 - target repo の commit は plugin では作らない

@@ -17,9 +17,9 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - DSPy/GEPA evaluator の LLM call は Hermes で認証済みの provider routing を使う。default は Hermes auxiliary model。`reflection_model` / `task_model` は model name override のみで、`null` は Hermes auxiliary default を意味する。plugin 独自に OpenAI / Anthropic / LiteLLM API key や provider selector を持たせない。
 - LLM/GEPA scorer の model 設定は plugin-local `config.yaml` / tracked `config.example.yaml` に `model.llm` / `model.gepa` として置く。Hermes 本体 `~/.hermes/config.yaml` の root `model:` 配下に `llm` / `gepa` を増やさない。`model.llm` / `model.gepa` は Hermes auxiliary task config と同じ ergonomics（`provider`, `model`, `base_url`, `api_key`, `timeout`, `max_tokens`, `extra_body`）にし、呼び出し自体は `agent.auxiliary_client.call_llm(...)` 経由にする。local `config.yaml` は gitignore、`config.example.yaml` は placeholder のみ。`.env` / `.env.example` はこの用途では作らず、custom endpoint secret が必要なら local YAML の `${ENV}` 参照を使う。
 - Runtime scorer の `--scorer gepa` は real DSPy / GEPA path を使い、dependency-free offline baseline に黙って fallback しない。deterministic scaffold は必要なら tests / fixtures / private helper に閉じる。
-- LLM / GEPA scoring は advisory only。`auto_apply` は常に false 扱いにし、無人変更の許可として使わない。GEPA/LLM comparison を self-improvement decision の default input とし、score / recommendation / risk / confidence / target / rationale の material disagreement は human review / approval-required に倒して unattended apply を block する。material 判定は change type ごとの policy config で扱い、risk / recommendation disagreement は常に block、memory / lifecycle / destructive / broad change は厳しめ、typo / pitfall / validation addition は score / confidence threshold だけ少し緩めてもよい。`report` / `run` / `generate-apply-plan` は compare default、軽量 `analyze` は heuristic default でよい。
+- LLM / GEPA scoring は advisory only。`auto_apply` は常に false 扱いにし、無人変更の許可として使わない。GEPA/LLM comparison を self-improvement decision の default input とし、score / recommendation / risk / confidence / target / rationale の material disagreement は human review に倒して unattended apply を block する。material 判定は change type ごとの policy config で扱い、risk / recommendation disagreement は常に block、memory / lifecycle / destructive / broad change は厳しめ、typo / pitfall / validation addition は score / confidence threshold だけ少し緩めてもよい。`report` / `plan` / `improve` は compare default。
 - Evaluator 自体も自己改善対象にする。GEPA/LLM disagreement、human approval/rejection、rollback/failure ledger、regression eval cases から candidate evaluator を生成・評価してよいが、active evaluator への昇格は `calibrate --execute` の regression gate を通った場合だけにする。candidate hash / active-before pointer/hash / regression result / rollback data を calibration ledger に束縛して silent replacement を禁止する。
-- Primary surface では `--execute` を唯一の user-facing mutation boundary にする。legacy `execution_mode` と capability gate は互換・高度な診断用に残る場合だけ使う。
+- Primary surface では `--execute` を唯一の user-facing mutation boundary にする。旧 `execution_mode` / capability gate / approval artifact / expected-hash command は削除済みで、通常 apply は `apply_policy` と内部 hash / target drift checks で fail-closed にする。
 - 変更前に `git status --short` と対象 diff を確認し、無関係な変更を巻き戻さない。
 
 ## 主要パス
@@ -31,7 +31,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `__init__.py`: thin plugin entrypoint。Hermes discovery 用に root に残し、実装 package を re-export。
 - `hermes_self_improvement/schemas.py`: plugin tool schema。
 - `hermes_self_improvement/tool_handlers.py`: CLI parity tool handler。root 直下の `tools.py` は Hermes core `tools.registry` を shadow するため使わない。
-- `hermes_self_improvement/config.py`: default config、config precedence、execution mode、policy gate。
+- `hermes_self_improvement/config.py`: default config、config precedence、apply_policy、calibration config。
 - `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry、retention。
 - `hermes_self_improvement/analysis.py`: event aggregation、finding 抽出、proposal 生成。explicit `memory_compression_candidate` / `skill_lifecycle_candidate` finding と `self_improvement_candidate` event は approval-required proposal に変換するが、auto-apply 許可にはしない。`scan_memory_compression_candidates()` / `scan_skill_lifecycle_candidates()` は dry-run candidate event だけを作る。
 - `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer。
@@ -39,8 +39,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `hermes_self_improvement/gepa_adapter.py`: GEPA payload、offline fixture eval、real DSPy/GEPA path の fail-closed 境界。
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と low-risk mutation planning。
 - `hermes_self_improvement/calibration.py`: calibration evidence collection、regression-gated active evaluator promotion、calibration rollback。
-- `hermes_self_improvement/ledger.py`: pending ledger と apply attempt artifact。
-- `hermes_self_improvement/approvals.py`: 旧 approval artifact generation / validation helpers。primary CLI / tool surface からは呼ばず、cleanup で削除候補。
+- `hermes_self_improvement/ledger.py`: pending ledger helpers。旧 low-risk apply / rollback skeleton は削除済み。
 - `hermes_self_improvement/cli.py`: CLI parser、report rendering、recent plan/apply/calibration summary integration、pipeline orchestration。
 - `bin/hermes-self-improve`: standalone wrapper CLI。
 - `evals/`: GEPA offline scorer の rubric / regression cases。
@@ -90,10 +89,10 @@ self_improvement_rollback
 3. Hook path を触る場合は、redaction・retention・partial event filtering が壊れないか確認する。
 4. Scorer path を触る場合は、advisory-only と `auto_apply: false` を崩さない。
 5. Apply-plan / ledger path を触る場合は、target hash、rollback preview、explicit target resolution、scorer disagreement gate、non-compare scorer が unattended eligible にならないことを確認する。stale path / command は canonical replacement が README/config/実ファイル/active memory/observed success などで独立確認できる場合だけ mutation plan を許可する。
-6. 実 mutation slice を追加するときは preview-first を崩さない。新しい簡素 surface では `apply <plan-id>` が preview、`apply <plan-id> --execute` が実行で、item hash / target baseline は内部検証する。旧 guarded command を直接使う場合は、low-risk apply は explicit confirmation と expected item hash、approved apply は approval hash + target hash + rollback preview/post-write validation、retention prune は expected artifact list hash、whole-file replacement は full before snapshot rollback を必須にする。`skill_create` / `skill_delete` / `skill_rename` / `skill_merge` / `memory_delete` / `evaluator_promote` のような lifecycle / destructive / active-evaluator mutation は approval-gated path だけで扱う。create は missing target + rollback delete、delete は existing target + before snapshot restore、rename は source exists + destination missing + rollback rename back、merge は destination replacement + source delete + multi-target rollback data、memory delete は configured `memory_roots` 内 target + before snapshot restore を必須にする。`evaluator_promote` は compiled candidate path/hash と regression result hash を active evaluator pointer payload に束縛し、`${reports_dir}/gepa/active-evaluator.json` または configured `active_evaluator_pointer_path` を `create_file` / `replace_entire_file` mutation と rollback preview で扱う。新しい destructive / broad mutation は low-risk に混ぜず、approval-gated path から始める。
+6. 実 mutation slice を追加するときは preview-first を崩さない。新しい簡素 surface では `apply <plan-id>` が preview、`apply <plan-id> --execute` が実行で、item hash / target baseline は内部検証する。`skill_create` / `skill_delete` / `skill_rename` / `skill_merge` / `memory_delete` / `evaluator_promote` のような lifecycle / destructive / active-evaluator mutation は通常 apply では ready にせず、まず `calibrate` や human-review plan に倒す。新しい destructive / broad mutation は低リスク apply に混ぜない。
 7. `__init__.py` / registration / bundled skill discovery を触ったら、unit test だけでなく plugin manager loading も確認する。
-8. Tool handler を触る場合は、wrapper CLI に shell out せず、CLI と同じ core function と `validate_mode_action(...)` / `_required_capability_for_command(...)` を通す。
-9. Config / policy を触る場合は、defaults < `config.json` < plugin-local `config.yaml` < `config.local.json` < `config.local.yaml` < `HERMES_SELF_IMPROVE_CONFIG` < `--config` の precedence と、`allow_policy_expansion` なしでは権限拡張できないことを確認する。explicit env / CLI config は JSON/YAML どちらも fail-closed に扱う。
+8. Tool handler を触る場合は、wrapper CLI に shell out せず、CLI と同じ core function を使う。
+9. Config / policy を触る場合は、defaults < `config.json` < plugin-local `config.yaml` < `config.local.json` < `config.local.yaml` < `HERMES_SELF_IMPROVE_CONFIG` < `--config` の precedence を確認する。explicit env / CLI config は JSON/YAML どちらも fail-closed に扱う。
 
 ## 検証 checklist
 

@@ -146,14 +146,6 @@ def test_render_retention_report_includes_preview_not_deletion_language(tmp_path
     assert "prune" not in rendered.lower()
 
 
-def test_policy_allows_retention_report_as_read_only_command():
-    mod = load_plugin_module()
-
-    for mode in ["report_only", "dry_run_plan", "apply_low_risk", "apply_approved"]:
-        assert mod.validate_mode_action(mode, "retention-report") == {"allowed": True, "reason": "allowed"}
-    assert mod.validate_mode_action("report_only", "retention-report", required_capability="mutate_skills")["allowed"] is False
-
-
 def test_retention_report_cli_is_removed_from_primary_surface(tmp_path):
     config = seed_artifacts(tmp_path)
     config_path = tmp_path / "config.json"
@@ -302,14 +294,6 @@ def test_retention_prune_cli_is_removed_from_primary_surface(tmp_path):
     )
     assert preview.returncode == 2
     assert "invalid choice" in preview.stderr
-
-def test_policy_allows_retention_prune_only_in_apply_approved_mode():
-    mod = load_plugin_module()
-
-    assert mod.validate_mode_action("apply_approved", "retention-prune", required_capability="prune_artifacts")["allowed"] is True
-    for mode in ["report_only", "dry_run_plan", "apply_low_risk"]:
-        assert mod.validate_mode_action(mode, "retention-prune", required_capability="prune_artifacts")["allowed"] is False
-
 
 def test_plugin_does_not_register_retention_prune_in_primary_tool_surface():
     mod = load_plugin_module()

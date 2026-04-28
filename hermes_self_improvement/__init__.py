@@ -17,46 +17,30 @@ if str(_PLUGIN_DIR) not in sys.path:
 try:  # pragma: no cover - package import path
     from .config import (
         DEFAULT_CALIBRATION,
-        DEFAULT_EXECUTION_MODE,
         DEFAULT_APPLY_POLICY,
-        DEFAULT_MODE_POLICY,
         DEFAULT_PREVIEW_CHARS,
         DEFAULT_RETENTION_DAYS,
-        RESERVED_EXECUTION_MODES,
         RISK_ORDER,
-        VALID_EXECUTION_MODES,
         _load_config,
-        _mode_policy_from_config,
-        _required_capability_for_command,
         apply_policy_allows_item,
         get_hermes_home,
         load_config,
         normalize_apply_policy,
         normalize_calibration_config,
-        resolve_execution_mode,
-        validate_mode_action,
     )
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from config import (
         DEFAULT_CALIBRATION,
-        DEFAULT_EXECUTION_MODE,
         DEFAULT_APPLY_POLICY,
-        DEFAULT_MODE_POLICY,
         DEFAULT_PREVIEW_CHARS,
         DEFAULT_RETENTION_DAYS,
-        RESERVED_EXECUTION_MODES,
         RISK_ORDER,
-        VALID_EXECUTION_MODES,
         _load_config,
-        _mode_policy_from_config,
-        _required_capability_for_command,
         apply_policy_allows_item,
         get_hermes_home,
         load_config,
         normalize_apply_policy,
         normalize_calibration_config,
-        resolve_execution_mode,
-        validate_mode_action,
     )
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -296,7 +280,6 @@ def score_proposals(
 
 try:  # pragma: no cover - package import path
     from .cli import (
-        _add_mode_argument,
         _call_gepa_eval,
         _format_score_breakdown,
         _format_scorer_compare,
@@ -304,12 +287,10 @@ try:  # pragma: no cover - package import path
         _handle_slash,
         _render_gepa_eval,
         _setup_cli,
-        build_approval_report_payload,
         build_ledger_report_payload,
         build_retention_prune_payload,
         build_retention_report_payload,
         main,
-        render_approval_report,
         render_ledger_report,
         render_retention_report,
         render_report,
@@ -318,7 +299,6 @@ try:  # pragma: no cover - package import path
     )
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from cli import (
-        _add_mode_argument,
         _call_gepa_eval,
         _format_score_breakdown,
         _format_scorer_compare,
@@ -326,12 +306,10 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _handle_slash,
         _render_gepa_eval,
         _setup_cli,
-        build_approval_report_payload,
         build_ledger_report_payload,
         build_retention_prune_payload,
         build_retention_report_payload,
         main,
-        render_approval_report,
         render_ledger_report,
         render_retention_report,
         render_report,
@@ -340,11 +318,6 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     )
 
 
-
-try:  # pragma: no cover - package import path
-    from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report, validate_approval_artifact, write_approval_artifact
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report, validate_approval_artifact, write_approval_artifact
 
 
 try:  # pragma: no cover - package import path
@@ -402,35 +375,9 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 
 
 try:  # pragma: no cover - package import path
-    from .ledger import (
-        _current_file_hash,
-        _find_apply_plan_item,
-        _find_apply_plan_path,
-        _find_ledger_path,
-        _load_apply_plan_by_id,
-        _load_ledger_by_id,
-        apply_low_risk_skeleton,
-        build_apply_attempt,
-        build_pending_ledger,
-        rollback_low_risk,
-        write_apply_attempt,
-        write_pending_ledger,
-    )
+    from .ledger import build_pending_ledger, write_pending_ledger
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from ledger import (
-        _current_file_hash,
-        _find_apply_plan_item,
-        _find_apply_plan_path,
-        _find_ledger_path,
-        _load_apply_plan_by_id,
-        _load_ledger_by_id,
-        apply_low_risk_skeleton,
-        build_apply_attempt,
-        build_pending_ledger,
-        rollback_low_risk,
-        write_apply_attempt,
-        write_pending_ledger,
-    )
+    from ledger import build_pending_ledger, write_pending_ledger
 
 
 

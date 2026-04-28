@@ -10,38 +10,24 @@ from typing import Any
 
 try:  # pragma: no cover - package import path
     from .analysis import AnalysisResult, analyze_events
-    from .approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
     from .apply_engine import apply_plan, rollback_apply_ledger
     from .apply_plan import build_apply_plan, write_apply_plan
     from .calibration import collect_calibration_evidence, run_calibration
     from .config import (
         DEFAULT_RETENTION_DAYS,
-        VALID_EXECUTION_MODES,
-        _load_config,
-        _required_capability_for_command,
         load_config,
-        resolve_execution_mode,
-        validate_mode_action,
     )
-    from .ledger import apply_low_risk_skeleton, rollback_low_risk
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import AnalysisResult, analyze_events
-    from approvals import build_approval_report_payload, create_approval_artifact, preview_apply_approved, render_approval_report
     from apply_engine import apply_plan, rollback_apply_ledger
     from apply_plan import build_apply_plan, write_apply_plan
     from calibration import collect_calibration_evidence, run_calibration
     from config import (
         DEFAULT_RETENTION_DAYS,
-        VALID_EXECUTION_MODES,
-        _load_config,
-        _required_capability_for_command,
         load_config,
-        resolve_execution_mode,
-        validate_mode_action,
     )
-    from ledger import apply_low_risk_skeleton, rollback_low_risk
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
 
@@ -954,15 +940,6 @@ def _add_config_argument(parser: argparse.ArgumentParser) -> None:
         help="Explicit config JSON/YAML path; overrides config.local.yaml and HERMES_SELF_IMPROVE_CONFIG",
     )
 
-
-def _add_mode_argument(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--mode",
-        choices=sorted(VALID_EXECUTION_MODES),
-        default=None,
-        help="Execution mode enforced by the plugin policy validator",
-    )
-    _add_config_argument(parser)
 
 
 def _render_apply_plan_summary(plan: dict[str, Any], path: str | Path) -> str:

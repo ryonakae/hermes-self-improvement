@@ -25,7 +25,7 @@ def write_applied_ledger(tmp_path):
     proposal = {
         "id": "proposal-4",
         "title": "Fix typo in skill prose",
-        "target": "file_workflow_skills",
+        "target": "skill",
         "target_path": str(target),
         "action": "typo_fix",
         "risk": "low",
@@ -48,15 +48,7 @@ def write_applied_ledger(tmp_path):
     )
     config = {"reports_dir": str(tmp_path / "reports")}
     mod.write_apply_plan(plan, config)
-    item = plan["items"][0]
-    result = mod.apply_low_risk_skeleton(
-        plan_id=plan["plan_id"],
-        item_id=item["item_id"],
-        config=config,
-        created_at=datetime(2026, 4, 26, 16, 30, tzinfo=timezone.utc),
-        confirm_apply=True,
-        expected_item_hash=item["item_hash"],
-    )
+    result = mod.apply_plan(plan_id=plan["plan_id"], config=config, execute=True)
     return mod, config, Path(result["ledger_path"])
 
 
@@ -73,15 +65,10 @@ def test_build_ledger_report_payload_summarizes_applied_ledgers_for_review(tmp_p
     assert summary["ledger_id"] == ledger["ledger_id"]
     assert summary["ledger_path"] == str(ledger_path)
     assert summary["current_status"] == "applied"
-    assert summary["title"] == "Fix typo in skill prose"
-    assert summary["change_type"] == "typo_fix"
-    assert summary["risk"] == "low"
-    assert summary["score"] == 91
-    assert summary["validation_status"] == "passed"
-    assert summary["git_commit_created"] is False
-    assert summary["evidence_summary"] == "read_file typo_detected x3"
-    assert summary["target_path"].endswith("SKILL.md")
-    assert summary["applied_diff"]["format"] == "low_risk_applied_diff_v1"
+    assert summary["plan_id"] == ledger["plan_id"]
+    assert summary["current_status"] == "applied"
+    assert summary["item_status_counts"]["applied"] == 1
+    assert summary["rollback_available"] is True
 
 
 def test_render_ledger_report_includes_human_readable_applied_summary(tmp_path):
@@ -91,16 +78,5 @@ def test_render_ledger_report_includes_human_readable_applied_summary(tmp_path):
     report = mod.render_ledger_report(payload)
 
     assert "# Hermes self-improvement ledger report" in report
-    assert "Fix typo in skill prose" in report
     assert "status: `applied`" in report
-    assert "validation: `passed`" in report
     assert "git commit created: False" in report
-    assert "read_file typo_detected x3" in report
-
-
-def test_policy_allows_ledger_report_as_read_only_command():
-    mod = load_plugin_module()
-
-    assert mod.validate_mode_action("report_only", "ledger-report") == {"allowed": True, "reason": "allowed"}
-    assert mod.validate_mode_action("dry_run_plan", "ledger-report") == {"allowed": True, "reason": "allowed"}
-    assert mod.validate_mode_action("apply_low_risk", "ledger-report") == {"allowed": True, "reason": "allowed"}

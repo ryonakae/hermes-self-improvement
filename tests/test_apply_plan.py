@@ -675,17 +675,6 @@ def test_write_apply_plan_uses_configurable_reports_dir_and_date_partition(tmp_p
     assert written["schema_name"] == "self_improvement_apply_plan"
 
 
-def test_generate_apply_plan_command_is_allowed_only_in_dry_run_plan_mode():
-    mod = load_plugin_module()
-
-    assert mod.validate_mode_action("dry_run_plan", "generate-apply-plan", required_capability="write_apply_plan") == {
-        "allowed": True,
-        "reason": "allowed",
-    }
-    denied = mod.validate_mode_action("report_only", "generate-apply-plan", required_capability="write_apply_plan")
-    assert denied["allowed"] is False
-
-
 def test_cli_rejects_generate_apply_plan_command():
     mod = load_plugin_module()
     import argparse

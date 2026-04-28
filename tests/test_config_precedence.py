@@ -31,16 +31,16 @@ def write_yaml(path: Path, text: str) -> Path:
 
 def test_load_config_precedence_cli_over_env_over_local_over_default(tmp_path, monkeypatch):
     mod = load_plugin_module()
-    repo_default = write_json(tmp_path / "config.json", {"execution_mode": "report_only", "retention_days": 10})
-    local = write_json(tmp_path / "config.local.json", {"execution_mode": "dry_run_plan", "retention_days": 20})
-    env = write_json(tmp_path / "env-config.json", {"execution_mode": "apply_low_risk", "retention_days": 30})
-    cli = write_json(tmp_path / "cli-config.json", {"execution_mode": "apply_approved", "retention_days": 40})
+    repo_default = write_json(tmp_path / "config.json", {"retention_days": 10})
+    local = write_json(tmp_path / "config.local.json", {"retention_days": 20})
+    env = write_json(tmp_path / "env-config.json", {"retention_days": 30})
+    cli = write_json(tmp_path / "cli-config.json", {"retention_days": 40})
     monkeypatch.setenv("HERMES_SELF_IMPROVE_CONFIG", str(env))
 
-    assert mod.load_config(repo_default)["execution_mode"] == "apply_low_risk"
-    assert mod.load_config(repo_default, cli_config_path=cli)["execution_mode"] == "apply_approved"
+    assert mod.load_config(repo_default)["retention_days"] == 30
+    assert mod.load_config(repo_default, cli_config_path=cli)["retention_days"] == 40
     monkeypatch.delenv("HERMES_SELF_IMPROVE_CONFIG")
-    assert mod.load_config(repo_default)["execution_mode"] == "dry_run_plan"
+    assert mod.load_config(repo_default)["retention_days"] == 20
 
 
 def test_load_config_records_loaded_sources_and_missing_cli_rejects(tmp_path):
@@ -64,12 +64,11 @@ def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
     mod = load_plugin_module()
     repo_default = write_json(
         tmp_path / "config.json",
-        {"execution_mode": "report_only", "model": {"llm": {"provider": "auto", "timeout": 10}}},
+        {"model": {"llm": {"provider": "auto", "timeout": 10}}},
     )
     plugin_yaml = write_yaml(
         tmp_path / "config.yaml",
         """
-        execution_mode: dry_run_plan
         model:
           llm:
             provider: codex
@@ -90,7 +89,6 @@ def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
 
     config = mod.load_config(repo_default)
 
-    assert config["execution_mode"] == "dry_run_plan"
     assert config["model"]["llm"]["provider"] == "codex"
     assert config["model"]["llm"]["model"] == "gpt-test"
     assert config["model"]["llm"]["timeout"] == 99
@@ -118,13 +116,13 @@ def test_unresolved_env_reference_remains_literal(tmp_path, monkeypatch):
 
 def test_explicit_yaml_config_paths_are_required_and_valid(tmp_path, monkeypatch):
     mod = load_plugin_module()
-    repo_default = write_json(tmp_path / "config.json", {"execution_mode": "report_only"})
-    env_yaml = write_yaml(tmp_path / "env-config.yaml", "execution_mode: apply_low_risk")
-    cli_yaml = write_yaml(tmp_path / "cli-config.yaml", "execution_mode: apply_approved")
+    repo_default = write_json(tmp_path / "config.json", {"retention_days": 10})
+    env_yaml = write_yaml(tmp_path / "env-config.yaml", "retention_days: 30")
+    cli_yaml = write_yaml(tmp_path / "cli-config.yaml", "retention_days: 40")
     monkeypatch.setenv("HERMES_SELF_IMPROVE_CONFIG", str(env_yaml))
 
-    assert mod.load_config(repo_default)["execution_mode"] == "apply_low_risk"
-    assert mod.load_config(repo_default, cli_config_path=cli_yaml)["execution_mode"] == "apply_approved"
+    assert mod.load_config(repo_default)["retention_days"] == 30
+    assert mod.load_config(repo_default, cli_config_path=cli_yaml)["retention_days"] == 40
 
     bad_yaml = write_yaml(tmp_path / "bad.yaml", "- not\n- an\n- object")
     try:
@@ -174,53 +172,6 @@ def test_local_operator_configs_are_gitignored():
     assert "config.yaml" in gitignore
     assert "config.local.yaml" in gitignore
     assert ".env.example" not in gitignore
-
-
-def test_policy_expansion_is_denied_by_default_even_if_config_requests_it():
-    mod = load_plugin_module()
-    config = {
-        "mode_policy": {
-            "report_only": {
-                "commands": ["status", "apply-low-risk"],
-                "capabilities": {"mutate_skills": True},
-            }
-        }
-    }
-
-    decision = mod.validate_mode_action(
-        "report_only",
-        "apply-low-risk",
-        required_capability="mutate_skills",
-        config=config,
-    )
-
-    assert decision["allowed"] is False
-    assert decision["reason"] in {"command_not_allowed", "capability_not_allowed"}
-    policy = mod._mode_policy_from_config(config)
-    assert "apply-low-risk" not in policy["report_only"]["commands"]
-    assert policy["report_only"]["capabilities"]["mutate_skills"] is False
-
-
-def test_policy_expansion_requires_explicit_guard():
-    mod = load_plugin_module()
-    config = {
-        "allow_policy_expansion": True,
-        "mode_policy": {
-            "report_only": {
-                "commands": ["status", "apply-low-risk"],
-                "capabilities": {"mutate_skills": True},
-            }
-        },
-    }
-
-    decision = mod.validate_mode_action(
-        "report_only",
-        "apply-low-risk",
-        required_capability="mutate_skills",
-        config=config,
-    )
-
-    assert decision == {"allowed": True, "reason": "allowed"}
 
 
 def test_cli_accepts_config_flag_for_all_subcommands():

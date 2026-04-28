@@ -71,7 +71,7 @@ PY
 ## 安全境界
 
 - hook は観測専用です。hook 内で LLM、GEPA optimizer、skill patch、memory edit、重い集計を実行しないでください。
-- `execution_mode` は `hermes_self_improvement/config.py` と CLI / tool policy gate で検証します。未知 mode、未許可 command、足りない capability は拒否します。
+- user-facing の mutation boundary は `--execute` だけです。旧 `execution_mode` / capability gate は削除済みで、通常 apply は `apply_policy` と内部 hash / drift check で fail-closed にします。
 - scorer は優先順位付けだけに使います。`auto_apply` は scorer に関係なく false 扱いです。decision-producing command は既定で `compare` を使い、low-risk unattended apply は `compare-v0.1` かつ disagreement なしの場合だけ候補になります。
 - telemetry には全文や secret を保存しません。redacted preview と hash を使います。
 - plugin は target repo の commit を作りません。commit は target repo の workflow に委譲します。
@@ -98,20 +98,19 @@ Primary tool surface は 7 個だけです。
 - `plugin.yaml`: plugin manifest
 - `__init__.py`: root の thin plugin entrypoint
 - `hermes_self_improvement/cli.py`: CLI parser と pipeline orchestration
-- `hermes_self_improvement/config.py`: execution mode と deny-by-default policy
+- `hermes_self_improvement/config.py`: config precedence、apply_policy、calibration 設定
 - `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry、retention
 - `hermes_self_improvement/analysis.py`: event aggregation と proposal generation。explicit `memory_compression_candidate` / `skill_lifecycle_candidate` finding と `self_improvement_candidate` event は approval-required proposal に変換するが、`auto_apply=false` のままにする。`scan_memory_compression_candidates()` / `scan_skill_lifecycle_candidates()` は dry-run candidate event だけを作る。
 - `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
 - `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、calibration rollback
-- `hermes_self_improvement/ledger.py`: apply attempt、ledger、rollback
-- `hermes_self_improvement/approvals.py`: approval artifact、validation、approved apply
+- `hermes_self_improvement/ledger.py`: pending ledger helpers（旧 low-risk apply/rollback は削除済み）
 - `hermes_self_improvement/tool_handlers.py`: plugin tools
 - `evals/`: offline scorer の rubric / regression cases
 - `skills/operations/`: bundled operational skill
 - `tests/`: pytest suite
 
-Runtime artifact は `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存します。主な subdir は `state/`, `daily/`, `apply-plans/`, `ledgers/`, `apply-attempts/`, `approvals/` です。
+Runtime artifact は `${HERMES_HOME:-~/.hermes}/reports/self-improvement/` 配下に保存します。主な subdir は `state/`, `daily/`, `apply-plans/`, `ledgers/` です。旧 `apply-attempts/` と `approvals/` は過去 artifact 用に残る場合がありますが、primary flow では新規作成しません。
 
 ## コーディング / テスト規約
 
