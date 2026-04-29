@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 try:  # pragma: no cover - package import path
+    from .mutation_backend import ALLOWED_MUTATION_AGENT_TOOLS, MutationBackend
     from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
+    from mutation_backend import ALLOWED_MUTATION_AGENT_TOOLS, MutationBackend
     from skill_snapshot import SkillSnapshotError, capture_skill_snapshot
 
-ALLOWED_MUTATION_AGENT_TOOLS = {"skills_list", "skill_view", "skill_manage"}
 SKILL_AGENT_TASK_TYPES = {
     "skill_create",
     "skill_improve",
@@ -21,7 +22,7 @@ SKILL_AGENT_TASK_TYPES = {
     "skill_remove_file",
     "skill_large_rewrite",
 }
-Backend = Callable[[str, dict[str, Any], dict[str, Any] | None], dict[str, Any] | str]
+Backend = Callable[[str, dict[str, Any], dict[str, Any] | None], dict[str, Any] | str] | MutationBackend
 
 
 class MutationAgentError(ValueError):
@@ -54,7 +55,10 @@ class MutationAgentRunner:
                 "reasons": ["bounded_skills_only_agent_backend_unavailable"],
                 "prompt": prompt,
             }
-        raw = self.backend(prompt, task, config)
+        if hasattr(self.backend, "run"):
+            raw = self.backend.run(prompt, task, config)  # type: ignore[union-attr]
+        else:
+            raw = self.backend(prompt, task, config)  # type: ignore[operator]
         parsed = parse_mutation_agent_result(raw)
         if not parsed.get("success"):
             return parsed
