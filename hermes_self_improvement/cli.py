@@ -1031,6 +1031,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_improve.set_defaults(func=_handle_cli)
 
     p_status = sub.add_parser("status", help="Show observer status")
+    p_status.add_argument("--json", action="store_true", dest="as_json", help="Print JSON output (default for status).")
     _add_config_argument(p_status)
     p_status.set_defaults(func=_handle_cli)
 

@@ -62,6 +62,15 @@ def test_primary_cli_surface_defaults_plan_and_improve_to_compare_scorer():
     assert report.scorer == "compare"
 
 
+def test_status_accepts_json_flag_as_noop():
+    parser = build_parser()
+
+    status = parser.parse_args(["status", "--json"])
+
+    assert status.self_improvement_cmd == "status"
+    assert status.as_json is True
+
+
 def test_legacy_cli_commands_are_absent_from_primary_surface():
     parser = build_parser()
     legacy_commands = [
