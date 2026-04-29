@@ -85,3 +85,5 @@ bin/hermes-self-improve --help
 bin/hermes-self-improve status
 bin/hermes-self-improve improve --since-hours 1 --json
 ```
+
+Implementation note: built-in memory direct restore currently fails closed as `unsupported_pending_store_validation`; external provider direct restore and sensitive delete re-add are forbidden.

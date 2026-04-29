@@ -30,3 +30,5 @@ Rollback is plugin-owned and deterministic. It uses `ledger_bound_restore`, not 
 Skill rollback uses full snapshots: `SKILL.md`, allowed supporting files under `references/`, `templates/`, `scripts/`, and `assets/`, existence maps, category/path metadata, and stable before/after hashes. Restore writes the snapshot back atomically where possible, removes files absent from the snapshot only inside the eligible skill directory and allowed supporting dirs, and verifies the final snapshot hash.
 
 Built-in memory rollback may use direct programmatic restore only after store format, locking, hashes, and cache invalidation are validated. External memory provider internals are never restored directly. Sensitive/secret/PII deletes are not reversed by re-adding sensitive content.
+
+Implementation note: built-in memory direct restore currently fails closed as `unsupported_pending_store_validation`; external provider direct restore and sensitive delete re-add are forbidden.
