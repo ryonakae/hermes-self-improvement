@@ -76,6 +76,8 @@ scorer_comparison_policy:
     - skill_rename
     - skill_merge
     - skill_trigger_change
+    - skill_write_file
+    - skill_remove_file
     - skill_large_rewrite
     - config_policy_expansion
     - evaluator_promote

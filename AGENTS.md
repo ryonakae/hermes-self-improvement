@@ -77,7 +77,7 @@ PY
 - `--execute` なしの `improve`, `calibrate`, `apply`, `rollback` は preview-only です。
 - `--execute` は mutation intent ですが、実変更は policy と内部検証を通った item だけです。
 - `apply --execute` は `apply_policy`、internal item hash、target drift check を通った ready item だけ変更します。
-- skill patch pilot は `skill_manage(action="patch")` のみを呼び、直接ファイル編集 fallback は使いません。
+- skill mutation は `skill_manage` の許可 action のみを呼び、直接ファイル編集 fallback は使いません。
 - memory mutation は provider policy / context の dry-run resolution までです。外部 memory の実行は fail-closed / needs_review に留めます。
 - `rollback --execute` は ledger hash と current target hash を検証します。1 item でも drift / tamper があれば rollback しません。
 - `calibrate --execute` は evidence threshold と regression pass を通った場合だけ active evaluator pointer を更新します。
@@ -98,7 +98,7 @@ PY
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
 - `hermes_self_improvement/apply_engine.py`: mutation と rollback ledger
 - `hermes_self_improvement/mutation_policy.py`: memory provider capability policy、strategy resolver、skill/memory mutation context builder
-- `hermes_self_improvement/mutation_worker.py`: tool-mediated executor pilot。現時点では `skill_manage` patch のみ
+- `hermes_self_improvement/mutation_worker.py`: tool-mediated executor。skill mutation は `skill_manage` の許可 action のみ
 - `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、calibration rollback
 - `hermes_self_improvement/tool_handlers.py`: plugin tools
 - `evals/proposal/`: offline scorer の repo-tracked public proposal eval assets。`rubric.json` は scorer contract、`cases.jsonl` は bundled golden regression seed。runtime/private eval cases は将来 `${HERMES_HOME:-~/.hermes}/self-improvement/evals/proposal/` に分ける。

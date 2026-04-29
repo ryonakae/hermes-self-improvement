@@ -39,7 +39,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `hermes_self_improvement/gepa_adapter.py`: GEPA payload、offline fixture eval、real DSPy/GEPA path の fail-closed 境界。
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と low-risk mutation planning。
 - `hermes_self_improvement/mutation_policy.py`: provider-aware memory mutation policy、strategy resolver、skill/memory context builder。
-- `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor pilot。現時点では `skill_manage` patch のみ実行可。
+- `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor。skill mutation は `skill_manage` の許可 action のみ実行可。
 - `hermes_self_improvement/calibration.py`: calibration evidence collection、regression-gated active evaluator promotion、calibration rollback。
 - `hermes_self_improvement/ledger.py`: pending ledger helpers。旧 low-risk apply / rollback skeleton は削除済み。
 - `hermes_self_improvement/cli.py`: CLI parser、report rendering、recent plan/apply/calibration summary integration、pipeline orchestration。

@@ -18,8 +18,9 @@ def load_plugin_module():
     return module
 
 
-def write_applied_ledger(tmp_path):
+def write_applied_ledger(tmp_path, monkeypatch):
     mod = load_plugin_module()
+    import hermes_self_improvement.apply_engine as apply_engine
     target = tmp_path / "SKILL.md"
     target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
     proposal = {
@@ -48,12 +49,18 @@ def write_applied_ledger(tmp_path):
     )
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     mod.write_apply_plan(plan, config)
+
+    def fake_execute(tool_args):
+        target.write_text(target.read_text(encoding="utf-8").replace(tool_args["old_string"], tool_args["new_string"], 1), encoding="utf-8")
+        return {"success": True, "direct_fallback_used": False}
+
+    monkeypatch.setattr(apply_engine, "execute_skill_manage_operation", fake_execute)
     result = mod.apply_plan(plan_id=plan["plan_id"], config=config, execute=True)
     return mod, config, Path(result["ledger_path"])
 
 
-def test_build_ledger_report_payload_summarizes_applied_ledgers_for_review(tmp_path):
-    mod, config, ledger_path = write_applied_ledger(tmp_path)
+def test_build_ledger_report_payload_summarizes_applied_ledgers_for_review(tmp_path, monkeypatch):
+    mod, config, ledger_path = write_applied_ledger(tmp_path, monkeypatch)
 
     payload = mod.build_ledger_report_payload(config=config, status="applied", limit=10)
 
@@ -71,8 +78,8 @@ def test_build_ledger_report_payload_summarizes_applied_ledgers_for_review(tmp_p
     assert summary["rollback_available"] is True
 
 
-def test_render_ledger_report_includes_human_readable_applied_summary(tmp_path):
-    mod, config, _ledger_path = write_applied_ledger(tmp_path)
+def test_render_ledger_report_includes_human_readable_applied_summary(tmp_path, monkeypatch):
+    mod, config, _ledger_path = write_applied_ledger(tmp_path, monkeypatch)
     payload = mod.build_ledger_report_payload(config=config, status="applied", limit=10)
 
     report = mod.render_ledger_report(payload)

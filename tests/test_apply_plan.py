@@ -207,7 +207,7 @@ def test_build_apply_plan_marks_resolved_items_ready_and_orders_steps(tmp_path):
     assert [item["item_id"] for item in plan["items"]] == ["step-001", "step-002"]
     assert [item["order"] for item in plan["items"]] == [1, 2]
     assert [item["status"] for item in plan["items"]] == ["ready", "ready"]
-    assert {item["mutation"]["old_text"] for item in plan["items"]} == {"teh browser", "teh second"}
+    assert {item["mutation"]["preview_mutation"]["old_text"] for item in plan["items"]} == {"teh browser", "teh second"}
 
 
 def test_build_apply_plan_marks_duplicate_text_edits_rejected_by_planner(tmp_path):
@@ -433,11 +433,13 @@ def test_build_apply_plan_plans_typo_fix_for_safe_prose_line(tmp_path):
 
     item = plan["items"][0]
     assert item["change_type"] == "typo_fix"
-    assert item["mutation"] == {
+    assert item["mutation"]["type"] == "skill_manage_patch"
+    assert item["mutation"]["preview_mutation"] == {
         "type": "replace_text_once",
         "old_text": "teh",
         "new_text": "the",
     }
+    assert item["mutation"]["context"]["allowed_tools"] == ["skill_manage"]
     assert item["eligible_for_unattended"] is True
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
     assert "Use the browser carefully." in item["rollback_preview"]["after_snippet"]
@@ -705,7 +707,8 @@ def test_build_apply_plan_plans_stale_path_fix_only_with_verified_canonical_repl
 
     item = plan["items"][0]
     assert item["change_type"] == "stale_path_fix"
-    assert item["mutation"] == {"type": "replace_text_once", "old_text": old_ref, "new_text": new_ref}
+    assert item["mutation"]["type"] == "skill_manage_patch"
+    assert item["mutation"]["preview_mutation"] == {"type": "replace_text_once", "old_text": old_ref, "new_text": new_ref}
     assert item["eligible_for_unattended"] is True
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
     assert item["rollback_preview"]["rollback_patch"] == {"type": "replace_text_once", "old_text": new_ref, "new_text": old_ref}
@@ -807,8 +810,10 @@ def test_build_apply_plan_supports_approval_required_large_rewrite_replace_entir
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["mutation"]["type"] == "replace_entire_file"
-    assert item["mutation"]["after_hash"] == mod._sha256_text(after)
+    assert item["mutation"]["type"] == "skill_manage_operation"
+    assert item["mutation"]["skill_manage_action"] == "edit"
+    assert item["mutation"]["preview_mutation"]["after_hash"] == mod._sha256_text(after)
+    assert item["mutation"]["context"]["tool_args"]["content"] == after
     assert item["rollback_preview"]["before_snapshot"] == before
     assert item["rollback_preview"]["after_hash"] == mod._sha256_text(after)
     assert item["rollback_preview"]["rollback_patch"]["type"] == "replace_entire_file"
@@ -877,8 +882,10 @@ def test_build_apply_plan_supports_approval_required_skill_create_file(tmp_path)
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["mutation"]["type"] == "create_file"
-    assert item["mutation"]["after_hash"] == mod._sha256_text(new_content)
+    assert item["mutation"]["type"] == "skill_manage_operation"
+    assert item["mutation"]["skill_manage_action"] == "create"
+    assert item["mutation"]["preview_mutation"]["after_hash"] == mod._sha256_text(new_content)
+    assert item["mutation"]["context"]["tool_args"]["content"] == new_content
     assert item["rollback_preview"]["rollback_strategy"] == "delete_created_file"
     assert item["rollback_preview"]["before_hash"] is None
     assert item["rollback_preview"]["after_hash"] == mod._sha256_text(new_content)
@@ -945,7 +952,9 @@ def test_build_apply_plan_supports_approval_required_skill_delete_file(tmp_path)
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["mutation"]["type"] == "delete_file"
+    assert item["mutation"]["type"] == "skill_manage_operation"
+    assert item["mutation"]["skill_manage_action"] == "delete"
+    assert item["mutation"]["context"]["tool_args"] == {"action": "delete", "name": "old-skill"}
     assert item["rollback_preview"]["rollback_strategy"] == "restore_full_file_from_before_content"
     assert item["rollback_preview"]["before_snapshot"] == before
     assert item["rollback_preview"]["after_hash"] is None
@@ -987,13 +996,9 @@ def test_build_apply_plan_supports_approval_required_skill_rename_file(tmp_path)
     assert item["destination_path"] == str(destination)
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["mutation"]["type"] == "rename_file"
-    assert item["mutation"]["destination_path"] == str(destination)
-    assert item["rollback_preview"]["rollback_strategy"] == "rename_file_back"
-    assert item["rollback_preview"]["before_snapshot"] == before
-    assert item["rollback_preview"]["after_hash"] is None
-    assert item["rollback_preview"]["destination_after_hash"] == mod._sha256_text(before)
+    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["unsupported_skill_manage_operation", "mutation_plan_missing"]}
+    assert item["mutation"] is None
+    assert item["rollback_preview"] is None
 
 
 def test_build_apply_plan_rejects_skill_rename_when_destination_exists(tmp_path):
@@ -1022,7 +1027,7 @@ def test_build_apply_plan_rejects_skill_rename_when_destination_exists(tmp_path)
     item = plan["items"][0]
     assert item["change_type"] == "skill_rename"
     assert item["mutation"] is None
-    assert "destination_already_exists" in item["eligibility"]["reasons"]
+    assert "unsupported_skill_manage_operation" in item["eligibility"]["reasons"]
 
 
 def test_build_apply_plan_supports_approval_required_skill_merge_files(tmp_path):
@@ -1064,15 +1069,9 @@ def test_build_apply_plan_supports_approval_required_skill_merge_files(tmp_path)
     assert item["source_path"] == str(source)
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["mutation"]["type"] == "merge_files"
-    assert item["mutation"]["source_path"] == str(source)
-    assert item["mutation"]["source_before_hash"] == mod._sha256_text(source_before)
-    assert item["rollback_preview"]["rollback_strategy"] == "restore_multiple_files"
-    assert item["rollback_preview"]["before_snapshot"] == dest_before
-    assert item["rollback_preview"]["source_before_snapshot"] == source_before
-    assert item["rollback_preview"]["after_hash"] == mod._sha256_text(merged)
-    assert item["rollback_preview"]["source_after_hash"] is None
+    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["unsupported_skill_manage_operation", "mutation_plan_missing"]}
+    assert item["mutation"] is None
+    assert item["rollback_preview"] is None
 
 
 

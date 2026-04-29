@@ -230,22 +230,34 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
     }
 
 
-def build_skill_patch_context(*, skill_name: str, old_string: str, new_string: str, file_path: str | None = None) -> dict[str, Any]:
-    args = {
-        "action": "patch",
-        "name": skill_name,
-        "old_string": old_string,
-        "new_string": new_string,
-        "replace_all": False,
-    }
-    if file_path:
-        args["file_path"] = file_path
+ALLOWED_SKILL_MANAGE_ACTIONS = {"create", "patch", "edit", "delete", "write_file", "remove_file"}
+
+
+def build_skill_manage_context(*, action: str, skill_name: str, **kwargs: Any) -> dict[str, Any]:
+    action = str(action or "").strip()
+    args: dict[str, Any] = {"action": action, "name": skill_name}
+    for key, value in kwargs.items():
+        if value is not None:
+            args[key] = value
+    if action == "patch" and "replace_all" not in args:
+        args["replace_all"] = False
     return {
         "target_kind": "skill",
-        "resolved_strategy": "skill_manage_patch",
-        "allowed_tools": ["skill_manage"],
+        "resolved_strategy": f"skill_manage_{action}" if action in ALLOWED_SKILL_MANAGE_ACTIONS else "unsupported_skill_manage_action",
+        "allowed_tools": ["skill_manage"] if action in ALLOWED_SKILL_MANAGE_ACTIONS else [],
         "forbidden": ["direct_file_edit", "direct_db_edit", "unsupported_provider_api"],
         "direct_fallback_allowed": False,
         "tool_name": "skill_manage",
         "tool_args": args,
     }
+
+
+def build_skill_patch_context(*, skill_name: str, old_string: str, new_string: str, file_path: str | None = None) -> dict[str, Any]:
+    return build_skill_manage_context(
+        action="patch",
+        skill_name=skill_name,
+        old_string=old_string,
+        new_string=new_string,
+        file_path=file_path,
+        replace_all=False,
+    )

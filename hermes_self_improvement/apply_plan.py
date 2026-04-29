@@ -7,11 +7,11 @@ from typing import Any
 
 try:  # pragma: no cover - package import path
     from .config import get_hermes_home
-    from .mutation_policy import build_memory_mutation_context, build_skill_patch_context
+    from .mutation_policy import build_memory_mutation_context, build_skill_manage_context, build_skill_patch_context
     from .observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from config import get_hermes_home
-    from mutation_policy import build_memory_mutation_context, build_skill_patch_context
+    from mutation_policy import build_memory_mutation_context, build_skill_manage_context, build_skill_patch_context
     from observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -37,6 +37,10 @@ def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
         return "stale_path_fix"
     if "stale_command" in haystack or ("stale" in haystack and "command" in haystack):
         return "stale_command_fix"
+    if "skill_write_file" in haystack or "skill write_file" in haystack or "write skill file" in haystack:
+        return "skill_write_file"
+    if "skill_remove_file" in haystack or "skill remove_file" in haystack or "remove skill file" in haystack:
+        return "skill_remove_file"
     if "skill_create" in haystack or "skill create" in haystack or "create skill" in haystack:
         return "skill_create"
     if "skill_delete" in haystack or "skill delete" in haystack or "delete skill" in haystack:
@@ -133,6 +137,10 @@ def _skill_name_for_proposal(proposal: dict[str, Any], target_path: str | None =
             parts = relative.parts
             if len(parts) >= 2 and parts[-1] == "SKILL.md":
                 return parts[-2]
+        if candidate.name == "SKILL.md" and candidate.parent.name:
+            return candidate.parent.name
+        if candidate.parent.parent.name:
+            return candidate.parent.parent.name
     return None
 
 
@@ -384,6 +392,41 @@ def _replacement_content_from_proposal(proposal: dict[str, Any]) -> Any:
     return after_text
 
 
+def _skill_category_for_target(skill_name: str | None, target_path: str | None, config: dict[str, Any] | None = None) -> str | None:
+    if not skill_name or not target_path:
+        return None
+    candidate = Path(str(target_path)).expanduser()
+    for root in _custom_skill_roots(config):
+        try:
+            relative = candidate.resolve().relative_to(root.resolve())
+        except ValueError:
+            continue
+        parts = relative.parts
+        if len(parts) == 3 and parts[-1] == "SKILL.md" and parts[-2] == skill_name:
+            return parts[0]
+    return None
+
+
+def _skill_manage_operation_mutation(
+    *,
+    action: str,
+    skill_name: str | None,
+    preview_mutation: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any] | None:
+    if not skill_name:
+        return None
+    context = build_skill_manage_context(action=action, skill_name=skill_name, **kwargs)
+    if not context.get("allowed_tools"):
+        return None
+    return {
+        "type": "skill_manage_operation",
+        "skill_manage_action": action,
+        "preview_mutation": preview_mutation,
+        "context": context,
+    }
+
+
 def _plan_replace_entire_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
     if target_content is None:
         return None, []
@@ -562,17 +605,77 @@ def _plan_mutation_for_item(
             base_blockers=base_blockers,
         )
     if change_type == "skill_create":
-        return _plan_create_file_mutation(proposal, target_content)
+        base_mutation, blockers = _plan_create_file_mutation(proposal, target_content)
+        if blockers or base_mutation is None:
+            return base_mutation, blockers
+        skill_name = _skill_name_for_proposal(proposal, target_path, config)
+        mutation = _skill_manage_operation_mutation(
+            action="create",
+            skill_name=skill_name,
+            preview_mutation=base_mutation,
+            content=base_mutation.get("after_text"),
+            category=proposal.get("category") or _skill_category_for_target(skill_name, target_path, config),
+        )
+        return mutation, [] if mutation else ["skill_name_missing"]
     if change_type == "skill_delete":
-        return _plan_delete_file_mutation(proposal, target_content)
+        base_mutation, blockers = _plan_delete_file_mutation(proposal, target_content)
+        if blockers or base_mutation is None:
+            return base_mutation, blockers
+        skill_name = _skill_name_for_proposal(proposal, target_path, config)
+        mutation = _skill_manage_operation_mutation(action="delete", skill_name=skill_name, preview_mutation=base_mutation)
+        return mutation, [] if mutation else ["skill_name_missing"]
+    if change_type == "skill_write_file":
+        after_text = _replacement_content_from_proposal(proposal)
+        if not isinstance(after_text, str):
+            return None, ["replacement_content_missing"]
+        skill_name = _skill_name_for_proposal(proposal, target_path, config)
+        file_path = proposal.get("skill_file_path") or proposal.get("supporting_file_path") or _skill_supporting_file_for_path(skill_name, target_path, config)
+        if not file_path:
+            return None, ["skill_supporting_file_path_missing"]
+        base_mutation = {"type": "replace_entire_file" if target_content is not None else "create_file", "after_text": after_text, "after_hash": _sha256_text(after_text)}
+        mutation = _skill_manage_operation_mutation(
+            action="write_file",
+            skill_name=skill_name,
+            preview_mutation=base_mutation,
+            file_path=str(file_path),
+            file_content=after_text,
+        )
+        return mutation, [] if mutation else ["skill_name_missing"]
+    if change_type == "skill_remove_file":
+        base_mutation, blockers = _plan_delete_file_mutation(proposal, target_content)
+        if blockers or base_mutation is None:
+            return base_mutation, blockers
+        skill_name = _skill_name_for_proposal(proposal, target_path, config)
+        file_path = proposal.get("skill_file_path") or proposal.get("supporting_file_path") or _skill_supporting_file_for_path(skill_name, target_path, config)
+        if not file_path:
+            return None, ["skill_supporting_file_path_missing"]
+        mutation = _skill_manage_operation_mutation(
+            action="remove_file",
+            skill_name=skill_name,
+            preview_mutation=base_mutation,
+            file_path=str(file_path),
+        )
+        return mutation, [] if mutation else ["skill_name_missing"]
     if change_type == "skill_rename":
-        return _plan_rename_file_mutation(proposal, target_content)
+        return None, ["unsupported_skill_manage_operation"]
     if change_type == "skill_merge":
-        return _plan_merge_files_mutation(proposal, target_content)
+        return None, ["unsupported_skill_manage_operation"]
     if change_type == "memory_delete":
         return _plan_memory_delete_mutation(proposal, target_content, target_path, config)
     if change_type == "evaluator_promote":
         return _plan_evaluator_promote_mutation(proposal, target_content)
+    if change_type == "skill_large_rewrite":
+        base_mutation, blockers = _plan_replace_entire_file_mutation(proposal, target_content)
+        if blockers or base_mutation is None:
+            return base_mutation, blockers
+        skill_name = _skill_name_for_proposal(proposal, target_path, config)
+        mutation = _skill_manage_operation_mutation(
+            action="edit",
+            skill_name=skill_name,
+            preview_mutation=base_mutation,
+            content=base_mutation.get("after_text"),
+        )
+        return mutation, [] if mutation else ["skill_name_missing"]
     if change_type in _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES:
         return _plan_replace_entire_file_mutation(proposal, target_content)
     heading_sets = {
@@ -595,7 +698,7 @@ def _plan_mutation_for_item(
 
 
 _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES = {"skill_large_rewrite", "memory_compress"}
-_APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES = {"skill_create", "skill_delete", "skill_rename", "skill_merge"}
+_APPROVAL_REQUIRED_FILE_LIFECYCLE_TYPES = {"skill_create", "skill_delete", "skill_rename", "skill_merge", "skill_write_file", "skill_remove_file"}
 _APPROVAL_REQUIRED_MEMORY_TYPES = {"memory_delete"}
 _APPROVAL_REQUIRED_EVALUATOR_TYPES = {"evaluator_promote"}
 _APPROVAL_REQUIRED_CHANGE_TYPES = (
@@ -758,7 +861,7 @@ def _rollback_preview_for_item(
     if not eligible or not target_path or not mutation:
         return None
     mutation_type = mutation.get("type")
-    if mutation_type == "skill_manage_patch":
+    if mutation_type in {"skill_manage_patch", "skill_manage_operation"}:
         mutation = mutation.get("preview_mutation") if isinstance(mutation.get("preview_mutation"), dict) else mutation
         mutation_type = mutation.get("type")
     if mutation_type != "create_file" and target_content is None:
@@ -885,8 +988,8 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         "target": proposal.get("target"),
         "target_kind": proposal.get("target"),
         "target_path": target_path,
-        "destination_path": mutation.get("destination_path") if isinstance(mutation, dict) else None,
-        "source_path": mutation.get("source_path") if isinstance(mutation, dict) else None,
+        "destination_path": mutation.get("destination_path") if isinstance(mutation, dict) and mutation.get("destination_path") else proposal.get("destination_path") or proposal.get("new_path") or proposal.get("renamed_path"),
+        "source_path": mutation.get("source_path") if isinstance(mutation, dict) and mutation.get("source_path") else proposal.get("source_path") or proposal.get("merge_source_path") or proposal.get("from_path"),
         "target_exists": target_meta["target_exists"],
         "before_hash": before_hash,
         "action": proposal.get("action"),
@@ -929,9 +1032,9 @@ def _mutation_conflict_key(item: dict[str, Any]) -> tuple[Any, ...] | None:
     if not target_path or not mutation:
         return None
     mutation_type = str(mutation.get("type") or "")
-    if mutation_type == "skill_manage_patch":
+    if mutation_type in {"skill_manage_patch", "skill_manage_operation"}:
         preview = mutation.get("preview_mutation") if isinstance(mutation.get("preview_mutation"), dict) else {}
-        return (target_path, mutation_type, preview.get("old_text"), (mutation.get("context") or {}).get("tool_args", {}).get("name"))
+        return (target_path, mutation_type, preview.get("type"), preview.get("old_text"), (mutation.get("context") or {}).get("tool_args", {}).get("name"), (mutation.get("context") or {}).get("tool_args", {}).get("file_path"))
     if mutation_type == "replace_text_once":
         return (target_path, mutation_type, mutation.get("old_text"))
     if mutation_type == "append_to_existing_section":

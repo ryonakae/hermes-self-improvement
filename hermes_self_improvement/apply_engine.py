@@ -14,7 +14,7 @@ try:  # pragma: no cover - package import path
         _apply_replace_text_once,
     )
     from .config import apply_policy_allows_item, normalize_apply_policy
-    from .mutation_worker import execute_skill_manage_patch
+    from .mutation_worker import execute_skill_manage_operation, execute_skill_manage_patch
     from .observer import _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_plan import (
@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _apply_replace_text_once,
     )
     from config import apply_policy_allows_item, normalize_apply_policy
-    from mutation_worker import execute_skill_manage_patch
+    from mutation_worker import execute_skill_manage_operation, execute_skill_manage_patch
     from observer import _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -92,7 +92,7 @@ def _current_content_and_hash(target_path: str | None) -> tuple[str | None, str 
 
 def _apply_mutation(content: str | None, mutation: dict[str, Any]) -> str | None:
     mutation_type = str(mutation.get("type") or "")
-    if mutation_type == "skill_manage_patch":
+    if mutation_type in {"skill_manage_patch", "skill_manage_operation"}:
         preview_mutation = mutation.get("preview_mutation") if isinstance(mutation.get("preview_mutation"), dict) else None
         return _apply_mutation(content, preview_mutation) if preview_mutation else None
     if mutation_type == "memory_provider_resolution":
@@ -117,6 +117,47 @@ def _write_mutation_result(target_path: str, mutation: dict[str, Any], after_con
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(after_content or "", encoding="utf-8")
+
+
+def _skill_manage_rollback_action(*, tool_args: dict[str, Any], rollback_data: dict[str, Any] | None) -> dict[str, Any] | None:
+    rollback_data = rollback_data if isinstance(rollback_data, dict) else {}
+    action = str(tool_args.get("action") or "")
+    name = tool_args.get("name")
+    if not name:
+        return None
+    before_snapshot = rollback_data.get("before_snapshot")
+    rollback_patch = rollback_data.get("rollback_patch") if isinstance(rollback_data.get("rollback_patch"), dict) else {}
+    if action == "create":
+        return {"type": "skill_manage", "tool_args": {"action": "delete", "name": name}}
+    if action == "delete" and isinstance(before_snapshot, str):
+        args = {"action": "create", "name": name, "content": before_snapshot}
+        if tool_args.get("category"):
+            args["category"] = tool_args.get("category")
+        return {"type": "skill_manage", "tool_args": args}
+    if action == "edit" and isinstance(before_snapshot, str):
+        return {"type": "skill_manage", "tool_args": {"action": "edit", "name": name, "content": before_snapshot}}
+    if action == "patch" and rollback_patch.get("type") == "replace_text_once":
+        args = {
+            "action": "patch",
+            "name": name,
+            "old_string": rollback_patch.get("old_text"),
+            "new_string": rollback_patch.get("new_text"),
+            "replace_all": False,
+        }
+        if tool_args.get("file_path"):
+            args["file_path"] = tool_args.get("file_path")
+        return {"type": "skill_manage", "tool_args": args}
+    if action == "write_file":
+        file_path = tool_args.get("file_path")
+        if not file_path:
+            return None
+        if rollback_data.get("rollback_strategy") == "delete_created_file":
+            return {"type": "skill_manage", "tool_args": {"action": "remove_file", "name": name, "file_path": file_path}}
+        if isinstance(before_snapshot, str):
+            return {"type": "skill_manage", "tool_args": {"action": "write_file", "name": name, "file_path": file_path, "file_content": before_snapshot}}
+    if action == "remove_file" and isinstance(before_snapshot, str) and tool_args.get("file_path"):
+        return {"type": "skill_manage", "tool_args": {"action": "write_file", "name": name, "file_path": tool_args.get("file_path"), "file_content": before_snapshot}}
+    return None
 
 
 def _empty_summary() -> dict[str, int]:
@@ -242,15 +283,15 @@ def apply_plan(
         item_result["rollback_data"] = item.get("rollback_preview")
 
         if execute:
-            if str(mutation.get("type") or "") == "skill_manage_patch":
+            if str(mutation.get("type") or "") in {"skill_manage_patch", "skill_manage_operation"}:
                 context = mutation.get("context") if isinstance(mutation.get("context"), dict) else {}
                 tool_args = context.get("tool_args") if isinstance(context.get("tool_args"), dict) else {}
-                tool_result = execute_skill_manage_patch(tool_args)
+                tool_result = execute_skill_manage_operation(tool_args)
                 item_result["tool_result"] = tool_result
                 item_result["mutation_context"] = context
                 if not tool_result.get("success"):
                     item_result["status"] = "failed"
-                    item_result["reasons"].append("skill_manage_patch_failed")
+                    item_result["reasons"].append("skill_manage_operation_failed")
                     item_result["reasons"].append(str(tool_result.get("error") or "unknown_tool_error"))
                     summary["failed"] += 1
                     result_items.append(item_result)
@@ -263,6 +304,9 @@ def apply_plan(
                     summary["failed"] += 1
                     result_items.append(item_result)
                     continue
+                rollback_action = _skill_manage_rollback_action(tool_args=tool_args, rollback_data=item_result.get("rollback_data"))
+                if rollback_action and isinstance(item_result.get("rollback_data"), dict):
+                    item_result["rollback_data"]["skill_manage_rollback"] = rollback_action
                 item_result["status"] = "applied"
                 summary["applied"] += 1
                 accepted_baseline[str(target_path)] = after_hash
@@ -316,6 +360,11 @@ def _rollback_item_plan(item: dict[str, Any]) -> dict[str, Any]:
         return item_result
 
     strategy = rollback.get("rollback_strategy")
+    skill_manage_rollback = rollback.get("skill_manage_rollback") if isinstance(rollback.get("skill_manage_rollback"), dict) else None
+    if skill_manage_rollback:
+        item_result["status"] = "would_rollback"
+        item_result["rollback_action"] = skill_manage_rollback
+        return item_result
     before_snapshot = rollback.get("before_snapshot")
     if strategy == "delete_created_file":
         if not target_path:
@@ -403,6 +452,9 @@ def _rollback_item_plan(item: dict[str, Any]) -> dict[str, Any]:
 
 def _execute_rollback_action(action: dict[str, Any]) -> bool:
     action_type = action.get("type")
+    if action_type == "skill_manage":
+        result = execute_skill_manage_operation(action.get("tool_args") if isinstance(action.get("tool_args"), dict) else {})
+        return bool(result.get("success"))
     if action_type == "delete_created_file":
         target = Path(str(action.get("target_path"))).expanduser()
         if target.exists():

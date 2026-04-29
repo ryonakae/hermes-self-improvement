@@ -127,9 +127,16 @@ def test_simplified_apply_tool_preview_does_not_mutate(tmp_path):
     assert target.read_text(encoding="utf-8") == "# Skill\n\nUse teh browser carefully.\n"
 
 
-def test_simplified_apply_tool_execute_mutates_policy_allowed_item(tmp_path):
+def test_simplified_apply_tool_execute_mutates_policy_allowed_item(tmp_path, monkeypatch):
     mod = load_plugin_module()
+    import hermes_self_improvement.apply_engine as apply_engine
     config, plan, target = _write_simple_plan(mod, tmp_path)
+
+    def fake_execute(tool_args):
+        target.write_text(target.read_text(encoding="utf-8").replace(tool_args["old_string"], tool_args["new_string"], 1), encoding="utf-8")
+        return {"success": True, "direct_fallback_used": False}
+
+    monkeypatch.setattr(apply_engine, "execute_skill_manage_operation", fake_execute)
 
     raw = mod._handle_self_improvement_apply_tool({
         "plan_id": plan["plan_id"],
