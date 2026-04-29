@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 ALLOWED_MUTATION_AGENT_TOOLS = {"skills_list", "skill_view", "skill_manage"}
+ALLOWED_SKILL_MANAGE_ACTIONS = {"create", "patch", "edit", "delete", "write_file", "remove_file"}
 _REQUIRED_SUCCESS_FIELDS = ("used_tools", "changed_skills", "created_skills", "deleted_skills", "verification_notes", "rollback_hints")
 
 
@@ -72,7 +73,56 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     for key in _REQUIRED_SUCCESS_FIELDS:
         if key not in result or not isinstance(result.get(key), list):
             return {"success": False, "error": f"mutation_agent_result_{key}_missing"}
+    changed = [str(name) for key in ("changed_skills", "created_skills", "deleted_skills") for name in (result.get(key) or [])]
+    if changed and not result.get("verification_notes"):
+        return {"success": False, "error": "mutation_agent_result_verification_notes_missing"}
+    allowed_targets = set(result.get("_allowed_targets") or [])
+    if allowed_targets:
+        escaped = sorted(name for name in changed if name not in allowed_targets)
+        if escaped:
+            return {"success": False, "error": "mutation_agent_result_target_escape", "escaped_targets": escaped}
+    result.pop("_allowed_targets", None)
     return result
+
+
+def _task_allowed_targets(task: dict[str, Any]) -> set[str]:
+    targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
+    names = set()
+    for key in ("primary_skill", "source_skill", "new_skill"):
+        value = targets.get(key)
+        if value:
+            names.add(str(value))
+    return names
+
+
+def _with_last_safe_step(error: dict[str, Any], actual_used: list[dict[str, Any]]) -> dict[str, Any]:
+    if actual_used:
+        last = actual_used[-1]
+        error.setdefault("last_tool", last.get("tool"))
+        if last.get("name"):
+            error.setdefault("last_tool_name", last.get("name"))
+        if last.get("action"):
+            error.setdefault("last_tool_action", last.get("action"))
+    return error
+
+
+def _validate_tool_call_args(tool: str, args: dict[str, Any]) -> dict[str, Any] | None:
+    if tool == "skill_view":
+        if not isinstance(args.get("name"), str) or not args.get("name", "").strip():
+            return {"success": False, "error": "skill_view_name_missing", "tool": tool}
+    if tool == "skill_manage":
+        action = str(args.get("action") or "").strip()
+        if not action:
+            return {"success": False, "error": "skill_manage_action_missing", "tool": tool}
+        if action not in ALLOWED_SKILL_MANAGE_ACTIONS:
+            return {"success": False, "error": "skill_manage_action_not_allowed", "tool": tool, "action": action}
+        if not isinstance(args.get("name"), str) or not args.get("name", "").strip():
+            return {"success": False, "error": "skill_manage_name_missing", "tool": tool}
+    if tool == "skills_list":
+        for key in ("path", "skill_path", "root", "file_path"):
+            if key in args:
+                return {"success": False, "error": "skills_list_path_arg_unsupported", "tool": tool, "arg": key}
+    return None
 
 
 def _redact_large(value: Any, *, max_chars: int = 4000) -> Any:
@@ -267,7 +317,10 @@ class HermesAuxiliaryMutationBackend:
                     return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_MUTATION_AGENT_TOOLS)}
                 args = step.get("args")
                 if not isinstance(args, dict):
-                    return {"success": False, "error": "tool_args_not_object", "tool": tool}
+                    return _with_last_safe_step({"success": False, "error": "tool_args_not_object", "tool": tool}, actual_used)
+                args_error = _validate_tool_call_args(tool, args)
+                if args_error:
+                    return _with_last_safe_step(args_error, actual_used)
                 tool_calls += 1
                 if tool_calls > self.limits.max_tool_calls:
                     return {"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_tool_calls_exceeded"]}
@@ -289,6 +342,9 @@ class HermesAuxiliaryMutationBackend:
                 final.pop("type", None)
                 final["used_tools"] = actual_used
                 final["tool_trace"] = list(actual_used)
+                allowed_targets = _task_allowed_targets(task)
+                if allowed_targets:
+                    final["_allowed_targets"] = sorted(allowed_targets)
                 parsed = validate_backend_success_result(final)
                 return parsed
             return {"success": False, "error": "mutation_agent_unknown_step_type", "step_type": step_type}

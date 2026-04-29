@@ -210,3 +210,81 @@ def test_skill_tool_executor_normalizes_string_json_results_from_registry():
 
     assert result["success"] is True
     assert result["skills"] == []
+
+
+def test_auxiliary_backend_rejects_final_with_changed_skill_outside_task_targets():
+    backend = HermesAuxiliaryMutationBackend(
+        tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
+        llm_call=lambda messages, **kwargs: json.dumps({
+            "type": "final",
+            "success": True,
+            "changed_skills": ["other-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "verification_notes": ["changed other"],
+            "rollback_hints": [],
+        }),
+    )
+
+    result = backend.run("prompt", {"targets": {"primary_skill": "demo-skill"}}, {})
+
+    assert result["success"] is False
+    assert result["error"] == "mutation_agent_result_target_escape"
+
+
+def test_auxiliary_backend_rejects_final_without_verification_notes_on_success():
+    backend = HermesAuxiliaryMutationBackend(
+        tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
+        llm_call=lambda messages, **kwargs: json.dumps({
+            "type": "final",
+            "success": True,
+            "changed_skills": ["demo-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "verification_notes": [],
+            "rollback_hints": [],
+        }),
+    )
+
+    result = backend.run("prompt", {"targets": {"primary_skill": "demo-skill"}}, {})
+
+    assert result["success"] is False
+    assert result["error"] == "mutation_agent_result_verification_notes_missing"
+
+
+def test_auxiliary_backend_rejects_tool_call_missing_required_name_for_skill_view():
+    backend = HermesAuxiliaryMutationBackend(
+        tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
+        llm_call=lambda messages, **kwargs: json.dumps({"type": "tool_call", "tool": "skill_view", "args": {}}),
+    )
+
+    result = backend.run("prompt", {}, {})
+
+    assert result["error"] == "skill_view_name_missing"
+
+
+def test_auxiliary_backend_rejects_skill_manage_action_outside_allowed_actions():
+    backend = HermesAuxiliaryMutationBackend(
+        tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
+        llm_call=lambda messages, **kwargs: json.dumps({"type": "tool_call", "tool": "skill_manage", "args": {"action": "rename", "name": "demo"}}),
+    )
+
+    result = backend.run("prompt", {}, {})
+
+    assert result["error"] == "skill_manage_action_not_allowed"
+
+
+def test_auxiliary_backend_includes_last_safe_step_in_failure_context():
+    responses = iter([
+        json.dumps({"type": "tool_call", "tool": "skills_list", "args": {}}),
+        json.dumps({"type": "tool_call", "tool": "skill_view", "args": {}}),
+    ])
+    backend = HermesAuxiliaryMutationBackend(
+        tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {"success": True}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
+        llm_call=lambda messages, **kwargs: next(responses),
+    )
+
+    result = backend.run("prompt", {}, {})
+
+    assert result["error"] == "skill_view_name_missing"
+    assert result["last_tool"] == "skills_list"
