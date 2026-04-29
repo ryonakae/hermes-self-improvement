@@ -29,6 +29,7 @@
 - Do not widen mutation-agent tools beyond exactly `skills_list`, `skill_view`, `skill_manage`.
 - Do not let merge judge alone authorize source deletion; deterministic checks must pass too.
 - Do not make memory rollback look supported. Built-in/external memory rollback remains fail-closed unless a separate store-validation proof is completed.
+- The separate memory rollback proof plan is `.hermes/plans/2026-04-30_081449-memory-rollback-store-validation.md`; execute it after the mutation backend hardening slices if we want to move beyond fail-closed documentation.
 - Do not expose item hash / target hash / approval artifact as user-facing mutation options.
 - Every code task below starts with tests, then implementation, then targeted validation, then commit.
 
@@ -439,7 +440,7 @@ git push
 
 ## Slice 7: Update Operations Docs to Match Actual Runtime Boundaries
 
-**Objective:** Ensure docs say exactly what is implemented: real backend exists, but it is bounded; memory rollback remains unsupported; status exposes readiness; live smoke is opt-in.
+**Objective:** Ensure docs say exactly what is implemented: real backend exists, but it is bounded; memory rollback remains unsupported in this hardening plan; detailed memory rollback proof/implementation work is tracked in `.hermes/plans/2026-04-30_081449-memory-rollback-store-validation.md`; status exposes readiness; live smoke is opt-in.
 
 **Files:**
 
@@ -590,6 +591,7 @@ Include only:
 - [ ] Merge judge exposes availability/source honestly and preserves failure reasons.
 - [ ] Live smoke cannot touch production `~/.hermes/skills` by default.
 - [ ] Docs match actual implementation and do not overclaim memory rollback.
+- [ ] Dedicated memory rollback store-validation plan exists and is linked from this plan before implementation moves past fail-closed behavior.
 - [ ] Full pytest suite passes.
 - [ ] Plugin discovery still works.
 - [ ] Commits are granular and pushed.
