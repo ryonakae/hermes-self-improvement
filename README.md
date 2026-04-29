@@ -17,6 +17,8 @@
 - 候補を heuristic / LLM / DSPy-backed GEPA scorer で採点する
 - report、apply plan、apply ledger、calibration ledger を artifact として残す
 - policy で許可された低リスクな text replacement を、内部 hash と drift check 付きで適用する
+- skill patch の最小 pilot では、直接ファイル編集ではなく `skill_manage(action="patch")` だけを使って適用する
+- memory delete などの抽象 memory mutation は、active provider の capability policy に解決する dry-run context を出す（外部 memory 実行はまだ無効）
 - evaluator/scorer の調整を `calibrate` で preview し、regression を通った場合だけ active 化する
 
 しないこと:
@@ -137,6 +139,7 @@ Primary surface の安全境界は `--execute` です。
 - `calibration` が evaluator/scorer 自己調整を決める。`apply_policy` とは別
 - `item_hash`, `target_hash`, `ledger_hash` は内部整合性、drift 検知、rollback 用
 - `rollback --execute` は ledger hash と current target hash を検証する。1 item でも drift / tamper があれば rollback しない
+- skill / memory mutation の直接ファイル・DB fallback は使わない。現時点の executable pilot は `skill_manage` patch のみで、memory provider mutation は dry-run resolution に留める
 
 既定 policy の例です。
 
@@ -239,7 +242,7 @@ defaults
   < --config
 ```
 
-`config.example.yaml` は git-managed な雛形です。local `config.yaml` / `config.local.yaml` は gitignore されています。`model.llm` / `model.gepa` の `api_key` は local YAML で `${ENV}` 参照にできます。`.env` / `.env.example` は使いません。
+`config.example.yaml` は git-managed な雛形です。local `config.yaml` / `config.local.yaml` は gitignore されています。`model.llm` / `model.gepa` / `model.mutation` の `api_key` は local YAML で `${ENV}` 参照にできます。`.env` / `.env.example` は使いません。`model.mutation` は isolated mutation worker 用の model selection で、実行 policy や fallback 設定ではありません。
 
 ## ディレクトリ
 
@@ -253,6 +256,8 @@ defaults
 - `hermes_self_improvement/scoring.py`: scorer 実装
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
 - `hermes_self_improvement/apply_engine.py`: mutation と rollback ledger
+- `hermes_self_improvement/mutation_policy.py`: provider-aware memory mutation policy と skill/memory context builder
+- `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation pilot。現時点では `skill_manage` patch のみ実行可
 - `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、rollback
 - `hermes_self_improvement/ledger.py`: ledger helpers
 - `hermes_self_improvement/tool_handlers.py`: plugin tools。root 直下の `tools.py` は置かない

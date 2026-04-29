@@ -161,6 +161,9 @@ def test_config_example_yaml_is_parseable():
 
     assert config["model"]["llm"]["provider"] == "auto"
     assert config["model"]["gepa"]["timeout"] == 120
+    assert config["model"]["mutation"]["timeout"] == 45
+    assert config["model"]["mutation"]["max_tokens"] == 1000
+    assert config["mutation"]["backend"] == "hermes_agent"
     assert config["apply_policy"]["max_risk"] == "low"
     assert config["apply_policy"]["allowed_target_kinds"] == ["skill", "memory"]
     assert config["calibration"]["evidence"]["min_evidence_events"] == 20

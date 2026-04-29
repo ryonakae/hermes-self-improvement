@@ -15,6 +15,13 @@ Completed baseline:
 
 Next work should be treated as operational hardening, real-runtime smoke, or new design work—not continuation of the old approval/mode implementation plan.
 
+## Active design plans
+
+- `2026-04-29_175500-tool-mediated-skill-memory-mutation.md`
+  - **Status:** draft / initial design decisions captured.
+  - Captures the tool-mediated mutation direction: `model.mutation`, plugin-owned mutation policy, `skill_manage`-only skill mutation, provider-aware memory mutation, no direct fallback, provider-specific unsupported delete behavior, and sensitive-delete fail-closed rules.
+  - Initial five-point dig is complete; next work is implementation task splitting / Slice 1.
+
 ## Completed canonical plan
 
 - `2026-04-28_133233-simplified-self-improvement-surface.md`

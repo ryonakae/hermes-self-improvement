@@ -1110,11 +1110,11 @@ def test_build_apply_plan_supports_approval_required_memory_delete_file(tmp_path
     assert item["target_exists"] is True
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["mutation"]["type"] == "delete_file"
-    assert item["rollback_preview"]["rollback_strategy"] == "restore_full_file_from_before_content"
-    assert item["rollback_preview"]["before_snapshot"] == before
-    assert item["rollback_preview"]["after_hash"] is None
+    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["memory_execution_dry_run_only"]}
+    assert item["mutation"]["type"] == "memory_provider_resolution"
+    assert item["mutation"]["execution_enabled"] is False
+    assert item["mutation"]["context"]["resolved_strategy"] == "built_in_remove"
+    assert item["rollback_preview"] is None
 
 
 def test_build_apply_plan_rejects_memory_delete_outside_allowed_roots(tmp_path):

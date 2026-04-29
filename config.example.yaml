@@ -42,6 +42,18 @@ model:
     max_tokens: 1800
     extra_body: {}
 
+  mutation:
+    provider: auto
+    model: ""
+    base_url: ""
+    api_key: ""
+    timeout: 45
+    max_tokens: 1000
+    extra_body: {}
+
+mutation:
+  backend: hermes_agent
+
 gepa_scorer:
   enabled: true
   mode: dspy_program_eval

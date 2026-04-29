@@ -14,6 +14,7 @@ try:  # pragma: no cover - package import path
         _apply_replace_text_once,
     )
     from .config import apply_policy_allows_item, normalize_apply_policy
+    from .mutation_worker import execute_skill_manage_patch
     from .observer import _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_plan import (
@@ -24,6 +25,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _apply_replace_text_once,
     )
     from config import apply_policy_allows_item, normalize_apply_policy
+    from mutation_worker import execute_skill_manage_patch
     from observer import _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -90,6 +92,11 @@ def _current_content_and_hash(target_path: str | None) -> tuple[str | None, str 
 
 def _apply_mutation(content: str | None, mutation: dict[str, Any]) -> str | None:
     mutation_type = str(mutation.get("type") or "")
+    if mutation_type == "skill_manage_patch":
+        preview_mutation = mutation.get("preview_mutation") if isinstance(mutation.get("preview_mutation"), dict) else None
+        return _apply_mutation(content, preview_mutation) if preview_mutation else None
+    if mutation_type == "memory_provider_resolution":
+        return None
     if mutation_type == "replace_text_once":
         return _apply_replace_text_once(content or "", mutation)
     if mutation_type == "append_to_existing_section":
@@ -235,11 +242,37 @@ def apply_plan(
         item_result["rollback_data"] = item.get("rollback_preview")
 
         if execute:
-            _write_mutation_result(str(target_path), mutation, after_content)
-            item_result["status"] = "applied"
-            summary["applied"] += 1
-            accepted_baseline[str(target_path)] = after_hash
-            target_changed = True
+            if str(mutation.get("type") or "") == "skill_manage_patch":
+                context = mutation.get("context") if isinstance(mutation.get("context"), dict) else {}
+                tool_args = context.get("tool_args") if isinstance(context.get("tool_args"), dict) else {}
+                tool_result = execute_skill_manage_patch(tool_args)
+                item_result["tool_result"] = tool_result
+                item_result["mutation_context"] = context
+                if not tool_result.get("success"):
+                    item_result["status"] = "failed"
+                    item_result["reasons"].append("skill_manage_patch_failed")
+                    item_result["reasons"].append(str(tool_result.get("error") or "unknown_tool_error"))
+                    summary["failed"] += 1
+                    result_items.append(item_result)
+                    continue
+                _after_content, observed_after_hash = _current_content_and_hash(target_path)
+                if observed_after_hash != after_hash:
+                    item_result["status"] = "failed"
+                    item_result["reasons"].append("tool_result_hash_mismatch")
+                    item_result["observed_after_hash"] = observed_after_hash
+                    summary["failed"] += 1
+                    result_items.append(item_result)
+                    continue
+                item_result["status"] = "applied"
+                summary["applied"] += 1
+                accepted_baseline[str(target_path)] = after_hash
+                target_changed = True
+            else:
+                _write_mutation_result(str(target_path), mutation, after_content)
+                item_result["status"] = "applied"
+                summary["applied"] += 1
+                accepted_baseline[str(target_path)] = after_hash
+                target_changed = True
         else:
             item_result["status"] = "would_apply"
             summary["would_apply"] += 1

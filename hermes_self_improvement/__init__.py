@@ -101,9 +101,25 @@ def _register_tools(ctx) -> None:
 try:  # pragma: no cover - package import path
     from .apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash, rollback_apply_ledger
     from .calibration import collect_calibration_evidence, rollback_calibration, run_calibration
+    from .mutation_policy import (
+        PROVIDER_POLICIES,
+        build_memory_mutation_context,
+        build_skill_patch_context,
+        provider_policy,
+        resolve_memory_strategy,
+    )
+    from .mutation_worker import execute_skill_manage_patch
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash, rollback_apply_ledger
     from calibration import collect_calibration_evidence, rollback_calibration, run_calibration
+    from mutation_policy import (
+        PROVIDER_POLICIES,
+        build_memory_mutation_context,
+        build_skill_patch_context,
+        provider_policy,
+        resolve_memory_strategy,
+    )
+    from mutation_worker import execute_skill_manage_patch
 
 try:  # pragma: no cover - package import path
     from .observer import (

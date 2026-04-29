@@ -30,6 +30,8 @@ Users do not provide expected hashes. Hashes are audit / integrity / drift-detec
 
 `apply_policy` controls normal skill/memory improvement application. Default policy allows low-risk, non-destructive skill/memory changes only.
 
+Skill mutation execution is tool-mediated. The current executable pilot only calls `skill_manage(action="patch")`; it does not use direct file fallback if the tool fails. Memory mutation is currently provider-policy/context dry-run only: abstract operations such as `memory_delete` resolve to provider-native strategies, but external memory execution remains disabled/fail-closed in this slice.
+
 Policy-denied ready items become `skipped_by_policy`; validation or mutation failures become `failed`; non-ready items remain `needs_review`.
 
 ## Calibration

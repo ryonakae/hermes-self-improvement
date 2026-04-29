@@ -7,9 +7,11 @@ from typing import Any
 
 try:  # pragma: no cover - package import path
     from .config import get_hermes_home
+    from .mutation_policy import build_memory_mutation_context, build_skill_patch_context
     from .observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from config import get_hermes_home
+    from mutation_policy import build_memory_mutation_context, build_skill_patch_context
     from observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -113,6 +115,41 @@ def _custom_skill_path_for_proposal(proposal: dict[str, Any], config: dict[str, 
         candidate = root / skill_name / "SKILL.md"
         if _path_inside_root(candidate, root):
             return str(candidate)
+    return None
+
+
+def _skill_name_for_proposal(proposal: dict[str, Any], target_path: str | None = None, config: dict[str, Any] | None = None) -> str | None:
+    for key in ("target_skill", "skill_name", "skill"):
+        name = _safe_relative_name(proposal.get(key))
+        if name and len(Path(name).parts) == 1:
+            return name
+    if target_path:
+        candidate = Path(str(target_path)).expanduser()
+        for root in _custom_skill_roots(config):
+            try:
+                relative = candidate.resolve().relative_to(root.resolve())
+            except ValueError:
+                continue
+            parts = relative.parts
+            if len(parts) >= 2 and parts[-1] == "SKILL.md":
+                return parts[-2]
+    return None
+
+
+def _skill_supporting_file_for_path(skill_name: str | None, target_path: str | None, config: dict[str, Any] | None = None) -> str | None:
+    if not skill_name or not target_path:
+        return None
+    candidate = Path(str(target_path)).expanduser()
+    for root in _custom_skill_roots(config):
+        try:
+            relative = candidate.resolve().relative_to(root.resolve())
+        except ValueError:
+            continue
+        parts = relative.parts
+        if len(parts) >= 2 and parts[-1] == "SKILL.md" and parts[-2] == skill_name:
+            return None
+        if len(parts) >= 3 and parts[-3] == skill_name:
+            return str(Path(*parts[-2:]))
     return None
 
 
@@ -304,6 +341,40 @@ def _plan_stale_reference_fix_mutation(proposal: dict[str, Any], target_content:
     return {"type": "replace_text_once", "old_text": old_text, "new_text": new_text}, []
 
 
+def _plan_skill_manage_patch_mutation(
+    *,
+    proposal: dict[str, Any],
+    target_content: str | None,
+    target_path: str | None,
+    config: dict[str, Any] | None,
+    base_mutation: dict[str, Any] | None,
+    base_blockers: list[str],
+) -> tuple[dict[str, Any] | None, list[str]]:
+    if base_mutation is None or base_blockers:
+        return base_mutation, base_blockers
+    if base_mutation.get("type") != "replace_text_once":
+        return base_mutation, base_blockers
+    skill_name = _skill_name_for_proposal(proposal, target_path, config)
+    if not skill_name:
+        return base_mutation, base_blockers
+    old_string = str(base_mutation.get("old_text") or "")
+    new_string = str(base_mutation.get("new_text") or "")
+    if not old_string or new_string is None:
+        return None, ["skill_manage_patch_args_missing"]
+    context = build_skill_patch_context(
+        skill_name=skill_name,
+        old_string=old_string,
+        new_string=new_string,
+        file_path=_skill_supporting_file_for_path(skill_name, target_path, config),
+    )
+    mutation = {
+        "type": "skill_manage_patch",
+        "preview_mutation": base_mutation,
+        "context": context,
+    }
+    return mutation, []
+
+
 def _replacement_content_from_proposal(proposal: dict[str, Any]) -> Any:
     after_text = proposal.get("after_text")
     if after_text is None:
@@ -353,9 +424,30 @@ def _plan_memory_delete_mutation(
     target_path: str | None,
     config: dict[str, Any] | None,
 ) -> tuple[dict[str, Any] | None, list[str]]:
-    if not _path_inside_any_root(target_path, _memory_roots(config)):
+    if target_path and not _path_inside_any_root(target_path, _memory_roots(config)):
         return None, ["memory_target_outside_allowed_roots"]
-    return _plan_delete_file_mutation(proposal, target_content)
+    provider = proposal.get("active_memory_provider") or proposal.get("memory_provider") or (config or {}).get("active_memory_provider") or (config or {}).get("memory_provider") or "built-in"
+    operation = {
+        "operation": "memory_delete",
+        "target": proposal.get("target_memory") or proposal.get("target") or proposal.get("old_text") or proposal.get("memory_text"),
+        "old_text": proposal.get("old_text"),
+        "current_claim": proposal.get("current_claim") or proposal.get("canonical_memory"),
+        "canonical_memory": proposal.get("canonical_memory"),
+        "reason": proposal.get("deletion_reason") or proposal.get("reason") or "stale",
+        "correction_type": proposal.get("correction_type"),
+        "memory_id": proposal.get("memory_id"),
+        "delete_id": proposal.get("delete_id"),
+        "fact_id": proposal.get("fact_id"),
+        "id": proposal.get("id"),
+        "query": proposal.get("query"),
+    }
+    context = build_memory_mutation_context(provider=str(provider), operation=operation)
+    mutation = {
+        "type": "memory_provider_resolution",
+        "execution_enabled": False,
+        "context": context,
+    }
+    return mutation, list(context.get("reasons") or ["memory_execution_dry_run_only"])
 
 
 def _plan_evaluator_promote_mutation(
@@ -450,9 +542,25 @@ def _plan_mutation_for_item(
     if isinstance(explicit, dict):
         return explicit, []
     if change_type == "typo_fix":
-        return _plan_typo_fix_mutation(proposal, target_content)
+        base_mutation, base_blockers = _plan_typo_fix_mutation(proposal, target_content)
+        return _plan_skill_manage_patch_mutation(
+            proposal=proposal,
+            target_content=target_content,
+            target_path=target_path,
+            config=config,
+            base_mutation=base_mutation,
+            base_blockers=base_blockers,
+        )
     if change_type in {"stale_path_fix", "stale_command_fix"}:
-        return _plan_stale_reference_fix_mutation(proposal, target_content)
+        base_mutation, base_blockers = _plan_stale_reference_fix_mutation(proposal, target_content)
+        return _plan_skill_manage_patch_mutation(
+            proposal=proposal,
+            target_content=target_content,
+            target_path=target_path,
+            config=config,
+            base_mutation=base_mutation,
+            base_blockers=base_blockers,
+        )
     if change_type == "skill_create":
         return _plan_create_file_mutation(proposal, target_content)
     if change_type == "skill_delete":
@@ -650,6 +758,9 @@ def _rollback_preview_for_item(
     if not eligible or not target_path or not mutation:
         return None
     mutation_type = mutation.get("type")
+    if mutation_type == "skill_manage_patch":
+        mutation = mutation.get("preview_mutation") if isinstance(mutation.get("preview_mutation"), dict) else mutation
+        mutation_type = mutation.get("type")
     if mutation_type != "create_file" and target_content is None:
         return None
     after_content = None
@@ -818,6 +929,9 @@ def _mutation_conflict_key(item: dict[str, Any]) -> tuple[Any, ...] | None:
     if not target_path or not mutation:
         return None
     mutation_type = str(mutation.get("type") or "")
+    if mutation_type == "skill_manage_patch":
+        preview = mutation.get("preview_mutation") if isinstance(mutation.get("preview_mutation"), dict) else {}
+        return (target_path, mutation_type, preview.get("old_text"), (mutation.get("context") or {}).get("tool_args", {}).get("name"))
     if mutation_type == "replace_text_once":
         return (target_path, mutation_type, mutation.get("old_text"))
     if mutation_type == "append_to_existing_section":
