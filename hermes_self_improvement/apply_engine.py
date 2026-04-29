@@ -19,6 +19,7 @@ try:  # pragma: no cover - package import path
     from .observer import _reports_dir, _sha256_text, _stable_json
     from .recovery_engine import ledger_bound_restore, recovery_action_from_snapshots
     from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
+    from .verification import verify_skill_merge_phase, verify_skill_rename_phase
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_plan import (
         _apply_append_to_existing_section,
@@ -33,6 +34,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from observer import _reports_dir, _sha256_text, _stable_json
     from recovery_engine import ledger_bound_restore, recovery_action_from_snapshots
     from skill_snapshot import SkillSnapshotError, capture_skill_snapshot
+    from verification import verify_skill_merge_phase, verify_skill_rename_phase
 
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -200,6 +202,93 @@ def _verify_skill_agent_result(
     return verification, reasons
 
 
+
+def _commit_delete_source_skill(skill_name: str, config: dict[str, Any]) -> dict[str, Any]:
+    delete_backend = config.get("_skill_delete_backend") if isinstance(config, dict) else None
+    if callable(delete_backend):
+        return delete_backend(skill_name)
+    return execute_skill_manage_operation({"action": "delete", "name": skill_name})
+
+
+def _run_lifecycle_skill_agent_mutation(
+    *,
+    mutation: dict[str, Any],
+    config: dict[str, Any],
+    before_snapshots: dict[str, dict[str, Any]],
+    agent_result: dict[str, Any],
+) -> dict[str, Any]:
+    task_kind = str(mutation.get("task_kind") or "")
+    targets = mutation.get("targets") if isinstance(mutation.get("targets"), dict) else {}
+    source_skill = str(targets.get("source_skill") or "")
+    destination_skill = str(targets.get("primary_skill") or targets.get("new_skill") or "")
+    names = set(_skill_agent_task_skill_names(mutation))
+    after_phase1: dict[str, dict[str, Any]] = {}
+    reasons: list[str] = []
+    for name in sorted(names):
+        try:
+            before = before_snapshots.get(name)
+            after_phase1[name] = capture_skill_snapshot(name, config=config, allow_missing=bool(before and before.get("exists") is False))
+        except SkillSnapshotError as exc:
+            reasons.append(f"after_phase1_{name}_{exc}")
+    if reasons:
+        return {"status": "failed", "reasons": reasons, "after_phase1_snapshots": after_phase1}
+    if task_kind == "skill_rename":
+        verification = verify_skill_rename_phase(
+            source_skill=source_skill,
+            new_skill=str(targets.get("new_skill") or ""),
+            before_snapshots=before_snapshots,
+            after_snapshots=after_phase1,
+            agent_result=agent_result,
+        )
+    elif task_kind == "skill_merge":
+        verification = verify_skill_merge_phase(
+            source_skill=source_skill,
+            destination_skill=destination_skill,
+            before_snapshots=before_snapshots,
+            after_snapshots=after_phase1,
+            agent_result=agent_result,
+            judge=config.get("_merge_judge") if callable(config.get("_merge_judge")) else None,
+        )
+    else:
+        return {"status": "failed", "reasons": ["unsupported_lifecycle_task_kind"]}
+    if not verification.get("passed"):
+        return {"status": "failed", "reasons": verification.get("reasons") or ["lifecycle_verification_failed"], "verification": verification, "after_phase1_snapshots": after_phase1}
+    delete_result = _commit_delete_source_skill(source_skill, config)
+    if not delete_result.get("success"):
+        return {"status": "failed", "reasons": ["commit_delete_source_failed", str(delete_result.get("error") or "unknown_delete_error")], "verification": verification, "after_phase1_snapshots": after_phase1, "commit_delete_result": delete_result}
+    after_final: dict[str, dict[str, Any]] = {}
+    for name in sorted(names):
+        before = before_snapshots.get(name)
+        try:
+            after_final[name] = capture_skill_snapshot(name, config=config, allow_missing=True if name == source_skill else bool(before and before.get("exists") is False))
+        except SkillSnapshotError as exc:
+            return {"status": "failed", "reasons": [f"after_final_{name}_{exc}"], "verification": verification, "after_phase1_snapshots": after_phase1, "commit_delete_result": delete_result}
+    if after_final.get(source_skill, {}).get("exists") is True:
+        return {"status": "failed", "reasons": ["source_still_exists_after_commit_delete"], "verification": verification, "after_final_snapshots": after_final, "commit_delete_result": delete_result}
+    rollback_actions = {}
+    for name, before in before_snapshots.items():
+        after = after_final.get(name)
+        if before and after and before.get("file_set_hash") != after.get("file_set_hash"):
+            rollback_actions[name] = recovery_action_from_snapshots(before_snapshot=before, current_snapshot=after)
+    return {
+        "status": "applied",
+        "reasons": [],
+        "verification": verification,
+        "after_phase1_snapshots": after_phase1,
+        "after_final_snapshots": after_final,
+        "commit_delete_result": delete_result,
+        "rollback_data": {
+            "rollback_strategy": "ledger_bound_restore",
+            "ledger_bound_restore": rollback_actions,
+            "skill_snapshots_before": before_snapshots,
+            "skill_snapshots_after": after_final,
+            "lifecycle_verification": verification,
+            "commit_delete_result": delete_result,
+            "tool_trace_verified": False,
+        },
+    }
+
+
 def _run_skill_agent_mutation(
     *,
     mutation: dict[str, Any],
@@ -229,6 +318,19 @@ def _run_skill_agent_mutation(
         result["reasons"].append(str(agent_result.get("error") or "mutation_agent_failed"))
         result["reasons"].extend(agent_result.get("reasons") or [])
         return result
+    if str(mutation.get("task_kind") or "") in {"skill_rename", "skill_merge"}:
+        lifecycle = _run_lifecycle_skill_agent_mutation(mutation=mutation, config=config, before_snapshots=before_snapshots, agent_result=agent_result)
+        result["verification"] = lifecycle.get("verification")
+        result["commit_delete_result"] = lifecycle.get("commit_delete_result")
+        if lifecycle.get("status") != "applied":
+            result["status"] = "failed"
+            result["reasons"].extend(lifecycle.get("reasons") or ["lifecycle_skill_agent_task_failed"])
+            return result
+        result["status"] = "applied"
+        result["target_changed"] = True
+        result["rollback_data"] = lifecycle.get("rollback_data")
+        return result
+
     verification, verification_reasons = _verify_skill_agent_result(mutation=mutation, before_snapshots=before_snapshots, agent_result=agent_result, config=config)
     result["verification"] = verification
     if verification_reasons:
@@ -540,7 +642,7 @@ def apply_plan(
     return result
 
 
-def _rollback_item_plan(item: dict[str, Any]) -> dict[str, Any]:
+def _rollback_item_plan(item: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
     rollback = item.get("rollback_data") if isinstance(item.get("rollback_data"), dict) else {}
     target_path = rollback.get("target_path") or item.get("target_path")
     item_result: dict[str, Any] = {
@@ -558,7 +660,7 @@ def _rollback_item_plan(item: dict[str, Any]) -> dict[str, Any]:
     ledger_restore = rollback.get("ledger_bound_restore") if isinstance(rollback.get("ledger_bound_restore"), dict) else None
     if ledger_restore:
         actions = list(ledger_restore.values()) if all(isinstance(v, dict) for v in ledger_restore.values()) and "type" not in ledger_restore else [ledger_restore]
-        previews = [ledger_bound_restore(action, execute=False) for action in actions]
+        previews = [ledger_bound_restore(action, config=config, execute=False) for action in actions]
         failed_previews = [preview for preview in previews if preview.get("status") != "would_restore"]
         item_result["status"] = "failed" if failed_previews else "would_rollback"
         item_result["rollback_action"] = {"type": "ledger_bound_restore_batch", "actions": actions} if not failed_previews else None
@@ -666,18 +768,18 @@ def _rollback_item_plan(item: dict[str, Any]) -> dict[str, Any]:
     return item_result
 
 
-def _execute_rollback_action(action: dict[str, Any]) -> bool:
+def _execute_rollback_action(action: dict[str, Any], config: dict[str, Any] | None = None) -> bool:
     action_type = action.get("type")
     if action_type == "skill_manage":
         result = execute_skill_manage_operation(action.get("tool_args") if isinstance(action.get("tool_args"), dict) else {})
         return bool(result.get("success"))
     if action_type == "ledger_bound_restore":
-        result = ledger_bound_restore(action, execute=True)
+        result = ledger_bound_restore(action, config=config, execute=True)
         return result.get("status") == "restored"
     if action_type == "ledger_bound_restore_batch":
         ok = True
         for subaction in action.get("actions") or []:
-            result = ledger_bound_restore(subaction, execute=True)
+            result = ledger_bound_restore(subaction, config=config, execute=True)
             ok = ok and result.get("status") == "restored"
         return ok
     return False
@@ -736,7 +838,7 @@ def rollback_apply_ledger(*, ledger_id: str, config: dict[str, Any], execute: bo
     for item in reversed(ledger.get("items") if isinstance(ledger.get("items"), list) else []):
         if item.get("status") != "applied":
             continue
-        result_items.append(_rollback_item_plan(item))
+        result_items.append(_rollback_item_plan(item, config=config))
 
     failed = sum(1 for item in result_items if item.get("status") == "failed")
     would = sum(1 for item in result_items if item.get("status") == "would_rollback")
@@ -747,7 +849,7 @@ def rollback_apply_ledger(*, ledger_id: str, config: dict[str, Any], execute: bo
             action = item.get("rollback_action") if isinstance(item.get("rollback_action"), dict) else None
             if not action:
                 continue
-            if _execute_rollback_action(action):
+            if _execute_rollback_action(action, config=config):
                 item["status"] = "rolled_back"
                 rolled_back += 1
                 target_changed = True
