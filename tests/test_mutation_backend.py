@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 
 from hermes_self_improvement.mutation_backend import (
     ALLOWED_MUTATION_AGENT_TOOLS,
@@ -8,6 +10,7 @@ from hermes_self_improvement.mutation_backend import (
     MutationBackendLimits,
     SkillToolExecutor,
     build_mutation_backend,
+    check_skill_tool_executor_readiness,
     mutation_backend_status,
     parse_backend_json,
     validate_backend_success_result,
@@ -156,3 +159,53 @@ def test_runtime_skill_tool_resolver_reports_unavailable_without_core_hook():
     status = mutation_backend_status({"mutation": {"backend": "disabled"}})
     assert status["available"] is False
     assert status["reason"] == "mutation_agent_backend_disabled"
+
+
+def test_skill_tool_executor_readiness_reports_resolved_callables():
+    executor = SkillToolExecutor(
+        skills_list_fn=lambda **kwargs: {"success": True, "skills": []},
+        skill_view_fn=lambda **kwargs: {"success": True, "content": "demo"},
+        skill_manage_fn=lambda **kwargs: {"success": True},
+        source="injected_test",
+    )
+
+    readiness = check_skill_tool_executor_readiness(executor)
+
+    assert readiness == {"available": True, "tool_executor": "injected_test", "readiness": "callables_resolved"}
+
+
+def test_skill_tool_executor_readiness_fails_when_one_callable_missing():
+    executor = SkillToolExecutor(skills_list_fn=lambda **kwargs: {}, skill_view_fn=lambda **kwargs: {}, source="partial")
+
+    readiness = check_skill_tool_executor_readiness(executor)
+
+    assert readiness["available"] is False
+    assert readiness["reason"] == "skill_tool_registry_unavailable"
+    assert "skill_manage" in readiness["missing_tools"]
+
+
+def test_mutation_backend_status_includes_tool_executor_source_and_readiness(monkeypatch):
+    fake_tools_pkg = types.ModuleType("tools")
+    fake_skills_tool = types.ModuleType("tools.skills_tool")
+    fake_skill_manager_tool = types.ModuleType("tools.skill_manager_tool")
+    fake_skills_tool.skills_list = lambda **kwargs: {"success": True, "skills": []}
+    fake_skills_tool.skill_view = lambda **kwargs: {"success": True, "content": "demo"}
+    fake_skill_manager_tool.skill_manage = lambda **kwargs: {"success": True}
+    monkeypatch.setitem(sys.modules, "tools", fake_tools_pkg)
+    monkeypatch.setitem(sys.modules, "tools.skills_tool", fake_skills_tool)
+    monkeypatch.setitem(sys.modules, "tools.skill_manager_tool", fake_skill_manager_tool)
+
+    status = mutation_backend_status({"mutation": {"backend": "hermes_auxiliary_tool_loop", "enabled": True}})
+
+    assert status["available"] is True
+    assert status["tool_executor"] == "hermes_tool_registry"
+    assert status["readiness"] == "callables_resolved"
+
+
+def test_skill_tool_executor_normalizes_string_json_results_from_registry():
+    executor = SkillToolExecutor(skills_list_fn=lambda **kwargs: json.dumps({"success": True, "skills": []}))
+
+    result = executor.call("skills_list", {})
+
+    assert result["success"] is True
+    assert result["skills"] == []

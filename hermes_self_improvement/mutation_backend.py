@@ -141,6 +141,25 @@ class SkillToolExecutor:
         return bool(self.skills_list_fn and self.skill_view_fn and self.skill_manage_fn)
 
 
+def check_skill_tool_executor_readiness(executor: SkillToolExecutor) -> dict[str, Any]:
+    missing = []
+    if executor.skills_list_fn is None:
+        missing.append("skills_list")
+    if executor.skill_view_fn is None:
+        missing.append("skill_view")
+    if executor.skill_manage_fn is None:
+        missing.append("skill_manage")
+    if missing:
+        return {
+            "available": False,
+            "reason": "skill_tool_registry_unavailable",
+            "missing_tools": missing,
+            "tool_executor": executor.source,
+            "detail": executor.unavailable_reason,
+        }
+    return {"available": True, "tool_executor": executor.source, "readiness": "callables_resolved"}
+
+
 def _ensure_hermes_agent_on_path() -> None:
     candidates = [
         Path(os.environ.get("HERMES_AGENT_ROOT", "")).expanduser() if os.environ.get("HERMES_AGENT_ROOT") else None,
@@ -307,6 +326,7 @@ def mutation_backend_status(config: dict[str, Any] | None = None) -> dict[str, A
     if normalized != "hermes_auxiliary_tool_loop":
         return {"configured": configured, "available": False, "reason": "mutation_agent_backend_unknown"}
     executor = resolve_skill_tool_executor(config)
-    if not executor.available():
-        return {"configured": normalized, "available": False, "reason": "skill_tool_registry_unavailable", "detail": executor.unavailable_reason}
-    return {"configured": normalized, "available": True, "tool_executor": executor.source}
+    readiness = check_skill_tool_executor_readiness(executor)
+    if not readiness.get("available"):
+        return {"configured": normalized, **readiness}
+    return {"configured": normalized, **readiness}
