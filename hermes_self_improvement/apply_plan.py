@@ -488,7 +488,8 @@ def _plan_memory_tool_mutation(
     }
     context = build_memory_mutation_context(provider=provider, operation=operation)
     if context.get("execution_enabled"):
-        mutation = {"type": "memory_tool_operation", "context": context}
+        mutation_type = "memory_tool_operation" if context.get("tool_name") == "memory" else "memory_provider_tool_operation"
+        mutation = {"type": mutation_type, "context": context}
         missing = []
         args = context.get("tool_args") if isinstance(context.get("tool_args"), dict) else {}
         if args.get("action") in {"add", "replace"} and not args.get("content"):
@@ -752,7 +753,7 @@ def _eligibility_for_apply_item(
     if change_type == "unknown_or_unclassified":
         reasons.append("change_type_unknown")
     if not target_path:
-        if not (change_type in {"memory_add", "memory_replace", "memory_delete"} and isinstance(mutation, dict) and mutation.get("type") == "memory_tool_operation"):
+        if not (change_type in {"memory_add", "memory_replace", "memory_delete"} and isinstance(mutation, dict) and mutation.get("type") in {"memory_tool_operation", "memory_provider_tool_operation"}):
             reasons.append("target_path_missing")
     elif target_exists is False and change_type not in {"skill_create", "evaluator_promote"}:
         reasons.append("target_not_found")
@@ -991,7 +992,7 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
     )
     approval_only = change_type in _APPROVAL_REQUIRED_CHANGE_TYPES
     eligible_for_unattended = eligibility["status"] == "eligible" and change_type in _LOW_RISK_UNATTENDED_CHANGE_TYPES
-    plan_status = "ready" if eligibility["status"] == "eligible" and mutation is not None and target_path else "needs_review"
+    plan_status = "ready" if eligibility["status"] == "eligible" and mutation is not None and (target_path or (change_type in {"memory_add", "memory_replace", "memory_delete"} and mutation.get("type") in {"memory_tool_operation", "memory_provider_tool_operation"})) else "needs_review"
     rollback_preview = _rollback_preview_for_item(
         target_path=target_path,
         target_content=target_meta.get("content"),

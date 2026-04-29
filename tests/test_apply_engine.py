@@ -107,6 +107,82 @@ def test_apply_plan_tracks_accepted_baseline_for_multiple_items_in_same_file(tmp
     assert target.read_text(encoding="utf-8") == "hello bye\n"
     assert result["summary"]["applied"] == 2
 
+
+def test_apply_hindsight_provider_operation_uses_provider_tool_without_direct_fallback(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    import hermes_self_improvement.apply_engine as apply_engine
+
+    context = mod.build_memory_mutation_context(
+        provider="hindsight",
+        operation={
+            "operation": "memory_delete",
+            "reason": "stale",
+            "target": "Ryo prefers old workflow",
+            "current_claim": "Ryo prefers new workflow",
+        },
+    )
+    item = {
+        "item_id": "step-001",
+        "status": "ready",
+        "order": 1,
+        "target_kind": "memory",
+        "target_path": None,
+        "change_type": "memory_delete",
+        "risk": "low",
+        "mutation": {"type": "memory_provider_tool_operation", "context": context},
+        "before_hash": None,
+    }
+    item["item_hash"] = mod.compute_apply_item_hash(item)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-hindsight", "items": [item]})
+
+    calls = []
+
+    def fake_execute(received_context):
+        calls.append(received_context)
+        return {"success": True, "tool_name": "hindsight_retain", "direct_fallback_used": False}
+
+    monkeypatch.setattr(apply_engine, "execute_memory_provider_tool_operation", fake_execute)
+
+    result = mod.apply_plan(plan_id="plan-hindsight", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=True)
+
+    assert result["summary"]["applied"] == 1
+    assert result["target_changed"] is True
+    assert len(calls) == 1
+    assert calls[0]["tool_name"] == "hindsight_retain"
+    assert calls[0]["tool_args"] == context["tool_args"]
+    assert calls[0]["allowed_tools"] == ["hindsight_retain"]
+    assert result["items"][0]["tool_result"]["direct_fallback_used"] is False
+
+
+def test_apply_hindsight_provider_operation_failure_has_no_direct_fallback(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    import hermes_self_improvement.apply_engine as apply_engine
+
+    context = mod.build_memory_mutation_context(
+        provider="hindsight",
+        operation={"operation": "memory_delete", "reason": "stale", "target": "old", "current_claim": "new"},
+    )
+    item = {
+        "item_id": "step-001",
+        "status": "ready",
+        "order": 1,
+        "target_kind": "memory",
+        "target_path": None,
+        "change_type": "memory_delete",
+        "risk": "low",
+        "mutation": {"type": "memory_provider_tool_operation", "context": context},
+        "before_hash": None,
+    }
+    item["item_hash"] = mod.compute_apply_item_hash(item)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-hindsight-fail", "items": [item]})
+    monkeypatch.setattr(apply_engine, "execute_memory_provider_tool_operation", lambda _context: {"success": False, "error": "unavailable", "direct_fallback_used": False})
+
+    result = mod.apply_plan(plan_id="plan-hindsight-fail", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=True)
+
+    assert result["summary"]["failed"] == 1
+    assert result["target_changed"] is False
+    assert "memory_provider_tool_operation_failed" in result["items"][0]["reasons"]
+
 def test_rollback_preview_does_not_mutate_applied_target(tmp_path):
     mod = load_plugin_module()
     target = tmp_path / "skill.md"

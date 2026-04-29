@@ -20,6 +20,15 @@ def _load_memory_tool() -> Callable[..., str]:
     return memory_tool
 
 
+def _load_provider_tool(tool_name: str) -> Callable[..., str]:
+    """Provider memory tools are exposed through Hermes runtime, not files.
+
+    The standalone plugin cannot safely reach into provider internals. Runtime
+    integrations may inject a provider-tool callable; otherwise we fail closed.
+    """
+    raise RuntimeError(f"memory_provider_tool_unavailable:{tool_name}")
+
+
 _ALLOWED_ARGS_BY_ACTION = {
     "create": {"action", "name", "content", "category"},
     "patch": {"action", "name", "old_string", "new_string", "replace_all", "file_path"},
@@ -51,6 +60,24 @@ def _normalize_skill_manage_result(raw: Any, args: dict[str, Any]) -> dict[str, 
         parsed = {"success": False, "error": "skill_manage_returned_unsupported_type", "raw": repr(raw)}
     parsed.setdefault("success", False)
     parsed["tool_name"] = "skill_manage"
+    parsed["tool_args"] = {k: v for k, v in args.items() if v is not None}
+    parsed["direct_fallback_used"] = False
+    return parsed
+
+
+def _normalize_provider_tool_result(raw: Any, args: dict[str, Any], *, tool_name: str) -> dict[str, Any]:
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = {"success": False, "error": f"{tool_name}_returned_non_json", "raw": raw}
+    elif isinstance(raw, dict):
+        parsed = raw
+    else:
+        parsed = {"success": False, "error": f"{tool_name}_returned_unsupported_type", "raw": repr(raw)}
+    if "success" not in parsed:
+        parsed["success"] = bool(parsed.get("result")) and not parsed.get("error")
+    parsed["tool_name"] = tool_name
     parsed["tool_args"] = {k: v for k, v in args.items() if v is not None}
     parsed["direct_fallback_used"] = False
     return parsed
@@ -102,3 +129,36 @@ def execute_memory_tool_operation(tool_args: dict[str, Any], *, memory_fn: Calla
     parsed = _normalize_skill_manage_result(raw, args)
     parsed["tool_name"] = "memory"
     return parsed
+
+
+def execute_hindsight_retain_operation(tool_args: dict[str, Any], *, provider_tool_fn: Callable[..., str] | None = None) -> dict[str, Any]:
+    """Execute a constrained Hindsight retain correction with no direct fallback."""
+    args = dict(tool_args or {})
+    allowed = {"content", "context", "tags"}
+    extra = sorted(set(args) - allowed)
+    if extra:
+        return {"success": False, "error": f"unexpected_hindsight_retain_args:{','.join(extra)}", "direct_fallback_used": False}
+    if not args.get("content"):
+        return {"success": False, "error": "hindsight_retain_args_missing:content", "direct_fallback_used": False}
+    if args.get("tags") is not None and not isinstance(args.get("tags"), list):
+        return {"success": False, "error": "invalid_hindsight_retain_tags", "direct_fallback_used": False}
+    try:
+        fn = provider_tool_fn or _load_provider_tool("hindsight_retain")
+        try:
+            raw = fn(**args)
+        except TypeError:
+            raw = fn("hindsight_retain", args)
+    except Exception as exc:
+        return {"success": False, "error": f"memory_provider_tool_unavailable:{exc}", "direct_fallback_used": False}
+    return _normalize_provider_tool_result(raw, args, tool_name="hindsight_retain")
+
+
+def execute_memory_provider_tool_operation(context: dict[str, Any], *, provider_tool_fn: Callable[..., str] | None = None) -> dict[str, Any]:
+    tool_name = str(context.get("tool_name") or "")
+    tool_args = context.get("tool_args") if isinstance(context.get("tool_args"), dict) else {}
+    allowed_tools = context.get("allowed_tools") if isinstance(context.get("allowed_tools"), list) else []
+    if tool_name not in allowed_tools:
+        return {"success": False, "error": "memory_provider_tool_not_allowed", "direct_fallback_used": False}
+    if tool_name == "hindsight_retain":
+        return execute_hindsight_retain_operation(tool_args, provider_tool_fn=provider_tool_fn)
+    return {"success": False, "error": "unsupported_memory_provider_tool", "direct_fallback_used": False}

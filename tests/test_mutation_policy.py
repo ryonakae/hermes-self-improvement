@@ -65,7 +65,7 @@ def test_provider_policy_allows_native_sensitive_delete_when_specific():
     assert "correction_tombstone" in result["forbidden"]
 
 
-def test_memory_delete_plan_records_provider_resolution_and_stays_not_ready(tmp_path):
+def test_memory_delete_plan_records_hindsight_correction_tool_operation(tmp_path):
     mod = load_plugin_module()
     plan = mod.build_apply_plan(
         proposals=[{
@@ -88,11 +88,16 @@ def test_memory_delete_plan_records_provider_resolution_and_stays_not_ready(tmp_
     )
 
     item = plan["items"][0]
-    assert item["status"] == "needs_review"
-    assert item["mutation"]["type"] == "memory_provider_resolution"
-    assert item["mutation"]["execution_enabled"] is False
-    assert item["mutation"]["context"]["resolved_strategy"] == "retain_correction"
-    assert "memory_execution_dry_run_only" in item["eligibility"]["reasons"]
+    assert item["status"] == "ready"
+    assert item["mutation"]["type"] == "memory_provider_tool_operation"
+    context = item["mutation"]["context"]
+    assert context["execution_enabled"] is True
+    assert context["tool_name"] == "hindsight_retain"
+    assert context["allowed_tools"] == ["hindsight_retain"]
+    assert context["direct_fallback_allowed"] is False
+    assert context["provider_resolution"]["resolved_strategy"] == "retain_correction"
+    assert "Ryo prefers new workflow" in context["tool_args"]["content"]
+    assert item["eligibility"] == {"status": "eligible", "reasons": []}
 
 
 def test_skill_patch_plan_uses_skill_manage_context(tmp_path):
@@ -397,3 +402,52 @@ def test_memory_tool_operation_execute_fails_closed_without_direct_fallback():
     rejected = mod.execute_memory_tool_operation({"action": "remove", "target": "memory"}, memory_fn=lambda **kwargs: json.dumps({"success": True}))
     assert rejected["success"] is False
     assert rejected["error"] == "memory_remove_args_missing:old_text"
+
+
+def test_hindsight_retain_executor_accepts_only_provider_tool_surface():
+    mod = load_plugin_module()
+    calls = []
+
+    def fake_hindsight(**kwargs):
+        calls.append(kwargs)
+        return json.dumps({"result": "Memory stored successfully."})
+
+    result = mod.execute_hindsight_retain_operation(
+        {"content": "Current actionable fact: Ryo prefers new workflow", "context": "self-improvement memory correction", "tags": ["self-improvement"]},
+        provider_tool_fn=fake_hindsight,
+    )
+
+    assert result["success"] is True
+    assert result["tool_name"] == "hindsight_retain"
+    assert result["direct_fallback_used"] is False
+    assert calls == [{"content": "Current actionable fact: Ryo prefers new workflow", "context": "self-improvement memory correction", "tags": ["self-improvement"]}]
+    rejected = mod.execute_hindsight_retain_operation({"content": "x", "raw_path": "/tmp/db"}, provider_tool_fn=fake_hindsight)
+    assert rejected["success"] is False
+    assert rejected["error"] == "unexpected_hindsight_retain_args:raw_path"
+
+
+def test_hindsight_sensitive_delete_remains_fail_closed_not_executable(tmp_path):
+    mod = load_plugin_module()
+    plan = mod.build_apply_plan(
+        proposals=[{
+            "id": "secret-delete",
+            "title": "delete memory",
+            "target": "memory",
+            "change_type": "memory_delete",
+            "risk": "high",
+            "recommendation": "approval_required",
+            "scorer": "compare-v0.1",
+            "active_memory_provider": "hindsight",
+            "deletion_reason": "secret",
+            "target_memory": "secret value",
+        }],
+        summary={},
+        execution_mode="preview",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement")},
+    )
+
+    item = plan["items"][0]
+    assert item["status"] == "needs_review"
+    assert item["mutation"]["type"] == "memory_provider_resolution"
+    assert item["mutation"]["context"]["resolved_strategy"] == "fail_closed_sensitive_delete"
+    assert "sensitive_delete_requires_provider_native_delete" in item["eligibility"]["reasons"]

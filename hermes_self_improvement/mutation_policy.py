@@ -120,8 +120,9 @@ def _delete_target_specific(operation: dict[str, Any]) -> bool:
 def resolve_memory_strategy(*, provider: str | None, operation: dict[str, Any]) -> dict[str, Any]:
     """Resolve an abstract memory operation into plugin-owned provider policy.
 
-    This is dry-run policy/context resolution only. Executable external-memory
-    mutation is intentionally disabled in the first implementation slice.
+    This resolves policy only. Built-in memory and narrowly scoped external
+    providers may still add execution context in build_memory_mutation_context();
+    unsupported providers remain dry-run or blocked.
     """
     policy = provider_policy(provider)
     requested = str(operation.get("operation") or operation.get("type") or "").strip()
@@ -237,6 +238,57 @@ def build_memory_tool_context(*, action: str, target: str = "memory", content: s
     }
 
 
+def _truncate_memory_text(text: str, max_chars: int = 300) -> str:
+    text = " ".join(str(text or "").split())
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "…"
+
+
+def render_hindsight_correction_content(context: dict[str, Any]) -> str | None:
+    """Render a bounded Hindsight correction without direct provider access."""
+    strategy = str(context.get("resolved_strategy") or "")
+    if strategy != "retain_correction":
+        return None
+    reason = str(context.get("deletion_reason") or "stale").strip().lower()
+    if reason in SENSITIVE_DELETE_REASONS:
+        return None
+    stale_claim = _truncate_memory_text(str(context.get("stale_claim") or ""), 140)
+    current_claim = _truncate_memory_text(str(context.get("current_claim") or ""), 180)
+    correction_type = str(context.get("correction_type") or "supersede")
+    if correction_type == "duplicate":
+        if current_claim:
+            return _truncate_memory_text(f"Duplicate memory should be ignored in favor of this canonical fact: {current_claim}")
+        if stale_claim:
+            return _truncate_memory_text(f"Duplicate/noisy memory should be ignored: {stale_claim}")
+        return None
+    if correction_type == "invalidate" or not current_claim:
+        if not stale_claim:
+            return None
+        return _truncate_memory_text(f"A previous memory is outdated and should no longer be used: {stale_claim}")
+    if stale_claim:
+        return _truncate_memory_text(f"A previous memory is outdated: {stale_claim}. Current actionable fact: {current_claim}")
+    return _truncate_memory_text(f"Current actionable fact: {current_claim}")
+
+
+def build_hindsight_tool_context(resolved: dict[str, Any]) -> dict[str, Any]:
+    content = render_hindsight_correction_content(resolved)
+    args: dict[str, Any] = {
+        "content": content,
+        "context": "self-improvement memory correction",
+        "tags": ["self-improvement", "memory-correction"],
+    }
+    return {
+        "target_kind": "memory",
+        "resolved_strategy": "hindsight_retain_correction",
+        "allowed_tools": ["hindsight_retain"] if content else [],
+        "forbidden": ["direct_file_edit", "direct_db_edit", "unsupported_provider_api"],
+        "direct_fallback_allowed": False,
+        "tool_name": "hindsight_retain",
+        "tool_args": args,
+    }
+
+
 def build_memory_mutation_context(*, provider: str | None, operation: dict[str, Any]) -> dict[str, Any]:
     normalized_provider = normalize_memory_provider(provider)
     requested = str(operation.get("operation") or operation.get("type") or "").strip()
@@ -271,6 +323,21 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
             **context,
         }
     resolved = resolve_memory_strategy(provider=provider, operation=operation)
+    if normalized_provider == "hindsight" and resolved.get("resolved_strategy") == "retain_correction" and resolved.get("status") == "dry_run_only":
+        context = build_hindsight_tool_context(resolved)
+        if context.get("allowed_tools"):
+            return {
+                "target_kind": "memory",
+                "execution_enabled": True,
+                "direct_fallback_allowed": False,
+                "status": "executable",
+                "requested_operation": requested,
+                "active_memory_provider": "hindsight",
+                "reasons": [],
+                "provider_resolution": resolved,
+                **context,
+            }
+        resolved = {**resolved, "status": "blocked", "reasons": ["hindsight_correction_content_missing"]}
     return {
         "target_kind": "memory",
         "execution_enabled": False,

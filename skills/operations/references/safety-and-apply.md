@@ -30,7 +30,7 @@ Users do not provide expected hashes. Hashes are audit / integrity / drift-detec
 
 `apply_policy` controls normal skill/memory improvement application. Default policy allows low-risk, non-destructive skill/memory changes only.
 
-Skill mutation execution is tool-mediated. Executable skill mutation calls only `skill_manage` with the allowed action families (`create`, `patch`, `edit`, `delete`, `write_file`, `remove_file`); it does not use direct file fallback if the tool fails. Built-in memory mutation calls only the `memory` tool (`add`, `replace`, `remove`) and fails closed if that tool/store is unavailable. External memory-provider mutation remains provider-policy/context dry-run only: abstract operations such as `memory_delete` resolve to provider-native strategies, but external memory execution remains disabled/fail-closed in this slice.
+Skill mutation execution is tool-mediated. Executable skill mutation calls only `skill_manage` with the allowed action families (`create`, `patch`, `edit`, `delete`, `write_file`, `remove_file`); it does not use direct file fallback if the tool fails. Built-in memory mutation calls only the `memory` tool (`add`, `replace`, `remove`) and fails closed if that tool/store is unavailable. External memory-provider mutation is provider-native-tool only. The current executable external path is Hindsight stale/incorrect/duplicate `memory_delete` resolving to a bounded `hindsight_retain` correction; sensitive/secret/PII delete still requires provider-native delete and fails closed for Hindsight because Hermes exposes no delete tool there.
 
 Policy-denied ready items become `skipped_by_policy`; validation or mutation failures become `failed`; non-ready items remain `needs_review`.
 
