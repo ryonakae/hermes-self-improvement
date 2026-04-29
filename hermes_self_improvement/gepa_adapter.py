@@ -15,8 +15,9 @@ ADAPTER_VERSION = "gepa-v0.1"
 PACKAGE_DIR = Path(__file__).resolve().parent
 PLUGIN_DIR = PACKAGE_DIR.parent
 EVAL_DIR = PLUGIN_DIR / "evals"
-RUBRIC_PATH = EVAL_DIR / "rubric.json"
-EVAL_CASES_PATH = EVAL_DIR / "proposal_eval_cases.jsonl"
+PROPOSAL_EVAL_DIR = EVAL_DIR / "proposal"
+RUBRIC_PATH = PROPOSAL_EVAL_DIR / "rubric.json"
+EVAL_CASES_PATH = PROPOSAL_EVAL_DIR / "cases.jsonl"
 PROGRAM_NAME = "ProposalScoringProgram"
 UTC = timezone.utc
 
@@ -518,6 +519,57 @@ def _check_eval_case(*, score: dict[str, Any], expected: dict[str, Any]) -> list
                 "expected": expected.get("confidence_min"),
             }
         )
+
+    required_breakdown = expected.get("required_breakdown_levels")
+    if isinstance(required_breakdown, dict):
+        score_breakdown = score.get("score_breakdown") if isinstance(score.get("score_breakdown"), dict) else {}
+        for dimension, minimum_level in required_breakdown.items():
+            dimension_score = score_breakdown.get(dimension) if isinstance(score_breakdown.get(dimension), dict) else {}
+            actual_level = dimension_score.get("level")
+            checks.append(
+                {
+                    "name": f"required_breakdown_levels.{dimension}",
+                    "passed": _level_rank(actual_level) >= _level_rank(minimum_level),
+                    "actual": actual_level,
+                    "expected": minimum_level,
+                }
+            )
+
+    forbidden_recommendations = expected.get("forbidden_recommendations")
+    if isinstance(forbidden_recommendations, list):
+        actual_recommendation = score.get("recommendation")
+        checks.append(
+            {
+                "name": "forbidden_recommendations",
+                "passed": actual_recommendation not in forbidden_recommendations,
+                "actual": actual_recommendation,
+                "expected": forbidden_recommendations,
+            }
+        )
+
+    if expected.get("must_block_unattended_apply") is True:
+        checks.append(
+            {
+                "name": "must_block_unattended_apply",
+                "passed": score.get("auto_apply") is False,
+                "actual": score.get("auto_apply"),
+                "expected": False,
+            }
+        )
+
+    rationale_terms = expected.get("rationale_must_include")
+    if isinstance(rationale_terms, list):
+        rationale = str(score.get("rationale") or "").lower()
+        missing = [str(term) for term in rationale_terms if str(term).lower() not in rationale]
+        checks.append(
+            {
+                "name": "rationale_must_include",
+                "passed": not missing,
+                "actual": str(score.get("rationale") or ""),
+                "expected": rationale_terms,
+                "missing": missing,
+            }
+        )
     return checks
 
 
@@ -529,6 +581,10 @@ def _coerce_int(value: Any, default: int = 0) -> int:
 
 
 def _confidence_rank(value: Any) -> int:
+    return _level_rank(value)
+
+
+def _level_rank(value: Any) -> int:
     return {"low": 0, "medium": 1, "high": 2}.get(str(value or "").lower(), -1)
 
 

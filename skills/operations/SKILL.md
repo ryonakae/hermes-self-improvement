@@ -42,7 +42,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `hermes_self_improvement/ledger.py`: pending ledger helpers。旧 low-risk apply / rollback skeleton は削除済み。
 - `hermes_self_improvement/cli.py`: CLI parser、report rendering、recent plan/apply/calibration summary integration、pipeline orchestration。
 - `bin/hermes-self-improve`: standalone wrapper CLI。
-- `evals/`: GEPA offline scorer の rubric / regression cases。
+- `evals/proposal/`: GEPA offline scorer の repo-tracked public proposal eval assets。`rubric.json` は scorer contract、`cases.jsonl` は bundled golden regression seed。plugin 利用ユーザーが環境ごとに変更するものではない。
 - `skills/operations/SKILL.md`: この bundled operational skill。
 
 Runtime artifact は既定で `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存する。保存場所の user-facing config override は現時点では提供しない。主な subdirectory は `apply-plans/`, `ledgers/`, `state/`, `daily/`, `gepa/`, `cache/`。

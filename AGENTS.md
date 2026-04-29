@@ -97,7 +97,7 @@ PY
 - `hermes_self_improvement/apply_engine.py`: mutation と rollback ledger
 - `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、calibration rollback
 - `hermes_self_improvement/tool_handlers.py`: plugin tools
-- `evals/`: offline scorer の rubric / regression cases
+- `evals/proposal/`: offline scorer の repo-tracked public proposal eval assets。`rubric.json` は scorer contract、`cases.jsonl` は bundled golden regression seed。runtime/private eval cases は将来 `${HERMES_HOME:-~/.hermes}/self-improvement/evals/proposal/` に分ける。
 - `skills/operations/`: bundled operational skill
 - `tests/`: pytest suite
 

@@ -62,8 +62,8 @@ All scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does
 
 ## GEPA / DSPy assets
 
-- `evals/proposal_eval_cases.jsonl`: regression cases for repeated tool failure, one-off low evidence, dangerous auto-apply denial, and stale memory review.
-- `evals/rubric.json`: `proposal-eval-v0.1` rubric. Hard constraint: `auto_apply: false`.
+- `evals/proposal/cases.jsonl`: repo-tracked public golden regression cases for proposal scoring (for example repeated tool failure, one-off low evidence, dangerous auto-apply denial, and stale memory review). Plugin users do not mutate this file; runtime/private cases belong under `~/.hermes/self-improvement/evals/proposal/` in later phases.
+- `evals/proposal/rubric.json`: `proposal-eval-v0.1` rubric. Hard constraint: `auto_apply: false`.
 - `hermes_self_improvement/dspy_program.py`: real DSPy scoring contract / module boundary. Deterministic baseline is retained only for regression fixtures/tests.
 - `hermes_self_improvement/gepa_adapter.py`: payload builder, offline fixture evaluation, real DSPy/GEPA scorer/optimizer boundary, compiled evaluator artifact resolution, and fail-closed error reporting.
 

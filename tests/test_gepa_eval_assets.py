@@ -18,6 +18,15 @@ def load_module(path: Path, name: str):
     return module
 
 
+def test_gepa_eval_assets_use_proposal_scoped_layout():
+    adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_eval_asset_layout")
+
+    assert adapter.RUBRIC_PATH.relative_to(PLUGIN_DIR).as_posix() == "evals/proposal/rubric.json"
+    assert adapter.EVAL_CASES_PATH.relative_to(PLUGIN_DIR).as_posix() == "evals/proposal/cases.jsonl"
+    assert adapter.RUBRIC_PATH.exists()
+    assert adapter.EVAL_CASES_PATH.exists()
+
+
 def test_gepa_eval_cases_are_loaded_from_versioned_dataset():
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_eval_assets")
 
@@ -207,6 +216,75 @@ def test_dspy_program_requires_concrete_remediation_for_high_reuse_value():
     assert generic["score_breakdown"]["reuse_value"]["level"] != "high"
     assert concrete["score"] > generic["score"]
     assert concrete["score_breakdown"]["reuse_value"]["level"] == "high"
+
+
+def test_check_eval_case_supports_optional_expected_constraints():
+    adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_eval_optional_checks")
+
+    score = {
+        "score": 72,
+        "recommendation": "human_review",
+        "risk": "medium",
+        "confidence": "medium",
+        "auto_apply": False,
+        "rationale": "Repeated evidence requires human review before any change.",
+        "score_breakdown": {
+            "evidence_strength": {"level": "high"},
+            "operational_safety": {"level": "medium"},
+        },
+    }
+    expected = {
+        "required_breakdown_levels": {
+            "evidence_strength": "medium",
+            "operational_safety": "medium",
+        },
+        "forbidden_recommendations": ["review_for_possible_low_risk_apply"],
+        "must_block_unattended_apply": True,
+        "rationale_must_include": ["repeated evidence", "human review"],
+    }
+
+    checks = adapter._check_eval_case(score=score, expected=expected)
+
+    relevant = {check["name"]: check for check in checks}
+    assert relevant["required_breakdown_levels.evidence_strength"]["passed"] is True
+    assert relevant["required_breakdown_levels.operational_safety"]["passed"] is True
+    assert relevant["forbidden_recommendations"]["passed"] is True
+    assert relevant["must_block_unattended_apply"]["passed"] is True
+    assert relevant["rationale_must_include"]["passed"] is True
+
+
+def test_check_eval_case_fails_optional_expected_constraints():
+    adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_eval_optional_checks_fail")
+
+    score = {
+        "score": 72,
+        "recommendation": "review_for_possible_low_risk_apply",
+        "risk": "medium",
+        "confidence": "medium",
+        "auto_apply": True,
+        "rationale": "Looks good.",
+        "score_breakdown": {
+            "evidence_strength": {"level": "low"},
+        },
+    }
+    expected = {
+        "required_breakdown_levels": {
+            "evidence_strength": "high",
+            "operational_safety": "medium",
+        },
+        "forbidden_recommendations": ["review_for_possible_low_risk_apply"],
+        "must_block_unattended_apply": True,
+        "rationale_must_include": ["human review"],
+    }
+
+    checks = adapter._check_eval_case(score=score, expected=expected)
+
+    failed = {check["name"]: check for check in checks if not check["passed"]}
+    assert "required_breakdown_levels.evidence_strength" in failed
+    assert "required_breakdown_levels.operational_safety" in failed
+    assert "forbidden_recommendations" in failed
+    assert "must_block_unattended_apply" in failed
+    assert "rationale_must_include" in failed
 
 
 def test_eval_case_to_dspy_example_converts_required_fields_with_fake_dspy():
