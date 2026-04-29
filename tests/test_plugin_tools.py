@@ -112,6 +112,17 @@ def test_register_exposes_simplified_self_improvement_tool_surface():
         assert "mode" not in kwargs["schema"]["parameters"].get("properties", {})
 
 
+def test_status_tool_reports_memory_rollback_readiness(tmp_path):
+    mod = load_plugin_module()
+
+    raw = mod._handle_self_improvement_status_tool({"config": {"_self_improvement_root": str(tmp_path / "self-improvement")}})
+    payload = parse_tool_payload(raw)
+
+    assert payload["memory_rollback"]["supported"] is False
+    assert payload["memory_rollback"]["reason"] == "unsupported_pending_store_validation"
+    assert "memory-rollback-store-validation" in payload["memory_rollback"]["proof_plan"]
+
+
 def test_simplified_apply_tool_preview_does_not_mutate(tmp_path):
     mod = load_plugin_module()
     config, plan, target = _write_simple_plan(mod, tmp_path)

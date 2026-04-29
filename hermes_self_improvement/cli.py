@@ -19,6 +19,7 @@ try:  # pragma: no cover - package import path
     )
     from .mutation_backend import mutation_backend_status
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
+    from .recovery_engine import memory_rollback_status
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
     from .verification import merge_judge_status
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
@@ -32,6 +33,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     )
     from mutation_backend import mutation_backend_status
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
+    from recovery_engine import memory_rollback_status
     from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
     from verification import merge_judge_status
 
@@ -1103,6 +1105,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "dspy_available": importlib.util.find_spec("dspy") is not None,
             "mutation_backend": mutation_backend_status(config),
             "merge_judge": merge_judge_status(config),
+            "memory_rollback": memory_rollback_status(config),
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return

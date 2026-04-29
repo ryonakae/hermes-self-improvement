@@ -198,6 +198,15 @@ def ledger_bound_restore(action: dict[str, Any], *, config: dict[str, Any] | Non
         return {"status": "failed", "reasons": [str(exc)], "target_changed": False}
 
 
+def memory_rollback_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {
+        "supported": False,
+        "reason": "unsupported_pending_store_validation",
+        "proof_plan": ".hermes/plans/2026-04-30_081449-memory-rollback-store-validation.md",
+        "forbidden": ["sensitive_delete_readd", "external_provider_direct_restore"],
+    }
+
+
 def memory_ledger_bound_restore(action: dict[str, Any], *, execute: bool = False) -> dict[str, Any]:
     """Fail-closed boundary for memory rollback until store semantics are proven.
 

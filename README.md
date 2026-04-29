@@ -23,7 +23,7 @@ Skill lifecycle meanings:
 - `skill_merge`: phase 1 integrates source into destination while keeping source; the plugin runs checklist verification plus an LLM judge; commit phase deletes source only after verification.
 
 Rollback storage follows the same boundary: skill rollback uses full `SKILL.md` and supporting-file snapshots; built-in memory direct restore is allowed only after store format, locking, hashes, and cache invalidation are validated; external memory provider internals are never touched; sensitive/secret/PII deletes are not rolled back by re-adding sensitive content.
-Current implementation note: skill rollback is implemented through ledger-bound snapshots. Memory rollback remains fail-closed until built-in memory store validation and provider-native compensating correction semantics are proven; built-in memory direct restore is fail-closed as `unsupported_pending_store_validation`, and external provider direct restore / sensitive delete re-add remain forbidden.
+Current implementation note: skill rollback is implemented through ledger-bound snapshots. Memory rollback remains fail-closed until built-in memory store validation and provider-native compensating correction semantics are proven; built-in memory direct restore is fail-closed as `unsupported_pending_store_validation`, and external provider direct restore / sensitive delete re-add remain forbidden. `status` exposes this as `memory_rollback.supported=false` and points to `.hermes/plans/2026-04-30_081449-memory-rollback-store-validation.md` for the proof/implementation plan.
 
 ## 何をする plugin か
 

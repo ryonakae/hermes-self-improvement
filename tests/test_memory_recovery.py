@@ -1,7 +1,15 @@
 from __future__ import annotations
 
-from hermes_self_improvement.recovery_engine import memory_ledger_bound_restore
+from hermes_self_improvement.recovery_engine import memory_ledger_bound_restore, memory_rollback_status
 
+
+def test_memory_rollback_status_exposes_fail_closed_readiness():
+    status = memory_rollback_status({})
+
+    assert status["supported"] is False
+    assert status["reason"] == "unsupported_pending_store_validation"
+    assert "2026-04-30_081449-memory-rollback-store-validation.md" in status["proof_plan"]
+    assert "sensitive_delete_readd" in status["forbidden"]
 
 def test_builtin_memory_restore_is_unsupported_until_store_validation():
     result = memory_ledger_bound_restore({
