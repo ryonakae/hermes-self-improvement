@@ -1109,10 +1109,8 @@ def test_build_apply_plan_supports_approval_required_memory_delete_file(tmp_path
     assert item["target_exists"] is True
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["memory_execution_dry_run_only"]}
-    assert item["mutation"]["type"] == "memory_provider_resolution"
-    assert item["mutation"]["execution_enabled"] is False
-    assert item["mutation"]["context"]["resolved_strategy"] == "built_in_remove"
+    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["memory_old_text_missing", "mutation_plan_missing"]}
+    assert item["mutation"] is None
     assert item["rollback_preview"] is None
 
 

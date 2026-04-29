@@ -53,6 +53,10 @@ def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
         return "skill_large_rewrite"
     if "memory_compress" in haystack or "memory compression" in haystack or "compress_memory" in haystack:
         return "memory_compress"
+    if "memory_add" in haystack or "memory add" in haystack or "add memory" in haystack:
+        return "memory_add"
+    if "memory_replace" in haystack or "memory replace" in haystack or "replace memory" in haystack:
+        return "memory_replace"
     if "memory_delete" in haystack or "memory delete" in haystack or "delete memory" in haystack:
         return "memory_delete"
     return "unknown_or_unclassified"
@@ -461,6 +465,41 @@ def _plan_delete_file_mutation(proposal: dict[str, Any], target_content: str | N
     return {"type": "delete_file"}, []
 
 
+def _memory_provider_for_proposal(proposal: dict[str, Any], config: dict[str, Any] | None) -> str:
+    return str(proposal.get("active_memory_provider") or proposal.get("memory_provider") or (config or {}).get("active_memory_provider") or (config or {}).get("memory_provider") or "built-in")
+
+
+def _plan_memory_tool_mutation(
+    *,
+    proposal: dict[str, Any],
+    config: dict[str, Any] | None,
+    operation_name: str,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    provider = _memory_provider_for_proposal(proposal, config)
+    operation = {
+        "operation": operation_name,
+        "target": proposal.get("target_memory") or proposal.get("old_text") or proposal.get("memory_text"),
+        "old_text": proposal.get("old_text") or proposal.get("target_memory") or proposal.get("memory_text"),
+        "content": proposal.get("content") or proposal.get("new_text") or proposal.get("current_claim") or proposal.get("canonical_memory"),
+        "current_claim": proposal.get("current_claim") or proposal.get("canonical_memory"),
+        "target_store": proposal.get("memory_target") or proposal.get("target_store") or "memory",
+        "reason": proposal.get("deletion_reason") or proposal.get("reason") or "stale",
+        "correction_type": proposal.get("correction_type"),
+    }
+    context = build_memory_mutation_context(provider=provider, operation=operation)
+    if context.get("execution_enabled"):
+        mutation = {"type": "memory_tool_operation", "context": context}
+        missing = []
+        args = context.get("tool_args") if isinstance(context.get("tool_args"), dict) else {}
+        if args.get("action") in {"add", "replace"} and not args.get("content"):
+            missing.append("memory_content_missing")
+        if args.get("action") in {"replace", "remove"} and not args.get("old_text"):
+            missing.append("memory_old_text_missing")
+        return (None, missing) if missing else (mutation, [])
+    mutation = {"type": "memory_provider_resolution", "execution_enabled": False, "context": context}
+    return mutation, list(context.get("reasons") or ["memory_execution_dry_run_only"])
+
+
 def _plan_memory_delete_mutation(
     proposal: dict[str, Any],
     target_content: str | None,
@@ -469,28 +508,7 @@ def _plan_memory_delete_mutation(
 ) -> tuple[dict[str, Any] | None, list[str]]:
     if target_path and not _path_inside_any_root(target_path, _memory_roots(config)):
         return None, ["memory_target_outside_allowed_roots"]
-    provider = proposal.get("active_memory_provider") or proposal.get("memory_provider") or (config or {}).get("active_memory_provider") or (config or {}).get("memory_provider") or "built-in"
-    operation = {
-        "operation": "memory_delete",
-        "target": proposal.get("target_memory") or proposal.get("target") or proposal.get("old_text") or proposal.get("memory_text"),
-        "old_text": proposal.get("old_text"),
-        "current_claim": proposal.get("current_claim") or proposal.get("canonical_memory"),
-        "canonical_memory": proposal.get("canonical_memory"),
-        "reason": proposal.get("deletion_reason") or proposal.get("reason") or "stale",
-        "correction_type": proposal.get("correction_type"),
-        "memory_id": proposal.get("memory_id"),
-        "delete_id": proposal.get("delete_id"),
-        "fact_id": proposal.get("fact_id"),
-        "id": proposal.get("id"),
-        "query": proposal.get("query"),
-    }
-    context = build_memory_mutation_context(provider=str(provider), operation=operation)
-    mutation = {
-        "type": "memory_provider_resolution",
-        "execution_enabled": False,
-        "context": context,
-    }
-    return mutation, list(context.get("reasons") or ["memory_execution_dry_run_only"])
+    return _plan_memory_tool_mutation(proposal=proposal, config=config, operation_name="memory_delete")
 
 
 def _plan_evaluator_promote_mutation(
@@ -660,6 +678,10 @@ def _plan_mutation_for_item(
         return None, ["unsupported_skill_manage_operation"]
     if change_type == "skill_merge":
         return None, ["unsupported_skill_manage_operation"]
+    if change_type == "memory_add":
+        return _plan_memory_tool_mutation(proposal=proposal, config=config, operation_name="memory_add")
+    if change_type == "memory_replace":
+        return _plan_memory_tool_mutation(proposal=proposal, config=config, operation_name="memory_replace")
     if change_type == "memory_delete":
         return _plan_memory_delete_mutation(proposal, target_content, target_path, config)
     if change_type == "evaluator_promote":
@@ -730,7 +752,8 @@ def _eligibility_for_apply_item(
     if change_type == "unknown_or_unclassified":
         reasons.append("change_type_unknown")
     if not target_path:
-        reasons.append("target_path_missing")
+        if not (change_type in {"memory_add", "memory_replace", "memory_delete"} and isinstance(mutation, dict) and mutation.get("type") == "memory_tool_operation"):
+            reasons.append("target_path_missing")
     elif target_exists is False and change_type not in {"skill_create", "evaluator_promote"}:
         reasons.append("target_not_found")
     reasons.extend(mutation_blockers)

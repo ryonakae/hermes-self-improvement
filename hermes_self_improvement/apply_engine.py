@@ -14,7 +14,7 @@ try:  # pragma: no cover - package import path
         _apply_replace_text_once,
     )
     from .config import apply_policy_allows_item, normalize_apply_policy
-    from .mutation_worker import execute_skill_manage_operation, execute_skill_manage_patch
+    from .mutation_worker import execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from .observer import _reports_dir, _sha256_text, _stable_json
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_plan import (
@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _apply_replace_text_once,
     )
     from config import apply_policy_allows_item, normalize_apply_policy
-    from mutation_worker import execute_skill_manage_operation, execute_skill_manage_patch
+    from mutation_worker import execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from observer import _reports_dir, _sha256_text, _stable_json
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -252,6 +252,30 @@ def apply_plan(
 
         target_path = item.get("target_path")
         mutation = item.get("mutation") if isinstance(item.get("mutation"), dict) else None
+        if mutation and mutation.get("type") == "memory_tool_operation":
+            context = mutation.get("context") if isinstance(mutation.get("context"), dict) else {}
+            tool_args = context.get("tool_args") if isinstance(context.get("tool_args"), dict) else {}
+            item_result["mutation_context"] = context
+            item_result["before_hash"] = item.get("before_hash")
+            item_result["after_hash"] = None
+            if execute:
+                tool_result = execute_memory_tool_operation(tool_args)
+                item_result["tool_result"] = tool_result
+                if not tool_result.get("success"):
+                    item_result["status"] = "failed"
+                    item_result["reasons"].append("memory_tool_operation_failed")
+                    item_result["reasons"].append(str(tool_result.get("error") or "unknown_tool_error"))
+                    summary["failed"] += 1
+                    result_items.append(item_result)
+                    continue
+                item_result["status"] = "applied"
+                summary["applied"] += 1
+                target_changed = True
+            else:
+                item_result["status"] = "would_apply"
+                summary["would_apply"] += 1
+            result_items.append(item_result)
+            continue
         if not target_path or not mutation:
             item_result["status"] = "failed"
             item_result["reasons"].append("mutation_plan_missing")

@@ -12,6 +12,14 @@ def _load_skill_manage() -> Callable[..., str]:
     return skill_manage
 
 
+def _load_memory_tool() -> Callable[..., str]:
+    try:
+        from tools.memory_tool import memory_tool  # type: ignore
+    except Exception as exc:  # pragma: no cover - depends on Hermes runtime path
+        raise RuntimeError(f"memory_tool_unavailable:{exc}") from exc
+    return memory_tool
+
+
 _ALLOWED_ARGS_BY_ACTION = {
     "create": {"action", "name", "content", "category"},
     "patch": {"action", "name", "old_string", "new_string", "replace_all", "file_path"},
@@ -68,3 +76,29 @@ def execute_skill_manage_operation(tool_args: dict[str, Any], *, skill_manage_fn
 
 def execute_skill_manage_patch(tool_args: dict[str, Any], *, skill_manage_fn: Callable[..., str] | None = None) -> dict[str, Any]:
     return execute_skill_manage_operation(tool_args, skill_manage_fn=skill_manage_fn)
+
+
+def execute_memory_tool_operation(tool_args: dict[str, Any], *, memory_fn: Callable[..., str] | None = None) -> dict[str, Any]:
+    """Execute a constrained built-in memory tool operation with no direct fallback."""
+    args = dict(tool_args or {})
+    action = str(args.get("action") or "")
+    allowed = {"action", "target", "content", "old_text"}
+    if action not in {"add", "replace", "remove"}:
+        return {"success": False, "error": "unsupported_memory_action", "direct_fallback_used": False}
+    extra = sorted(set(args) - allowed)
+    if extra:
+        return {"success": False, "error": f"unexpected_memory_args:{','.join(extra)}", "direct_fallback_used": False}
+    if args.get("target") not in {"memory", "user"}:
+        return {"success": False, "error": "invalid_memory_target", "direct_fallback_used": False}
+    if action in {"add", "replace"} and not args.get("content"):
+        return {"success": False, "error": f"memory_{action}_args_missing:content", "direct_fallback_used": False}
+    if action in {"replace", "remove"} and not args.get("old_text"):
+        return {"success": False, "error": f"memory_{action}_args_missing:old_text", "direct_fallback_used": False}
+    fn = memory_fn or _load_memory_tool()
+    try:
+        raw = fn(**args)
+    except TypeError as exc:
+        return {"success": False, "error": f"memory_tool_unavailable:{exc}", "direct_fallback_used": False}
+    parsed = _normalize_skill_manage_result(raw, args)
+    parsed["tool_name"] = "memory"
+    return parsed

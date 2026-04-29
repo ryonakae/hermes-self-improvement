@@ -112,6 +112,8 @@ def _default_config() -> dict[str, Any]:
             },
             "strict_change_types": [
                 "memory_compress",
+                "memory_add",
+                "memory_replace",
                 "memory_delete",
                 "skill_create",
                 "skill_delete",

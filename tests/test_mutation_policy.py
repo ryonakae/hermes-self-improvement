@@ -353,3 +353,47 @@ def test_skill_manage_operation_apply_records_tool_mediated_rollback(tmp_path, m
     assert calls == [{"action": "edit", "name": "demo-skill", "content": after}]
     rollback = result["items"][0]["rollback_data"]["skill_manage_rollback"]
     assert rollback == {"type": "skill_manage", "tool_args": {"action": "edit", "name": "demo-skill", "content": before}}
+
+
+
+def test_builtin_memory_add_replace_delete_plan_use_memory_tool_context(tmp_path):
+    mod = load_plugin_module()
+    cases = [
+        ("memory_add", {"content": "User prefers concise updates."}, {"action": "add", "target": "memory", "content": "User prefers concise updates."}),
+        ("memory_replace", {"old_text": "old preference", "new_text": "new preference"}, {"action": "replace", "target": "memory", "old_text": "old preference", "content": "new preference"}),
+        ("memory_delete", {"old_text": "stale preference"}, {"action": "remove", "target": "memory", "old_text": "stale preference"}),
+    ]
+    for action, extra, expected_args in cases:
+        plan = mod.build_apply_plan(
+            proposals=[{
+                "id": action,
+                "title": action,
+                "target": "memory",
+                "action": action,
+                "risk": "low",
+                "recommendation": "approval_required",
+                "scorer": "compare-v0.1",
+                **extra,
+            }],
+            summary={},
+            execution_mode="preview",
+            config={"memory_provider": "built-in"},
+        )
+        item = plan["items"][0]
+        assert item["mutation"]["type"] == "memory_tool_operation"
+        assert item["mutation"]["context"]["allowed_tools"] == ["memory"]
+        assert item["mutation"]["context"]["tool_args"] == expected_args
+        assert item["eligibility"] == {"status": "eligible", "reasons": []}
+
+
+def test_memory_tool_operation_execute_fails_closed_without_direct_fallback():
+    mod = load_plugin_module()
+
+    result = mod.execute_memory_tool_operation({"action": "add", "target": "memory", "content": "x"}, memory_fn=lambda **kwargs: json.dumps({"success": True}))
+    assert result["success"] is True
+    assert result["tool_name"] == "memory"
+    assert result["direct_fallback_used"] is False
+
+    rejected = mod.execute_memory_tool_operation({"action": "remove", "target": "memory"}, memory_fn=lambda **kwargs: json.dumps({"success": True}))
+    assert rejected["success"] is False
+    assert rejected["error"] == "memory_remove_args_missing:old_text"

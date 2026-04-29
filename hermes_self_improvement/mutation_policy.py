@@ -220,7 +220,56 @@ def resolve_memory_strategy(*, provider: str | None, operation: dict[str, Any]) 
     }
 
 
+def build_memory_tool_context(*, action: str, target: str = "memory", content: str | None = None, old_text: str | None = None) -> dict[str, Any]:
+    args: dict[str, Any] = {"action": action, "target": target}
+    if content is not None:
+        args["content"] = content
+    if old_text is not None:
+        args["old_text"] = old_text
+    return {
+        "target_kind": "memory",
+        "resolved_strategy": f"built_in_memory_{action}",
+        "allowed_tools": ["memory"],
+        "forbidden": ["direct_file_edit", "direct_db_edit", "unsupported_provider_api"],
+        "direct_fallback_allowed": False,
+        "tool_name": "memory",
+        "tool_args": args,
+    }
+
+
 def build_memory_mutation_context(*, provider: str | None, operation: dict[str, Any]) -> dict[str, Any]:
+    normalized_provider = normalize_memory_provider(provider)
+    requested = str(operation.get("operation") or operation.get("type") or "").strip()
+    if normalized_provider == "built-in" and requested in {"memory_add", "memory_replace", "memory_delete"}:
+        if requested == "memory_add":
+            context = build_memory_tool_context(
+                action="add",
+                target=str(operation.get("target_store") or operation.get("memory_target") or "memory"),
+                content=operation.get("content") or operation.get("current_claim"),
+            )
+        elif requested == "memory_replace":
+            context = build_memory_tool_context(
+                action="replace",
+                target=str(operation.get("target_store") or operation.get("memory_target") or "memory"),
+                old_text=operation.get("old_text") or operation.get("target"),
+                content=operation.get("content") or operation.get("current_claim"),
+            )
+        else:
+            context = build_memory_tool_context(
+                action="remove",
+                target=str(operation.get("target_store") or operation.get("memory_target") or "memory"),
+                old_text=operation.get("old_text") or operation.get("target"),
+            )
+        return {
+            "target_kind": "memory",
+            "execution_enabled": True,
+            "direct_fallback_allowed": False,
+            "status": "executable",
+            "requested_operation": requested,
+            "active_memory_provider": "built-in",
+            "reasons": [],
+            **context,
+        }
     resolved = resolve_memory_strategy(provider=provider, operation=operation)
     return {
         "target_kind": "memory",
