@@ -20,6 +20,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - LLM / GEPA scoring は advisory only。`auto_apply` は常に false 扱いにし、無人変更の許可として使わない。GEPA/LLM comparison を self-improvement decision の default input とし、score / recommendation / risk / confidence / target / rationale の material disagreement は human review に倒して unattended apply を block する。material 判定は change type ごとの policy config で扱い、risk / recommendation disagreement は常に block、memory / lifecycle / destructive / broad change は厳しめ、typo / pitfall / validation addition は score / confidence threshold だけ少し緩めてもよい。`report` / `plan` / `improve` は compare default。
 - Evaluator 自体も自己改善対象にする。GEPA/LLM disagreement、human review outcome、rollback/failure ledger、regression eval cases から candidate evaluator を生成・評価してよいが、active evaluator への昇格は `calibrate --execute` の regression gate を通った場合だけにする。candidate hash / active-before pointer/hash / regression result / rollback data を calibration ledger に束縛して silent replacement を禁止する。
 - Primary surface では `--execute` を唯一の user-facing mutation boundary にする。旧 `execution_mode` / capability gate / approval artifact / expected-hash command は削除済みで、通常 apply は `apply_policy` と内部 hash / target drift checks で fail-closed にする。
+- この plugin の mutation 対象は、ユーザーが plugin を入れた Hermes 環境の skill / memory。plugin 自身の README / AGENTS.md / config や任意 docs/config file は自己改善対象にしない。skill に同梱された README / reference などの supporting file は、skill の一部として必要な場合だけ `skill_manage` 経由で扱う。
 - 変更前に `git status --short` と対象 diff を確認し、無関係な変更を巻き戻さない。
 
 ## 主要パス
@@ -39,7 +40,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `hermes_self_improvement/gepa_adapter.py`: GEPA payload、offline fixture eval、real DSPy/GEPA path の fail-closed 境界。
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と low-risk mutation planning。
 - `hermes_self_improvement/mutation_policy.py`: provider-aware memory mutation policy、strategy resolver、skill/memory context builder。
-- `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor。skill mutation は `skill_manage` の許可 action のみ実行可。built-in memory は `memory` tool、外部 memory は provider-native correction/delete tool のみ。直接 fallback はしない。
+- `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor。skill mutation は `skill_manage` の許可 action のみ実行可。built-in memory は `memory` tool、外部 memory は provider-native correction/delete tool のみ。直接 fallback はしない。generic direct file mutation は apply / rollback 実行 path では無効で、skill supporting file は `skill_manage` 経由でのみ扱う。
 - `hermes_self_improvement/calibration.py`: calibration evidence collection、regression-gated active evaluator promotion、calibration rollback。
 - `hermes_self_improvement/ledger.py`: pending ledger helpers。旧 low-risk apply / rollback skeleton は削除済み。
 - `hermes_self_improvement/cli.py`: CLI parser、report rendering、recent plan/apply/calibration summary integration、pipeline orchestration。
@@ -90,7 +91,7 @@ self_improvement_rollback
 2. 新しい policy / apply / scorer 挙動は TDD で fail-closed を先に固定してから実装する。
 3. Hook path を触る場合は、redaction・retention・partial event filtering が壊れないか確認する。
 4. Scorer path を触る場合は、advisory-only と `auto_apply: false` を崩さない。
-5. Apply-plan / ledger path を触る場合は、target hash、rollback preview、explicit target resolution、scorer disagreement gate、non-compare scorer が unattended eligible にならないことを確認する。stale path / command は canonical replacement が README/config/実ファイル/active memory/observed success などで独立確認できる場合だけ mutation plan を許可する。
+5. Apply-plan / ledger path を触る場合は、target hash、rollback preview、explicit target resolution、scorer disagreement gate、non-compare scorer が unattended eligible にならないことを確認する。stale path / command は canonical replacement が README/config/実ファイル/active memory/observed success などで独立確認できる場合だけ skill mutation plan を許可する。plugin 自身の docs/config や任意 docs/config file を mutation target にしない。
 6. 実 mutation slice を追加するときは preview-first を崩さない。新しい簡素 surface では `apply <plan-id>` が preview、`apply <plan-id> --execute` が実行で、item hash / target baseline は内部検証する。`skill_create` / `skill_delete` / `skill_rename` / `skill_merge` / `memory_delete` / `evaluator_promote` のような lifecycle / destructive / active-evaluator mutation は通常 apply では ready にせず、まず `calibrate` や human-review plan に倒す。新しい destructive / broad mutation は低リスク apply に混ぜない。
 7. `__init__.py` / registration / bundled skill discovery を触ったら、unit test だけでなく plugin manager loading も確認する。
 8. Tool handler を触る場合は、wrapper CLI に shell out せず、CLI と同じ core function を使う。

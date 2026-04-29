@@ -32,6 +32,12 @@ PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
 APPLY_RESULT_STATUSES = {"would_apply", "applied", "skipped_by_policy", "failed", "needs_review"}
+TOOL_MEDIATED_APPLY_MUTATION_TYPES = {
+    "skill_manage_patch",
+    "skill_manage_operation",
+    "memory_tool_operation",
+    "memory_provider_tool_operation",
+}
 
 
 def compute_apply_item_hash(item: dict[str, Any]) -> str:
@@ -108,15 +114,6 @@ def _apply_mutation(content: str | None, mutation: dict[str, Any]) -> str | None
     if mutation_type == "delete_file":
         return _apply_delete_file(content, mutation)
     return None
-
-
-def _write_mutation_result(target_path: str, mutation: dict[str, Any], after_content: str | None) -> None:
-    path = Path(str(target_path)).expanduser()
-    if mutation.get("type") == "delete_file":
-        path.unlink()
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(after_content or "", encoding="utf-8")
 
 
 def _skill_manage_rollback_action(*, tool_args: dict[str, Any], rollback_data: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -305,6 +302,13 @@ def apply_plan(
             summary["failed"] += 1
             result_items.append(item_result)
             continue
+        mutation_type = str(mutation.get("type") or "")
+        if mutation_type not in TOOL_MEDIATED_APPLY_MUTATION_TYPES:
+            item_result["status"] = "failed"
+            item_result["reasons"].append("direct_file_mutation_disabled")
+            summary["failed"] += 1
+            result_items.append(item_result)
+            continue
 
         content, current_hash = _current_content_and_hash(target_path)
         baseline = accepted_baseline.setdefault(str(target_path), item.get("before_hash"))
@@ -359,11 +363,11 @@ def apply_plan(
                 accepted_baseline[str(target_path)] = after_hash
                 target_changed = True
             else:
-                _write_mutation_result(str(target_path), mutation, after_content)
-                item_result["status"] = "applied"
-                summary["applied"] += 1
-                accepted_baseline[str(target_path)] = after_hash
-                target_changed = True
+                item_result["status"] = "failed"
+                item_result["reasons"].append("unsupported_tool_mediated_mutation")
+                summary["failed"] += 1
+                result_items.append(item_result)
+                continue
         else:
             item_result["status"] = "would_apply"
             summary["would_apply"] += 1
@@ -502,30 +506,6 @@ def _execute_rollback_action(action: dict[str, Any]) -> bool:
     if action_type == "skill_manage":
         result = execute_skill_manage_operation(action.get("tool_args") if isinstance(action.get("tool_args"), dict) else {})
         return bool(result.get("success"))
-    if action_type == "delete_created_file":
-        target = Path(str(action.get("target_path"))).expanduser()
-        if target.exists():
-            target.unlink()
-        return True
-    if action_type == "rename_file_back":
-        target = Path(str(action.get("target_path"))).expanduser()
-        destination = Path(str(action.get("destination_path"))).expanduser()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        destination.replace(target)
-        return True
-    if action_type == "restore_multiple_files":
-        target = Path(str(action.get("target_path"))).expanduser()
-        source = Path(str(action.get("source_path"))).expanduser()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        source.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(str(action.get("before_snapshot")), encoding="utf-8")
-        source.write_text(str(action.get("source_before_snapshot")), encoding="utf-8")
-        return True
-    if action_type == "restore_full_file_from_before_content":
-        target = Path(str(action.get("target_path"))).expanduser()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(str(action.get("before_snapshot")), encoding="utf-8")
-        return True
     return False
 
 

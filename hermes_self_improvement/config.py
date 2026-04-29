@@ -23,6 +23,7 @@ DEFAULT_PREVIEW_CHARS = 1000
 DEFAULT_RETENTION_DAYS = 30
 ENV_CONFIG_PATH = "HERMES_SELF_IMPROVE_CONFIG"
 RISK_ORDER = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+NON_MUTABLE_TARGET_KINDS = {"docs", "doc", "documentation", "config", "configuration", "evaluator"}
 DEFAULT_APPLY_POLICY = {
     "max_risk": "low",
     "allow_destructive": False,
@@ -264,6 +265,8 @@ def apply_policy_allows_item(item: dict[str, Any], policy: dict[str, Any] | None
         reasons.append("destructive_not_allowed")
 
     target_kind = str(_item_field(item, "target_kind", "kind", default="") or "")
+    if target_kind in NON_MUTABLE_TARGET_KINDS:
+        reasons.append("target_kind_non_mutable")
     allowed_target_kinds = set(normalized_policy.get("allowed_target_kinds") or [])
     if allowed_target_kinds and target_kind not in allowed_target_kinds:
         reasons.append("target_kind_not_allowed")

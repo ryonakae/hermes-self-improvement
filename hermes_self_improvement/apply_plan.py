@@ -19,6 +19,12 @@ PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
 PLAN_ITEM_STATUSES = {"ready", "needs_review", "rejected_by_planner"}
 APPLY_RESULT_STATUSES = {"would_apply", "applied", "skipped_by_policy", "failed", "needs_review"}
+TOOL_MEDIATED_APPLY_MUTATION_TYPES = {
+    "skill_manage_patch",
+    "skill_manage_operation",
+    "memory_tool_operation",
+    "memory_provider_tool_operation",
+}
 
 def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
     explicit = str(proposal.get("change_type") or "").strip()
@@ -387,6 +393,43 @@ def _plan_skill_manage_patch_mutation(
     return mutation, []
 
 
+def _plan_skill_manage_append_mutation(
+    *,
+    proposal: dict[str, Any],
+    target_content: str | None,
+    target_path: str | None,
+    config: dict[str, Any] | None,
+    base_mutation: dict[str, Any] | None,
+    base_blockers: list[str],
+) -> tuple[dict[str, Any] | None, list[str]]:
+    if base_mutation is None or base_blockers:
+        return base_mutation, base_blockers
+    if base_mutation.get("type") != "append_to_existing_section":
+        return base_mutation, base_blockers
+    skill_name = _skill_name_for_proposal(proposal, target_path, config)
+    if not skill_name:
+        return base_mutation, ["skill_name_missing_for_tool_mediated_append"]
+    heading = str(base_mutation.get("section_heading") or base_mutation.get("section") or "").strip()
+    text = str(base_mutation.get("text") or "").rstrip()
+    if not heading or not text:
+        return None, ["skill_manage_append_args_missing"]
+    old_string = heading + "\n"
+    if target_content is None or target_content.count(old_string) != 1:
+        return None, ["skill_manage_append_anchor_not_unique"]
+    new_string = old_string + text + "\n"
+    context = build_skill_patch_context(
+        skill_name=skill_name,
+        old_string=old_string,
+        new_string=new_string,
+        file_path=_skill_supporting_file_for_path(skill_name, target_path, config),
+    )
+    return {
+        "type": "skill_manage_patch",
+        "preview_mutation": {"type": "replace_text_once", "old_text": old_string, "new_text": new_string},
+        "context": context,
+    }, []
+
+
 def _replacement_content_from_proposal(proposal: dict[str, Any]) -> Any:
     after_text = proposal.get("after_text")
     if after_text is None:
@@ -602,7 +645,10 @@ def _plan_mutation_for_item(
 ) -> tuple[dict[str, Any] | None, list[str]]:
     explicit = proposal.get("mutation")
     if isinstance(explicit, dict):
-        return explicit, []
+        mutation_type = str(explicit.get("type") or "")
+        if mutation_type in TOOL_MEDIATED_APPLY_MUTATION_TYPES:
+            return explicit, []
+        return explicit, ["direct_file_mutation_unsupported"]
     if change_type == "typo_fix":
         base_mutation, base_blockers = _plan_typo_fix_mutation(proposal, target_content)
         return _plan_skill_manage_patch_mutation(
@@ -713,11 +759,19 @@ def _plan_mutation_for_item(
     heading = _find_existing_section_heading(target_content, headings)
     if not heading:
         return None, ["existing_section_missing"]
-    return {
+    base_mutation = {
         "type": "append_to_existing_section",
         "section_heading": heading,
         "text": _proposal_mutation_text(proposal),
-    }, []
+    }
+    return _plan_skill_manage_append_mutation(
+        proposal=proposal,
+        target_content=target_content,
+        target_path=target_path,
+        config=config,
+        base_mutation=base_mutation,
+        base_blockers=[],
+    )
 
 
 _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES = {"skill_large_rewrite", "memory_compress"}
@@ -760,6 +814,8 @@ def _eligibility_for_apply_item(
     reasons.extend(mutation_blockers)
     if mutation is None:
         reasons.append("mutation_plan_missing")
+    elif str(mutation.get("type") or "") not in TOOL_MEDIATED_APPLY_MUTATION_TYPES:
+        reasons.append("direct_file_mutation_unsupported")
     if scorer_disagreements:
         reasons.append("scorer_disagreement")
     if change_type in _LOW_RISK_UNATTENDED_CHANGE_TYPES and str(scorer or "") != "compare-v0.1":

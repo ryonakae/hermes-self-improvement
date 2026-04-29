@@ -44,7 +44,7 @@ def make_item(mod, *, item_id: str, target: Path, old: str, new: str, risk: str 
     return item
 
 
-def test_apply_plan_preview_never_mutates_and_reports_would_apply(tmp_path):
+def test_apply_plan_preview_blocks_direct_file_mutation(tmp_path):
     mod = load_plugin_module()
     target = tmp_path / "skill.md"
     target.write_text("helo world\n", encoding="utf-8")
@@ -54,12 +54,13 @@ def test_apply_plan_preview_never_mutates_and_reports_would_apply(tmp_path):
     result = mod.apply_plan(plan_id="plan-preview", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=False)
 
     assert target.read_text(encoding="utf-8") == "helo world\n"
-    assert result["summary"]["would_apply"] == 1
+    assert result["summary"]["failed"] == 1
+    assert "direct_file_mutation_disabled" in result["items"][0]["reasons"]
     assert result["target_changed"] is False
     assert result["ledger_path"] is None
 
 
-def test_apply_plan_execute_mutates_policy_allowed_ready_items_and_skips_disallowed(tmp_path):
+def test_apply_plan_execute_blocks_direct_file_mutation_and_skips_disallowed(tmp_path):
     mod = load_plugin_module()
     target = tmp_path / "skill.md"
     target.write_text("helo world and byee\n", encoding="utf-8")
@@ -69,14 +70,15 @@ def test_apply_plan_execute_mutates_policy_allowed_ready_items_and_skips_disallo
 
     result = mod.apply_plan(plan_id="plan-exec", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=True)
 
-    assert target.read_text(encoding="utf-8") == "hello world and byee\n"
-    assert result["summary"]["applied"] == 1
+    assert target.read_text(encoding="utf-8") == "helo world and byee\n"
+    assert result["summary"]["failed"] == 1
     assert result["summary"]["skipped_by_policy"] == 1
-    assert result["target_changed"] is True
+    assert "direct_file_mutation_disabled" in result["items"][0]["reasons"]
+    assert result["target_changed"] is False
     assert result["ledger_path"]
     ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
     assert ledger["operation"] == "apply"
-    assert ledger["summary"]["applied"] == 1
+    assert ledger["summary"]["applied"] == 0
 
 
 def test_apply_plan_detects_item_hash_mismatch_without_user_supplied_hash(tmp_path):
@@ -94,7 +96,7 @@ def test_apply_plan_detects_item_hash_mismatch_without_user_supplied_hash(tmp_pa
     assert "item_hash_mismatch" in result["items"][0]["reasons"]
 
 
-def test_apply_plan_tracks_accepted_baseline_for_multiple_items_in_same_file(tmp_path):
+def test_apply_plan_blocks_multiple_direct_file_mutations_in_same_file(tmp_path):
     mod = load_plugin_module()
     target = tmp_path / "skill.md"
     target.write_text("helo byee\n", encoding="utf-8")
@@ -104,8 +106,9 @@ def test_apply_plan_tracks_accepted_baseline_for_multiple_items_in_same_file(tmp
 
     result = mod.apply_plan(plan_id="plan-batch", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=True)
 
-    assert target.read_text(encoding="utf-8") == "hello bye\n"
-    assert result["summary"]["applied"] == 2
+    assert target.read_text(encoding="utf-8") == "helo byee\n"
+    assert result["summary"]["failed"] == 2
+    assert all("direct_file_mutation_disabled" in item["reasons"] for item in result["items"])
 
 
 def test_apply_hindsight_provider_operation_uses_provider_tool_without_direct_fallback(tmp_path, monkeypatch):
@@ -183,7 +186,7 @@ def test_apply_hindsight_provider_operation_failure_has_no_direct_fallback(tmp_p
     assert result["target_changed"] is False
     assert "memory_provider_tool_operation_failed" in result["items"][0]["reasons"]
 
-def test_rollback_preview_does_not_mutate_applied_target(tmp_path):
+def test_rollback_preview_ignores_failed_direct_file_items(tmp_path):
     mod = load_plugin_module()
     target = tmp_path / "skill.md"
     target.write_text("helo world\n", encoding="utf-8")
@@ -195,12 +198,13 @@ def test_rollback_preview_does_not_mutate_applied_target(tmp_path):
     result = mod.rollback_apply_ledger(ledger_id=ledger["ledger_id"], config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=False)
 
     assert result["current_status"] == "would_rollback"
-    assert result["summary"]["would_rollback"] == 1
+    assert result["summary"] == {"would_rollback": 0, "rolled_back": 0, "failed": 0}
+    assert result["items"] == []
     assert result["target_changed"] is False
-    assert target.read_text(encoding="utf-8") == "hello world\n"
+    assert target.read_text(encoding="utf-8") == "helo world\n"
 
 
-def test_rollback_execute_restores_applied_target(tmp_path):
+def test_rollback_execute_does_not_restore_failed_direct_file_item(tmp_path):
     mod = load_plugin_module()
     target = tmp_path / "skill.md"
     target.write_text("helo world\n", encoding="utf-8")
@@ -212,8 +216,9 @@ def test_rollback_execute_restores_applied_target(tmp_path):
     result = mod.rollback_apply_ledger(ledger_id=ledger["ledger_id"], config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=True)
 
     assert result["current_status"] == "rolled_back"
-    assert result["summary"]["rolled_back"] == 1
-    assert result["target_changed"] is True
+    assert result["summary"] == {"would_rollback": 0, "rolled_back": 0, "failed": 0}
+    assert result["items"] == []
+    assert result["target_changed"] is False
     assert target.read_text(encoding="utf-8") == "helo world\n"
 
 
@@ -234,10 +239,10 @@ def test_rollback_rejects_tampered_ledger_hash(tmp_path):
     assert result["current_status"] == "failed"
     assert result["reasons"] == ["ledger_hash_mismatch"]
     assert result["target_changed"] is False
-    assert target.read_text(encoding="utf-8") == "hello world\n"
+    assert target.read_text(encoding="utf-8") == "helo world\n"
 
 
-def test_rollback_execute_fails_all_when_any_applied_target_has_drift(tmp_path):
+def test_rollback_execute_ignores_failed_direct_file_items_even_with_later_drift(tmp_path):
     mod = load_plugin_module()
     first_target = tmp_path / "first.md"
     second_target = tmp_path / "second.md"
@@ -252,8 +257,9 @@ def test_rollback_execute_fails_all_when_any_applied_target_has_drift(tmp_path):
 
     result = mod.rollback_apply_ledger(ledger_id=ledger["ledger_id"], config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=True)
 
-    assert result["current_status"] == "failed"
-    assert result["summary"]["failed"] == 1
+    assert result["current_status"] == "rolled_back"
+    assert result["summary"] == {"would_rollback": 0, "rolled_back": 0, "failed": 0}
+    assert result["items"] == []
     assert result["target_changed"] is False
     assert first_target.read_text(encoding="utf-8") == "external drift\n"
-    assert second_target.read_text(encoding="utf-8") == "bye second\n"
+    assert second_target.read_text(encoding="utf-8") == "byee second\n"

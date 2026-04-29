@@ -56,13 +56,14 @@ def test_evaluator_promote_plans_create_active_pointer_with_candidate_hash(tmp_p
     assert item["target_path"] == str(pointer)
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"]["status"] == "eligible"
+    assert item["eligibility"]["status"] == "not_eligible"
+    assert "direct_file_mutation_unsupported" in item["eligibility"]["reasons"]
     assert mutation["type"] == "create_file"
     assert after["operation"] == "evaluator_promote"
     assert after["compiled_program_path"] == str(candidate)
     assert after["compiled_program_hash"] == candidate_hash
     assert after["regression_result_hash"] == "regression-hash-1"
-    assert item["rollback_preview"]["rollback_strategy"] == "delete_created_file"
+    assert item["rollback_preview"] is None
 
 
 def test_evaluator_promote_plans_replace_existing_active_pointer(tmp_path):
@@ -98,5 +99,6 @@ def test_evaluator_promote_plans_replace_existing_active_pointer(tmp_path):
     item = plan["items"][0]
     assert item["before_hash"] == before_hash
     assert item["mutation"]["type"] == "replace_entire_file"
-    assert item["rollback_preview"]["rollback_strategy"] == "restore_full_file_from_before_content"
-    assert item["rollback_preview"]["before_snapshot"] == pointer.read_text(encoding="utf-8")
+    assert item["eligibility"]["status"] == "not_eligible"
+    assert "direct_file_mutation_unsupported" in item["eligibility"]["reasons"]
+    assert item["rollback_preview"] is None

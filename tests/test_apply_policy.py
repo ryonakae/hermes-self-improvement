@@ -60,15 +60,15 @@ def test_default_apply_policy_fails_closed_for_high_destructive_evaluator_or_unk
         assert expected_reason in reasons
 
 
-def test_apply_policy_override_can_allow_medium_risk_docs_but_denied_change_type_wins(tmp_path):
+def test_apply_policy_override_cannot_allow_non_mutable_docs_or_config_targets(tmp_path):
     mod = load_plugin_module()
     config_path = write_json(
         tmp_path / "config.json",
         {
             "apply_policy": {
                 "max_risk": "medium",
-                "allowed_target_kinds": ["skill", "memory", "docs"],
-                "allowed_change_types": ["docs_update", "typo_fix"],
+                "allowed_target_kinds": ["skill", "memory", "docs", "config"],
+                "allowed_change_types": ["docs_update", "config_update", "typo_fix"],
                 "denied_change_types": ["typo_fix"],
             }
         },
@@ -76,8 +76,12 @@ def test_apply_policy_override_can_allow_medium_risk_docs_but_denied_change_type
 
     policy = mod.load_config(config_path)["apply_policy"]
 
-    allowed, reasons = mod.apply_policy_allows_item(
+    docs_allowed, docs_reasons = mod.apply_policy_allows_item(
         {"risk": "medium", "target_kind": "docs", "change_type": "docs_update"},
+        policy,
+    )
+    config_allowed, config_reasons = mod.apply_policy_allows_item(
+        {"risk": "low", "target_kind": "config", "change_type": "config_update"},
         policy,
     )
     denied, denied_reasons = mod.apply_policy_allows_item(
@@ -85,7 +89,10 @@ def test_apply_policy_override_can_allow_medium_risk_docs_but_denied_change_type
         policy,
     )
 
-    assert (allowed, reasons) == (True, [])
+    assert docs_allowed is False
+    assert "target_kind_non_mutable" in docs_reasons
+    assert config_allowed is False
+    assert "target_kind_non_mutable" in config_reasons
     assert denied is False
     assert "change_type_denied" in denied_reasons
 

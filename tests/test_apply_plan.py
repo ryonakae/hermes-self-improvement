@@ -338,10 +338,10 @@ def test_build_apply_plan_resolves_existing_target_path_and_before_hash(tmp_path
     assert item["target_path"] == str(target)
     assert item["target_exists"] is True
     assert item["before_hash"] == hashlib.sha256(target.read_bytes()).hexdigest()
-    assert item["eligible_for_unattended"] is True
-    assert item["requires_approval"] is False
-    assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["ledger_preview"]["would_create_pending_ledger"] is True
+    assert item["eligible_for_unattended"] is False
+    assert item["requires_approval"] is True
+    assert "direct_file_mutation_unsupported" in item["eligibility"]["reasons"]
+    assert item["ledger_preview"]["would_create_pending_ledger"] is False
 
 
 def test_build_apply_plan_plans_pitfall_mutation_for_existing_pitfalls_section(tmp_path):
@@ -359,11 +359,13 @@ def test_build_apply_plan_plans_pitfall_mutation_for_existing_pitfalls_section(t
     )
 
     item = plan["items"][0]
-    assert item["mutation"] == {
-        "type": "append_to_existing_section",
-        "section_heading": "## Pitfalls",
-        "text": "- Observed repeated sandbox permission-denied events.",
+    assert item["mutation"]["type"] == "skill_manage_patch"
+    assert item["mutation"]["preview_mutation"] == {
+        "type": "replace_text_once",
+        "old_text": "## Pitfalls\n",
+        "new_text": "## Pitfalls\n- Observed repeated sandbox permission-denied events.\n",
     }
+    assert item["mutation"]["context"]["tool_name"] == "skill_manage"
     assert item["eligible_for_unattended"] is True
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
 
@@ -385,10 +387,11 @@ def test_build_apply_plan_plans_validation_mutation_for_existing_validation_sect
 
     item = plan["items"][0]
     assert item["change_type"] == "validation_addition_existing_section"
-    assert item["mutation"] == {
-        "type": "append_to_existing_section",
-        "section_heading": "## Validation",
-        "text": "- Verify generated apply-plan artifacts before applying low-risk changes.",
+    assert item["mutation"]["type"] == "skill_manage_patch"
+    assert item["mutation"]["preview_mutation"] == {
+        "type": "replace_text_once",
+        "old_text": "## Validation\n",
+        "new_text": "## Validation\n- Verify generated apply-plan artifacts before applying low-risk changes.\n",
     }
     assert item["eligible_for_unattended"] is True
     assert item["eligibility"] == {"status": "eligible", "reasons": []}
@@ -534,7 +537,8 @@ def test_build_apply_plan_resolves_explicit_custom_skill_hint_inside_configured_
     assert item["target_path"] == str(skill_file)
     assert item["target_exists"] is True
     assert item["before_hash"] == hashlib.sha256(skill_file.read_bytes()).hexdigest()
-    assert item["mutation"]["section_heading"] == "## Pitfalls"
+    assert item["mutation"]["type"] == "skill_manage_patch"
+    assert item["mutation"]["context"]["tool_args"]["name"] == "sandbox-skill"
     assert item["eligible_for_unattended"] is True
 
 
@@ -625,9 +629,9 @@ def test_build_apply_plan_includes_rollback_preview_for_eligible_append_mutation
     assert rollback["before_snippet"] == original
     assert rollback["before_snapshot"] == original
     assert rollback["rollback_patch"] == {
-        "type": "remove_text_once",
-        "text": "- Observed repeated sandbox permission-denied events.\n",
-        "section_heading": "## Pitfalls",
+        "type": "replace_text_once",
+        "old_text": "## Pitfalls\n- Observed repeated sandbox permission-denied events.\n",
+        "new_text": "## Pitfalls\n",
     }
     assert "- Existing note" in rollback["after_snippet"]
     assert "Observed repeated sandbox permission-denied events." in rollback["after_snippet"]
