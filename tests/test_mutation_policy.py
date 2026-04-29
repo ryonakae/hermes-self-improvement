@@ -451,3 +451,85 @@ def test_hindsight_sensitive_delete_remains_fail_closed_not_executable(tmp_path)
     assert item["mutation"]["type"] == "memory_provider_resolution"
     assert item["mutation"]["context"]["resolved_strategy"] == "fail_closed_sensitive_delete"
     assert "sensitive_delete_requires_provider_native_delete" in item["eligibility"]["reasons"]
+
+
+def test_external_provider_corrections_resolve_to_native_tool_contexts():
+    mod = load_plugin_module()
+    cases = {
+        "honcho": ("honcho_conclude", "conclusion"),
+        "mem0": ("mem0_conclude", "conclusion"),
+        "byterover": ("brv_curate", "content"),
+        "openviking": ("viking_remember", "content"),
+        "holographic": ("fact_store", "content"),
+        "retaindb": ("retaindb_remember", "content"),
+        "supermemory": ("supermemory_store", "content"),
+    }
+    for provider, (tool_name, content_key) in cases.items():
+        context = mod.build_memory_mutation_context(
+            provider=provider,
+            operation={
+                "operation": "memory_delete",
+                "reason": "incorrect",
+                "target": "User prefers old workflow",
+                "current_claim": "User prefers new workflow",
+            },
+        )
+        assert context["execution_enabled"] is True
+        assert context["tool_name"] == tool_name
+        assert context["allowed_tools"] == [tool_name]
+        assert context["direct_fallback_allowed"] is False
+        assert "User prefers new workflow" in context["tool_args"][content_key]
+
+
+def test_native_delete_context_requires_provider_identity():
+    mod = load_plugin_module()
+    missing = mod.build_memory_mutation_context(
+        provider="retaindb",
+        operation={"operation": "memory_delete", "reason": "secret", "target": "long enough stale memory text"},
+    )
+    assert missing["execution_enabled"] is False
+    assert missing["resolved_strategy"] == "native_delete"
+    assert missing["reasons"] == ["native_delete_identity_missing"]
+
+    cases = [
+        ("honcho", {"delete_id": "conclusion-1"}, "honcho_conclude", {"delete_id": "conclusion-1"}),
+        ("holographic", {"fact_id": 42}, "fact_store", {"action": "remove", "fact_id": 42}),
+        ("retaindb", {"memory_id": "mem-1"}, "retaindb_forget", {"memory_id": "mem-1"}),
+        ("supermemory", {"id": "sm-1"}, "supermemory_forget", {"id": "sm-1"}),
+    ]
+    for provider, identity, tool_name, expected_args in cases:
+        context = mod.build_memory_mutation_context(
+            provider=provider,
+            operation={"operation": "memory_delete", "reason": "secret", **identity},
+        )
+        assert context["execution_enabled"] is True
+        assert context["tool_name"] == tool_name
+        assert context["tool_args"] == expected_args
+        assert "correction_tombstone" in context["forbidden"]
+
+
+def test_generic_provider_tool_executor_validates_supported_surfaces():
+    mod = load_plugin_module()
+    calls = []
+
+    def fake_provider(*args, **kwargs):
+        calls.append((args, kwargs))
+        return json.dumps({"result": "ok"})
+
+    context = {
+        "tool_name": "retaindb_forget",
+        "allowed_tools": ["retaindb_forget"],
+        "tool_args": {"memory_id": "mem-1"},
+    }
+    result = mod.execute_memory_provider_tool_operation(context, provider_tool_fn=fake_provider)
+    assert result["success"] is True
+    assert result["tool_name"] == "retaindb_forget"
+    assert result["direct_fallback_used"] is False
+    assert calls == [((), {"memory_id": "mem-1"})]
+
+    rejected = mod.execute_memory_provider_tool_operation(
+        {"tool_name": "fact_store", "allowed_tools": ["fact_store"], "tool_args": {"action": "remove"}},
+        provider_tool_fn=fake_provider,
+    )
+    assert rejected["success"] is False
+    assert rejected["error"] == "fact_store_args_missing:fact_id"

@@ -38,10 +38,9 @@ PROVIDER_POLICIES: dict[str, ProviderPolicy] = {
     "honcho": ProviderPolicy(
         provider="honcho",
         add_tools=("honcho_conclude",),
-        update_tools=("honcho_update_peer_card",),
-        delete_tools=("honcho_delete_conclusion",),
+        delete_tools=("honcho_conclude",),
         correction_tools=("honcho_conclude",),
-        notes="Honcho conclusion delete is reserved for sensitive removal with a concrete conclusion id; stale corrections prefer new conclusions.",
+        notes="Honcho conclude creates conclusions and can delete by delete_id for PII removal; stale corrections prefer new conclusions.",
     ),
     "mem0": ProviderPolicy(
         provider="mem0",
@@ -117,6 +116,25 @@ def _delete_target_specific(operation: dict[str, Any]) -> bool:
     return len(target) >= 12
 
 
+def _native_delete_identifier(operation: dict[str, Any], provider: str) -> dict[str, Any] | None:
+    if provider == "honcho":
+        value = operation.get("delete_id") or operation.get("memory_id") or operation.get("id")
+        return {"delete_id": str(value)} if value else None
+    if provider == "holographic":
+        value = operation.get("fact_id") or operation.get("memory_id") or operation.get("id")
+        try:
+            return {"fact_id": int(value)} if value is not None and str(value) != "" else None
+        except Exception:
+            return None
+    if provider == "retaindb":
+        value = operation.get("memory_id") or operation.get("id")
+        return {"memory_id": str(value)} if value else None
+    if provider == "supermemory":
+        value = operation.get("memory_id") or operation.get("id")
+        return {"id": str(value)} if value else None
+    return None
+
+
 def resolve_memory_strategy(*, provider: str | None, operation: dict[str, Any]) -> dict[str, Any]:
     """Resolve an abstract memory operation into plugin-owned provider policy.
 
@@ -166,7 +184,7 @@ def resolve_memory_strategy(*, provider: str | None, operation: dict[str, Any]) 
                 "resolved_strategy": "native_delete",
                 "allowed_tools": list(policy.delete_tools),
                 "forbidden": ["direct_file_edit", "direct_db_edit", "unsupported_provider_api", "correction_tombstone"],
-                "policy_note": "Sensitive deletion may use only provider-native delete/forget/remove with a sufficiently specific target. Execution is disabled in this slice.",
+                "policy_note": "Sensitive deletion may use only provider-native delete/forget/remove with a sufficiently specific target. Execution requires provider-native identity.",
                 "reasons": ["memory_execution_dry_run_only"],
                 "provider_policy": policy.to_dict(),
             }
@@ -186,12 +204,15 @@ def resolve_memory_strategy(*, provider: str | None, operation: dict[str, Any]) 
     if policy.provider == "built-in" and policy.delete_tools:
         strategy = "built_in_remove"
         allowed = policy.delete_tools
-    elif policy.delete_tools and target_specific:
+    elif policy.delete_tools and _native_delete_identifier(operation, policy.provider):
         strategy = "native_delete"
         allowed = policy.delete_tools
     elif correctable and policy.correction_tools:
         strategy = "retain_correction"
         allowed = policy.correction_tools
+    elif policy.delete_tools and target_specific:
+        strategy = "native_delete"
+        allowed = policy.delete_tools
     else:
         strategy = "fail_closed_no_delete_or_correction"
         allowed = ()
@@ -272,20 +293,60 @@ def render_hindsight_correction_content(context: dict[str, Any]) -> str | None:
 
 
 def build_hindsight_tool_context(resolved: dict[str, Any]) -> dict[str, Any]:
+    return build_provider_correction_tool_context(resolved)
+
+
+def build_provider_correction_tool_context(resolved: dict[str, Any]) -> dict[str, Any]:
     content = render_hindsight_correction_content(resolved)
-    args: dict[str, Any] = {
-        "content": content,
-        "context": "self-improvement memory correction",
-        "tags": ["self-improvement", "memory-correction"],
-    }
+    provider = str(resolved.get("active_memory_provider") or "")
+    tool = (resolved.get("allowed_tools") or [None])[0]
+    args: dict[str, Any] | None = None
+    if tool in {"hindsight_retain", "brv_curate", "viking_remember"}:
+        args = {"content": content}
+        if tool == "hindsight_retain":
+            args.update({"context": "self-improvement memory correction", "tags": ["self-improvement", "memory-correction"]})
+    elif tool == "honcho_conclude":
+        args = {"conclusion": content}
+    elif tool == "mem0_conclude":
+        args = {"conclusion": content}
+    elif tool == "fact_store":
+        args = {"action": "add", "content": content, "category": "general", "tags": "self-improvement,memory-correction"}
+    elif tool == "retaindb_remember":
+        args = {"content": content, "memory_type": "factual", "importance": 0.7}
+    elif tool == "supermemory_store":
+        args = {"content": content, "metadata": {"source": "self-improvement", "kind": "memory-correction"}}
     return {
         "target_kind": "memory",
-        "resolved_strategy": "hindsight_retain_correction",
-        "allowed_tools": ["hindsight_retain"] if content else [],
+        "resolved_strategy": f"{provider}_retain_correction" if provider else "provider_retain_correction",
+        "allowed_tools": [tool] if content and tool else [],
         "forbidden": ["direct_file_edit", "direct_db_edit", "unsupported_provider_api"],
         "direct_fallback_allowed": False,
-        "tool_name": "hindsight_retain",
-        "tool_args": args,
+        "tool_name": tool,
+        "tool_args": args or {},
+    }
+
+
+def build_provider_native_delete_tool_context(resolved: dict[str, Any], operation: dict[str, Any]) -> dict[str, Any]:
+    provider = str(resolved.get("active_memory_provider") or "")
+    tool = (resolved.get("allowed_tools") or [None])[0]
+    identity = _native_delete_identifier(operation, provider)
+    args: dict[str, Any] | None = None
+    if identity and tool == "honcho_conclude":
+        args = {"delete_id": identity["delete_id"]}
+    elif identity and tool == "fact_store":
+        args = {"action": "remove", "fact_id": identity["fact_id"]}
+    elif identity and tool == "retaindb_forget":
+        args = {"memory_id": identity["memory_id"]}
+    elif identity and tool == "supermemory_forget":
+        args = {"id": identity["id"]}
+    return {
+        "target_kind": "memory",
+        "resolved_strategy": f"{provider}_native_delete" if provider else "provider_native_delete",
+        "allowed_tools": [tool] if args and tool else [],
+        "forbidden": ["direct_file_edit", "direct_db_edit", "unsupported_provider_api", "correction_tombstone"],
+        "direct_fallback_allowed": False,
+        "tool_name": tool,
+        "tool_args": args or {},
     }
 
 
@@ -323,8 +384,8 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
             **context,
         }
     resolved = resolve_memory_strategy(provider=provider, operation=operation)
-    if normalized_provider == "hindsight" and resolved.get("resolved_strategy") == "retain_correction" and resolved.get("status") == "dry_run_only":
-        context = build_hindsight_tool_context(resolved)
+    if resolved.get("resolved_strategy") == "retain_correction" and resolved.get("status") == "dry_run_only":
+        context = build_provider_correction_tool_context(resolved)
         if context.get("allowed_tools"):
             return {
                 "target_kind": "memory",
@@ -332,12 +393,27 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
                 "direct_fallback_allowed": False,
                 "status": "executable",
                 "requested_operation": requested,
-                "active_memory_provider": "hindsight",
+                "active_memory_provider": normalized_provider,
                 "reasons": [],
                 "provider_resolution": resolved,
                 **context,
             }
-        resolved = {**resolved, "status": "blocked", "reasons": ["hindsight_correction_content_missing"]}
+        resolved = {**resolved, "status": "blocked", "reasons": ["memory_correction_tool_context_missing"]}
+    if resolved.get("resolved_strategy") == "native_delete" and resolved.get("status") == "dry_run_only":
+        context = build_provider_native_delete_tool_context(resolved, operation)
+        if context.get("allowed_tools"):
+            return {
+                "target_kind": "memory",
+                "execution_enabled": True,
+                "direct_fallback_allowed": False,
+                "status": "executable",
+                "requested_operation": requested,
+                "active_memory_provider": normalized_provider,
+                "reasons": [],
+                "provider_resolution": resolved,
+                **context,
+            }
+        resolved = {**resolved, "status": "blocked", "reasons": ["native_delete_identity_missing"]}
     return {
         "target_kind": "memory",
         "execution_enabled": False,

@@ -153,12 +153,64 @@ def execute_hindsight_retain_operation(tool_args: dict[str, Any], *, provider_to
     return _normalize_provider_tool_result(raw, args, tool_name="hindsight_retain")
 
 
+_PROVIDER_TOOL_ALLOWED_ARGS = {
+    "hindsight_retain": {"content", "context", "tags"},
+    "honcho_conclude": {"conclusion", "delete_id", "peer"},
+    "mem0_conclude": {"conclusion"},
+    "brv_curate": {"content"},
+    "viking_remember": {"content", "category"},
+    "fact_store": {"action", "content", "fact_id", "category", "tags", "trust_delta"},
+    "retaindb_remember": {"content", "memory_type", "importance"},
+    "retaindb_forget": {"memory_id"},
+    "supermemory_store": {"content", "metadata"},
+    "supermemory_forget": {"id"},
+}
+
+
+def _provider_tool_missing_args(tool_name: str, args: dict[str, Any]) -> list[str]:
+    if tool_name in {"hindsight_retain", "brv_curate", "viking_remember", "retaindb_remember", "supermemory_store"}:
+        return ["content"] if not args.get("content") else []
+    if tool_name in {"mem0_conclude", "honcho_conclude"}:
+        if tool_name == "honcho_conclude" and args.get("delete_id"):
+            return []
+        return ["conclusion"] if not args.get("conclusion") else []
+    if tool_name == "fact_store":
+        action = args.get("action")
+        if action == "add":
+            return ["content"] if not args.get("content") else []
+        if action == "remove":
+            return ["fact_id"] if args.get("fact_id") in {None, ""} else []
+        return ["action"]
+    if tool_name == "retaindb_forget":
+        return ["memory_id"] if not args.get("memory_id") else []
+    if tool_name == "supermemory_forget":
+        return ["id"] if not args.get("id") else []
+    return []
+
+
 def execute_memory_provider_tool_operation(context: dict[str, Any], *, provider_tool_fn: Callable[..., str] | None = None) -> dict[str, Any]:
     tool_name = str(context.get("tool_name") or "")
     tool_args = context.get("tool_args") if isinstance(context.get("tool_args"), dict) else {}
     allowed_tools = context.get("allowed_tools") if isinstance(context.get("allowed_tools"), list) else []
     if tool_name not in allowed_tools:
         return {"success": False, "error": "memory_provider_tool_not_allowed", "direct_fallback_used": False}
+    allowed_args = _PROVIDER_TOOL_ALLOWED_ARGS.get(tool_name)
+    if allowed_args is None:
+        return {"success": False, "error": "unsupported_memory_provider_tool", "direct_fallback_used": False}
+    extra = sorted(set(tool_args) - allowed_args)
+    if extra:
+        return {"success": False, "error": f"unexpected_{tool_name}_args:{','.join(extra)}", "direct_fallback_used": False}
+    missing = _provider_tool_missing_args(tool_name, tool_args)
+    if missing:
+        return {"success": False, "error": f"{tool_name}_args_missing:{','.join(missing)}", "direct_fallback_used": False}
     if tool_name == "hindsight_retain":
         return execute_hindsight_retain_operation(tool_args, provider_tool_fn=provider_tool_fn)
-    return {"success": False, "error": "unsupported_memory_provider_tool", "direct_fallback_used": False}
+    try:
+        fn = provider_tool_fn or _load_provider_tool(tool_name)
+        try:
+            raw = fn(**tool_args)
+        except TypeError:
+            raw = fn(tool_name, tool_args)
+    except Exception as exc:
+        return {"success": False, "error": f"memory_provider_tool_unavailable:{exc}", "direct_fallback_used": False}
+    return _normalize_provider_tool_result(raw, tool_args, tool_name=tool_name)

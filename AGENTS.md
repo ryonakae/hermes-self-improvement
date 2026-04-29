@@ -78,7 +78,7 @@ PY
 - `--execute` は mutation intent ですが、実変更は policy と内部検証を通った item だけです。
 - `apply --execute` は `apply_policy`、internal item hash、target drift check を通った ready item だけ変更します。
 - skill mutation は `skill_manage` の許可 action のみを呼び、直接ファイル編集 fallback は使いません。
-- built-in memory mutation は `memory` tool のみを呼びます。外部 memory mutation は provider-native tool 経由だけを許可し、現時点では Hindsight の stale/incorrect/duplicate `memory_delete` → `hindsight_retain` correction のみ実行可能です。sensitive delete と provider tool 不在 runtime は fail-closed にします。
+- built-in memory mutation は `memory` tool のみを呼びます。外部 memory mutation は provider-native tool 経由だけを許可します。stale/incorrect/duplicate `memory_delete` は provider correction tool で supersede/invalidate し、native delete は `delete_id` / `fact_id` / `memory_id` / `id` など provider-native ID がある場合だけ実行します。sensitive delete と provider tool 不在 runtime は fail-closed にします。
 - `rollback --execute` は ledger hash と current target hash を検証します。1 item でも drift / tamper があれば rollback しません。
 - `calibrate --execute` は evidence threshold と regression pass を通った場合だけ active evaluator pointer を更新します。
 - GEPA / LLM の点数だけで auto-apply を許可しないでください。

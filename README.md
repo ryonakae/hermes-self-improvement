@@ -18,7 +18,7 @@
 - report、apply plan、apply ledger、calibration ledger を artifact として残す
 - policy で許可された低リスクな text replacement を、内部 hash と drift check 付きで適用する
 - skill mutation は、直接ファイル編集ではなく `skill_manage` の create / patch / edit / delete / write_file / remove_file だけを使って適用する
-- built-in memory mutation は `memory` tool の add / replace / remove だけを使って適用する。外部 memory provider は capability policy に解決し、Hindsight の stale/incorrect/duplicate `memory_delete` だけ `hindsight_retain` correction として実行可能。sensitive delete や provider tool 不在時は fail-closed
+- built-in memory mutation は `memory` tool の add / replace / remove だけを使って適用する。外部 memory provider は capability policy に解決し、stale/incorrect/duplicate `memory_delete` は各 provider の correction tool（例: `hindsight_retain`, `honcho_conclude`, `mem0_conclude`, `brv_curate`, `viking_remember`, `fact_store`, `retaindb_remember`, `supermemory_store`）で実行可能。native delete は provider-native ID がある場合だけ実行し、sensitive delete や provider tool 不在時は fail-closed
 - evaluator/scorer の調整を `calibrate` で preview し、regression を通った場合だけ active 化する
 
 しないこと:
@@ -139,7 +139,7 @@ Primary surface の安全境界は `--execute` です。
 - `calibration` が evaluator/scorer 自己調整を決める。`apply_policy` とは別
 - `item_hash`, `target_hash`, `ledger_hash` は内部整合性、drift 検知、rollback 用
 - `rollback --execute` は ledger hash と current target hash を検証する。1 item でも drift / tamper があれば rollback しない
-- skill / memory mutation の直接ファイル・DB fallback は使わない。skill mutation は `skill_manage` 経由、built-in memory は `memory` tool 経由。外部 memory provider は provider-native tool 経由に限定し、現時点で実行可能なのは Hindsight の stale/incorrect/duplicate delete を `hindsight_retain` correction として保存する path だけ。sensitive delete と tool 不在 runtime は fail-closed
+- skill / memory mutation の直接ファイル・DB fallback は使わない。skill mutation は `skill_manage` 経由、built-in memory は `memory` tool 経由。外部 memory provider は provider-native tool 経由に限定し、stale/incorrect/duplicate delete は provider の correction tool、native delete は provider-native ID がある場合だけ使う。sensitive delete と tool 不在 runtime は fail-closed
 
 既定 policy の例です。
 
