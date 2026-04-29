@@ -207,6 +207,53 @@ def memory_rollback_status(config: dict[str, Any] | None = None) -> dict[str, An
     }
 
 
+def plan_memory_ledger_bound_restore(action: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Preview a memory rollback without mutating memory or provider internals."""
+    base: dict[str, Any] = {
+        "target_changed": False,
+        "direct_restore_allowed": False,
+        "ledger_hash": action.get("ledger_hash"),
+        "item_hash": action.get("item_hash"),
+    }
+    if action.get("target_kind") != "memory":
+        return {**base, "status": "failed", "reasons": ["target_kind_not_memory"]}
+    expected = action.get("expected_current_state_hash")
+    current = action.get("current_state_hash")
+    if expected and current and expected != current:
+        return {**base, "status": "failed", "reasons": ["memory_state_hash_mismatch"], "expected_current_state_hash": expected, "current_state_hash": current}
+    if action.get("sensitive_delete") is True:
+        return {**base, "status": "failed", "reasons": ["sensitive_delete_restore_forbidden"]}
+
+    provider = str(action.get("provider") or "built-in").strip().lower().replace("_", "-")
+    restore_mode = str(action.get("restore_mode") or "")
+    operation = str(action.get("operation") or "")
+    if provider not in {"built-in", "builtin", "built-in-memory"}:
+        if restore_mode == "external_provider_compensating_correction" or action.get("correction_hash"):
+            return {
+                **base,
+                "status": "would_write_provider_correction",
+                "provider": provider,
+                "restore_mode": "external_provider_compensating_correction",
+                "correction_hash": action.get("correction_hash"),
+                "reasons": [],
+            }
+        return {**base, "status": "failed", "provider": provider, "reasons": ["external_provider_direct_restore_forbidden"]}
+
+    if restore_mode.startswith("external_provider"):
+        return {**base, "status": "failed", "provider": provider, "reasons": ["external_provider_direct_restore_forbidden"]}
+
+    required_hashes = {key: action.get(key) for key in ("old_text_hash", "new_content_hash", "content_hash", "deleted_text_hash", "tool_args_hash") if action.get(key)}
+    if restore_mode == "builtin_memory_full_store_restore":
+        return {**base, "status": "failed", "provider": "built-in", "reasons": ["unsupported_pending_store_validation"]}
+    if operation == "memory_add":
+        return {**base, "status": "would_restore_memory_via_memory_tool", "provider": "built-in", "tool_name": "memory", "compensating_action": "remove", "required_hashes": required_hashes, "reasons": []}
+    if operation == "memory_replace":
+        return {**base, "status": "would_restore_memory_via_memory_tool", "provider": "built-in", "tool_name": "memory", "compensating_action": "replace", "required_hashes": required_hashes, "reasons": []}
+    if operation == "memory_delete":
+        return {**base, "status": "failed", "provider": "built-in", "reasons": ["memory_delete_readd_pending_validation"]}
+    return {**base, "status": "failed", "provider": "built-in", "reasons": ["unsupported_memory_rollback_operation"]}
+
+
 def memory_ledger_bound_restore(action: dict[str, Any], *, execute: bool = False) -> dict[str, Any]:
     """Fail-closed boundary for memory rollback until store semantics are proven.
 
@@ -214,14 +261,10 @@ def memory_ledger_bound_restore(action: dict[str, Any], *, execute: bool = False
     and cache invalidation semantics before it can safely write. External memory
     providers must never be restored through direct provider internals.
     """
-    if action.get("target_kind") != "memory":
-        return {"status": "failed", "reasons": ["target_kind_not_memory"], "target_changed": False, "ledger_hash": action.get("ledger_hash"), "item_hash": action.get("item_hash")}
-    if action.get("sensitive_delete") is True:
-        return {"status": "failed", "reasons": ["sensitive_delete_restore_forbidden"], "target_changed": False, "ledger_hash": action.get("ledger_hash"), "item_hash": action.get("item_hash")}
-    restore_mode = str(action.get("restore_mode") or "")
-    if restore_mode.startswith("external_provider") or action.get("provider") not in {None, "", "built-in", "builtin", "built_in"}:
-        return {"status": "failed", "reasons": ["external_provider_direct_restore_forbidden"], "target_changed": False, "ledger_hash": action.get("ledger_hash"), "item_hash": action.get("item_hash")}
-    return {"status": "failed", "reasons": ["unsupported_pending_store_validation"], "target_changed": False, "execute": bool(execute), "ledger_hash": action.get("ledger_hash"), "item_hash": action.get("item_hash")}
+    preview = plan_memory_ledger_bound_restore(action)
+    if preview.get("status") == "failed":
+        return {**preview, "execute": bool(execute)}
+    return {**preview, "status": "failed", "reasons": ["unsupported_pending_store_validation"], "execute": bool(execute)}
 
 
 def recovery_action_from_snapshots(*, before_snapshot: dict[str, Any], current_snapshot: dict[str, Any]) -> dict[str, Any]:
