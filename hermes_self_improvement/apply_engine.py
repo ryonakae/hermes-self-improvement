@@ -14,9 +14,11 @@ try:  # pragma: no cover - package import path
         _apply_replace_text_once,
     )
     from .config import apply_policy_allows_item, normalize_apply_policy
+    from .mutation_agent import run_skill_agent_task
     from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from .observer import _reports_dir, _sha256_text, _stable_json
-    from .recovery_engine import ledger_bound_restore
+    from .recovery_engine import ledger_bound_restore, recovery_action_from_snapshots
+    from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_plan import (
         _apply_append_to_existing_section,
@@ -26,9 +28,11 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _apply_replace_text_once,
     )
     from config import apply_policy_allows_item, normalize_apply_policy
+    from mutation_agent import run_skill_agent_task
     from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from observer import _reports_dir, _sha256_text, _stable_json
-    from recovery_engine import ledger_bound_restore
+    from recovery_engine import ledger_bound_restore, recovery_action_from_snapshots
+    from skill_snapshot import SkillSnapshotError, capture_skill_snapshot
 
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -117,6 +121,130 @@ def _apply_mutation(content: str | None, mutation: dict[str, Any]) -> str | None
         return _apply_delete_file(content, mutation)
     return None
 
+
+
+
+def _skill_agent_task_skill_names(mutation: dict[str, Any]) -> list[str]:
+    targets = mutation.get("targets") if isinstance(mutation.get("targets"), dict) else {}
+    names: list[str] = []
+    for key in ("primary_skill", "source_skill", "new_skill"):
+        value = targets.get(key)
+        if value and str(value) not in names:
+            names.append(str(value))
+    return names
+
+
+def _snapshot_skill_targets(mutation: dict[str, Any], config: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    snapshots: dict[str, dict[str, Any]] = {}
+    reasons: list[str] = []
+    task_kind = str(mutation.get("task_kind") or "")
+    targets = mutation.get("targets") if isinstance(mutation.get("targets"), dict) else {}
+    for key, name in targets.items():
+        allow_missing = (task_kind == "skill_create" and key in {"primary_skill", "new_skill"}) or (task_kind == "skill_rename" and key == "new_skill")
+        try:
+            snapshots[str(name)] = capture_skill_snapshot(str(name), config=config, allow_missing=allow_missing)
+        except SkillSnapshotError as exc:
+            reasons.append(f"{key}_{exc}")
+    return snapshots, reasons
+
+
+def _skill_agent_result_changed_names(agent_result: dict[str, Any]) -> set[str]:
+    changed: set[str] = set()
+    for key in ("changed_skills", "created_skills", "deleted_skills"):
+        for name in agent_result.get(key) or []:
+            changed.add(str(name))
+    return changed
+
+
+def _verify_skill_agent_result(
+    *,
+    mutation: dict[str, Any],
+    before_snapshots: dict[str, dict[str, Any]],
+    agent_result: dict[str, Any],
+    config: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    reasons: list[str] = []
+    after_snapshots: dict[str, dict[str, Any]] = {}
+    allowed_targets = set(_skill_agent_task_skill_names(mutation))
+    changed_names = _skill_agent_result_changed_names(agent_result)
+    unexpected = sorted(name for name in changed_names if name not in allowed_targets)
+    if unexpected:
+        reasons.append("agent_changed_unallowed_skill")
+    for name in sorted(allowed_targets | changed_names):
+        before = before_snapshots.get(name)
+        allow_missing = bool(before and before.get("exists") is False)
+        try:
+            after_snapshots[name] = capture_skill_snapshot(name, config=config, allow_missing=allow_missing)
+        except SkillSnapshotError as exc:
+            reasons.append(f"after_snapshot_{name}_{exc}")
+    task_kind = str(mutation.get("task_kind") or "")
+    if task_kind not in {"skill_rename", "skill_merge", "skill_delete"}:
+        if not changed_names:
+            reasons.append("agent_result_no_changed_skills")
+        for name in changed_names:
+            before = before_snapshots.get(name)
+            after = after_snapshots.get(name)
+            if before and after and before.get("file_set_hash") == after.get("file_set_hash"):
+                reasons.append("agent_result_target_unchanged")
+    rollback_actions = {}
+    for name, before in before_snapshots.items():
+        after = after_snapshots.get(name)
+        if before and after and before.get("file_set_hash") != after.get("file_set_hash"):
+            rollback_actions[name] = recovery_action_from_snapshots(before_snapshot=before, current_snapshot=after)
+    verification = {
+        "before_snapshots": before_snapshots,
+        "after_snapshots": after_snapshots,
+        "ledger_bound_restore": rollback_actions,
+        "tool_trace_verified": False,
+    }
+    return verification, reasons
+
+
+def _run_skill_agent_mutation(
+    *,
+    mutation: dict[str, Any],
+    config: dict[str, Any],
+    execute: bool,
+) -> dict[str, Any]:
+    before_snapshots, snapshot_reasons = _snapshot_skill_targets(mutation, config)
+    result: dict[str, Any] = {
+        "mutation_type": "skill_agent_task",
+        "task_kind": mutation.get("task_kind"),
+        "before_snapshots": before_snapshots,
+        "target_changed": False,
+        "reasons": list(snapshot_reasons),
+    }
+    if snapshot_reasons:
+        result["status"] = "failed"
+        return result
+    if not execute:
+        result["status"] = "would_apply"
+        result["would_run_mutation_agent"] = True
+        return result
+    backend = config.get("_mutation_agent_backend") if isinstance(config, dict) else None
+    agent_result = run_skill_agent_task(mutation, config=config, backend=backend)
+    result["agent_result"] = agent_result
+    if not agent_result.get("success"):
+        result["status"] = "failed"
+        result["reasons"].append(str(agent_result.get("error") or "mutation_agent_failed"))
+        result["reasons"].extend(agent_result.get("reasons") or [])
+        return result
+    verification, verification_reasons = _verify_skill_agent_result(mutation=mutation, before_snapshots=before_snapshots, agent_result=agent_result, config=config)
+    result["verification"] = verification
+    if verification_reasons:
+        result["status"] = "failed"
+        result["reasons"].extend(verification_reasons)
+        return result
+    result["status"] = "applied"
+    result["target_changed"] = True
+    result["rollback_data"] = {
+        "rollback_strategy": "ledger_bound_restore",
+        "ledger_bound_restore": verification.get("ledger_bound_restore"),
+        "skill_snapshots_before": before_snapshots,
+        "skill_snapshots_after": verification.get("after_snapshots"),
+        "tool_trace_verified": False,
+    }
+    return result
 
 def _skill_manage_rollback_action(*, tool_args: dict[str, Any], rollback_data: dict[str, Any] | None) -> dict[str, Any] | None:
     rollback_data = rollback_data if isinstance(rollback_data, dict) else {}
@@ -298,6 +426,28 @@ def apply_plan(
                 summary["would_apply"] += 1
             result_items.append(item_result)
             continue
+        if mutation and mutation.get("type") == "skill_agent_task":
+            agent_apply = _run_skill_agent_mutation(mutation=mutation, config=config, execute=execute)
+            item_result["mutation_context"] = {"type": "skill_agent_task", "task_kind": mutation.get("task_kind")}
+            item_result["before_hash"] = item.get("before_hash")
+            item_result["agent_result"] = agent_apply.get("agent_result")
+            item_result["verification"] = agent_apply.get("verification")
+            item_result["rollback_data"] = agent_apply.get("rollback_data")
+            if agent_apply.get("status") == "would_apply":
+                item_result["status"] = "would_apply"
+                item_result["would_run_mutation_agent"] = True
+                summary["would_apply"] += 1
+            elif agent_apply.get("status") == "applied":
+                item_result["status"] = "applied"
+                item_result["after_hash"] = _sha256_text(_stable_json((agent_apply.get("verification") or {}).get("after_snapshots") or {}))
+                summary["applied"] += 1
+                target_changed = True
+            else:
+                item_result["status"] = "failed"
+                item_result["reasons"].extend(agent_apply.get("reasons") or ["skill_agent_task_failed"])
+                summary["failed"] += 1
+            result_items.append(item_result)
+            continue
         if not target_path or not mutation:
             item_result["status"] = "failed"
             item_result["reasons"].append("mutation_plan_missing")
@@ -404,6 +554,20 @@ def _rollback_item_plan(item: dict[str, Any]) -> dict[str, Any]:
         item_result["reasons"].append("item_not_applied")
         return item_result
 
+    strategy = rollback.get("rollback_strategy")
+    ledger_restore = rollback.get("ledger_bound_restore") if isinstance(rollback.get("ledger_bound_restore"), dict) else None
+    if ledger_restore:
+        actions = list(ledger_restore.values()) if all(isinstance(v, dict) for v in ledger_restore.values()) and "type" not in ledger_restore else [ledger_restore]
+        previews = [ledger_bound_restore(action, execute=False) for action in actions]
+        failed_previews = [preview for preview in previews if preview.get("status") != "would_restore"]
+        item_result["status"] = "failed" if failed_previews else "would_rollback"
+        item_result["rollback_action"] = {"type": "ledger_bound_restore_batch", "actions": actions} if not failed_previews else None
+        item_result["recovery_preview"] = previews
+        if failed_previews:
+            for preview in failed_previews:
+                item_result["reasons"].extend(preview.get("reasons") or ["ledger_bound_restore_validation_failed"])
+        return item_result
+
     current_content, current_hash = _current_content_and_hash(target_path)
     if current_hash != item.get("after_hash"):
         item_result["status"] = "failed"
@@ -412,16 +576,6 @@ def _rollback_item_plan(item: dict[str, Any]) -> dict[str, Any]:
         item_result["expected_hash"] = item.get("after_hash")
         return item_result
 
-    strategy = rollback.get("rollback_strategy")
-    ledger_restore = rollback.get("ledger_bound_restore") if isinstance(rollback.get("ledger_bound_restore"), dict) else None
-    if ledger_restore:
-        preview = ledger_bound_restore(ledger_restore, execute=False)
-        item_result["status"] = "would_rollback" if preview.get("status") == "would_restore" else "failed"
-        item_result["rollback_action"] = ledger_restore if preview.get("status") == "would_restore" else None
-        item_result["recovery_preview"] = preview
-        if preview.get("status") != "would_restore":
-            item_result["reasons"].extend(preview.get("reasons") or ["ledger_bound_restore_validation_failed"])
-        return item_result
     skill_manage_rollback = rollback.get("skill_manage_rollback") if isinstance(rollback.get("skill_manage_rollback"), dict) else None
     if skill_manage_rollback:
         item_result["status"] = "would_rollback"
@@ -520,6 +674,12 @@ def _execute_rollback_action(action: dict[str, Any]) -> bool:
     if action_type == "ledger_bound_restore":
         result = ledger_bound_restore(action, execute=True)
         return result.get("status") == "restored"
+    if action_type == "ledger_bound_restore_batch":
+        ok = True
+        for subaction in action.get("actions") or []:
+            result = ledger_bound_restore(subaction, execute=True)
+            ok = ok and result.get("status") == "restored"
+        return ok
     return False
 
 

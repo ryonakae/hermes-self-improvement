@@ -263,3 +263,166 @@ def test_rollback_execute_ignores_failed_direct_file_items_even_with_later_drift
     assert result["target_changed"] is False
     assert first_target.read_text(encoding="utf-8") == "external drift\n"
     assert second_target.read_text(encoding="utf-8") == "byee second\n"
+
+
+
+def _write_skill(root: Path, name: str, body: str = "# Skill\n") -> Path:
+    skill_dir = root / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(f"---\nname: {name}\ndescription: Test skill\n---\n\n{body}", encoding="utf-8")
+    return skill_dir
+
+
+def _skill_agent_item(mod, *, item_id="step-001", skill_name="demo-skill", task_kind="skill_improve", status="ready") -> dict:
+    item = {
+        "item_id": item_id,
+        "status": status,
+        "order": int(item_id.split("-")[-1]),
+        "target_kind": "skill",
+        "target_path": None,
+        "change_type": task_kind,
+        "risk": "low",
+        "destructive": False,
+        "before_hash": None,
+        "mutation": {
+            "type": "skill_agent_task",
+            "task_kind": task_kind,
+            "targets": {"primary_skill": skill_name},
+            "instructions": "Improve the skill.",
+            "constraints": [
+                "Use only skills_list, skill_view, skill_manage.",
+                "Do not use terminal/file/git/direct filesystem tools.",
+                "Operate only on mutable local skills resolved by the plugin.",
+            ],
+            "expected_outcome": {"target_exists": True},
+            "verification_contract": {"checklist_required": True, "llm_judge_required": False},
+        },
+    }
+    item["item_hash"] = mod.compute_apply_item_hash(item)
+    return item
+
+
+def test_apply_preview_reports_would_run_mutation_agent_without_mutating(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    skill_dir = _write_skill(skills_root, "demo-skill", "# Before\n")
+    item = _skill_agent_item(mod)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-agent-preview", "items": [item]})
+
+    result = mod.apply_plan(
+        plan_id="plan-agent-preview",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [skills_root]},
+        execute=False,
+    )
+
+    assert result["summary"]["would_apply"] == 1
+    assert result["items"][0]["would_run_mutation_agent"] is True
+    assert "# Before" in (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_apply_execute_with_fake_mutation_agent_updates_skill_and_writes_snapshot_ledger(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    skill_dir = _write_skill(skills_root, "demo-skill", "# Before\n")
+    item = _skill_agent_item(mod)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-agent-exec", "items": [item]})
+
+    def fake_backend(prompt, task, config):
+        (skill_dir / "SKILL.md").write_text("---\nname: demo-skill\ndescription: Test skill\n---\n\n# After\n", encoding="utf-8")
+        return {
+            "success": True,
+            "task_kind": "skill_improve",
+            "used_tools": [{"tool": "skill_view", "target": "demo-skill"}, {"tool": "skill_manage", "action": "edit", "name": "demo-skill"}],
+            "changed_skills": ["demo-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "ready_to_delete_source": False,
+            "merged_points": [],
+            "removed_as_duplicate": [],
+            "conflicts_resolved": [],
+            "supporting_files_moved": [],
+            "verification_notes": [],
+            "rollback_hints": [],
+        }
+
+    result = mod.apply_plan(
+        plan_id="plan-agent-exec",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [skills_root], "_mutation_agent_backend": fake_backend},
+        execute=True,
+    )
+
+    assert result["summary"]["applied"] == 1
+    assert result["target_changed"] is True
+    ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
+    rollback = ledger["items"][0]["rollback_data"]
+    assert rollback["rollback_strategy"] == "ledger_bound_restore"
+    assert "demo-skill" in rollback["ledger_bound_restore"]
+
+
+def test_apply_execute_rejects_agent_result_with_disallowed_tool(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    skill_dir = _write_skill(skills_root, "demo-skill", "# Before\n")
+    item = _skill_agent_item(mod)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-agent-bad-tool", "items": [item]})
+
+    def bad_backend(prompt, task, config):
+        (skill_dir / "SKILL.md").write_text("---\nname: demo-skill\n---\n\n# After\n", encoding="utf-8")
+        return {
+            "success": True,
+            "task_kind": "skill_improve",
+            "used_tools": [{"tool": "terminal"}],
+            "changed_skills": ["demo-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "ready_to_delete_source": False,
+            "merged_points": [],
+            "removed_as_duplicate": [],
+            "conflicts_resolved": [],
+            "supporting_files_moved": [],
+            "verification_notes": [],
+            "rollback_hints": [],
+        }
+
+    result = mod.apply_plan(
+        plan_id="plan-agent-bad-tool",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [skills_root], "_mutation_agent_backend": bad_backend},
+        execute=True,
+    )
+
+    assert result["summary"]["failed"] == 1
+    assert "disallowed_tool_reported" in result["items"][0]["reasons"]
+
+
+def test_apply_execute_rejects_agent_success_when_target_unchanged(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    _write_skill(skills_root, "demo-skill", "# Before\n")
+    item = _skill_agent_item(mod)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-agent-unchanged", "items": [item]})
+
+    def unchanged_backend(prompt, task, config):
+        return {
+            "success": True,
+            "task_kind": "skill_improve",
+            "used_tools": [{"tool": "skill_view", "target": "demo-skill"}],
+            "changed_skills": ["demo-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "ready_to_delete_source": False,
+            "merged_points": [],
+            "removed_as_duplicate": [],
+            "conflicts_resolved": [],
+            "supporting_files_moved": [],
+            "verification_notes": [],
+            "rollback_hints": [],
+        }
+
+    result = mod.apply_plan(
+        plan_id="plan-agent-unchanged",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [skills_root], "_mutation_agent_backend": unchanged_backend},
+        execute=True,
+    )
+
+    assert result["summary"]["failed"] == 1
+    assert "agent_result_target_unchanged" in result["items"][0]["reasons"]
