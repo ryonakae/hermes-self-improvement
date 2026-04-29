@@ -14,6 +14,16 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 
 RECOVERY_ACTION_TYPE = "ledger_bound_restore"
 SKILL_RESTORE_MODE = "skill_full_snapshot_restore"
+EXTERNAL_PROVIDER_CORRECTION_TOOLS = {
+    "hindsight": "hindsight_retain",
+    "honcho": "honcho_conclude",
+    "mem0": "mem0_conclude",
+    "byterover": "brv_curate",
+    "openviking": "viking_remember",
+    "holographic": "fact_store",
+    "retaindb": "retaindb_remember",
+    "supermemory": "supermemory_store",
+}
 
 
 class RecoveryError(ValueError):
@@ -229,11 +239,15 @@ def plan_memory_ledger_bound_restore(action: dict[str, Any], *, config: dict[str
     operation = str(action.get("operation") or "")
     if provider not in {"built-in", "builtin", "built-in-memory"}:
         if restore_mode == "external_provider_compensating_correction" or action.get("correction_hash"):
+            tool_name = action.get("tool_name") or EXTERNAL_PROVIDER_CORRECTION_TOOLS.get(provider)
+            if provider not in EXTERNAL_PROVIDER_CORRECTION_TOOLS or not tool_name:
+                return {**base, "status": "failed", "provider": provider, "reasons": ["external_provider_correction_tool_unavailable"]}
             return {
                 **base,
                 "status": "would_write_provider_correction",
                 "provider": provider,
                 "restore_mode": "external_provider_compensating_correction",
+                "tool_name": tool_name,
                 "correction_hash": action.get("correction_hash"),
                 "reasons": [],
             }

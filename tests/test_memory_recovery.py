@@ -151,3 +151,62 @@ def test_memory_rollback_execute_remains_blocked_without_cache_visibility_proof(
     assert result["status"] == "failed"
     assert "unsupported_pending_store_validation" in result["reasons"]
     assert result["target_changed"] is False
+
+
+def test_hindsight_rollback_is_correction_not_direct_restore():
+    result = plan_memory_ledger_bound_restore({
+        "target_kind": "memory",
+        "provider": "hindsight",
+        "restore_mode": "external_provider_compensating_correction",
+        "operation": "memory_replace",
+        "correction_hash": "correction-hash",
+        "tool_name": "hindsight_retain",
+    })
+
+    assert result["status"] == "would_write_provider_correction"
+    assert result["provider"] == "hindsight"
+    assert result["tool_name"] == "hindsight_retain"
+    assert result["direct_restore_allowed"] is False
+    assert result.get("restore_mode") == "external_provider_compensating_correction"
+
+
+def test_honcho_sensitive_delete_rollback_is_forbidden_even_with_delete_id():
+    result = plan_memory_ledger_bound_restore({
+        "target_kind": "memory",
+        "provider": "honcho",
+        "restore_mode": "external_provider_compensating_correction",
+        "operation": "memory_delete",
+        "sensitive_delete": True,
+        "delete_id": "conclusion-1",
+    })
+
+    assert result["status"] == "failed"
+    assert "sensitive_delete_restore_forbidden" in result["reasons"]
+
+
+def test_provider_without_correction_tool_blocks_rollback():
+    result = plan_memory_ledger_bound_restore({
+        "target_kind": "memory",
+        "provider": "unknown-provider",
+        "restore_mode": "external_provider_compensating_correction",
+        "operation": "memory_replace",
+        "correction_hash": "correction-hash",
+    })
+
+    assert result["status"] == "failed"
+    assert "external_provider_correction_tool_unavailable" in result["reasons"]
+
+
+def test_provider_compensation_never_repeats_sensitive_content():
+    result = plan_memory_ledger_bound_restore({
+        "target_kind": "memory",
+        "provider": "hindsight",
+        "restore_mode": "external_provider_compensating_correction",
+        "operation": "memory_replace",
+        "correction_hash": "correction-hash",
+        "sensitive_content": "secret token value",
+        "tool_name": "hindsight_retain",
+    })
+
+    assert result["status"] == "would_write_provider_correction"
+    assert "secret token value" not in str(result)
