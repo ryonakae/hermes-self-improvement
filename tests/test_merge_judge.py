@@ -78,4 +78,53 @@ def test_merge_judge_uses_configured_mutation_model():
 
 
 def test_merge_judge_status_reports_injected():
-    assert merge_judge_status({"_merge_judge": lambda **kwargs: {"passed": True}}) == {"available": True, "source": "injected"}
+    assert merge_judge_status({"_merge_judge": lambda **kwargs: {"passed": True}}) == {"available": True, "source": "injected", "model_source": "injected"}
+
+
+def test_merge_judge_status_reports_model_config_source():
+    status = merge_judge_status({"model": {"mutation": {"provider": "auto"}}})
+
+    assert "available" in status
+    assert status["model_source"] == "model.mutation"
+
+
+def test_merge_judge_rejects_passed_true_with_any_boolean_gate_false():
+    result = auxiliary_merge_judge(
+        source_before={}, destination_before={}, destination_after={}, agent_result={},
+        llm_call=lambda messages, **kwargs: json.dumps({
+            "passed": True,
+            "source_information_preserved": False,
+            "no_obvious_contradictions": True,
+            "no_major_duplicate_guidance": True,
+            "safe_to_delete_source": True,
+            "reasons": [],
+        }),
+    )
+
+    assert result["passed"] is False
+    assert "merge_judge_source_information_preserved_false" in result["reasons"]
+
+
+def test_merge_judge_truncates_large_snapshots_with_marker():
+    seen = {}
+
+    def fake(messages, **kwargs):
+        seen["payload"] = messages[1]["content"]
+        return json.dumps({
+            "passed": False,
+            "source_information_preserved": False,
+            "no_obvious_contradictions": True,
+            "no_major_duplicate_guidance": True,
+            "safe_to_delete_source": False,
+            "reasons": ["too large"],
+        })
+
+    auxiliary_merge_judge(
+        source_before=_snap("source", "x" * 7000),
+        destination_before={},
+        destination_after={},
+        agent_result={},
+        llm_call=fake,
+    )
+
+    assert "<truncated" in seen["payload"]

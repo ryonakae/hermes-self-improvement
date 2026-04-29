@@ -96,6 +96,8 @@ def _parse_merge_judge_response(raw: str | dict[str, Any]) -> dict[str, Any]:
     for key in required:
         if not isinstance(parsed.get(key), bool):
             reasons.append(f"merge_judge_{key}_missing")
+        elif parsed.get(key) is not True:
+            reasons.append(f"merge_judge_{key}_false")
     if parsed.get("safe_to_delete_source") is not True:
         reasons.append("merge_judge_not_safe_to_delete_source")
     passed = all(parsed.get(key) is True for key in required) and not reasons
@@ -158,7 +160,7 @@ def build_merge_judge(config: dict[str, Any] | None = None, llm_call: Callable[.
 
 def merge_judge_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     if isinstance(config, dict) and callable(config.get("_merge_judge")):
-        return {"available": True, "source": "injected"}
+        return {"available": True, "source": "injected", "model_source": "injected"}
     try:
         try:
             from .mutation_backend import _ensure_hermes_agent_on_path
@@ -167,8 +169,8 @@ def merge_judge_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
         _ensure_hermes_agent_on_path()
         import agent.auxiliary_client  # type: ignore  # noqa: F401
     except Exception as exc:
-        return {"available": False, "reason": "hermes_auxiliary_unavailable", "detail": str(exc)}
-    return {"available": True, "source": "hermes_auxiliary"}
+        return {"available": False, "reason": "hermes_auxiliary_unavailable", "detail": str(exc), "model_source": "model.mutation"}
+    return {"available": True, "source": "hermes_auxiliary", "model_source": "model.mutation"}
 
 
 def verify_skill_merge_phase(
@@ -213,4 +215,6 @@ def verify_skill_merge_phase(
     judge_passed = bool(judge_result.get("passed")) and bool(judge_result.get("safe_to_delete_source", judge_result.get("passed")))
     if not judge_passed:
         reasons.append("merge_judge_failed")
+        for reason in judge_result.get("reasons") or []:
+            reasons.append(str(reason))
     return {"passed": not reasons, "reasons": reasons, "judge_result": judge_result}
