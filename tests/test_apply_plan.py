@@ -835,15 +835,9 @@ def test_build_apply_plan_supports_approval_required_large_rewrite_replace_entir
     assert item["change_type"] == "skill_large_rewrite"
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["mutation"]["type"] == "skill_manage_operation"
-    assert item["mutation"]["skill_manage_action"] == "edit"
-    assert item["mutation"]["preview_mutation"]["after_hash"] == mod._sha256_text(after)
-    assert item["mutation"]["context"]["tool_args"]["content"] == after
-    assert item["rollback_preview"]["before_snapshot"] == before
-    assert item["rollback_preview"]["after_hash"] == mod._sha256_text(after)
-    assert item["rollback_preview"]["rollback_patch"]["type"] == "replace_entire_file"
-    assert item["ledger_preview"]["rollback_preview_hash"]
+    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["semantic_mutation_agent_requires_review"]}
+    assert item["mutation"]["type"] == "skill_agent_task"
+    assert item["mutation"]["task_kind"] == "skill_large_rewrite"
 
 
 def test_build_apply_plan_rejects_large_rewrite_without_after_text(tmp_path):
@@ -909,16 +903,10 @@ def test_build_apply_plan_supports_approval_required_skill_create_file(tmp_path)
     assert item["before_hash"] is None
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["mutation"]["type"] == "skill_manage_operation"
-    assert item["mutation"]["skill_manage_action"] == "create"
-    assert item["mutation"]["preview_mutation"]["after_hash"] == mod._sha256_text(new_content)
-    assert item["mutation"]["context"]["tool_args"]["content"] == new_content
-    assert item["rollback_preview"]["rollback_strategy"] == "delete_created_file"
-    assert item["rollback_preview"]["before_hash"] is None
-    assert item["rollback_preview"]["after_hash"] == mod._sha256_text(new_content)
-    assert item["rollback_preview"]["rollback_patch"]["type"] == "delete_file"
-    assert item["ledger_preview"]["rollback_preview_hash"]
+    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["semantic_mutation_agent_requires_review"]}
+    assert item["mutation"]["type"] == "skill_agent_task"
+    assert item["mutation"]["task_kind"] == "skill_create"
+    assert item["rollback_preview"] is None
 
 
 def test_build_apply_plan_rejects_skill_create_when_target_exists(tmp_path):
@@ -981,14 +969,10 @@ def test_build_apply_plan_supports_approval_required_skill_delete_file(tmp_path)
     assert item["target_exists"] is True
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"] == {"status": "eligible", "reasons": []}
-    assert item["mutation"]["type"] == "skill_manage_operation"
-    assert item["mutation"]["skill_manage_action"] == "delete"
-    assert item["mutation"]["context"]["tool_args"] == {"action": "delete", "name": "old-skill"}
-    assert item["rollback_preview"]["rollback_strategy"] == "restore_full_file_from_before_content"
-    assert item["rollback_preview"]["before_snapshot"] == before
-    assert item["rollback_preview"]["after_hash"] is None
-    assert item["rollback_preview"]["rollback_patch"]["type"] == "create_file"
+    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["semantic_mutation_agent_requires_review"]}
+    assert item["mutation"]["type"] == "skill_agent_task"
+    assert item["mutation"]["task_kind"] == "skill_delete"
+    assert item["rollback_preview"] is None
 
 
 

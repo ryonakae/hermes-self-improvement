@@ -251,7 +251,7 @@ def test_skill_manage_operation_executor_allows_only_known_actions():
     assert rejected["error"] == "unsupported_skill_manage_action"
 
 
-def test_skill_write_and_remove_file_plan_use_skill_manage_context(tmp_path):
+def test_skill_write_and_remove_file_plan_use_semantic_agent_task(tmp_path):
     mod = load_plugin_module()
     skill_dir = tmp_path / "skills" / "demo-skill" / "references"
     skill_dir.mkdir(parents=True)
@@ -275,14 +275,10 @@ def test_skill_write_and_remove_file_plan_use_skill_manage_context(tmp_path):
         config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
     )
     write_item = write_plan["items"][0]
-    assert write_item["mutation"]["type"] == "skill_manage_operation"
-    assert write_item["mutation"]["skill_manage_action"] == "write_file"
-    assert write_item["mutation"]["context"]["tool_args"] == {
-        "action": "write_file",
-        "name": "demo-skill",
-        "file_path": "references/guide.md",
-        "file_content": "new guide\n",
-    }
+    assert write_item["mutation"]["type"] == "skill_agent_task"
+    assert write_item["mutation"]["task_kind"] == "skill_write_file"
+    assert write_item["mutation"]["targets"] == {"primary_skill": "demo-skill"}
+    assert "semantic_mutation_agent_requires_review" in write_item["eligibility"]["reasons"]
 
     remove_plan = mod.build_apply_plan(
         proposals=[{
@@ -300,13 +296,10 @@ def test_skill_write_and_remove_file_plan_use_skill_manage_context(tmp_path):
         config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
     )
     remove_item = remove_plan["items"][0]
-    assert remove_item["mutation"]["type"] == "skill_manage_operation"
-    assert remove_item["mutation"]["skill_manage_action"] == "remove_file"
-    assert remove_item["mutation"]["context"]["tool_args"] == {
-        "action": "remove_file",
-        "name": "demo-skill",
-        "file_path": "references/guide.md",
-    }
+    assert remove_item["mutation"]["type"] == "skill_agent_task"
+    assert remove_item["mutation"]["task_kind"] == "skill_remove_file"
+    assert remove_item["mutation"]["targets"] == {"primary_skill": "demo-skill"}
+    assert "semantic_mutation_agent_requires_review" in remove_item["eligibility"]["reasons"]
 
 
 def test_skill_manage_operation_apply_records_tool_mediated_rollback(tmp_path, monkeypatch):

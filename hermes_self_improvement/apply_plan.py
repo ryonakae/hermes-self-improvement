@@ -848,57 +848,21 @@ def _plan_mutation_for_item(
             base_blockers=base_blockers,
         )
     if change_type == "skill_create":
-        base_mutation, blockers = _plan_create_file_mutation(proposal, target_content)
-        if blockers or base_mutation is None:
-            return base_mutation, blockers
-        skill_name = _skill_name_for_proposal(proposal, target_path, config)
-        mutation = _skill_manage_operation_mutation(
-            action="create",
-            skill_name=skill_name,
-            preview_mutation=base_mutation,
-            content=base_mutation.get("after_text"),
-            category=proposal.get("category") or _skill_category_for_target(skill_name, target_path, config),
-        )
-        return mutation, [] if mutation else ["skill_name_missing"]
+        if target_content is not None:
+            return None, ["target_already_exists"]
+        return _skill_agent_task_mutation(task_kind="skill_create", proposal=proposal, target_path=target_path, config=config)
     if change_type == "skill_delete":
-        base_mutation, blockers = _plan_delete_file_mutation(proposal, target_content)
-        if blockers or base_mutation is None:
-            return base_mutation, blockers
-        skill_name = _skill_name_for_proposal(proposal, target_path, config)
-        mutation = _skill_manage_operation_mutation(action="delete", skill_name=skill_name, preview_mutation=base_mutation)
-        return mutation, [] if mutation else ["skill_name_missing"]
+        if target_content is None:
+            return None, ["target_not_found"]
+        return _skill_agent_task_mutation(task_kind="skill_delete", proposal=proposal, target_path=target_path, config=config)
     if change_type == "skill_write_file":
-        after_text = _replacement_content_from_proposal(proposal)
-        if not isinstance(after_text, str):
+        if _replacement_content_from_proposal(proposal) is None:
             return None, ["replacement_content_missing"]
-        skill_name = _skill_name_for_proposal(proposal, target_path, config)
-        file_path = proposal.get("skill_file_path") or proposal.get("supporting_file_path") or _skill_supporting_file_for_path(skill_name, target_path, config)
-        if not file_path:
-            return None, ["skill_supporting_file_path_missing"]
-        base_mutation = {"type": "replace_entire_file" if target_content is not None else "create_file", "after_text": after_text, "after_hash": _sha256_text(after_text)}
-        mutation = _skill_manage_operation_mutation(
-            action="write_file",
-            skill_name=skill_name,
-            preview_mutation=base_mutation,
-            file_path=str(file_path),
-            file_content=after_text,
-        )
-        return mutation, [] if mutation else ["skill_name_missing"]
+        return _skill_agent_task_mutation(task_kind="skill_write_file", proposal=proposal, target_path=target_path, config=config)
     if change_type == "skill_remove_file":
-        base_mutation, blockers = _plan_delete_file_mutation(proposal, target_content)
-        if blockers or base_mutation is None:
-            return base_mutation, blockers
-        skill_name = _skill_name_for_proposal(proposal, target_path, config)
-        file_path = proposal.get("skill_file_path") or proposal.get("supporting_file_path") or _skill_supporting_file_for_path(skill_name, target_path, config)
-        if not file_path:
-            return None, ["skill_supporting_file_path_missing"]
-        mutation = _skill_manage_operation_mutation(
-            action="remove_file",
-            skill_name=skill_name,
-            preview_mutation=base_mutation,
-            file_path=str(file_path),
-        )
-        return mutation, [] if mutation else ["skill_name_missing"]
+        if target_content is None:
+            return None, ["target_not_found"]
+        return _skill_agent_task_mutation(task_kind="skill_remove_file", proposal=proposal, target_path=target_path, config=config)
     if change_type == "skill_rename":
         return _skill_agent_task_mutation(task_kind="skill_rename", proposal=proposal, target_path=target_path, config=config)
     if change_type == "skill_merge":
@@ -912,17 +876,11 @@ def _plan_mutation_for_item(
     if change_type == "evaluator_promote":
         return _plan_evaluator_promote_mutation(proposal, target_content)
     if change_type == "skill_large_rewrite":
-        base_mutation, blockers = _plan_replace_entire_file_mutation(proposal, target_content)
-        if blockers or base_mutation is None:
-            return base_mutation, blockers
-        skill_name = _skill_name_for_proposal(proposal, target_path, config)
-        mutation = _skill_manage_operation_mutation(
-            action="edit",
-            skill_name=skill_name,
-            preview_mutation=base_mutation,
-            content=base_mutation.get("after_text"),
-        )
-        return mutation, [] if mutation else ["skill_name_missing"]
+        if target_content is None:
+            return None, ["target_not_found"]
+        if not isinstance(_replacement_content_from_proposal(proposal), str):
+            return None, ["replacement_content_missing"]
+        return _skill_agent_task_mutation(task_kind="skill_large_rewrite", proposal=proposal, target_path=target_path, config=config)
     if change_type in _APPROVAL_REQUIRED_REPLACE_ENTIRE_FILE_TYPES:
         return _plan_replace_entire_file_mutation(proposal, target_content)
     heading_sets = {
