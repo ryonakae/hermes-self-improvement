@@ -1,29 +1,51 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+from pathlib import Path
 
 import pytest
 
 from hermes_self_improvement.mutation_backend import HermesAuxiliaryMutationBackend, SkillToolExecutor, mutation_backend_status
 
 
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _write_temp_skill(root: Path, name: str, content: str) -> Path:
+    skill_dir = root / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    path = skill_dir / "SKILL.md"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
 def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools(tmp_path):
-    skills: dict[str, str] = {
-        "demo-skill": "---\nname: demo-skill\ndescription: Demo\n---\n\n# Demo\n\nOld guidance.\n"
-    }
-    before = skills["demo-skill"]
+    temp_skills_root = tmp_path / "skills"
+    production_sentinel = tmp_path / "production-skills" / "do-not-touch" / "SKILL.md"
+    production_sentinel.parent.mkdir(parents=True)
+    production_sentinel.write_text("production sentinel", encoding="utf-8")
+    before = "---\nname: demo-skill\ndescription: Demo\n---\n\n# Demo\n\nOld guidance.\n"
+    skill_path = _write_temp_skill(temp_skills_root, "demo-skill", before)
+    before_hash = _sha256(skill_path.read_text(encoding="utf-8"))
 
     def fake_list(**kwargs):
-        return {"success": True, "skills": [{"name": name} for name in sorted(skills)]}
+        return {"success": True, "skills": [{"name": path.parent.name} for path in sorted(temp_skills_root.glob("*/SKILL.md"))]}
 
     def fake_view(name: str, **kwargs):
-        return {"success": name in skills, "content": skills.get(name, "")}
+        path = temp_skills_root / name / "SKILL.md"
+        return {"success": path.exists(), "content": path.read_text(encoding="utf-8") if path.exists() else ""}
 
     def fake_manage(action: str, name: str, old_string: str = "", new_string: str = "", **kwargs):
-        if action != "patch" or name not in skills or old_string not in skills[name]:
+        path = temp_skills_root / name / "SKILL.md"
+        if action != "patch" or not path.exists():
             return json.dumps({"success": False, "error": "patch_failed"})
-        skills[name] = skills[name].replace(old_string, new_string, 1)
+        content = path.read_text(encoding="utf-8")
+        if old_string not in content:
+            return json.dumps({"success": False, "error": "patch_failed"})
+        path.write_text(content.replace(old_string, new_string, 1), encoding="utf-8")
         return json.dumps({"success": True})
 
     responses = iter([
@@ -46,18 +68,25 @@ def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools
     result = backend.run("Improve demo-skill", {"type": "skill_agent_task", "targets": {"primary_skill": "demo-skill"}}, {})
 
     assert result["success"] is True
-    assert "Improved guidance." in skills["demo-skill"]
-    assert before != skills["demo-skill"]
-    assert result["used_tools"] == [{"tool": "skill_view", "name": "demo-skill"}, {"tool": "skill_manage", "action": "patch", "name": "demo-skill"}]
+    assert "Improved guidance." in skill_path.read_text(encoding="utf-8")
+    assert before_hash != _sha256(skill_path.read_text(encoding="utf-8"))
+    assert production_sentinel.read_text(encoding="utf-8") == "production sentinel"
+    assert result["used_tools"] == [
+        {"tool": "skill_view", "success": True, "name": "demo-skill"},
+        {"tool": "skill_manage", "success": True, "action": "patch", "name": "demo-skill"},
+    ]
 
     # deterministic rollback smoke for the disposable local fixture
-    skills["demo-skill"] = before
-    assert skills["demo-skill"] == before
+    skill_path.write_text(before, encoding="utf-8")
+    assert _sha256(skill_path.read_text(encoding="utf-8")) == before_hash
+    assert production_sentinel.read_text(encoding="utf-8") == "production sentinel"
 
 
 @pytest.mark.skipif(os.environ.get("HERMES_SELF_IMPROVE_LIVE_MUTATION_SMOKE") != "1", reason="live smoke is opt-in")
 def test_live_mutation_backend_smoke_isolated_status_only(tmp_path, monkeypatch):
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes-home"))
+    hermes_home = tmp_path / "hermes-home"
+    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+    assert not Path.home().joinpath(".hermes", "skills").resolve().is_relative_to(tmp_path.resolve())
     status = mutation_backend_status({"mutation": {"backend": "hermes_auxiliary_tool_loop", "enabled": True}})
     if not status.get("available"):
         pytest.skip(f"mutation backend unavailable: {status.get('reason')}")
