@@ -127,3 +127,27 @@ def test_memory_rollback_preview_blocks_when_current_state_hash_mismatches():
 
     assert result["status"] == "failed"
     assert "memory_state_hash_mismatch" in result["reasons"]
+
+
+def test_memory_rollback_execute_remains_blocked_without_cache_visibility_proof():
+    preview = plan_memory_ledger_bound_restore({
+        "target_kind": "memory",
+        "provider": "built-in",
+        "restore_mode": "memory_tool_compensating_action_pending_validation",
+        "operation": "memory_add",
+        "content_hash": "added-hash",
+        "tool_args_hash": "tool-hash",
+    })
+    result = memory_ledger_bound_restore({
+        "target_kind": "memory",
+        "provider": "built-in",
+        "restore_mode": "memory_tool_compensating_action_pending_validation",
+        "operation": "memory_add",
+        "content_hash": "added-hash",
+        "tool_args_hash": "tool-hash",
+    }, execute=True)
+
+    assert preview["status"] == "would_restore_memory_via_memory_tool"
+    assert result["status"] == "failed"
+    assert "unsupported_pending_store_validation" in result["reasons"]
+    assert result["target_changed"] is False
