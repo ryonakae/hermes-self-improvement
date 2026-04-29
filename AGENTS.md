@@ -98,7 +98,7 @@ PY
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
 - `hermes_self_improvement/apply_engine.py`: mutation と rollback ledger
 - `hermes_self_improvement/mutation_policy.py`: memory provider capability policy、strategy resolver、skill/memory mutation context builder
-- `hermes_self_improvement/mutation_worker.py`: tool-mediated executor。skill mutation は `skill_manage` の許可 action のみ
+- `hermes_self_improvement/mutation_worker.py`: tool-mediated executor。skill mutation は `skill_manage`、built-in memory は `memory`、外部 memory は provider-native correction/delete tool のみ
 - `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、calibration rollback
 - `hermes_self_improvement/tool_handlers.py`: plugin tools
 - `evals/proposal/`: offline scorer の repo-tracked public proposal eval assets。`rubric.json` は scorer contract、`cases.jsonl` は bundled golden regression seed。runtime/private eval cases は将来 `${HERMES_HOME:-~/.hermes}/self-improvement/evals/proposal/` に分ける。

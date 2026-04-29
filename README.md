@@ -257,7 +257,7 @@ defaults
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
 - `hermes_self_improvement/apply_engine.py`: mutation と rollback ledger
 - `hermes_self_improvement/mutation_policy.py`: provider-aware memory mutation policy と skill/memory context builder
-- `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor。skill mutation は `skill_manage` の許可 action だけ実行可
+- `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor。skill mutation は `skill_manage`、built-in memory は `memory`、外部 memory は provider-native correction/delete tool だけ実行可
 - `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、rollback
 - `hermes_self_improvement/ledger.py`: ledger helpers
 - `hermes_self_improvement/tool_handlers.py`: plugin tools。root 直下の `tools.py` は置かない
