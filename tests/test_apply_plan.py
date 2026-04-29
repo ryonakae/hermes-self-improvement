@@ -143,6 +143,7 @@ def test_build_apply_plan_includes_versioned_metadata_and_safe_default_items(tmp
         proposals=sample_proposals(),
         summary={"event_count": 10},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=created_at,
     )
 
@@ -201,6 +202,7 @@ def test_build_apply_plan_marks_resolved_items_ready_and_orders_steps(tmp_path):
         proposals=[second, first],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -225,6 +227,7 @@ def test_build_apply_plan_marks_duplicate_text_edits_rejected_by_planner(tmp_pat
         proposals=[first, second],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -307,6 +310,7 @@ def test_build_apply_plan_blocks_unattended_apply_for_non_compare_scorer(tmp_pat
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -331,6 +335,7 @@ def test_build_apply_plan_resolves_existing_target_path_and_before_hash(tmp_path
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -355,6 +360,7 @@ def test_build_apply_plan_plans_pitfall_mutation_for_existing_pitfalls_section(t
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -382,6 +388,7 @@ def test_build_apply_plan_plans_validation_mutation_for_existing_validation_sect
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -410,6 +417,7 @@ def test_build_apply_plan_fails_closed_when_validation_section_is_missing(tmp_pa
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -431,6 +439,7 @@ def test_build_apply_plan_plans_typo_fix_for_safe_prose_line(tmp_path):
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -459,6 +468,7 @@ def test_build_apply_plan_rejects_typo_fix_inside_code_fence(tmp_path):
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -488,6 +498,7 @@ def test_build_apply_plan_rejects_typo_fix_in_inline_code_url_or_frontmatter(tmp
             proposals=[proposal],
             summary={},
             execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
             created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
         )
 
@@ -507,6 +518,7 @@ def test_build_apply_plan_rejects_typo_fix_when_text_is_not_unique(tmp_path):
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -529,7 +541,7 @@ def test_build_apply_plan_resolves_explicit_custom_skill_hint_inside_configured_
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
-        config={"custom_skill_roots": [str(skill_root)]},
+        config={"_mutable_local_skill_roots": [str(skill_root)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -553,7 +565,7 @@ def test_build_apply_plan_refuses_unsafe_custom_skill_hint(tmp_path):
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
-        config={"custom_skill_roots": [str(skill_root)]},
+        config={"_mutable_local_skill_roots": [str(skill_root)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -574,6 +586,7 @@ def test_build_apply_plan_fails_closed_when_pitfall_section_is_missing(tmp_path)
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -594,6 +607,7 @@ def test_build_apply_plan_fails_closed_when_target_path_does_not_exist(tmp_path)
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -616,6 +630,7 @@ def test_build_apply_plan_includes_rollback_preview_for_eligible_append_mutation
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -654,6 +669,7 @@ def test_build_apply_plan_includes_full_before_snapshot_even_when_preview_is_tru
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -669,6 +685,7 @@ def test_write_apply_plan_uses_self_improvement_root_and_date_partition(tmp_path
         proposals=sample_proposals(),
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=created_at,
     )
 
@@ -706,6 +723,7 @@ def test_build_apply_plan_plans_stale_path_fix_only_with_verified_canonical_repl
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -731,6 +749,7 @@ def test_build_apply_plan_rejects_stale_path_without_independent_canonical_verif
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -752,6 +771,7 @@ def test_build_apply_plan_rejects_stale_fix_when_old_reference_is_not_unique(tmp
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -774,6 +794,7 @@ def test_build_apply_plan_rejects_stale_fix_from_untrusted_verification_source(t
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
 
@@ -806,6 +827,7 @@ def test_build_apply_plan_supports_approval_required_large_rewrite_replace_entir
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 27, 18, 0, tzinfo=timezone.utc),
     )
 
@@ -842,6 +864,7 @@ def test_build_apply_plan_rejects_large_rewrite_without_after_text(tmp_path):
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 27, 18, 0, tzinfo=timezone.utc),
     )
 
@@ -876,6 +899,7 @@ def test_build_apply_plan_supports_approval_required_skill_create_file(tmp_path)
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 28, 10, 0, tzinfo=timezone.utc),
     )
 
@@ -915,6 +939,7 @@ def test_build_apply_plan_rejects_skill_create_when_target_exists(tmp_path):
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 28, 10, 0, tzinfo=timezone.utc),
     )
 
@@ -947,6 +972,7 @@ def test_build_apply_plan_supports_approval_required_skill_delete_file(tmp_path)
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 28, 10, 0, tzinfo=timezone.utc),
     )
 
@@ -991,6 +1017,7 @@ def test_build_apply_plan_supports_approval_required_skill_rename_file(tmp_path)
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc),
     )
 
@@ -1025,6 +1052,7 @@ def test_build_apply_plan_rejects_skill_rename_when_destination_exists(tmp_path)
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc),
     )
 
@@ -1064,6 +1092,7 @@ def test_build_apply_plan_supports_approval_required_skill_merge_files(tmp_path)
         proposals=[proposal],
         summary={},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path.parent)]},
         created_at=datetime(2026, 4, 28, 14, 0, tzinfo=timezone.utc),
     )
 
@@ -1144,3 +1173,79 @@ def test_build_apply_plan_rejects_memory_delete_outside_allowed_roots(tmp_path):
     assert item["change_type"] == "memory_delete"
     assert item["mutation"] is None
     assert "memory_target_outside_allowed_roots" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_refuses_explicit_external_skill_path(tmp_path):
+    mod = load_plugin_module()
+    local_root = tmp_path / "local-skills"
+    external_root = tmp_path / "external-skills"
+    external_skill = external_root / "external-skill"
+    external_skill.mkdir(parents=True)
+    external_file = external_skill / "SKILL.md"
+    external_file.write_text("# External\n\n## Pitfalls\n- Existing note\n", encoding="utf-8")
+    proposal = sample_pitfall_proposal()
+    proposal["target_path"] = str(external_file)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(local_root)]},
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["target_path"] == str(external_file)
+    assert item["target_exists"] is True
+    assert item["mutation"]["type"] == "append_to_existing_section"
+    assert item["eligible_for_unattended"] is False
+    assert "skill_name_missing_for_tool_mediated_append" in item["eligibility"]["reasons"]
+    assert "direct_file_mutation_unsupported" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_ignores_legacy_custom_skill_roots_for_mutation(tmp_path):
+    mod = load_plugin_module()
+    legacy_root = tmp_path / "legacy-custom-root"
+    skill_dir = legacy_root / "legacy-skill"
+    skill_dir.mkdir(parents=True)
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text("# Legacy\n\n## Pitfalls\n- Existing note\n", encoding="utf-8")
+    proposal = sample_pitfall_proposal()
+    proposal["target_skill"] = "legacy-skill"
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"custom_skill_roots": [str(legacy_root)]},
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["target_path"] != str(skill_file)
+    assert item["target_exists"] is False
+    assert item["eligible_for_unattended"] is False
+
+
+def test_build_apply_plan_refuses_hub_or_builtin_skill_name(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    skill_dir = tmp_path / "skills" / "hub-skill"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("# Hub skill\n\nUse teh browser.\n", encoding="utf-8")
+    monkeypatch.setitem(mod.build_apply_plan.__globals__, "_skill_is_hub_or_builtin", lambda name: name == "hub-skill")
+    proposal = sample_typo_proposal()
+    proposal["target_skill"] = "hub-skill"
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
+        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["target_exists"] in (False, None)
+    assert item["mutation"] is None
+    assert item["eligible_for_unattended"] is False
+    assert "mutation_plan_missing" in item["eligibility"]["reasons"]

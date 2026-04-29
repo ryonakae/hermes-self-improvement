@@ -21,7 +21,8 @@ def load_plugin_module():
 def write_applied_ledger(tmp_path, monkeypatch):
     mod = load_plugin_module()
     import hermes_self_improvement.apply_engine as apply_engine
-    target = tmp_path / "SKILL.md"
+    target = tmp_path / "skills" / "demo-skill" / "SKILL.md"
+    target.parent.mkdir(parents=True)
     target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
     proposal = {
         "id": "proposal-4",
@@ -41,13 +42,14 @@ def write_applied_ledger(tmp_path, monkeypatch):
         "old_text": "teh",
         "new_text": "the",
     }
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [str(tmp_path / "skills")]}
     plan = mod.build_apply_plan(
         proposals=[proposal],
         summary={"event_count": 10},
         execution_mode="dry_run_plan",
+        config=config,
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
-    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     mod.write_apply_plan(plan, config)
 
     def fake_execute(tool_args):

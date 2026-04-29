@@ -88,8 +88,16 @@ def _path_inside_root(candidate: Path, root: Path) -> bool:
         return False
 
 
-def _custom_skill_roots(config: dict[str, Any] | None) -> list[Path]:
-    roots = (config or {}).get("custom_skill_roots")
+def _mutable_local_skill_roots(config: dict[str, Any] | None) -> list[Path]:
+    """Return skill roots that may be mutated via skill_manage.
+
+    Hermes' skill_manage tool treats only $HERMES_HOME/skills as writable;
+    built-in skills, hub-installed skills, plugin-bundled skills, and
+    skills.external_dirs are read-only from this plugin's perspective. Tests may
+    pass _mutable_local_skill_roots to sandbox this root.
+    """
+    cfg = config or {}
+    roots = cfg.get("_mutable_local_skill_roots")
     if roots is None:
         roots = [get_hermes_home() / "skills"]
     if isinstance(roots, (str, Path)):
@@ -97,6 +105,76 @@ def _custom_skill_roots(config: dict[str, Any] | None) -> list[Path]:
     if not isinstance(roots, list):
         return []
     return [Path(str(root)).expanduser() for root in roots if root]
+
+
+def _configured_mutable_roots(config: dict[str, Any] | None) -> bool:
+    cfg = config or {}
+    return bool(cfg.get("_mutable_local_skill_roots"))
+
+
+def _skill_is_hub_or_builtin(name: str) -> bool:
+    try:
+        from tools.skills_hub import HubLockFile  # type: ignore
+        if name in {entry.get("name") for entry in HubLockFile().list_installed()}:
+            return True
+    except Exception:
+        pass
+    try:
+        from tools.skills_sync import _read_manifest  # type: ignore
+        if name in set(_read_manifest() or []):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _find_mutable_local_skill_dir(name: str, config: dict[str, Any] | None = None) -> Path | None:
+    if not name or _skill_is_hub_or_builtin(name):
+        return None
+    if _configured_mutable_roots(config):
+        for root in _mutable_local_skill_roots(config):
+            for skill_md in root.rglob("SKILL.md") if root.exists() else []:
+                if skill_md.parent.name == name:
+                    return skill_md.parent
+        return None
+    try:
+        from tools.skill_manager_tool import _find_skill, _is_local_skill  # type: ignore
+        existing = _find_skill(name)
+        if not existing:
+            return None
+        skill_dir = Path(existing["path"])
+        if _is_local_skill(skill_dir) and not _skill_is_hub_or_builtin(name):
+            return skill_dir
+        return None
+    except Exception:
+        if _skill_is_hub_or_builtin(name):
+            return None
+        for root in _mutable_local_skill_roots(config):
+            for skill_md in root.rglob("SKILL.md") if root.exists() else []:
+                if skill_md.parent.name == name:
+                    return skill_md.parent
+        return None
+
+
+def _known_non_mutable_skill(name: str, config: dict[str, Any] | None = None) -> bool:
+    if not name:
+        return False
+    if _skill_is_hub_or_builtin(name):
+        return True
+    if _configured_mutable_roots(config):
+        return False
+    try:
+        from tools.skill_manager_tool import _find_skill, _is_local_skill  # type: ignore
+        existing = _find_skill(name)
+        return bool(existing and not _is_local_skill(Path(existing["path"])))
+    except Exception:
+        return False
+
+
+def _custom_skill_roots(config: dict[str, Any] | None) -> list[Path]:
+    # Backward-compatible internal name: mutation planning intentionally uses
+    # only mutable local skill roots, not arbitrary configured read roots.
+    return _mutable_local_skill_roots(config)
 
 
 def _memory_roots(config: dict[str, Any] | None) -> list[Path]:
@@ -125,6 +203,11 @@ def _custom_skill_path_for_proposal(proposal: dict[str, Any], config: dict[str, 
             break
     if not skill_name:
         return None
+    skill_dir = _find_mutable_local_skill_dir(skill_name, config)
+    if skill_dir:
+        return str(skill_dir / "SKILL.md")
+    if _known_non_mutable_skill(skill_name, config):
+        return None
     for root in _custom_skill_roots(config):
         candidate = root / skill_name / "SKILL.md"
         if _path_inside_root(candidate, root):
@@ -135,7 +218,7 @@ def _custom_skill_path_for_proposal(proposal: dict[str, Any], config: dict[str, 
 def _skill_name_for_proposal(proposal: dict[str, Any], target_path: str | None = None, config: dict[str, Any] | None = None) -> str | None:
     for key in ("target_skill", "skill_name", "skill"):
         name = _safe_relative_name(proposal.get(key))
-        if name and len(Path(name).parts) == 1:
+        if name and len(Path(name).parts) == 1 and not _known_non_mutable_skill(name, config):
             return name
     if target_path:
         candidate = Path(str(target_path)).expanduser()
@@ -146,11 +229,11 @@ def _skill_name_for_proposal(proposal: dict[str, Any], target_path: str | None =
                 continue
             parts = relative.parts
             if len(parts) >= 2 and parts[-1] == "SKILL.md":
-                return parts[-2]
-        if candidate.name == "SKILL.md" and candidate.parent.name:
-            return candidate.parent.name
-        if candidate.parent.parent.name:
-            return candidate.parent.parent.name
+                name = parts[-2]
+                return name if not _known_non_mutable_skill(name, config) else None
+            if len(parts) >= 3 and parts[1] in {"references", "templates", "scripts", "assets"}:
+                name = parts[0]
+                return name if not _known_non_mutable_skill(name, config) else None
     return None
 
 

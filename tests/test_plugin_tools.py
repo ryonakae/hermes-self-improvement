@@ -47,7 +47,8 @@ def parse_tool_payload(raw: str) -> dict:
 
 
 def _write_simple_plan(mod, tmp_path: Path):
-    target = tmp_path / "SKILL.md"
+    target = tmp_path / "skills" / "demo-skill" / "SKILL.md"
+    target.parent.mkdir(parents=True)
     target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
     proposal = {
         "id": "proposal-tool-apply",
@@ -67,12 +68,13 @@ def _write_simple_plan(mod, tmp_path: Path):
         proposals=[proposal],
         summary={"event_count": 10},
         execution_mode="preview",
-        config={"_self_improvement_root": str(tmp_path / "self-improvement")},
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [str(tmp_path / "skills")]},
         created_at=datetime(2026, 4, 28, 15, 30, tzinfo=timezone.utc),
     )
     config = {
         "_self_improvement_root": str(tmp_path / "self-improvement"),
         "apply_policy": {"allowed_target_kinds": ["skill", "memory", "file_workflow_skills"]},
+        "_mutable_local_skill_roots": [str(tmp_path / "skills")],
     }
     mod.write_apply_plan(plan, config)
     return config, plan, target

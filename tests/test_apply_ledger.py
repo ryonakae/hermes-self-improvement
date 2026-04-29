@@ -21,7 +21,8 @@ def load_plugin_module():
 
 def eligible_plan_with_one_item(tmp_path):
     mod = load_plugin_module()
-    target = tmp_path / "SKILL.md"
+    target = tmp_path / "demo-skill" / "SKILL.md"
+    target.parent.mkdir(parents=True)
     original = "# Skill\n\n## Pitfalls\n- Existing note\n"
     target.write_text(original, encoding="utf-8")
     proposal = {
@@ -45,6 +46,7 @@ def eligible_plan_with_one_item(tmp_path):
         proposals=[proposal],
         summary={"event_count": 10},
         execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path)]},
         created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
     )
     return mod, plan, plan["items"][0], target, original

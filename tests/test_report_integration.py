@@ -104,6 +104,7 @@ def test_run_pipeline_report_includes_plan_apply_and_calibration_summaries(tmp_p
     mod = load_plugin_module()
     config = {
         "_self_improvement_root": str(tmp_path / "self-improvement"),
+        "_mutable_local_skill_roots": [str(tmp_path)],
     }
     create_plan_and_apply_ledger(mod, tmp_path, config)
     create_needs_review_plan(mod, tmp_path, config)

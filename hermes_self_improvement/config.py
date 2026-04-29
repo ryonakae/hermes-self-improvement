@@ -50,7 +50,6 @@ def _default_config() -> dict[str, Any]:
         "enabled": True,
         "preview_chars": DEFAULT_PREVIEW_CHARS,
         "retention_days": DEFAULT_RETENTION_DAYS,
-        "custom_skill_roots": [str(get_hermes_home() / "skills")],
         "apply_policy": copy.deepcopy(DEFAULT_APPLY_POLICY),
         "calibration": copy.deepcopy(DEFAULT_CALIBRATION),
         "model": {

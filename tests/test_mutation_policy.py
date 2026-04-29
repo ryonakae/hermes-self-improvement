@@ -123,7 +123,7 @@ def test_skill_patch_plan_uses_skill_manage_context(tmp_path):
         }],
         summary={},
         execution_mode="preview",
-        config={"custom_skill_roots": [str(tmp_path / "skills")]},
+        config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
     )
 
     item = plan["items"][0]
@@ -272,7 +272,7 @@ def test_skill_write_and_remove_file_plan_use_skill_manage_context(tmp_path):
         }],
         summary={},
         execution_mode="preview",
-        config={"custom_skill_roots": [str(tmp_path / "skills")]},
+        config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
     )
     write_item = write_plan["items"][0]
     assert write_item["mutation"]["type"] == "skill_manage_operation"
@@ -297,7 +297,7 @@ def test_skill_write_and_remove_file_plan_use_skill_manage_context(tmp_path):
         }],
         summary={},
         execution_mode="preview",
-        config={"custom_skill_roots": [str(tmp_path / "skills")]},
+        config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
     )
     remove_item = remove_plan["items"][0]
     assert remove_item["mutation"]["type"] == "skill_manage_operation"
