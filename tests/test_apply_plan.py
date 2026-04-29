@@ -1027,8 +1027,9 @@ def test_build_apply_plan_supports_approval_required_skill_rename_file(tmp_path)
     assert item["destination_path"] == str(destination)
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["unsupported_skill_manage_operation", "mutation_plan_missing"]}
-    assert item["mutation"] is None
+    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["semantic_mutation_agent_requires_review"]}
+    assert item["mutation"]["type"] == "skill_agent_task"
+    assert item["mutation"]["task_kind"] == "skill_rename"
     assert item["rollback_preview"] is None
 
 
@@ -1059,7 +1060,7 @@ def test_build_apply_plan_rejects_skill_rename_when_destination_exists(tmp_path)
     item = plan["items"][0]
     assert item["change_type"] == "skill_rename"
     assert item["mutation"] is None
-    assert "unsupported_skill_manage_operation" in item["eligibility"]["reasons"]
+    assert "destination_already_exists" in item["eligibility"]["reasons"]
 
 
 def test_build_apply_plan_supports_approval_required_skill_merge_files(tmp_path):
@@ -1102,8 +1103,10 @@ def test_build_apply_plan_supports_approval_required_skill_merge_files(tmp_path)
     assert item["source_path"] == str(source)
     assert item["eligible_for_unattended"] is False
     assert item["requires_approval"] is True
-    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["unsupported_skill_manage_operation", "mutation_plan_missing"]}
-    assert item["mutation"] is None
+    assert item["eligibility"] == {"status": "not_eligible", "reasons": ["semantic_mutation_agent_requires_review"]}
+    assert item["mutation"]["type"] == "skill_agent_task"
+    assert item["mutation"]["task_kind"] == "skill_merge"
+    assert item["mutation"]["verification_contract"]["llm_judge_required"] is True
     assert item["rollback_preview"] is None
 
 
@@ -1249,3 +1252,150 @@ def test_build_apply_plan_refuses_hub_or_builtin_skill_name(tmp_path, monkeypatc
     assert item["mutation"] is None
     assert item["eligible_for_unattended"] is False
     assert "mutation_plan_missing" in item["eligibility"]["reasons"]
+
+
+
+def _write_local_skill(root: Path, name: str) -> Path:
+    skill_dir = root / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(f"---\nname: {name}\ndescription: Test skill\n---\n\n# {name}\n", encoding="utf-8")
+    return skill_dir
+
+
+def test_build_apply_plan_plans_skill_rename_as_agent_task_needs_review(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    _write_local_skill(skills_root, "old-skill")
+    proposal = {
+        "id": "proposal-rename",
+        "title": "Rename old skill",
+        "target": "skill",
+        "action": "skill_rename",
+        "change_type": "skill_rename",
+        "source_skill": "old-skill",
+        "new_skill": "new-skill",
+        "risk": "medium",
+        "confidence": "high",
+        "score": 80,
+        "recommendation": "needs_review",
+        "scorer": "compare-v0.1",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [skills_root]},
+        created_at=datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["status"] == "needs_review"
+    assert item["eligible_for_unattended"] is False
+    assert item["mutation"]["type"] == "skill_agent_task"
+    assert item["mutation"]["task_kind"] == "skill_rename"
+    assert item["mutation"]["targets"] == {"source_skill": "old-skill", "new_skill": "new-skill"}
+    assert "semantic_mutation_agent_requires_review" in item["eligibility"]["reasons"]
+
+
+def test_build_apply_plan_plans_skill_merge_as_agent_task_with_llm_judge_contract(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    _write_local_skill(skills_root, "source-skill")
+    dest = _write_local_skill(skills_root, "dest-skill")
+    proposal = {
+        "id": "proposal-merge",
+        "title": "Merge duplicate skill",
+        "target": "skill",
+        "action": "skill_merge",
+        "change_type": "skill_merge",
+        "target_skill": "dest-skill",
+        "source_skill": "source-skill",
+        "target_path": str(dest / "SKILL.md"),
+        "risk": "medium",
+        "confidence": "high",
+        "score": 82,
+        "recommendation": "needs_review",
+        "scorer": "compare-v0.1",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [skills_root]},
+        created_at=datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc),
+    )
+
+    mutation = plan["items"][0]["mutation"]
+    assert mutation["type"] == "skill_agent_task"
+    assert mutation["task_kind"] == "skill_merge"
+    assert mutation["targets"] == {"primary_skill": "dest-skill", "source_skill": "source-skill"}
+    assert mutation["verification_contract"]["llm_judge_required"] is True
+
+
+def test_skill_agent_task_refuses_non_mutable_skill_targets(tmp_path):
+    mod = load_plugin_module()
+    mutable_root = tmp_path / "skills"
+    external_root = tmp_path / "external"
+    _write_local_skill(external_root, "external-source")
+    proposal = {
+        "id": "proposal-rename-external",
+        "title": "Rename external skill",
+        "target": "skill",
+        "action": "skill_rename",
+        "change_type": "skill_rename",
+        "source_skill": "external-source",
+        "new_skill": "new-skill",
+        "risk": "medium",
+        "confidence": "high",
+        "score": 80,
+        "recommendation": "needs_review",
+        "scorer": "compare-v0.1",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [mutable_root]},
+        created_at=datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["status"] == "needs_review"
+    assert item["mutation"]["type"] == "skill_agent_task"
+    assert "source_skill_not_mutable_local" in item["eligibility"]["reasons"]
+
+
+def test_skill_agent_task_has_no_file_or_terminal_tools_in_constraints(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    _write_local_skill(skills_root, "source-skill")
+    proposal = {
+        "id": "proposal-rename-constraints",
+        "title": "Rename skill with constraints",
+        "target": "skill",
+        "action": "skill_rename",
+        "change_type": "skill_rename",
+        "source_skill": "source-skill",
+        "new_skill": "renamed-skill",
+        "risk": "medium",
+        "confidence": "high",
+        "score": 80,
+        "recommendation": "needs_review",
+        "scorer": "compare-v0.1",
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [skills_root]},
+        created_at=datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc),
+    )
+
+    constraints = "\n".join(plan["items"][0]["mutation"]["constraints"])
+    assert "skills_list" in constraints and "skill_view" in constraints and "skill_manage" in constraints
+    assert "terminal/file/git/direct filesystem" in constraints
+    assert "browser" not in constraints

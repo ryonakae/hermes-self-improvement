@@ -25,6 +25,16 @@ TOOL_MEDIATED_APPLY_MUTATION_TYPES = {
     "memory_tool_operation",
     "memory_provider_tool_operation",
 }
+SEMANTIC_SKILL_AGENT_TASK_KINDS = {
+    "skill_create",
+    "skill_improve",
+    "skill_delete",
+    "skill_rename",
+    "skill_merge",
+    "skill_write_file",
+    "skill_remove_file",
+    "skill_large_rewrite",
+}
 
 def _classify_apply_change_type(proposal: dict[str, Any]) -> str:
     explicit = str(proposal.get("change_type") or "").strip()
@@ -557,6 +567,91 @@ def _skill_manage_operation_mutation(
     }
 
 
+def _skill_agent_task_mutation(
+    *,
+    task_kind: str,
+    proposal: dict[str, Any],
+    target_path: str | None,
+    config: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    if task_kind not in SEMANTIC_SKILL_AGENT_TASK_KINDS:
+        return None, ["skill_agent_task_kind_unsupported"]
+    primary_skill = _skill_name_for_proposal(proposal, target_path, config)
+    source_skill = _safe_relative_name(proposal.get("source_skill") or proposal.get("from_skill") or proposal.get("old_skill"))
+    new_skill = _safe_relative_name(proposal.get("new_skill") or proposal.get("destination_skill") or proposal.get("renamed_skill"))
+    if not source_skill and task_kind == "skill_rename":
+        source_skill = primary_skill
+    if not source_skill and task_kind == "skill_merge" and proposal.get("source_path"):
+        source_skill = _skill_name_for_proposal({}, str(proposal.get("source_path")), config)
+    if not new_skill and task_kind == "skill_rename" and proposal.get("destination_path"):
+        dest = Path(str(proposal.get("destination_path"))).expanduser()
+        if dest.name == "SKILL.md":
+            new_skill = dest.parent.name
+    blockers: list[str] = []
+    targets: dict[str, str] = {}
+    if primary_skill:
+        targets["primary_skill"] = primary_skill
+    if source_skill:
+        targets["source_skill"] = source_skill
+    if new_skill:
+        targets["new_skill"] = new_skill
+
+    if task_kind == "skill_rename":
+        if not source_skill:
+            blockers.append("source_skill_missing")
+        if not new_skill:
+            blockers.append("new_skill_missing")
+        if source_skill and not _find_mutable_local_skill_dir(source_skill, config):
+            blockers.append("source_skill_not_mutable_local")
+        if new_skill and _known_non_mutable_skill(new_skill, config):
+            blockers.append("new_skill_non_mutable")
+        destination_path = proposal.get("destination_path") or proposal.get("new_path") or proposal.get("renamed_path")
+        if destination_path and Path(str(destination_path)).expanduser().exists():
+            return None, ["destination_already_exists"]
+    elif task_kind == "skill_merge":
+        if not source_skill:
+            blockers.append("source_skill_missing")
+        if not primary_skill:
+            blockers.append("primary_skill_missing")
+        if source_skill and not _find_mutable_local_skill_dir(source_skill, config):
+            blockers.append("source_skill_not_mutable_local")
+        if primary_skill and not _find_mutable_local_skill_dir(primary_skill, config):
+            blockers.append("primary_skill_not_mutable_local")
+    elif task_kind in {"skill_improve", "skill_large_rewrite", "skill_delete", "skill_write_file", "skill_remove_file"}:
+        if not primary_skill:
+            blockers.append("primary_skill_missing")
+        elif not _find_mutable_local_skill_dir(primary_skill, config):
+            blockers.append("primary_skill_not_mutable_local")
+    elif task_kind == "skill_create":
+        if not (new_skill or primary_skill):
+            blockers.append("new_skill_missing")
+
+    constraints = [
+        "Use only skills_list, skill_view, skill_manage.",
+        "Do not use terminal/file/git/direct filesystem tools.",
+        "Operate only on mutable local skills resolved by the plugin.",
+        "Do not modify plugin files or arbitrary docs/config targets.",
+    ]
+    instructions = str(proposal.get("instructions") or proposal.get("reason") or proposal.get("title") or f"Perform {task_kind} safely.")
+    mutation = {
+        "type": "skill_agent_task",
+        "task_kind": task_kind,
+        "targets": targets,
+        "instructions": instructions,
+        "constraints": constraints,
+        "expected_outcome": {
+            "target_exists": task_kind not in {"skill_delete"},
+            "source_deleted_after_commit": task_kind in {"skill_rename", "skill_merge"},
+            "frontmatter_name": new_skill if task_kind == "skill_rename" else primary_skill or new_skill,
+        },
+        "verification_contract": {
+            "checklist_required": True,
+            "llm_judge_required": task_kind == "skill_merge",
+        },
+    }
+    return mutation, blockers
+
+
 def _plan_replace_entire_file_mutation(proposal: dict[str, Any], target_content: str | None) -> tuple[dict[str, Any] | None, list[str]]:
     if target_content is None:
         return None, []
@@ -805,9 +900,9 @@ def _plan_mutation_for_item(
         )
         return mutation, [] if mutation else ["skill_name_missing"]
     if change_type == "skill_rename":
-        return None, ["unsupported_skill_manage_operation"]
+        return _skill_agent_task_mutation(task_kind="skill_rename", proposal=proposal, target_path=target_path, config=config)
     if change_type == "skill_merge":
-        return None, ["unsupported_skill_manage_operation"]
+        return _skill_agent_task_mutation(task_kind="skill_merge", proposal=proposal, target_path=target_path, config=config)
     if change_type == "memory_add":
         return _plan_memory_tool_mutation(proposal=proposal, config=config, operation_name="memory_add")
     if change_type == "memory_replace":
@@ -897,6 +992,8 @@ def _eligibility_for_apply_item(
     reasons.extend(mutation_blockers)
     if mutation is None:
         reasons.append("mutation_plan_missing")
+    elif str(mutation.get("type") or "") == "skill_agent_task":
+        reasons.append("semantic_mutation_agent_requires_review")
     elif str(mutation.get("type") or "") not in TOOL_MEDIATED_APPLY_MUTATION_TYPES:
         reasons.append("direct_file_mutation_unsupported")
     if scorer_disagreements:
