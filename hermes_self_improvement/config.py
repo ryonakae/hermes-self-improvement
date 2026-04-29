@@ -82,7 +82,10 @@ def _default_config() -> dict[str, Any]:
             },
         },
         "mutation": {
-            "backend": "hermes_agent",
+            "backend": "hermes_auxiliary_tool_loop",
+            "enabled": True,
+            "max_tool_calls": 8,
+            "max_iterations": 6,
         },
         "llm_scorer": {
             "provider": "auto",

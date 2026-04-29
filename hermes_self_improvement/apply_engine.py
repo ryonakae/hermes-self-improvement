@@ -14,12 +14,13 @@ try:  # pragma: no cover - package import path
         _apply_replace_text_once,
     )
     from .config import apply_policy_allows_item, normalize_apply_policy
+    from .mutation_backend import build_mutation_backend
     from .mutation_agent import run_skill_agent_task
     from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from .observer import _reports_dir, _sha256_text, _stable_json
     from .recovery_engine import ledger_bound_restore, recovery_action_from_snapshots
     from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
-    from .verification import verify_skill_merge_phase, verify_skill_rename_phase
+    from .verification import build_merge_judge, verify_skill_merge_phase, verify_skill_rename_phase
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_plan import (
         _apply_append_to_existing_section,
@@ -29,12 +30,13 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _apply_replace_text_once,
     )
     from config import apply_policy_allows_item, normalize_apply_policy
+    from mutation_backend import build_mutation_backend
     from mutation_agent import run_skill_agent_task
     from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from observer import _reports_dir, _sha256_text, _stable_json
     from recovery_engine import ledger_bound_restore, recovery_action_from_snapshots
     from skill_snapshot import SkillSnapshotError, capture_skill_snapshot
-    from verification import verify_skill_merge_phase, verify_skill_rename_phase
+    from verification import build_merge_judge, verify_skill_merge_phase, verify_skill_rename_phase
 
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -247,7 +249,7 @@ def _run_lifecycle_skill_agent_mutation(
             before_snapshots=before_snapshots,
             after_snapshots=after_phase1,
             agent_result=agent_result,
-            judge=config.get("_merge_judge") if callable(config.get("_merge_judge")) else None,
+            judge=build_merge_judge(config),
         )
     else:
         return {"status": "failed", "reasons": ["unsupported_lifecycle_task_kind"]}
@@ -310,7 +312,7 @@ def _run_skill_agent_mutation(
         result["status"] = "would_apply"
         result["would_run_mutation_agent"] = True
         return result
-    backend = config.get("_mutation_agent_backend") if isinstance(config, dict) else None
+    backend = build_mutation_backend(config)
     agent_result = run_skill_agent_task(mutation, config=config, backend=backend)
     result["agent_result"] = agent_result
     if not agent_result.get("success"):
