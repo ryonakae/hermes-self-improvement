@@ -17,8 +17,10 @@ try:  # pragma: no cover - package import path
         DEFAULT_RETENTION_DAYS,
         load_config,
     )
+    from .mutation_backend import mutation_backend_status
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
+    from .verification import merge_judge_status
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import AnalysisResult, analyze_events
     from apply_engine import apply_plan, rollback_apply_ledger
@@ -28,8 +30,10 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         DEFAULT_RETENTION_DAYS,
         load_config,
     )
+    from mutation_backend import mutation_backend_status
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
+    from verification import merge_judge_status
 
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -1096,6 +1100,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "last_event_ts": events[-1].get("ts") if events else None,
             "gepa_scorer_mode": (config.get("gepa_scorer") or {}).get("mode") if isinstance(config.get("gepa_scorer"), dict) else None,
             "dspy_available": importlib.util.find_spec("dspy") is not None,
+            "mutation_backend": mutation_backend_status(config),
+            "merge_judge": merge_judge_status(config),
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
