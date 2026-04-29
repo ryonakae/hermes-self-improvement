@@ -333,6 +333,7 @@ def test_apply_execute_with_fake_mutation_agent_updates_skill_and_writes_snapsho
             "success": True,
             "task_kind": "skill_improve",
             "used_tools": [{"tool": "skill_view", "target": "demo-skill"}, {"tool": "skill_manage", "action": "edit", "name": "demo-skill"}],
+            "tool_trace": [{"tool": "skill_view", "success": True, "name": "demo-skill"}, {"tool": "skill_manage", "action": "edit", "name": "demo-skill", "success": True}],
             "changed_skills": ["demo-skill"],
             "created_skills": [],
             "deleted_skills": [],
@@ -357,6 +358,8 @@ def test_apply_execute_with_fake_mutation_agent_updates_skill_and_writes_snapsho
     rollback = ledger["items"][0]["rollback_data"]
     assert rollback["rollback_strategy"] == "ledger_bound_restore"
     assert "demo-skill" in rollback["ledger_bound_restore"]
+    assert ledger["items"][0]["verification"]["tool_trace_verified"] is True
+    assert ledger["items"][0]["verification"]["tool_trace"][1]["tool"] == "skill_manage"
 
 
 def test_apply_execute_rejects_agent_result_with_disallowed_tool(tmp_path):
@@ -392,6 +395,78 @@ def test_apply_execute_rejects_agent_result_with_disallowed_tool(tmp_path):
 
     assert result["summary"]["failed"] == 1
     assert "disallowed_tool_reported" in result["items"][0]["reasons"]
+
+
+def test_apply_verification_rejects_trace_target_not_in_allowed_skill_names(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    skill_dir = _write_skill(skills_root, "demo-skill", "# Before\n")
+    item = _skill_agent_item(mod)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-agent-trace-target", "items": [item]})
+
+    def bad_trace_backend(prompt, task, config):
+        (skill_dir / "SKILL.md").write_text("---\nname: demo-skill\ndescription: Test skill\n---\n\n# After\n", encoding="utf-8")
+        return {
+            "success": True,
+            "task_kind": "skill_improve",
+            "used_tools": [{"tool": "skill_view", "target": "demo-skill"}, {"tool": "skill_manage", "action": "edit", "name": "other-skill"}],
+            "tool_trace": [{"tool": "skill_manage", "action": "edit", "name": "other-skill", "success": True}],
+            "changed_skills": ["demo-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "ready_to_delete_source": False,
+            "merged_points": [],
+            "removed_as_duplicate": [],
+            "conflicts_resolved": [],
+            "supporting_files_moved": [],
+            "verification_notes": [],
+            "rollback_hints": [],
+        }
+
+    result = mod.apply_plan(
+        plan_id="plan-agent-trace-target",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [skills_root], "_mutation_agent_backend": bad_trace_backend},
+        execute=True,
+    )
+
+    assert result["summary"]["failed"] == 1
+    assert "agent_trace_unallowed_skill" in result["items"][0]["reasons"]
+
+
+def test_apply_verification_rejects_success_without_mutating_tool_for_improve_task(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    skill_dir = _write_skill(skills_root, "demo-skill", "# Before\n")
+    item = _skill_agent_item(mod)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-agent-no-mutation-trace", "items": [item]})
+
+    def no_mutating_trace_backend(prompt, task, config):
+        (skill_dir / "SKILL.md").write_text("---\nname: demo-skill\ndescription: Test skill\n---\n\n# After\n", encoding="utf-8")
+        return {
+            "success": True,
+            "task_kind": "skill_improve",
+            "used_tools": [{"tool": "skill_view", "target": "demo-skill"}],
+            "tool_trace": [{"tool": "skill_view", "name": "demo-skill", "success": True}],
+            "changed_skills": ["demo-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "ready_to_delete_source": False,
+            "merged_points": [],
+            "removed_as_duplicate": [],
+            "conflicts_resolved": [],
+            "supporting_files_moved": [],
+            "verification_notes": [],
+            "rollback_hints": [],
+        }
+
+    result = mod.apply_plan(
+        plan_id="plan-agent-no-mutation-trace",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [skills_root], "_mutation_agent_backend": no_mutating_trace_backend},
+        execute=True,
+    )
+
+    assert result["summary"]["failed"] == 1
+    assert "agent_trace_missing_successful_skill_manage" in result["items"][0]["reasons"]
 
 
 def test_apply_execute_rejects_agent_success_when_target_unchanged(tmp_path):

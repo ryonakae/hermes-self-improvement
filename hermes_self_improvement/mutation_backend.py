@@ -272,7 +272,15 @@ class HermesAuxiliaryMutationBackend:
                 if tool_calls > self.limits.max_tool_calls:
                     return {"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_tool_calls_exceeded"]}
                 result = self.tool_executor.call(tool, args)
-                actual_used.append({"tool": tool, **({"action": args.get("action")} if tool == "skill_manage" and args.get("action") else {}), **({"name": args.get("name")} if args.get("name") else {})})
+                trace_entry = {
+                    "tool": tool,
+                    "success": bool(result.get("success")) if isinstance(result, dict) else False,
+                }
+                if tool == "skill_manage" and args.get("action"):
+                    trace_entry["action"] = args.get("action")
+                if args.get("name"):
+                    trace_entry["name"] = args.get("name")
+                actual_used.append(trace_entry)
                 messages.append({"role": "assistant", "content": json.dumps(step, ensure_ascii=False, sort_keys=True)})
                 messages.append({"role": "user", "content": "Tool result JSON:\n" + json.dumps(result, ensure_ascii=False, sort_keys=True)})
                 continue
@@ -280,6 +288,7 @@ class HermesAuxiliaryMutationBackend:
                 final = dict(step)
                 final.pop("type", None)
                 final["used_tools"] = actual_used
+                final["tool_trace"] = list(actual_used)
                 parsed = validate_backend_success_result(final)
                 return parsed
             return {"success": False, "error": "mutation_agent_unknown_step_type", "step_type": step_type}

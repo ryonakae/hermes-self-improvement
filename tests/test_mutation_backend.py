@@ -100,7 +100,8 @@ def test_auxiliary_backend_executes_allowed_skill_tool_sequence():
     )
     result = backend.run("prompt", {"type": "skill_agent_task"}, {})
     assert result["success"] is True
-    assert result["used_tools"] == [{"tool": "skill_view", "name": "demo"}]
+    assert result["used_tools"] == [{"tool": "skill_view", "success": True, "name": "demo"}]
+    assert result["tool_trace"] == [{"tool": "skill_view", "success": True, "name": "demo"}]
 
 
 def test_auxiliary_backend_rejects_disallowed_tool_request():
@@ -147,7 +148,7 @@ def test_auxiliary_backend_records_used_tools_from_actual_calls_not_only_self_re
         llm_call=lambda messages, **kwargs: next(responses),
     )
     result = backend.run("prompt", {}, {})
-    assert result["used_tools"] == [{"tool": "skills_list"}]
+    assert result["used_tools"] == [{"tool": "skills_list", "success": True}]
 
 
 def test_build_mutation_backend_normalizes_disabled_and_unknown():

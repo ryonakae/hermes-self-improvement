@@ -14,7 +14,7 @@ try:  # pragma: no cover - package import path
         _apply_replace_text_once,
     )
     from .config import apply_policy_allows_item, normalize_apply_policy
-    from .mutation_backend import build_mutation_backend
+    from .mutation_backend import ALLOWED_MUTATION_AGENT_TOOLS, build_mutation_backend
     from .mutation_agent import run_skill_agent_task
     from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from .observer import _reports_dir, _sha256_text, _stable_json
@@ -30,7 +30,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _apply_replace_text_once,
     )
     from config import apply_policy_allows_item, normalize_apply_policy
-    from mutation_backend import build_mutation_backend
+    from mutation_backend import ALLOWED_MUTATION_AGENT_TOOLS, build_mutation_backend
     from mutation_agent import run_skill_agent_task
     from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from observer import _reports_dir, _sha256_text, _stable_json
@@ -160,6 +160,35 @@ def _skill_agent_result_changed_names(agent_result: dict[str, Any]) -> set[str]:
     return changed
 
 
+def _skill_agent_tool_trace(agent_result: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_trace = agent_result.get("tool_trace") if isinstance(agent_result.get("tool_trace"), list) else agent_result.get("used_tools")
+    trace: list[dict[str, Any]] = []
+    for entry in raw_trace or []:
+        if isinstance(entry, dict):
+            trace.append(dict(entry))
+        else:
+            trace.append({"tool": str(entry)})
+    return trace
+
+
+def _verify_skill_agent_tool_trace(*, agent_result: dict[str, Any], allowed_targets: set[str], changed_names: set[str]) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    trace = _skill_agent_tool_trace(agent_result)
+    mutating_tool_seen = False
+    for entry in trace:
+        tool = str(entry.get("tool") or "")
+        if tool not in ALLOWED_MUTATION_AGENT_TOOLS:
+            reasons.append("agent_trace_disallowed_tool")
+        name = entry.get("name") or entry.get("target")
+        if name and str(name) not in allowed_targets:
+            reasons.append("agent_trace_unallowed_skill")
+        if tool == "skill_manage" and entry.get("success", True) is not False:
+            mutating_tool_seen = True
+    if changed_names and not mutating_tool_seen:
+        reasons.append("agent_trace_missing_successful_skill_manage")
+    return not reasons, reasons
+
+
 def _verify_skill_agent_result(
     *,
     mutation: dict[str, Any],
@@ -174,6 +203,8 @@ def _verify_skill_agent_result(
     unexpected = sorted(name for name in changed_names if name not in allowed_targets)
     if unexpected:
         reasons.append("agent_changed_unallowed_skill")
+    trace_verified, trace_reasons = _verify_skill_agent_tool_trace(agent_result=agent_result, allowed_targets=allowed_targets, changed_names=changed_names)
+    reasons.extend(trace_reasons)
     for name in sorted(allowed_targets | changed_names):
         before = before_snapshots.get(name)
         allow_missing = bool(before and before.get("exists") is False)
@@ -199,7 +230,8 @@ def _verify_skill_agent_result(
         "before_snapshots": before_snapshots,
         "after_snapshots": after_snapshots,
         "ledger_bound_restore": rollback_actions,
-        "tool_trace_verified": False,
+        "tool_trace": _skill_agent_tool_trace(agent_result),
+        "tool_trace_verified": trace_verified,
     }
     return verification, reasons
 
