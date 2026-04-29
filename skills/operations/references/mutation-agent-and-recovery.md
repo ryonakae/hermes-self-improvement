@@ -31,4 +31,4 @@ Skill rollback uses full snapshots: `SKILL.md`, allowed supporting files under `
 
 Built-in memory rollback may use direct programmatic restore only after store format, locking, hashes, and cache invalidation are validated. External memory provider internals are never restored directly. Sensitive/secret/PII deletes are not reversed by re-adding sensitive content.
 
-Implementation note: built-in memory direct restore currently fails closed as `unsupported_pending_store_validation`; external provider direct restore and sensitive delete re-add are forbidden.
+Implementation note: skill rollback is implemented through ledger-bound snapshots. Memory rollback remains fail-closed until built-in memory store validation and provider-native compensating correction semantics are proven; built-in memory direct restore currently fails closed as `unsupported_pending_store_validation`, and external provider direct restore / sensitive delete re-add are forbidden.

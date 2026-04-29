@@ -86,4 +86,4 @@ bin/hermes-self-improve status
 bin/hermes-self-improve improve --since-hours 1 --json
 ```
 
-Implementation note: built-in memory direct restore currently fails closed as `unsupported_pending_store_validation`; external provider direct restore and sensitive delete re-add are forbidden.
+Implementation note: skill rollback is implemented through ledger-bound snapshots. Memory rollback remains fail-closed until built-in memory store validation and provider-native compensating correction semantics are proven; built-in memory direct restore currently fails closed as `unsupported_pending_store_validation`, and external provider direct restore / sensitive delete re-add are forbidden.

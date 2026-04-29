@@ -41,6 +41,7 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - `hermes_self_improvement/dspy_program.py`: real DSPy scoring contract / module boundary。deterministic baseline は runtime scorer ではなく regression fixture に閉じる。
 - `hermes_self_improvement/gepa_adapter.py`: GEPA payload、offline fixture eval、real DSPy/GEPA path の fail-closed 境界。
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と low-risk mutation planning。
+- `hermes_self_improvement/mutation_backend.py`: bounded skills-only mutation backend。real path は Hermes auxiliary model の JSON tool loop で、実行 tool は `skills_list` / `skill_view` / `skill_manage` のみ。runtime tool registry / auxiliary model が使えなければ fail-closed で readiness に理由を出す。
 - `hermes_self_improvement/mutation_policy.py`: provider-aware memory mutation policy、strategy resolver、skill/memory context builder。
 - `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor。skill mutation は `skill_manage` の許可 action のみ実行可。built-in memory は `memory` tool、外部 memory は provider-native correction/delete tool のみ。直接 fallback はしない。generic direct file mutation は apply / rollback 実行 path では無効で、skill supporting file は `skill_manage` 経由でのみ扱う。
 - `hermes_self_improvement/calibration.py`: calibration evidence collection、regression-gated active evaluator promotion、calibration rollback。
@@ -157,4 +158,4 @@ Expected: enabled true, error null, hooks > 0。Tool を追加・削除した場
 - DSPy を Hermes 認証済み provider routing へ接続するときは、plugin-local `model.gepa` を `dspy.BaseLM` bridge に渡し、`agent.auxiliary_client.call_llm(...)` の戻りを OpenAI chat completion 互換 object（`choices[].message.content`, `model`, `usage`, `_hidden_params`）に整形してから DSPy に返す。real DSPy program は `dspy.context(lm=bridge)` 内で `dspy.Predict` を呼び、`gepa-optimize` は同じ bridge を student program と `dspy.GEPA(reflection_lm=...)` に渡す。fake-DSPy tests では `BaseLM` / `context` の有無で分岐し、live LLM/network に依存しない。
 - GEPA optimizer / trainset 変換では malformed eval case を `rejected` として記録するだけで終わらせず、optimizer training / compile path では non-empty rejected set を fail-closed にする。report / non-optimizer path では rejected を表示して継続してよいが、partial train silently は避ける。
 
-Implementation note: built-in memory direct restore currently fails closed as `unsupported_pending_store_validation`; external provider direct restore and sensitive delete re-add are forbidden.
+Implementation note: skill rollback is implemented through ledger-bound snapshots. Memory rollback remains fail-closed until built-in memory store validation and provider-native compensating correction semantics are proven; built-in memory direct restore currently fails closed as `unsupported_pending_store_validation`, and external provider direct restore / sensitive delete re-add are forbidden.
