@@ -77,9 +77,11 @@ PY
 - `--execute` なしの `improve`, `calibrate`, `apply`, `rollback` は preview-only です。
 - `--execute` は mutation intent ですが、実変更は policy と内部検証を通った item だけです。
 - `apply --execute` は `apply_policy`、internal item hash、target drift check を通った ready item だけ変更します。
-- skill mutation は `skill_manage` の許可 action のみを呼び、直接ファイル編集 fallback は使いません。対象は Hermes が内部 registry / provenance で mutable local と判定する skill だけです。`hermes skills list --source local` を subprocess 実行して判定するわけではありません。hub-installed / built-in / plugin-bundled / external read-only skill dirs は対象外です。skill に同梱された README / reference などの supporting file は、skill の一部として必要な場合だけ `skill_manage` 経由で扱います。
+- forward skill mutation は semantic mutation agent による `skill_agent_task` を主軸にします。agent が使える tool は `skills_list` / `skill_view` / `skill_manage` のみで、terminal/file/git/direct filesystem は使いません。bounded agent を作れない場合は fail-closed / `needs_review` に倒し、低レベル fallback で代替しません。
+- skill mutation 対象は Hermes が内部 registry / provenance で mutable local と判定する skill だけです。`hermes skills list --source local` を subprocess 実行して判定するわけではありません。hub-installed / built-in / plugin-bundled / external read-only skill dirs は対象外です。skill に同梱された README / reference などの supporting file は、skill の一部として必要な場合だけ `skill_manage` 経由で扱います。
+- rollback は mutation agent を起動せず、ledger/hash/scope を検証したうえで plugin-owned `ledger_bound_restore` recovery engine が snapshot から deterministic restore します。これは rollback 専用で、forward direct file/DB/provider-internal mutation は引き続き禁止です。
 - built-in memory mutation は `memory` tool のみを呼びます。外部 memory mutation は provider-native tool 経由だけを許可します。stale/incorrect/duplicate `memory_delete` は provider correction tool で supersede/invalidate し、native delete は `delete_id` / `fact_id` / `memory_id` / `id` など provider-native ID がある場合だけ実行します。sensitive delete と provider tool 不在 runtime は fail-closed にします。
-- Generic direct file mutation は apply / rollback の実行 path では無効です。この plugin 自身の README / AGENTS.md / config や任意 docs/config file は自己改善対象にしません。
+- Generic direct file mutation は forward apply path では無効です。rollback は `ledger_bound_restore` に限り ledger/hash/scope 検証後の snapshot restore を行います。この plugin 自身の README / AGENTS.md / config や任意 docs/config file は自己改善対象にしません。
 - `rollback --execute` は ledger hash と current target hash を検証します。1 item でも drift / tamper があれば rollback しません。
 - `calibrate --execute` は evidence threshold と regression pass を通った場合だけ active evaluator pointer を更新します。
 - GEPA / LLM の点数だけで auto-apply を許可しないでください。
@@ -98,6 +100,9 @@ PY
 - `hermes_self_improvement/scoring.py`: heuristic / LLM / GEPA / compare scorer
 - `hermes_self_improvement/apply_plan.py`: dry-run apply plan と mutation plan
 - `hermes_self_improvement/apply_engine.py`: mutation と rollback ledger
+- `hermes_self_improvement/skill_snapshot.py`: mutable-local skill の rollback snapshot
+- `hermes_self_improvement/recovery_engine.py`: ledger-bound deterministic restore
+- `hermes_self_improvement/mutation_agent.py`: semantic mutation agent runner abstraction
 - `hermes_self_improvement/mutation_policy.py`: memory provider capability policy、strategy resolver、skill/memory mutation context builder
 - `hermes_self_improvement/mutation_worker.py`: tool-mediated executor。skill mutation は `skill_manage`、built-in memory は `memory`、外部 memory は provider-native correction/delete tool のみ
 - `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion、calibration rollback
@@ -151,3 +156,5 @@ Cron から `improve --execute` を使う場合も、許可範囲は `apply_poli
 - `skills/operations/references/safety-and-apply.md`: safety / apply 境界
 - `.hermes/plans/2026-04-26_185111-self-improvement-auto-apply-policy.md`: auto-apply 方針
 - `.hermes/plans/2026-04-29_003219-self-improvement-runtime-home.md`: runtime storage migration 方針
+
+- `skills/operations/references/mutation-agent-and-recovery.md`: semantic mutation agent と ledger-bound restore の詳細

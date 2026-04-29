@@ -20,6 +20,8 @@ Hermes の skill / memory / prompt / tool-use workflow を改善するための 
 - LLM / GEPA scoring は advisory only。`auto_apply` は常に false 扱いにし、無人変更の許可として使わない。GEPA/LLM comparison を self-improvement decision の default input とし、score / recommendation / risk / confidence / target / rationale の material disagreement は human review に倒して unattended apply を block する。material 判定は change type ごとの policy config で扱い、risk / recommendation disagreement は常に block、memory / lifecycle / destructive / broad change は厳しめ、typo / pitfall / validation addition は score / confidence threshold だけ少し緩めてもよい。`report` / `plan` / `improve` は compare default。
 - Evaluator 自体も自己改善対象にする。GEPA/LLM disagreement、human review outcome、rollback/failure ledger、regression eval cases から candidate evaluator を生成・評価してよいが、active evaluator への昇格は `calibrate --execute` の regression gate を通った場合だけにする。candidate hash / active-before pointer/hash / regression result / rollback data を calibration ledger に束縛して silent replacement を禁止する。
 - Primary surface では `--execute` を唯一の user-facing mutation boundary にする。旧 `execution_mode` / capability gate / approval artifact / expected-hash command は削除済みで、通常 apply は `apply_policy` と内部 hash / target drift checks で fail-closed にする。
+- Forward skill mutation は semantic mutation agent の `skill_agent_task` を主軸にする。agent に許可する tool は `skills_list` / `skill_view` / `skill_manage` のみ。terminal/file/git/direct filesystem/provider internals/plugin docs-config mutation は禁止。bounded skills-only agent surface を作れない場合は fail-closed / `needs_review` に倒し、低レベル fallback で代替しない。
+- Rollback は mutation agent を起動しない。plugin-owned `ledger_bound_restore` recovery engine が ledger hash / item hash / current target hash / scope を検証し、snapshot から deterministic restore する。これは rollback 専用で、forward direct file/DB/provider-internal mutation は引き続き禁止。
 - この plugin の mutation 対象は、ユーザーが plugin を入れた Hermes 環境の mutable local skills と memory。skill は Hermes の内部 registry / provenance 判定で mutable local と確認できるものだけで、`hermes skills list --source local` を subprocess 実行して判定するわけではない。plugin-bundled skill、hub-installed skill、built-in skill、external skill dirs、plugin 自身の README / AGENTS.md / config、任意 docs/config file は自己改善対象にしない。skill に同梱された README / reference などの supporting file は、skill の一部として必要な場合だけ `skill_manage` 経由で扱う。
 - 変更前に `git status --short` と対象 diff を確認し、無関係な変更を巻き戻さない。
 
@@ -138,6 +140,7 @@ Expected: enabled true, error null, hooks > 0。Tool を追加・削除した場
 
 - `references/architecture.md`: hook、telemetry、module layout、scorer / GEPA の仕組み。
 - `references/safety-and-apply.md`: execution mode、apply-plan、ledger、auto-apply 境界。
+- `references/mutation-agent-and-recovery.md`: semantic mutation agent と ledger-bound restore の詳細。
 - `references/operations.md`: scheduled maintenance、memory/custom-skill review、plugin discovery、pitfalls。
 
 ## Pitfalls

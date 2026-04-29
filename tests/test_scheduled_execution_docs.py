@@ -43,3 +43,16 @@ def test_tool_handler_docs_use_non_shadowing_module_name():
     assert "tool_handlers.py" in combined
     assert "plugin_plugin_tools.py" not in combined
     assert "shadow" in combined
+
+
+def test_docs_define_mutation_agent_recovery_boundary():
+    mutation_ref = ROOT / "skills" / "operations" / "references" / "mutation-agent-and-recovery.md"
+    combined = "\n\n".join(read(path) for path in (README, AGENTS, SKILL, ROOT / "skills" / "operations" / "references" / "safety-and-apply.md", mutation_ref))
+
+    assert "skill_agent_task" in combined
+    assert "ledger_bound_restore" in combined
+    assert "skills_list" in combined and "skill_view" in combined and "skill_manage" in combined
+    assert "Rollback is not agent-driven" in combined or "rollback は mutation agent を起動しない" in combined
+    assert "hermes skills list --source local" in combined
+    assert "subprocess 実行して判定するわけではない" in combined
+    assert "terminal" in combined and "file tools" in combined

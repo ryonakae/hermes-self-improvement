@@ -6,6 +6,24 @@
 
 この plugin は勝手に skill や memory を書き換えません。hook は観測だけをします。実変更は `apply` / `rollback` / `calibrate` などの明示コマンドで扱い、変更できる phase でも `--execute` が必要です。
 
+
+## Mutation agent / recovery architecture
+
+Forward mutation and rollback intentionally use different mechanisms. Forward skill mutation is semantic and agent-driven: the plugin plans bounded `skill_agent_task` intents and a mutation agent may execute them using only official Hermes skill tools (`skills_list`, `skill_view`, `skill_manage`). It must not use terminal, file, git, browser, web, direct filesystem access, provider internals, or plugin docs/config mutation. If a bounded skills-only agent surface is unavailable, the item stays failed/`needs_review`; the plugin does not broaden tools as a fallback.
+
+Rollback is plugin-owned and deterministic. `self_improvement_rollback` / `rollback --execute` uses a ledger-bound `ledger_bound_restore` recovery path, validates ledger and current target hashes, and restores from captured snapshots. Rollback never launches the mutation agent. This direct programmatic restore is allowed only in the rollback path after ledger/hash/scope validation; forward direct file/DB/provider-internal mutation remains forbidden.
+
+Skill lifecycle meanings:
+
+- `skill_create`: mutation agent creates a valid mutable-local skill.
+- `skill_improve` / `skill_large_rewrite`: mutation agent patches or edits the target skill as needed.
+- `skill_write_file` / `skill_remove_file`: mutation agent changes only allowed skill supporting files through `skill_manage`.
+- `skill_delete`: deletes only an eligible mutable-local skill and remains destructive/review-gated.
+- `skill_rename`: phase 1 creates/copies the new skill while keeping the old skill; the plugin verifies the result; commit phase deletes the old skill.
+- `skill_merge`: phase 1 integrates source into destination while keeping source; the plugin runs checklist verification plus an LLM judge; commit phase deletes source only after verification.
+
+Rollback storage follows the same boundary: skill rollback uses full `SKILL.md` and supporting-file snapshots; built-in memory direct restore is allowed only after store format, locking, hashes, and cache invalidation are validated; external memory provider internals are never touched; sensitive/secret/PII deletes are not rolled back by re-adding sensitive content.
+
 ## 何をする plugin か
 
 この plugin は、Hermes の自己改善を「ログを見る」「候補を作る」「採点する」「人間が確認できる形にする」「安全に適用する」に分けます。
@@ -17,7 +35,7 @@
 - 候補を heuristic / LLM / DSPy-backed GEPA scorer で採点する
 - report、apply plan、apply ledger、calibration ledger を artifact として残す
 - policy で許可された低リスクな skill / memory mutation を、内部 hash と drift check 付きで適用する
-- skill mutation は、直接ファイル編集ではなく `skill_manage` の create / patch / edit / delete / write_file / remove_file だけを使って適用する。対象は Hermes が内部 registry / provenance で mutable local と判定する skill だけで、`hermes skills list --source local` を subprocess 実行して判定するわけではない。hub-installed / built-in / plugin-bundled / external read-only skill dirs は対象外。skill に同梱された README / reference などの supporting file も、skill の一部として必要な場合だけ `skill_manage` 経由で扱う
+- skill mutation は、semantic `skill_agent_task` を主軸にし、agent が公式 Hermes skill tools（`skills_list`, `skill_view`, `skill_manage`）だけを使って適用する。移行期間の低リスク互換 path も直接ファイル編集ではなく `skill_manage` の create / patch / edit / delete / write_file / remove_file だけを使う。対象は Hermes が内部 registry / provenance で mutable local と判定する skill だけで、`hermes skills list --source local` を subprocess 実行して判定するわけではない。hub-installed / built-in / plugin-bundled / external read-only skill dirs は対象外。skill に同梱された README / reference などの supporting file も、skill の一部として必要な場合だけ `skill_manage` 経由で扱う
 - built-in memory mutation は `memory` tool の add / replace / remove だけを使って適用する。外部 memory provider は capability policy に解決し、stale/incorrect/duplicate `memory_delete` は各 provider の correction tool（例: `hindsight_retain`, `honcho_conclude`, `mem0_conclude`, `brv_curate`, `viking_remember`, `fact_store`, `retaindb_remember`, `supermemory_store`）で実行可能。native delete は provider-native ID がある場合だけ実行し、sensitive delete や provider tool 不在時は fail-closed
 - plugin 自身の README / AGENTS.md / config を自己改善対象として編集しない。docs/config target は apply policy override でも mutation 不可
 - evaluator/scorer の調整を `calibrate` で preview し、regression を通った場合だけ active 化する
@@ -140,8 +158,8 @@ Primary surface の安全境界は `--execute` です。
 - `calibration` が evaluator/scorer 自己調整を決める。`apply_policy` とは別
 - `item_hash`, `target_hash`, `ledger_hash` は内部整合性、drift 検知、rollback 用
 - `rollback --execute` は ledger hash と current target hash を検証する。1 item でも drift / tamper があれば rollback しない
-- skill / memory mutation の直接ファイル・DB fallback は使わない。skill mutation は `skill_manage` 経由、built-in memory は `memory` tool 経由。外部 memory provider は provider-native tool 経由に限定し、stale/incorrect/duplicate delete は provider の correction tool、native delete は provider-native ID がある場合だけ使う。sensitive delete と tool 不在 runtime は fail-closed
-- generic direct file mutation は apply / rollback の実行 path では無効。plugin 自身の README / AGENTS.md / config、あるいは任意 docs/config file は自己改善対象にしない。skill に同梱された README / reference は skill supporting file として `skill_manage` 経由でのみ扱う
+- forward skill / memory mutation の直接ファイル・DB fallback は使わない。skill mutation は semantic mutation agent と公式 skill tools 経由、built-in memory は `memory` tool 経由。外部 memory provider は provider-native tool 経由に限定し、stale/incorrect/duplicate delete は provider の correction tool、native delete は provider-native ID がある場合だけ使う。sensitive delete と tool 不在 runtime は fail-closed
+- generic direct file mutation は forward apply path では無効。rollback は `ledger_bound_restore` に限り ledger/hash/scope 検証後の snapshot restore を行う。plugin 自身の README / AGENTS.md / config、あるいは任意 docs/config file は自己改善対象にしない。skill に同梱された README / reference は skill supporting file として `skill_manage` 経由でのみ扱う
 
 既定 policy の例です。
 
