@@ -186,6 +186,111 @@ def test_apply_hindsight_provider_operation_failure_has_no_direct_fallback(tmp_p
     assert result["target_changed"] is False
     assert "memory_provider_tool_operation_failed" in result["items"][0]["reasons"]
 
+
+def _memory_tool_item(mod, *, item_id: str, action: str, tool_args: dict, change_type: str | None = None, sensitive_reason: str | None = None) -> dict:
+    item = {
+        "item_id": item_id,
+        "status": "ready",
+        "order": int(item_id.split("-")[-1]),
+        "target_kind": "memory",
+        "target_path": None,
+        "change_type": change_type or {"add": "memory_add", "replace": "memory_replace", "remove": "memory_delete"}[action],
+        "risk": "low",
+        "destructive": action == "remove",
+        "before_hash": None,
+        "mutation": {"type": "memory_tool_operation", "context": {"allowed_tools": ["memory"], "tool_name": "memory", "tool_args": tool_args}},
+    }
+    if sensitive_reason:
+        item["deletion_reason"] = sensitive_reason
+    item["item_hash"] = mod.compute_apply_item_hash(item)
+    return item
+
+
+def test_memory_tool_apply_records_rollback_validation_metadata_without_raw_added_content(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    import hermes_self_improvement.apply_engine as apply_engine
+
+    tool_args = {"action": "add", "target": "memory", "content": "User prefers concise updates."}
+    item = _memory_tool_item(mod, item_id="step-001", action="add", tool_args=tool_args)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-memory-add", "items": [item]})
+    monkeypatch.setattr(apply_engine, "execute_memory_tool_operation", lambda args: {"success": True, "tool_name": "memory", "echo": args})
+
+    result = mod.apply_plan(plan_id="plan-memory-add", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=True)
+
+    assert result["summary"]["applied"] == 1
+    rollback = result["items"][0]["rollback_data"]
+    assert rollback["rollback_strategy"] == "memory_tool_compensating_action_pending_validation"
+    assert rollback["target_kind"] == "memory"
+    assert rollback["provider"] == "built-in"
+    assert rollback["operation"] == "memory_add"
+    assert rollback["sensitive_delete"] is False
+    assert rollback["direct_restore_allowed"] is False
+    assert rollback["item_hash"] == item["item_hash"]
+    assert rollback["tool_args_hash"] == mod._sha256_text(mod._stable_json(tool_args))
+    assert "User prefers concise updates." not in json.dumps(rollback, ensure_ascii=False)
+
+
+def test_memory_tool_replace_records_old_and_new_hashes_without_raw_text(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    import hermes_self_improvement.apply_engine as apply_engine
+
+    tool_args = {"action": "replace", "target": "memory", "old_text": "old preference", "content": "new preference"}
+    item = _memory_tool_item(mod, item_id="step-001", action="replace", tool_args=tool_args)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-memory-replace", "items": [item]})
+    monkeypatch.setattr(apply_engine, "execute_memory_tool_operation", lambda args: {"success": True, "tool_name": "memory"})
+
+    result = mod.apply_plan(plan_id="plan-memory-replace", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=True)
+
+    rollback = result["items"][0]["rollback_data"]
+    assert rollback["operation"] == "memory_replace"
+    assert rollback["old_text_hash"] == mod._sha256_text("old preference")
+    assert rollback["new_content_hash"] == mod._sha256_text("new preference")
+    assert "old preference" not in json.dumps(rollback, ensure_ascii=False)
+    assert "new preference" not in json.dumps(rollback, ensure_ascii=False)
+
+
+def test_memory_tool_remove_records_sensitive_flag_and_no_deleted_text(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    import hermes_self_improvement.apply_engine as apply_engine
+
+    tool_args = {"action": "remove", "target": "memory", "old_text": "secret token value"}
+    item = _memory_tool_item(mod, item_id="step-001", action="remove", tool_args=tool_args, sensitive_reason="secret")
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-memory-remove", "items": [item]})
+    monkeypatch.setattr(apply_engine, "execute_memory_tool_operation", lambda args: {"success": True, "tool_name": "memory"})
+
+    result = mod.apply_plan(plan_id="plan-memory-remove", config={"_self_improvement_root": str(tmp_path / "self-improvement"), "apply_policy": {"allow_destructive": True}}, execute=True)
+
+    rollback = result["items"][0]["rollback_data"]
+    assert rollback["operation"] == "memory_delete"
+    assert rollback["sensitive_delete"] is True
+    assert rollback["deleted_text_hash"] == mod._sha256_text("secret token value")
+    assert "secret token value" not in json.dumps(rollback, ensure_ascii=False)
+
+
+def test_memory_rollback_preview_uses_ledger_hash_and_remains_fail_closed(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    import hermes_self_improvement.apply_engine as apply_engine
+
+    tool_args = {"action": "add", "target": "memory", "content": "User prefers concise updates."}
+    item = _memory_tool_item(mod, item_id="step-001", action="add", tool_args=tool_args)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-memory-rollback", "items": [item]})
+    monkeypatch.setattr(apply_engine, "execute_memory_tool_operation", lambda args: {"success": True, "tool_name": "memory"})
+
+    apply_result = mod.apply_plan(plan_id="plan-memory-rollback", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=True)
+    ledger = json.loads(Path(apply_result["ledger_path"]).read_text(encoding="utf-8"))
+
+    result = mod.rollback_apply_ledger(ledger_id=ledger["ledger_id"], config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=False)
+
+    assert result["current_status"] == "failed"
+    assert result["summary"]["failed"] == 1
+    assert result["items"][0]["rollback_action"] is None
+    assert "unsupported_pending_store_validation" in result["items"][0]["reasons"]
+    preview = result["items"][0]["recovery_preview"]
+    assert preview["status"] == "failed"
+    assert preview["ledger_hash"] == ledger["ledger_hash"]
+    assert preview["item_hash"] == item["item_hash"]
+
+
 def test_rollback_preview_ignores_failed_direct_file_items(tmp_path):
     mod = load_plugin_module()
     target = tmp_path / "skill.md"

@@ -18,7 +18,7 @@ try:  # pragma: no cover - package import path
     from .mutation_agent import run_skill_agent_task
     from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from .observer import _reports_dir, _sha256_text, _stable_json
-    from .recovery_engine import ledger_bound_restore, recovery_action_from_snapshots
+    from .recovery_engine import ledger_bound_restore, memory_ledger_bound_restore, recovery_action_from_snapshots
     from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
     from .verification import build_merge_judge, verify_skill_merge_phase, verify_skill_rename_phase
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from mutation_agent import run_skill_agent_task
     from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from observer import _reports_dir, _sha256_text, _stable_json
-    from recovery_engine import ledger_bound_restore, recovery_action_from_snapshots
+    from recovery_engine import ledger_bound_restore, memory_ledger_bound_restore, recovery_action_from_snapshots
     from skill_snapshot import SkillSnapshotError, capture_skill_snapshot
     from verification import build_merge_judge, verify_skill_merge_phase, verify_skill_rename_phase
 
@@ -382,6 +382,60 @@ def _run_skill_agent_mutation(
     }
     return result
 
+def _memory_tool_operation_name(action: str) -> str:
+    return {"add": "memory_add", "replace": "memory_replace", "remove": "memory_delete"}.get(action, f"memory_{action}" if action else "memory_unknown")
+
+
+def _memory_delete_is_sensitive(*, item: dict[str, Any], tool_args: dict[str, Any]) -> bool:
+    if str(tool_args.get("action") or "") != "remove":
+        return False
+    haystack = " ".join(str(item.get(key) or "") for key in ("deletion_reason", "reason", "title", "risk"))
+    lowered = haystack.lower()
+    return any(marker in lowered for marker in ("secret", "sensitive", "credential", "token", "password", "api key", "apikey", "pii"))
+
+
+def _memory_tool_rollback_metadata(*, item: dict[str, Any], context: dict[str, Any], tool_args: dict[str, Any], tool_result: dict[str, Any] | None = None) -> dict[str, Any]:
+    action = str(tool_args.get("action") or "")
+    operation = _memory_tool_operation_name(action)
+    metadata: dict[str, Any] = {
+        "rollback_strategy": "memory_tool_compensating_action_pending_validation",
+        "target_kind": "memory",
+        "provider": "built-in",
+        "operation": operation,
+        "sensitive_delete": _memory_delete_is_sensitive(item=item, tool_args=tool_args),
+        "direct_restore_allowed": False,
+        "item_hash": item.get("item_hash"),
+        "before_plan_hash": item.get("before_hash"),
+        "tool_args_hash": _sha256_text(_stable_json(tool_args)),
+        "mutation_context_hash": _sha256_text(_stable_json({k: v for k, v in context.items() if k != "tool_args"})),
+    }
+    if tool_result is not None:
+        sanitized_result = {k: v for k, v in tool_result.items() if k not in {"echo", "raw", "content", "old_text"}}
+        metadata["tool_result_hash"] = _sha256_text(_stable_json(sanitized_result))
+    if isinstance(tool_args.get("old_text"), str):
+        key = "deleted_text_hash" if action == "remove" else "old_text_hash"
+        metadata[key] = _sha256_text(str(tool_args.get("old_text")))
+    if isinstance(tool_args.get("content"), str):
+        metadata["new_content_hash" if action == "replace" else "content_hash"] = _sha256_text(str(tool_args.get("content")))
+    return metadata
+
+
+def _memory_rollback_action_from_metadata(*, item: dict[str, Any], rollback: dict[str, Any], ledger_hash: str | None = None) -> dict[str, Any]:
+    action = {
+        "type": "ledger_bound_restore",
+        "target_kind": "memory",
+        "restore_mode": "memory_tool_compensating_action_pending_validation",
+        "provider": rollback.get("provider") or "built-in",
+        "operation": rollback.get("operation"),
+        "sensitive_delete": bool(rollback.get("sensitive_delete")),
+        "item_hash": rollback.get("item_hash") or item.get("item_hash"),
+        "tool_args_hash": rollback.get("tool_args_hash"),
+    }
+    if ledger_hash:
+        action["ledger_hash"] = ledger_hash
+    return action
+
+
 def _skill_manage_rollback_action(*, tool_args: dict[str, Any], rollback_data: dict[str, Any] | None) -> dict[str, Any] | None:
     rollback_data = rollback_data if isinstance(rollback_data, dict) else {}
     action = str(tool_args.get("action") or "")
@@ -532,10 +586,12 @@ def apply_plan(
                     result_items.append(item_result)
                     continue
                 item_result["status"] = "applied"
+                item_result["rollback_data"] = _memory_tool_rollback_metadata(item=item, context=context, tool_args=tool_args, tool_result=tool_result)
                 summary["applied"] += 1
                 target_changed = True
             else:
                 item_result["status"] = "would_apply"
+                item_result["rollback_data"] = _memory_tool_rollback_metadata(item=item, context=context, tool_args=tool_args)
                 summary["would_apply"] += 1
             result_items.append(item_result)
             continue
@@ -676,7 +732,7 @@ def apply_plan(
     return result
 
 
-def _rollback_item_plan(item: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
+def _rollback_item_plan(item: dict[str, Any], config: dict[str, Any] | None = None, ledger_hash: str | None = None) -> dict[str, Any]:
     rollback = item.get("rollback_data") if isinstance(item.get("rollback_data"), dict) else {}
     target_path = rollback.get("target_path") or item.get("target_path")
     item_result: dict[str, Any] = {
@@ -691,6 +747,15 @@ def _rollback_item_plan(item: dict[str, Any], config: dict[str, Any] | None = No
         return item_result
 
     strategy = rollback.get("rollback_strategy")
+    if strategy == "memory_tool_compensating_action_pending_validation" or rollback.get("target_kind") == "memory":
+        action = _memory_rollback_action_from_metadata(item=item, rollback=rollback, ledger_hash=ledger_hash)
+        preview = memory_ledger_bound_restore(action, execute=False)
+        item_result["recovery_preview"] = preview
+        item_result["status"] = "failed" if preview.get("status") != "would_restore" else "would_rollback"
+        item_result["rollback_action"] = action if preview.get("status") == "would_restore" else None
+        if preview.get("status") != "would_restore":
+            item_result["reasons"].extend(preview.get("reasons") or ["memory_ledger_bound_restore_validation_failed"])
+        return item_result
     ledger_restore = rollback.get("ledger_bound_restore") if isinstance(rollback.get("ledger_bound_restore"), dict) else None
     if ledger_restore:
         actions = list(ledger_restore.values()) if all(isinstance(v, dict) for v in ledger_restore.values()) and "type" not in ledger_restore else [ledger_restore]
@@ -872,7 +937,7 @@ def rollback_apply_ledger(*, ledger_id: str, config: dict[str, Any], execute: bo
     for item in reversed(ledger.get("items") if isinstance(ledger.get("items"), list) else []):
         if item.get("status") != "applied":
             continue
-        result_items.append(_rollback_item_plan(item, config=config))
+        result_items.append(_rollback_item_plan(item, config=config, ledger_hash=expected_hash))
 
     failed = sum(1 for item in result_items if item.get("status") == "failed")
     would = sum(1 for item in result_items if item.get("status") == "would_rollback")

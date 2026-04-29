@@ -215,13 +215,13 @@ def memory_ledger_bound_restore(action: dict[str, Any], *, execute: bool = False
     providers must never be restored through direct provider internals.
     """
     if action.get("target_kind") != "memory":
-        return {"status": "failed", "reasons": ["target_kind_not_memory"], "target_changed": False}
+        return {"status": "failed", "reasons": ["target_kind_not_memory"], "target_changed": False, "ledger_hash": action.get("ledger_hash"), "item_hash": action.get("item_hash")}
     if action.get("sensitive_delete") is True:
-        return {"status": "failed", "reasons": ["sensitive_delete_restore_forbidden"], "target_changed": False}
+        return {"status": "failed", "reasons": ["sensitive_delete_restore_forbidden"], "target_changed": False, "ledger_hash": action.get("ledger_hash"), "item_hash": action.get("item_hash")}
     restore_mode = str(action.get("restore_mode") or "")
     if restore_mode.startswith("external_provider") or action.get("provider") not in {None, "", "built-in", "builtin", "built_in"}:
-        return {"status": "failed", "reasons": ["external_provider_direct_restore_forbidden"], "target_changed": False}
-    return {"status": "failed", "reasons": ["unsupported_pending_store_validation"], "target_changed": False, "execute": bool(execute)}
+        return {"status": "failed", "reasons": ["external_provider_direct_restore_forbidden"], "target_changed": False, "ledger_hash": action.get("ledger_hash"), "item_hash": action.get("item_hash")}
+    return {"status": "failed", "reasons": ["unsupported_pending_store_validation"], "target_changed": False, "execute": bool(execute), "ledger_hash": action.get("ledger_hash"), "item_hash": action.get("item_hash")}
 
 
 def recovery_action_from_snapshots(*, before_snapshot: dict[str, Any], current_snapshot: dict[str, Any]) -> dict[str, Any]:
