@@ -16,6 +16,7 @@ try:  # pragma: no cover - package import path
     from .config import apply_policy_allows_item, normalize_apply_policy
     from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from .observer import _reports_dir, _sha256_text, _stable_json
+    from .recovery_engine import ledger_bound_restore
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from apply_plan import (
         _apply_append_to_existing_section,
@@ -27,6 +28,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from config import apply_policy_allows_item, normalize_apply_policy
     from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from observer import _reports_dir, _sha256_text, _stable_json
+    from recovery_engine import ledger_bound_restore
 
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -411,6 +413,15 @@ def _rollback_item_plan(item: dict[str, Any]) -> dict[str, Any]:
         return item_result
 
     strategy = rollback.get("rollback_strategy")
+    ledger_restore = rollback.get("ledger_bound_restore") if isinstance(rollback.get("ledger_bound_restore"), dict) else None
+    if ledger_restore:
+        preview = ledger_bound_restore(ledger_restore, execute=False)
+        item_result["status"] = "would_rollback" if preview.get("status") == "would_restore" else "failed"
+        item_result["rollback_action"] = ledger_restore if preview.get("status") == "would_restore" else None
+        item_result["recovery_preview"] = preview
+        if preview.get("status") != "would_restore":
+            item_result["reasons"].extend(preview.get("reasons") or ["ledger_bound_restore_validation_failed"])
+        return item_result
     skill_manage_rollback = rollback.get("skill_manage_rollback") if isinstance(rollback.get("skill_manage_rollback"), dict) else None
     if skill_manage_rollback:
         item_result["status"] = "would_rollback"
@@ -506,6 +517,9 @@ def _execute_rollback_action(action: dict[str, Any]) -> bool:
     if action_type == "skill_manage":
         result = execute_skill_manage_operation(action.get("tool_args") if isinstance(action.get("tool_args"), dict) else {})
         return bool(result.get("success"))
+    if action_type == "ledger_bound_restore":
+        result = ledger_bound_restore(action, execute=True)
+        return result.get("status") == "restored"
     return False
 
 
