@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -97,5 +99,54 @@ def probe_builtin_memory_store(config: dict[str, Any] | None = None) -> dict[str
         "hermes_home": str(hermes_home),
         "store_files": resolved,
         "reasons": [],
+        "direct_restore_allowed": False,
+    }
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _stable_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def capture_builtin_memory_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Capture a read-only, hashable view of built-in memory store files.
+
+    This proves state observability only. It deliberately leaves cache/session
+    visibility unproven, so rollback execution must remain disabled until a
+    stronger live proof exists.
+    """
+    probe = probe_builtin_memory_store(config)
+    if probe.get("status") != "validated":
+        return {
+            "status": "blocked",
+            "provider": probe.get("provider") or "built-in",
+            "reasons": probe.get("reasons") or ["memory_store_probe_failed"],
+            "files": [],
+            "state_hash": None,
+            "cache_invalidation_verified": False,
+            "direct_restore_allowed": False,
+        }
+
+    files = []
+    for raw_path in probe.get("store_files") or []:
+        path = Path(str(raw_path)).expanduser().resolve()
+        data = path.read_bytes()
+        files.append({
+            "path": str(path),
+            "sha256": _sha256_bytes(data),
+            "size_bytes": len(data),
+        })
+    files = sorted(files, key=lambda item: item["path"])
+    return {
+        "status": "captured",
+        "provider": "built-in",
+        "hermes_home": probe.get("hermes_home"),
+        "state_hash": _sha256_bytes(_stable_json(files).encode("utf-8")),
+        "files": files,
+        "reasons": [],
+        "cache_invalidation_verified": False,
         "direct_restore_allowed": False,
     }
