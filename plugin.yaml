@@ -18,7 +18,3 @@ provides_tools:
   - self_improvement_report
   - self_improvement_improve
   - self_improvement_calibrate
-  - self_improvement_plan
-  - self_improvement_apply
-  - self_improvement_rollback
-  - self_improvement_record_outcome

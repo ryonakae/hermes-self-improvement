@@ -5,27 +5,19 @@ from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover - package import path
-    from .apply_engine import apply_plan, rollback_apply_ledger
-    from .apply_plan import build_apply_plan, write_apply_plan
     from .calibration import run_calibration
     from .cli import build_review_outcome_report_payload, run_improve, run_pipeline
     from .config import DEFAULT_RETENTION_DAYS, load_config
     from .mutation_backend import mutation_backend_status
-    from .next_actions import build_next_actions_for_apply_preview, build_next_actions_for_plan
     from .observer import _event_path, _load_events
-    from .outcome_store import record_review_outcome
     from .recovery_engine import memory_rollback_status
     from .verification import merge_judge_status
 except Exception:  # pragma: no cover - direct file import used by tests/plugin wrapper
-    from apply_engine import apply_plan, rollback_apply_ledger
-    from apply_plan import build_apply_plan, write_apply_plan
     from calibration import run_calibration
     from cli import build_review_outcome_report_payload, run_improve, run_pipeline
     from config import DEFAULT_RETENTION_DAYS, load_config
     from mutation_backend import mutation_backend_status
-    from next_actions import build_next_actions_for_apply_preview, build_next_actions_for_plan
     from observer import _event_path, _load_events
-    from outcome_store import record_review_outcome
     from recovery_engine import memory_rollback_status
     from verification import merge_judge_status
 
@@ -64,15 +56,6 @@ def _coerce_int(raw: Any, default: int, minimum: int | None = None, maximum: int
     return value
 
 
-def _items_from_args(args: dict[str, Any]) -> list[str] | None:
-    raw = args.get("items")
-    if isinstance(raw, list):
-        return [str(item) for item in raw if str(item)] or None
-    if isinstance(raw, str):
-        return [part.strip() for part in raw.split(",") if part.strip()] or None
-    return None
-
-
 def _handle_self_improvement_status_tool(args: dict[str, Any] | None = None, **_kw) -> str:
     args = args or {}
     config = _config_from_args(args)
@@ -108,49 +91,11 @@ def _handle_self_improvement_report_tool(args: dict[str, Any] | None = None, **_
     return tool_result(out)
 
 
-def _handle_self_improvement_plan_tool(args: dict[str, Any] | None = None, **_kw) -> str:
-    args = args or {}
-    config = _config_from_args(args)
-    out = run_pipeline(
-        config,
-        since_hours=_coerce_int(args.get("since_hours"), 24, 1),
-        write_report=False,
-        scorer=str(args.get("scorer") or "compare"),
-    )
-    plan = build_apply_plan(
-        proposals=out.get("proposals") or [],
-        summary=out.get("summary") or {},
-        execution_mode="preview",
-        config=config,
-    )
-    plan["next_actions"] = build_next_actions_for_plan(plan)
-    path = write_apply_plan(plan, config)
-    return tool_result({"schema_name": "self_improvement_plan_result", "apply_plan": plan, "apply_plan_path": str(path), "next_actions": plan["next_actions"], "target_changed": False})
-
-
-def _handle_self_improvement_apply_tool(args: dict[str, Any] | None = None, **_kw) -> str:
-    args = args or {}
-    plan_id = str(args.get("plan_id") or "")
-    if not plan_id:
-        return tool_error("plan_id is required", target_changed=False)
-    try:
-        result = apply_plan(
-            plan_id=plan_id,
-            config=_config_from_args(args),
-            item_ids=_items_from_args(args),
-            execute=bool(args.get("execute", False)),
-        )
-        if not bool(args.get("execute", False)):
-            result["next_actions"] = build_next_actions_for_apply_preview(result)
-        return tool_result(result)
-    except Exception as exc:
-        return tool_error("apply_failed", error_detail=str(exc), target_changed=False)
-
-
 def _handle_self_improvement_calibrate_tool(args: dict[str, Any] | None = None, **_kw) -> str:
     args = args or {}
+    dry_run = bool(args.get("dry_run", False))
     try:
-        return tool_result(run_calibration(config=_config_from_args(args), execute=bool(args.get("execute", False))))
+        return tool_result(run_calibration(config=_config_from_args(args), execute=not dry_run))
     except Exception as exc:
         return tool_error("calibration_failed", error_detail=str(exc), target_changed=False)
 
@@ -161,49 +106,8 @@ def _handle_self_improvement_improve_tool(args: dict[str, Any] | None = None, **
         return tool_result(run_improve(
             config=_config_from_args(args),
             since_hours=_coerce_int(args.get("since_hours"), 24, 1),
-            execute=bool(args.get("execute", False)),
+            dry_run=bool(args.get("dry_run", False)),
             scorer=str(args.get("scorer") or "compare"),
-            item_ids=_items_from_args(args),
         ))
     except Exception as exc:
         return tool_error("improve_failed", error_detail=str(exc), target_changed=False)
-
-
-def _handle_self_improvement_record_outcome_tool(args: dict[str, Any] | None = None, **_kw) -> str:
-    args = args or {}
-    try:
-        outcome = {
-            "outcome": args.get("outcome"),
-            "plan_id": args.get("plan_id"),
-            "item_id": args.get("item_id"),
-            "proposal_id": args.get("proposal_id"),
-            "ledger_id": args.get("ledger_id"),
-            "reason": args.get("reason"),
-            "source": args.get("source") or "tool",
-            "risk": args.get("risk"),
-            "recommendation": args.get("recommendation"),
-            "scorer": args.get("scorer"),
-            "target_kind": args.get("target_kind"),
-            "change_type": args.get("change_type"),
-        }
-        result = record_review_outcome(config=_config_from_args(args), outcome=outcome)
-        if result.get("status") != "recorded":
-            return tool_error("record_outcome_failed", reasons=result.get("reasons"), target_changed=False)
-        return tool_result(result)
-    except Exception as exc:
-        return tool_error("record_outcome_failed", error_detail=str(exc), target_changed=False)
-
-
-def _handle_self_improvement_rollback_tool(args: dict[str, Any] | None = None, **_kw) -> str:
-    args = args or {}
-    ledger_id = str(args.get("ledger_id") or "")
-    if not ledger_id:
-        return tool_error("ledger_id is required", target_changed=False)
-    try:
-        return tool_result(rollback_apply_ledger(
-            ledger_id=ledger_id,
-            config=_config_from_args(args),
-            execute=bool(args.get("execute", False)),
-        ))
-    except Exception as exc:
-        return tool_error("rollback_failed", error_detail=str(exc), target_changed=False)

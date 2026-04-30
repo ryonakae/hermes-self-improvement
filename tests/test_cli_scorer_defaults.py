@@ -25,24 +25,16 @@ def parse_args(argv: list[str]):
 def test_decision_commands_default_to_compare_scorer():
     assert parse_args(["improve"]).scorer == "compare"
     assert parse_args(["report"]).scorer == "compare"
-    assert parse_args(["plan"]).scorer == "compare"
 
 
-def test_legacy_analyze_command_is_removed():
-    try:
-        parse_args(["analyze"])
-    except SystemExit as exc:
-        assert exc.code == 2
-    else:
-        raise AssertionError("legacy analyze command should not parse")
-
-
-def test_plan_command_uses_simplified_surface_without_mode_flag():
-    args = parse_args(["plan", "--since-hours", "3"])
-
-    assert args.self_improvement_cmd == "plan"
-    assert args.since_hours == 3
-    assert not hasattr(args, "mode")
+def test_removed_commands_do_not_parse():
+    for command in ["analyze", "plan", "apply", "rollback", "outcome"]:
+        try:
+            parse_args([command])
+        except SystemExit as exc:
+            assert exc.code == 2
+        else:
+            raise AssertionError(f"removed command should not parse: {command}")
 
 
 def test_render_apply_plan_summary_is_user_friendly():

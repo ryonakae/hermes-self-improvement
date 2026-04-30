@@ -52,13 +52,9 @@ UTC = timezone.utc
 try:  # pragma: no cover - package import path
     from .schemas import SELF_IMPROVEMENT_TOOL_SPECS
     from .tool_handlers import (
-        _handle_self_improvement_apply_tool,
         _handle_self_improvement_calibrate_tool,
         _handle_self_improvement_improve_tool,
-        _handle_self_improvement_plan_tool,
-        _handle_self_improvement_record_outcome_tool,
         _handle_self_improvement_report_tool,
-        _handle_self_improvement_rollback_tool,
         _handle_self_improvement_status_tool,
     )
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
@@ -69,13 +65,9 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     _tools_mod = importlib.util.module_from_spec(_tools_spec)
     sys.modules[_tools_spec.name] = _tools_mod
     _tools_spec.loader.exec_module(_tools_mod)
-    _handle_self_improvement_apply_tool = _tools_mod._handle_self_improvement_apply_tool
     _handle_self_improvement_calibrate_tool = _tools_mod._handle_self_improvement_calibrate_tool
     _handle_self_improvement_improve_tool = _tools_mod._handle_self_improvement_improve_tool
-    _handle_self_improvement_plan_tool = _tools_mod._handle_self_improvement_plan_tool
-    _handle_self_improvement_record_outcome_tool = _tools_mod._handle_self_improvement_record_outcome_tool
     _handle_self_improvement_report_tool = _tools_mod._handle_self_improvement_report_tool
-    _handle_self_improvement_rollback_tool = _tools_mod._handle_self_improvement_rollback_tool
     _handle_self_improvement_status_tool = _tools_mod._handle_self_improvement_status_tool
 
 _SELF_IMPROVEMENT_TOOL_HANDLERS = {
@@ -83,10 +75,6 @@ _SELF_IMPROVEMENT_TOOL_HANDLERS = {
     "self_improvement_report": _handle_self_improvement_report_tool,
     "self_improvement_improve": _handle_self_improvement_improve_tool,
     "self_improvement_calibrate": _handle_self_improvement_calibrate_tool,
-    "self_improvement_plan": _handle_self_improvement_plan_tool,
-    "self_improvement_apply": _handle_self_improvement_apply_tool,
-    "self_improvement_rollback": _handle_self_improvement_rollback_tool,
-    "self_improvement_record_outcome": _handle_self_improvement_record_outcome_tool,
 }
 
 

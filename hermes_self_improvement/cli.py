@@ -904,6 +904,37 @@ def run_pipeline(
     return out
 
 
+def _write_run_artifact(result: dict[str, Any], config: dict[str, Any]) -> Path:
+    runs_dir = _reports_dir(config) / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    run_id = str(result.get("run_id") or datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ"))
+    safe_run_id = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in run_id).strip(".-") or "run"
+    path = runs_dir / f"{safe_run_id}.json"
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    return path
+
+
+def _summarize_runner_decisions(proposals: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {"total": 0, "skill": 0, "memory": 0, "scorer": 0, "evaluator": 0, "out_of_scope": 0}
+    for proposal in proposals:
+        if not isinstance(proposal, dict):
+            continue
+        summary["total"] += 1
+        target = str(proposal.get("target_kind") or proposal.get("target") or "").lower()
+        action = str(proposal.get("action") or "").lower()
+        if "skill" in target:
+            summary["skill"] += 1
+        elif "memory" in target:
+            summary["memory"] += 1
+        elif "scorer" in target or "scorer" in action:
+            summary["scorer"] += 1
+        elif "evaluator" in target or "evaluator" in action:
+            summary["evaluator"] += 1
+        else:
+            summary["out_of_scope"] += 1
+    return summary
+
+
 def _add_config_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config",
@@ -993,51 +1024,61 @@ def run_improve(
     *,
     config: dict[str, Any],
     since_hours: int = 24,
-    execute: bool = False,
+    dry_run: bool = False,
     scorer: str = "compare",
-    item_ids: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Run the simplified self-improvement loop.
+    """Run the self-improvement loop.
 
-    `execute=False` is preview-only: calibration does not promote and apply does
-    not mutate. `execute=True` is the sole user-facing mutation boundary; policy
-    and internal hash checks still decide what can actually change.
+    `dry_run=True` is preview-only. By default the runner is mutation-capable,
+    while policy and internal checks still decide what can actually change.
     """
-    calibration = run_calibration(config=config, execute=bool(execute))
+    mutate = not bool(dry_run)
+    calibration = run_calibration(config=config, execute=mutate)
     pipeline = run_pipeline(
         config,
         since_hours=int(since_hours),
         write_report=False,
         scorer=scorer,
     )
-    plan = build_apply_plan(
-        proposals=pipeline.get("proposals") or [],
-        summary=pipeline.get("summary") or {},
-        execution_mode="improve_execute" if execute else "preview",
-        config=config,
-    )
-    plan_path = write_apply_plan(plan, config)
-    apply_result = apply_plan(
-        plan_id=str(plan.get("plan_id")),
-        config=config,
-        item_ids=item_ids,
-        execute=bool(execute),
-    )
+    proposals = pipeline.get("proposals") if isinstance(pipeline.get("proposals"), list) else []
+    decisions_summary = _summarize_runner_decisions(proposals)
+    run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
     result_payload = {
-        "schema_name": "self_improvement_improve_result",
+        "schema_name": "self_improvement_run_result",
         "schema_version": "1.0",
-        "execute": bool(execute),
-        "target_changed": bool(calibration.get("active_changed") or apply_result.get("target_changed")),
+        "run_id": run_id,
+        "dry_run": bool(dry_run),
+        "execute": mutate,
+        "target_changed": bool(calibration.get("active_changed")),
         "calibration": calibration,
-        "plan": {
-            "plan_id": plan.get("plan_id"),
-            "apply_plan_path": str(plan_path),
-            "summary": _plan_status_counts(plan),
+        "evidence_pack": None,
+        "step_decisions": {
+            "summary": decisions_summary,
+            "proposals_considered": proposals,
+            "skill": {"status": "not_yet_implemented", "changed": 0},
+            "memory": {"status": "not_yet_implemented", "changed": 0},
+            "scorer": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
+            "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
         },
-        "apply": apply_result,
+        "skill_changes": [],
+        "memory_changes": [],
+        "summary": {
+            "skill_changes": 0,
+            "memory_changes": 0,
+            "scorer_evaluator_changed": bool(calibration.get("active_changed")),
+            "dry_run": bool(dry_run),
+        },
     }
-    if not execute:
-        result_payload["next_actions"] = build_next_actions_for_improve(result_payload)
+    artifact_path = _write_run_artifact(result_payload, config)
+    result_payload["artifact_path"] = str(artifact_path)
+    if dry_run:
+        result_payload["next_actions"] = [
+            {
+                "kind": "run_mutating_improve",
+                "command": "bin/hermes-self-improve improve",
+                "description": "Run self-improvement with mutation enabled by default.",
+            }
+        ]
     return result_payload
 
 
@@ -1051,35 +1092,25 @@ def _plan_status_counts(plan: dict[str, Any]) -> dict[str, int]:
 
 
 def _render_improve_summary(result: dict[str, Any]) -> str:
-    plan = result.get("plan") if isinstance(result.get("plan"), dict) else {}
-    plan_summary = plan.get("summary") if isinstance(plan.get("summary"), dict) else {}
-    apply_result = result.get("apply") if isinstance(result.get("apply"), dict) else {}
-    apply_summary = apply_result.get("summary") if isinstance(apply_result.get("summary"), dict) else {}
-    title = "Self-improvement result" if result.get("execute") else "Self-improvement preview"
+    summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+    step_decisions = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
+    decision_summary = step_decisions.get("summary") if isinstance(step_decisions.get("summary"), dict) else {}
+    title = "Self-improvement dry run" if result.get("dry_run") else "Self-improvement result"
     lines = [
         title,
-        f"Calibration: {(result.get('calibration') or {}).get('current_status') if isinstance(result.get('calibration'), dict) else 'unknown'}",
-        "Plan: "
-        f"{plan.get('plan_id')} "
-        f"ready={int(plan_summary.get('ready') or 0)} "
-        f"needs_review={int(plan_summary.get('needs_review') or 0)} "
-        f"rejected_by_planner={int(plan_summary.get('rejected_by_planner') or 0)}",
+        "",
+        "Skill improvements:",
+        f"- changed {int(summary.get('skill_changes') or 0)} skills",
+        "Memory improvements:",
+        f"- changed {int(summary.get('memory_changes') or 0)} memories",
+        "Scorer/evaluator:",
+        f"- calibration status: {(result.get('calibration') or {}).get('current_status') if isinstance(result.get('calibration'), dict) else 'unknown'}",
+        f"- active evaluator changed: {bool(summary.get('scorer_evaluator_changed'))}",
+        "Evidence/proposals:",
+        f"- considered {int(decision_summary.get('total') or 0)} proposal signals",
     ]
-    if result.get("execute"):
-        lines.extend([
-            f"Applied: {int(apply_summary.get('applied') or 0)}",
-            f"Skipped by policy: {int(apply_summary.get('skipped_by_policy') or 0)}",
-            f"Failed: {int(apply_summary.get('failed') or 0)}",
-        ])
-    else:
-        lines.append(
-            "Apply preview: "
-            f"would_apply={int(apply_summary.get('would_apply') or 0)} "
-            f"skipped_by_policy={int(apply_summary.get('skipped_by_policy') or 0)} "
-            f"failed={int(apply_summary.get('failed') or 0)}"
-        )
-    if apply_result.get("ledger_path"):
-        lines.append(f"Ledger: {apply_result.get('ledger_path')}")
+    if result.get("artifact_path"):
+        lines.append(f"Artifact: {result.get('artifact_path')}")
     rendered_actions = render_next_actions(result.get("next_actions") if isinstance(result.get("next_actions"), list) else [])
     if rendered_actions:
         lines.extend(["", rendered_actions])
@@ -1089,11 +1120,10 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
 def _setup_cli(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="self_improvement_cmd")
 
-    p_improve = sub.add_parser("improve", help="Preview or execute the full self-improvement loop")
+    p_improve = sub.add_parser("improve", help="Run the full self-improvement loop; mutates by default")
     p_improve.add_argument("--since-hours", type=int, default=24)
     p_improve.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
-    p_improve.add_argument("--items", dest="item_ids", default=None, help="Comma-separated plan item ids to apply after planning")
-    p_improve.add_argument("--execute", action="store_true", help="Actually run mutation-capable phases; omit for preview")
+    p_improve.add_argument("--dry-run", action="store_true", help="Preview without mutation")
     p_improve.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_improve)
     p_improve.set_defaults(func=_handle_cli)
@@ -1110,51 +1140,11 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     _add_config_argument(p_report)
     p_report.set_defaults(func=_handle_cli)
 
-    p_plan = sub.add_parser("plan", help="Generate an ordered improvement plan artifact")
-    p_plan.add_argument("--since-hours", type=int, default=24)
-    p_plan.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
-    p_plan.add_argument("--json", action="store_true", dest="as_json")
-    _add_config_argument(p_plan)
-    p_plan.set_defaults(func=_handle_cli)
-
-    p_calibrate = sub.add_parser("calibrate", help="Preview evaluator/scorer calibration from recent evidence")
-    p_calibrate.add_argument("--execute", action="store_true", help="Promote calibration only when regression gates pass")
+    p_calibrate = sub.add_parser("calibrate", help="Calibrate evaluator/scorer; mutates by default when gates pass")
+    p_calibrate.add_argument("--dry-run", action="store_true", help="Preview without promoting active evaluator/scorer")
     p_calibrate.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_calibrate)
     p_calibrate.set_defaults(func=_handle_cli)
-
-    p_apply = sub.add_parser("apply", help="Preview or execute an ordered improvement plan")
-    p_apply.add_argument("plan_id")
-    p_apply.add_argument("--items", dest="item_ids", default=None, help="Comma-separated plan item ids to apply, e.g. step-001,step-002")
-    p_apply.add_argument("--execute", action="store_true", help="Actually mutate policy-allowed targets; omit for preview")
-    p_apply.add_argument("--json", action="store_true", dest="as_json")
-    _add_config_argument(p_apply)
-    p_apply.set_defaults(func=_handle_cli)
-
-    p_rollback = sub.add_parser("rollback", help="Preview or execute rollback for a self-improvement apply ledger")
-    p_rollback.add_argument("ledger_id")
-    p_rollback.add_argument("--execute", action="store_true", help="Actually restore targets; omit for preview")
-    p_rollback.add_argument("--json", action="store_true", dest="as_json")
-    _add_config_argument(p_rollback)
-    p_rollback.set_defaults(func=_handle_cli)
-
-    p_outcome = sub.add_parser("outcome", help="Record an append-only review/apply/rollback outcome")
-    p_outcome.add_argument("--outcome", required=True, choices=sorted(OUTCOME_VALUES))
-    p_outcome.add_argument("--plan-id")
-    p_outcome.add_argument("--item-id")
-    p_outcome.add_argument("--from-plan-item", help="Convenience form: plan-id:item-id")
-    p_outcome.add_argument("--proposal-id")
-    p_outcome.add_argument("--ledger-id")
-    p_outcome.add_argument("--reason")
-    p_outcome.add_argument("--source", default="cli")
-    p_outcome.add_argument("--risk")
-    p_outcome.add_argument("--recommendation")
-    p_outcome.add_argument("--scorer")
-    p_outcome.add_argument("--target-kind")
-    p_outcome.add_argument("--change-type")
-    p_outcome.add_argument("--json", action="store_true", dest="as_json")
-    _add_config_argument(p_outcome)
-    p_outcome.set_defaults(func=_handle_cli)
 
 
 def _handle_cli(args: argparse.Namespace) -> None:
@@ -1165,9 +1155,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
         payload = run_improve(
             config=config,
             since_hours=int(getattr(args, "since_hours", 24)),
-            execute=bool(getattr(args, "execute", False)),
+            dry_run=bool(getattr(args, "dry_run", False)),
             scorer=str(getattr(args, "scorer", "compare")),
-            item_ids=_parse_item_ids(getattr(args, "item_ids", None)),
         )
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
@@ -1195,102 +1184,12 @@ def _handle_cli(args: argparse.Namespace) -> None:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
 
-    if cmd == "plan":
-        out = run_pipeline(
-            config,
-            since_hours=int(getattr(args, "since_hours", 24)),
-            write_report=False,
-            scorer=getattr(args, "scorer", "compare"),
-        )
-        plan = build_apply_plan(
-            proposals=out.get("proposals") or [],
-            summary=out.get("summary") or {},
-            execution_mode="preview",
-            config=config,
-        )
-        plan["next_actions"] = build_next_actions_for_plan(plan)
-        path = write_apply_plan(plan, config)
-        payload = {"apply_plan": plan, "apply_plan_path": str(path), "next_actions": plan["next_actions"]}
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(_render_apply_plan_summary(plan, path))
-        return
-
     if cmd == "calibrate":
-        payload = run_calibration(config=config, execute=bool(getattr(args, "execute", False)))
+        payload = run_calibration(config=config, execute=not bool(getattr(args, "dry_run", False)))
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
             print(_render_calibration_summary(payload))
-        return
-
-    if cmd == "apply":
-        payload = apply_plan(
-            plan_id=str(getattr(args, "plan_id")),
-            config=config,
-            item_ids=_parse_item_ids(getattr(args, "item_ids", None)),
-            execute=bool(getattr(args, "execute", False)),
-        )
-        if not bool(getattr(args, "execute", False)):
-            payload["next_actions"] = build_next_actions_for_apply_preview(payload)
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(_render_apply_result_summary(payload))
-        return
-
-    if cmd == "rollback":
-        payload = rollback_apply_ledger(
-            ledger_id=str(getattr(args, "ledger_id")),
-            config=config,
-            execute=bool(getattr(args, "execute", False)),
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-        else:
-            print(f"Rollback ledger: {payload.get('ledger_id')}")
-            print(f"Mode: {'execute' if payload.get('execute') else 'preview'}")
-            print(f"Status: {payload.get('current_status')}")
-            if payload.get("reasons"):
-                print("Reasons: " + ", ".join(payload.get("reasons") or []))
-        return
-
-    if cmd == "outcome":
-        from_plan_item = str(getattr(args, "from_plan_item", None) or "")
-        derived_plan_id = getattr(args, "plan_id", None)
-        derived_item_id = getattr(args, "item_id", None)
-        if from_plan_item and ":" in from_plan_item:
-            plan_part, item_part = from_plan_item.split(":", 1)
-            derived_plan_id = derived_plan_id or plan_part or None
-            derived_item_id = derived_item_id or item_part or None
-        payload = record_review_outcome(
-            config=config,
-            outcome={
-                "outcome": getattr(args, "outcome", None),
-                "plan_id": derived_plan_id,
-                "item_id": derived_item_id,
-                "proposal_id": getattr(args, "proposal_id", None),
-                "ledger_id": getattr(args, "ledger_id", None),
-                "reason": getattr(args, "reason", None),
-                "source": getattr(args, "source", None) or "cli",
-                "risk": getattr(args, "risk", None),
-                "recommendation": getattr(args, "recommendation", None),
-                "scorer": getattr(args, "scorer", None),
-                "target_kind": getattr(args, "target_kind", None),
-                "change_type": getattr(args, "change_type", None),
-            },
-        )
-        if getattr(args, "as_json", False):
-            print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str))
-        else:
-            print(f"Outcome: {payload.get('status')}")
-            if payload.get("path"):
-                print(f"Path: {payload.get('path')}")
-            if payload.get("reasons"):
-                print("Reasons: " + ", ".join(payload.get("reasons") or []))
-        if payload.get("status") != "recorded":
-            raise SystemExit(1)
         return
 
     if cmd == "report":

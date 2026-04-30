@@ -22,26 +22,22 @@ def parse_args(argv: list[str]):
     return parser.parse_args(argv)
 
 
-def test_apply_command_uses_simplified_surface_without_mode_or_hash_flags():
-    args = parse_args(["apply", "plan-123", "--items", "step-001,step-002", "--execute"])
-
-    assert args.self_improvement_cmd == "apply"
-    assert args.plan_id == "plan-123"
-    assert args.item_ids == "step-001,step-002"
-    assert args.execute is True
-    assert not hasattr(args, "mode")
-    assert not hasattr(args, "expected_item_hash")
-    assert not hasattr(args, "confirm_apply")
+def assert_rejected(argv: list[str]):
+    try:
+        parse_args(argv)
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:  # pragma: no cover
+        raise AssertionError(f"argv should be rejected: {argv}")
 
 
-def test_parse_item_ids_splits_comma_separated_values():
-    cli = load_cli_module()
+def test_apply_command_is_removed_from_primary_surface():
+    assert_rejected(["apply", "plan-123"])
+    assert_rejected(["apply", "plan-123", "--items", "step-001,step-002"])
+    assert_rejected(["apply", "plan-123", "--execute"])
 
-    assert cli._parse_item_ids(" step-001,step-002 ,, step-003 ") == ["step-001", "step-002", "step-003"]
-    assert cli._parse_item_ids(None) is None
 
-
-def test_render_apply_result_summary_is_user_friendly():
+def test_apply_summary_helper_is_legacy_internal_only():
     cli = load_cli_module()
 
     text = cli._render_apply_result_summary(
@@ -62,40 +58,40 @@ def test_render_apply_result_summary_is_user_friendly():
     assert "Apply plan: plan-123" in text
     assert "Mode: preview" in text
     assert "Would apply: 2" in text
-    assert "Skipped by policy: 1" in text
-    assert "Failed: 1" in text
-    assert "Needs review: 1" in text
 
 
-def test_apply_cli_handler_calls_unified_apply_engine_without_execution_mode(monkeypatch, tmp_path, capsys):
+def test_improve_cli_handler_writes_run_artifact_without_apply_command(monkeypatch, tmp_path, capsys):
     cli = load_cli_module()
     calls = []
 
     monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"_self_improvement_root": str(tmp_path / "self-improvement")})
 
-    def fake_apply_plan(**kwargs):
+    def fake_run_improve(**kwargs):
         calls.append(kwargs)
         return {
-            "schema_name": "self_improvement_apply_result",
-            "plan_id": kwargs["plan_id"],
-            "execute": kwargs["execute"],
+            "schema_name": "self_improvement_run_result",
+            "dry_run": kwargs["dry_run"],
+            "execute": not kwargs["dry_run"],
             "target_changed": False,
-            "summary": {"would_apply": 1, "applied": 0, "skipped_by_policy": 0, "failed": 0, "needs_review": 0},
-            "items": [],
-            "ledger_path": None,
+            "summary": {"skill_changes": 0, "memory_changes": 0, "scorer_evaluator_changed": False},
+            "step_decisions": {"summary": {"total": 0}},
+            "calibration": {"current_status": "no_op"},
+            "artifact_path": str(tmp_path / "self-improvement" / "runs" / "run.json"),
         }
 
-    monkeypatch.setattr(cli, "apply_plan", fake_apply_plan)
-    args = parse_args(["apply", "plan-123", "--items", "step-001,step-002"])
+    monkeypatch.setattr(cli, "run_improve", fake_run_improve)
+    args = parse_args(["improve", "--dry-run"])
 
     cli._handle_cli(args)
 
     assert calls == [
         {
-            "plan_id": "plan-123",
             "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
-            "item_ids": ["step-001", "step-002"],
-            "execute": False,
+            "since_hours": 24,
+            "dry_run": True,
+            "scorer": "compare",
         }
     ]
-    assert "Apply plan: plan-123" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Self-improvement dry run" in out
+    assert "Artifact:" in out

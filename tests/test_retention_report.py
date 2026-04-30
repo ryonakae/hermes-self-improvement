@@ -204,4 +204,4 @@ def test_plugin_does_not_register_retention_report_in_primary_tool_surface():
 
     names = {tool["name"] for tool in ctx.tools}
     assert "self_improvement_retention_report" not in names
-    assert len([name for name in names if name.startswith("self_improvement_")]) == 8
+    assert len([name for name in names if name.startswith("self_improvement_")]) == 4

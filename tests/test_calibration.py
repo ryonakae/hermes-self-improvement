@@ -141,11 +141,12 @@ def test_calibration_preview_does_not_write_active_pointer(tmp_path):
     assert result["active_changed"] is False
 
 
-def test_calibrate_command_uses_simplified_surface_without_mode_or_hash_flags():
-    args = parse_args(["calibrate", "--execute"])
+def test_calibrate_command_uses_dry_run_surface_without_mode_or_hash_flags():
+    args = parse_args(["calibrate", "--dry-run"])
 
     assert args.self_improvement_cmd == "calibrate"
-    assert args.execute is True
+    assert args.dry_run is True
+    assert not hasattr(args, "execute")
     assert not hasattr(args, "mode")
     assert not hasattr(args, "expected_item_hash")
     assert not hasattr(args, "confirm_apply")
@@ -170,7 +171,7 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
         }
 
     monkeypatch.setattr(cli, "run_calibration", fake_run_calibration)
-    args = parse_args(["calibrate"])
+    args = parse_args(["calibrate", "--dry-run"])
 
     cli._handle_cli(args)
 
