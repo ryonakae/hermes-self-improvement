@@ -21,3 +21,4 @@ provides_tools:
   - self_improvement_plan
   - self_improvement_apply
   - self_improvement_rollback
+  - self_improvement_record_outcome

@@ -60,7 +60,7 @@ Review outcome feedback は明示的に記録する。人間が plan を rejecte
 
 Memory visibility proof は built-in memory tool の変更が store / cache / session 境界で観測できるかを検証するためのもの。execution remains blocked で、rollback execution を有効化しない。default tests は fake adapters と temp `HERMES_HOME` だけを使い、live smoke is opt-in (`HERMES_SELF_IMPROVE_LIVE_MEMORY_SMOKE=1`) で、does not touch production ~/.hermes。
 
-理由には secret を入れない。reason は redaction され、元文は hash 化される。rollback 後は rollback reason を短く残す。tool-native `self_improvement_record_outcome` は primary seven tools を増やすため現時点では deferred。
+理由には secret を入れない。reason は redaction され、元文は hash 化される。rollback 後は rollback reason を短く残す。tool-native `self_improvement_record_outcome` は append-only feedback tool として提供し、mutation permission / approval artifact にはしない。
 
 Repository root から実行する。
 

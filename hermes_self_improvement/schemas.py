@@ -4,6 +4,7 @@ STRING = {"type": "string"}
 CONFIG_PATH_PROPERTY = {"type": "string", "description": "Explicit config JSON/YAML path; same precedence as CLI --config."}
 BOOLEAN = {"type": "boolean"}
 SCORER_PROPERTY = {"type": "string", "enum": ["heuristic", "llm", "gepa", "compare"], "default": "compare"}
+OUTCOME_PROPERTY = {"type": "string", "enum": ["accepted_for_apply", "rejected_by_human", "edited_before_apply", "ignored_stale", "applied_successfully", "apply_failed", "rolled_back", "rollback_failed"]}
 
 SELF_IMPROVEMENT_STATUS_SCHEMA = {
     "name": "self_improvement_status",
@@ -96,6 +97,31 @@ SELF_IMPROVEMENT_ROLLBACK_SCHEMA = {
     },
 }
 
+SELF_IMPROVEMENT_RECORD_OUTCOME_SCHEMA = {
+    "name": "self_improvement_record_outcome",
+    "description": "Record append-only human/apply/rollback outcome feedback. Does not mutate targets or grant apply permission.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "config_path": CONFIG_PATH_PROPERTY,
+            "outcome": OUTCOME_PROPERTY,
+            "plan_id": STRING,
+            "item_id": STRING,
+            "proposal_id": STRING,
+            "ledger_id": STRING,
+            "reason": {"type": "string", "description": "Short redacted reason; do not include secrets."},
+            "source": {"type": "string", "default": "tool"},
+            "risk": STRING,
+            "recommendation": STRING,
+            "scorer": STRING,
+            "target_kind": STRING,
+            "change_type": STRING,
+            "config": {"type": "object", "description": "Test-only config override."},
+        },
+        "required": ["outcome"],
+    },
+}
+
 SELF_IMPROVEMENT_TOOL_SPECS = (
     ("self_improvement_status", SELF_IMPROVEMENT_STATUS_SCHEMA),
     ("self_improvement_report", SELF_IMPROVEMENT_REPORT_SCHEMA),
@@ -104,4 +130,5 @@ SELF_IMPROVEMENT_TOOL_SPECS = (
     ("self_improvement_plan", SELF_IMPROVEMENT_PLAN_SCHEMA),
     ("self_improvement_apply", SELF_IMPROVEMENT_APPLY_SCHEMA),
     ("self_improvement_rollback", SELF_IMPROVEMENT_ROLLBACK_SCHEMA),
+    ("self_improvement_record_outcome", SELF_IMPROVEMENT_RECORD_OUTCOME_SCHEMA),
 )

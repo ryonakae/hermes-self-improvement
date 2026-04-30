@@ -13,6 +13,7 @@ try:  # pragma: no cover - package import path
     from .mutation_backend import mutation_backend_status
     from .next_actions import build_next_actions_for_apply_preview, build_next_actions_for_plan
     from .observer import _event_path, _load_events
+    from .outcome_store import record_review_outcome
     from .recovery_engine import memory_rollback_status
     from .verification import merge_judge_status
 except Exception:  # pragma: no cover - direct file import used by tests/plugin wrapper
@@ -24,6 +25,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/plugin 
     from mutation_backend import mutation_backend_status
     from next_actions import build_next_actions_for_apply_preview, build_next_actions_for_plan
     from observer import _event_path, _load_events
+    from outcome_store import record_review_outcome
     from recovery_engine import memory_rollback_status
     from verification import merge_judge_status
 
@@ -165,6 +167,31 @@ def _handle_self_improvement_improve_tool(args: dict[str, Any] | None = None, **
         ))
     except Exception as exc:
         return tool_error("improve_failed", error_detail=str(exc), target_changed=False)
+
+
+def _handle_self_improvement_record_outcome_tool(args: dict[str, Any] | None = None, **_kw) -> str:
+    args = args or {}
+    try:
+        outcome = {
+            "outcome": args.get("outcome"),
+            "plan_id": args.get("plan_id"),
+            "item_id": args.get("item_id"),
+            "proposal_id": args.get("proposal_id"),
+            "ledger_id": args.get("ledger_id"),
+            "reason": args.get("reason"),
+            "source": args.get("source") or "tool",
+            "risk": args.get("risk"),
+            "recommendation": args.get("recommendation"),
+            "scorer": args.get("scorer"),
+            "target_kind": args.get("target_kind"),
+            "change_type": args.get("change_type"),
+        }
+        result = record_review_outcome(config=_config_from_args(args), outcome=outcome)
+        if result.get("status") != "recorded":
+            return tool_error("record_outcome_failed", reasons=result.get("reasons"), target_changed=False)
+        return tool_result(result)
+    except Exception as exc:
+        return tool_error("record_outcome_failed", error_detail=str(exc), target_changed=False)
 
 
 def _handle_self_improvement_rollback_tool(args: dict[str, Any] | None = None, **_kw) -> str:

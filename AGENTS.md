@@ -119,7 +119,7 @@ Repo 側の `evals/` は共通 seed / regression assets です。user-specific �
 
 ## Plugin tools
 
-Primary tool surface は 7 個だけです。`plugin.yaml`, `hermes_self_improvement/schemas.py`, `hermes_self_improvement/tool_handlers.py` を同時に確認してください。handler は wrapper CLI に shell out せず、CLI と同じ core function を使います。
+Primary tool surface は、append-only outcome feedback tool を含む 8 個です。`plugin.yaml`, `hermes_self_improvement/schemas.py`, `hermes_self_improvement/tool_handlers.py` を同時に確認してください。handler は wrapper CLI に shell out せず、CLI と同じ core function を使います。
 
 - `self_improvement_status`
 - `self_improvement_report`
@@ -128,6 +128,7 @@ Primary tool surface は 7 個だけです。`plugin.yaml`, `hermes_self_improve
 - `self_improvement_plan`
 - `self_improvement_apply`
 - `self_improvement_rollback`
+- `self_improvement_record_outcome`
 
 `mode` / `confirm_*` / `expected_*hash` は primary schema に出しません。
 

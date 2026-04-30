@@ -95,6 +95,7 @@ def test_register_exposes_simplified_self_improvement_tool_surface():
         "self_improvement_plan",
         "self_improvement_apply",
         "self_improvement_rollback",
+        "self_improvement_record_outcome",
     }
     assert not {
         "self_improvement_approve",
@@ -244,3 +245,34 @@ def test_plan_and_apply_tools_include_next_actions_for_previews(tmp_path):
     plan_payload = parse_tool_payload(plan_raw)
     assert "next_actions" in plan_payload
     assert plan_payload["apply_plan"].get("next_actions") == plan_payload["next_actions"]
+
+
+def test_record_outcome_tool_writes_append_only_outcome(tmp_path):
+    mod = load_plugin_module()
+
+    raw = mod._handle_self_improvement_record_outcome_tool({
+        "outcome": "rejected_by_human",
+        "plan_id": "plan-1",
+        "item_id": "step-001",
+        "reason": "too broad",
+        "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
+    })
+    payload = parse_tool_payload(raw)
+
+    assert payload["status"] == "recorded"
+    assert payload["target_changed"] is False
+    assert Path(payload["path"]).is_file()
+
+
+def test_record_outcome_tool_fails_closed_for_invalid_outcome(tmp_path):
+    mod = load_plugin_module()
+
+    raw = mod._handle_self_improvement_record_outcome_tool({
+        "outcome": "approve_all",
+        "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
+    })
+    payload = parse_tool_payload(raw)
+
+    assert payload["error"] == "record_outcome_failed"
+    assert payload["target_changed"] is False
+    assert "unknown_outcome" in payload["reasons"]

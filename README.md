@@ -121,7 +121,7 @@ GEPA の score が高くても、そのまま自動適用はしません。mutat
 
 After a plan item is accepted, rejected, edited before apply, ignored as stale, applied, failed, or rolled back, the outcome can be recorded as an append-only review outcome. Review outcomes are summarized in reports and counted as calibration evidence. They do not grant auto-apply permission; evaluator changes still require `calibrate --execute` and regression gates.
 
-理由には secret を入れないでください。短い reason は保存前に redaction され、元文は hash だけを calibration evidence の紐づけに使います。 Human review outcomes such as `rejected_by_human`, `edited_before_apply`, and `ignored_stale` require plan/item binding; use `bin/hermes-self-improve outcome --outcome rejected_by_human --from-plan-item <plan-id>:<item-id> --reason "<short reason>"` or explicit `--plan-id` / `--item-id`.Slack/agent workflows からの tool-native outcome recording は現時点では deferred で、明示 CLI 記録を使います。
+理由には secret を入れないでください。短い reason は保存前に redaction され、元文は hash だけを calibration evidence の紐づけに使います。 Human review outcomes such as `rejected_by_human`, `edited_before_apply`, and `ignored_stale` require plan/item binding; use `bin/hermes-self-improve outcome --outcome rejected_by_human --from-plan-item <plan-id>:<item-id> --reason "<short reason>"` or explicit `--plan-id` / `--item-id`.Slack/agent workflows can use `self_improvement_record_outcome` for append-only feedback; it does not mutate targets or grant apply permission. CLI recording remains available.
 
 普段は `improve` を使います。
 
@@ -215,7 +215,7 @@ Legacy/debug command は primary surface に戻しません。`generate-apply-pl
 
 `plugin.yaml` は agent-native tools を登録します。tool handler は wrapper CLI に shell out せず、CLI と同じ core function を呼びます。
 
-Primary tool surface も 7 個だけです。
+Primary tool surface も、append-only outcome feedback tool を含む 8 個です。
 
 - `self_improvement_status`
 - `self_improvement_report`
@@ -224,6 +224,7 @@ Primary tool surface も 7 個だけです。
 - `self_improvement_plan`
 - `self_improvement_apply`
 - `self_improvement_rollback`
+- `self_improvement_record_outcome`
 
 Tool でも `execute=false` が preview-only、`execute=true` が mutation intent です。`mode` / `confirm_*` / `expected_*hash` は primary schema に出しません。
 

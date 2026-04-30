@@ -731,8 +731,8 @@ def build_review_outcome_report_payload(*, config: dict[str, Any], limit: int = 
         "summary": summarize_review_outcomes(explicit),
         "inferred_from_ledgers": inferred.get("summary") if isinstance(inferred, dict) else {},
         "outcomes": explicit[: min(limit, 10)],
-        "recording_tool": "cli",
-        "tool_native_recording": "deferred",
+        "recording_tool": "cli_or_self_improvement_record_outcome",
+        "tool_native_recording": "append_only_feedback",
         "auto_apply_permission": False,
     }
 
