@@ -606,3 +606,60 @@ def test_apply_execute_rejects_agent_success_when_target_unchanged(tmp_path):
 
     assert result["summary"]["failed"] == 1
     assert "agent_result_target_unchanged" in result["items"][0]["reasons"]
+
+
+def make_skill_manage_patch_item(mod, *, item_id: str, target: Path, old: str, new: str) -> dict:
+    before = target.read_text(encoding="utf-8")
+    item = {
+        "item_id": item_id,
+        "status": "ready",
+        "order": int(item_id.split("-")[-1]),
+        "target_kind": "skill",
+        "target_path": str(target),
+        "change_type": "typo_fix",
+        "risk": "low",
+        "destructive": False,
+        "before_hash": mod._sha256_text(before),
+        "mutation": {
+            "type": "skill_manage_patch",
+            "preview_mutation": {"type": "replace_text_once", "old_text": old, "new_text": new},
+            "context": {"tool_name": "skill_manage", "tool_args": {"action": "patch", "name": "demo", "old_string": old, "new_string": new}},
+        },
+        "rollback_preview": {"before_snapshot": before},
+    }
+    item["item_hash"] = mod.compute_apply_item_hash(item)
+    return item
+
+
+def test_apply_plan_classifies_compatible_content_drift_without_rejecting_preview(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("helo world\n", encoding="utf-8")
+    item = make_skill_manage_patch_item(mod, item_id="step-001", target=target, old="helo", new="hello")
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-compatible-drift", "items": [item]})
+    target.write_text("Context changed.\nhelo world\n", encoding="utf-8")
+
+    result = mod.apply_plan(plan_id="plan-compatible-drift", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=False)
+
+    assert result["summary"]["would_apply"] == 1
+    applied = result["items"][0]
+    assert applied["status"] == "would_apply"
+    assert applied["drift"]["class"] == "compatible_drift"
+    assert applied["drift"]["action"] == "continue"
+
+
+def test_apply_plan_skips_superseded_content_drift(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("helo world\n", encoding="utf-8")
+    item = make_skill_manage_patch_item(mod, item_id="step-001", target=target, old="helo", new="hello")
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-superseded-drift", "items": [item]})
+    target.write_text("hello world\n", encoding="utf-8")
+
+    result = mod.apply_plan(plan_id="plan-superseded-drift", config={"_self_improvement_root": str(tmp_path / "self-improvement")}, execute=False)
+
+    assert result["summary"]["skipped_by_policy"] == 1
+    skipped = result["items"][0]
+    assert skipped["status"] == "skipped_by_policy"
+    assert "skip_superseded" in skipped["reasons"]
+    assert skipped["drift"]["class"] == "superseded"

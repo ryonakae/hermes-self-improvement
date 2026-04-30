@@ -17,6 +17,7 @@ try:  # pragma: no cover - package import path
     from .mutation_backend import ALLOWED_MUTATION_AGENT_TOOLS, build_mutation_backend
     from .mutation_agent import run_skill_agent_task
     from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
+    from .drift import classify_content_drift
     from .observer import _reports_dir, _sha256_text, _stable_json
     from .recovery_engine import ledger_bound_restore, memory_ledger_bound_restore, recovery_action_from_snapshots
     from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
@@ -33,6 +34,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from mutation_backend import ALLOWED_MUTATION_AGENT_TOOLS, build_mutation_backend
     from mutation_agent import run_skill_agent_task
     from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
+    from drift import classify_content_drift
     from observer import _reports_dir, _sha256_text, _stable_json
     from recovery_engine import ledger_bound_restore, memory_ledger_bound_restore, recovery_action_from_snapshots
     from skill_snapshot import SkillSnapshotError, capture_skill_snapshot
@@ -656,12 +658,29 @@ def apply_plan(
 
         content, current_hash = _current_content_and_hash(target_path)
         baseline = accepted_baseline.setdefault(str(target_path), item.get("before_hash"))
-        if current_hash != baseline:
-            item_result["status"] = "failed"
-            item_result["reasons"].append("target_hash_mismatch")
+        drift = classify_content_drift(
+            baseline_hash=baseline,
+            current_hash=current_hash,
+            current_content=content,
+            mutation=mutation,
+            target_kind=item.get("target_kind"),
+        )
+        item_result["drift"] = drift
+        if drift.get("class") != "no_drift":
             item_result["current_hash"] = current_hash
             item_result["expected_hash"] = baseline
-            summary["failed"] += 1
+        if drift.get("action") == "skip" and drift.get("class") == "superseded":
+            item_result["status"] = "skipped_by_policy"
+            item_result["reasons"].append("skip_superseded")
+            item_result["reasons"].extend(drift.get("reasons") or [])
+            summary["skipped_by_policy"] += 1
+            result_items.append(item_result)
+            continue
+        if drift.get("action") != "continue":
+            item_result["status"] = "failed" if drift.get("class") == "target_identity_drift" else "needs_review"
+            item_result["reasons"].append("target_hash_mismatch")
+            item_result["reasons"].extend(drift.get("reasons") or [])
+            summary[item_result["status"]] += 1
             result_items.append(item_result)
             continue
 
