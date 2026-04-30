@@ -17,6 +17,7 @@ try:  # pragma: no cover - package import path
         DEFAULT_RETENTION_DAYS,
         load_config,
     )
+    from .evidence import build_evidence_pack, write_evidence_pack
     from .mutation_backend import mutation_backend_status
     from .next_actions import build_next_actions_for_apply_preview, build_next_actions_for_improve, build_next_actions_for_plan, render_next_actions
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
@@ -33,6 +34,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         DEFAULT_RETENTION_DAYS,
         load_config,
     )
+    from evidence import build_evidence_pack, write_evidence_pack
     from mutation_backend import mutation_backend_status
     from next_actions import build_next_actions_for_apply_preview, build_next_actions_for_improve, build_next_actions_for_plan, render_next_actions
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
@@ -1034,6 +1036,11 @@ def run_improve(
     """
     mutate = not bool(dry_run)
     calibration = run_calibration(config=config, execute=mutate)
+    until = datetime.now(UTC)
+    since = until - timedelta(hours=int(since_hours))
+    events = _load_events(_event_path(config), since=since)
+    evidence_pack = build_evidence_pack(events, since, until)
+    evidence_path = write_evidence_pack(evidence_pack, _reports_dir(config))
     pipeline = run_pipeline(
         config,
         since_hours=int(since_hours),
@@ -1051,7 +1058,11 @@ def run_improve(
         "execute": mutate,
         "target_changed": bool(calibration.get("active_changed")),
         "calibration": calibration,
-        "evidence_pack": None,
+        "evidence_pack": {
+            "path": str(evidence_path),
+            "summary": evidence_pack.get("summary"),
+            "views": evidence_pack.get("views"),
+        },
         "step_decisions": {
             "summary": decisions_summary,
             "proposals_considered": proposals,
