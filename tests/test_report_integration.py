@@ -190,3 +190,29 @@ def test_recent_plan_report_payload_includes_next_actions(tmp_path):
     actions = payload["plans"][0]["next_actions"]
     assert any(action["kind"] == "execute_ready_items" for action in actions)
     assert any(action["kind"] == "record_rejection_outcome" for action in actions)
+
+
+def test_ledger_report_surfaces_drift_and_agent_stop_counts(tmp_path):
+    from hermes_self_improvement.cli import build_ledger_report_payload
+
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    ledger_dir = tmp_path / "self-improvement" / "ledgers" / "2026-04-30"
+    ledger_dir.mkdir(parents=True)
+    (ledger_dir / "ledger-drift.json").write_text(json.dumps({
+        "schema_name": "self_improvement_apply_ledger",
+        "operation": "apply",
+        "ledger_id": "ledger-drift",
+        "created_at": "2026-04-30T18:00:00+00:00",
+        "plan_id": "plan-drift",
+        "summary": {"would_apply": 0, "applied": 0, "skipped_by_policy": 1, "failed": 0, "needs_review": 1},
+        "items": [
+            {"item_id": "step-001", "status": "skipped_by_policy", "drift": {"class": "superseded", "action": "skip"}},
+            {"item_id": "step-002", "status": "needs_review", "mutation_agent_outcome": "stopped_stale_target"},
+        ],
+    }), encoding="utf-8")
+
+    payload = build_ledger_report_payload(config=config, status="all", operation="apply")
+
+    ledger = payload["ledgers"][0]
+    assert ledger["drift_class_counts"] == {"superseded": 1}
+    assert ledger["mutation_agent_outcome_counts"] == {"stopped_stale_target": 1}

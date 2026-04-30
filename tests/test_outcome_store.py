@@ -95,3 +95,27 @@ def test_summarize_review_outcomes_distinguishes_human_and_ledger_sources():
     assert summary["explicit_human_review_outcomes"] == 2
     assert summary["ledger_inferred_outcomes"] == 1
     assert summary["bad_outcomes"] == 2
+
+
+def test_infer_outcomes_from_apply_ledger_preserves_drift_and_agent_stop_outcomes(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    ledger_dir = tmp_path / "self-improvement" / "ledgers" / "2026-04-30"
+    ledger_dir.mkdir(parents=True)
+    (ledger_dir / "ledger-drift.json").write_text(json.dumps({
+        "schema_name": "self_improvement_apply_ledger",
+        "operation": "apply",
+        "ledger_id": "ledger-drift",
+        "plan_id": "plan-drift",
+        "items": [
+            {"item_id": "step-001", "status": "skipped_by_policy", "target_kind": "skill", "drift": {"class": "superseded"}},
+            {"item_id": "step-002", "status": "needs_review", "target_kind": "skill", "mutation_agent_outcome": "stopped_stale_target"},
+        ],
+    }), encoding="utf-8")
+
+    inferred = infer_review_outcomes_from_ledgers(config=config)
+
+    assert inferred["summary"]["by_outcome"]["skipped_superseded"] == 1
+    assert inferred["summary"]["by_outcome"]["stopped_stale_target"] == 1
+    rows = {row["item_id"]: row for row in inferred["outcomes"]}
+    assert rows["step-001"]["drift_class"] == "superseded"
+    assert rows["step-002"]["mutation_agent_outcome"] == "stopped_stale_target"

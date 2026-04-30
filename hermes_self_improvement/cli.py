@@ -259,6 +259,16 @@ def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
     items = ledger.get("items") if isinstance(ledger.get("items"), list) else []
     typed_items = [item for item in items if isinstance(item, dict)]
     item_status_counts = _status_counts(typed_items, ("would_apply", "applied", "skipped_by_policy", "failed", "needs_review"))
+    drift_class_counts: dict[str, int] = {}
+    mutation_agent_outcome_counts: dict[str, int] = {}
+    for item in typed_items:
+        drift = item.get("drift") if isinstance(item.get("drift"), dict) else {}
+        drift_class = str(drift.get("class") or "")
+        if drift_class:
+            drift_class_counts[drift_class] = drift_class_counts.get(drift_class, 0) + 1
+        agent_outcome = str(item.get("mutation_agent_outcome") or "")
+        if agent_outcome:
+            mutation_agent_outcome_counts[agent_outcome] = mutation_agent_outcome_counts.get(agent_outcome, 0) + 1
     summary_payload = {
         "ledger_id": ledger.get("ledger_id"),
         "ledger_path": ledger.get("_ledger_path"),
@@ -278,6 +288,8 @@ def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
         "evidence_summary": review.get("evidence_summary"),
         "summary": summary,
         "item_status_counts": item_status_counts,
+        "drift_class_counts": drift_class_counts,
+        "mutation_agent_outcome_counts": mutation_agent_outcome_counts,
         "git_commit_created": review.get("git_commit_created", bool(git_metadata.get("commit_created"))),
         "git_metadata": git_metadata,
         "target_before_hash": ledger.get("target_before_hash"),
@@ -341,6 +353,10 @@ def render_ledger_report(payload: dict[str, Any]) -> str:
         ])
         if ledger.get("evidence_summary"):
             lines.append(f"- evidence: {ledger.get('evidence_summary')}")
+        if ledger.get("drift_class_counts"):
+            lines.append(f"- drift classes: `{ledger.get('drift_class_counts')}`")
+        if ledger.get("mutation_agent_outcome_counts"):
+            lines.append(f"- mutation agent outcomes: `{ledger.get('mutation_agent_outcome_counts')}`")
         git_metadata = ledger.get("git_metadata") if isinstance(ledger.get("git_metadata"), dict) else {}
         if git_metadata.get("is_git_managed"):
             lines.append(f"- git target: `{git_metadata.get('target_relative_path')}` in `{git_metadata.get('repo_root')}`")

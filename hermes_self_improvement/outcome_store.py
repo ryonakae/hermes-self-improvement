@@ -187,10 +187,16 @@ def infer_review_outcomes_from_ledgers(*, config: dict[str, Any], limit: int = 2
                 elif status == "failed":
                     mapped = "rollback_failed"
             else:
+                drift = item.get("drift") if isinstance(item.get("drift"), dict) else {}
+                agent_outcome = str(item.get("mutation_agent_outcome") or "")
                 if status == "applied":
                     mapped = "applied_successfully"
                 elif status == "failed":
                     mapped = "apply_failed"
+                elif status == "skipped_by_policy" and drift.get("class") == "superseded":
+                    mapped = "skipped_superseded"
+                elif status in {"needs_review", "skipped_by_policy"} and agent_outcome in {"skipped_superseded", "stopped_stale_target", "stopped_conflict", "stopped_uncertain_needs_review"}:
+                    mapped = agent_outcome
             if mapped is None:
                 continue
             rows.append({
@@ -206,6 +212,9 @@ def infer_review_outcomes_from_ledgers(*, config: dict[str, Any], limit: int = 2
                 "source": "ledger_inference",
                 "target_kind": item.get("target_kind"),
                 "change_type": item.get("change_type"),
+                "drift_class": (item.get("drift") or {}).get("class") if isinstance(item.get("drift"), dict) else None,
+                "drift_action": (item.get("drift") or {}).get("action") if isinstance(item.get("drift"), dict) else None,
+                "mutation_agent_outcome": item.get("mutation_agent_outcome"),
                 "path": str(path),
             })
     return {"outcomes": rows, "summary": summarize_review_outcomes(rows), "target_changed": False}
