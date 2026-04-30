@@ -19,9 +19,15 @@ When older plans conflict with this list, this index wins unless a newer plan ex
 
 ## Active plans
 
-None.
+- `2026-04-30_114058-review-outcome-feedback-loop.md`
+  - **Priority:** first.
+  - Adds append-only review outcome records, CLI/report/calibration integration, and a dogfood feedback loop so human/apply/rollback outcomes can improve evaluator evidence without granting auto-apply permission.
 
-New implementation work should start with a new timestamped plan that references this index and current code/docs. Do not continue old approval/mode/low-risk command plans directly.
+- `2026-04-30_114059-memory-visibility-proof.md`
+  - **Priority:** second.
+  - Adds memory visibility/cache/session proof harnesses and status/reporting around why memory rollback execution remains blocked. This is a proof plan, not an execution-enablement plan.
+
+New implementation work should start from these active plans or from a newer timestamped plan that references this index and current code/docs. Do not continue old approval/mode/low-risk command plans directly.
 
 ## Completed canonical implementation records
 
