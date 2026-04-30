@@ -10,6 +10,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+_LOCAL_DIR = Path(__file__).resolve().parent
+if str(_LOCAL_DIR) not in sys.path:
+    sys.path.insert(0, str(_LOCAL_DIR))
+
+try:  # pragma: no cover - package import path
+    from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
+except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
+    from prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
+
 
 ADAPTER_VERSION = "gepa-v0.1"
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -114,6 +123,7 @@ RUBRIC = {
     "risk": ["low", "medium", "high"],
     "recommendation": ["report_only", "human_review", "review_for_possible_low_risk_apply"],
     "safety": "GEPA output is advisory only. It must never grant unattended apply permission.",
+    "skill_memory_classification": SKILL_MEMORY_CLASSIFICATION_BLOCK,
 }
 
 
@@ -125,7 +135,7 @@ def load_rubric(path: Path | None = None) -> dict[str, Any]:
     data = json.loads(target.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"Rubric file is not a JSON object: {target}")
-    return data
+    return {**data, "skill_memory_classification": SKILL_MEMORY_CLASSIFICATION_BLOCK}
 
 
 def load_eval_cases(path: Path | None = None) -> list[dict[str, Any]]:

@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any
 
+try:  # pragma: no cover - package import path
+    from .prompts import skill_memory_classification_context
+except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
+    from prompts import skill_memory_classification_context
+
 SENSITIVE_DELETE_REASONS = {"pii", "secret", "harmful_instruction", "sensitive"}
 CORRECTABLE_DELETE_REASONS = {"stale", "incorrect", "duplicate"}
 
@@ -256,6 +261,7 @@ def build_memory_tool_context(*, action: str, target: str = "memory", content: s
         "direct_fallback_allowed": False,
         "tool_name": "memory",
         "tool_args": args,
+        **skill_memory_classification_context(),
     }
 
 
@@ -323,6 +329,7 @@ def build_provider_correction_tool_context(resolved: dict[str, Any]) -> dict[str
         "direct_fallback_allowed": False,
         "tool_name": tool,
         "tool_args": args or {},
+        **skill_memory_classification_context(),
     }
 
 
@@ -347,6 +354,7 @@ def build_provider_native_delete_tool_context(resolved: dict[str, Any], operatio
         "direct_fallback_allowed": False,
         "tool_name": tool,
         "tool_args": args or {},
+        **skill_memory_classification_context(),
     }
 
 
@@ -419,6 +427,7 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
         "execution_enabled": False,
         "direct_fallback_allowed": False,
         **resolved,
+        **skill_memory_classification_context(),
     }
 
 
@@ -441,6 +450,7 @@ def build_skill_manage_context(*, action: str, skill_name: str, **kwargs: Any) -
         "direct_fallback_allowed": False,
         "tool_name": "skill_manage",
         "tool_args": args,
+        **skill_memory_classification_context(),
     }
 
 

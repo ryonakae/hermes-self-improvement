@@ -7,9 +7,11 @@ from typing import Any, Callable
 
 try:  # pragma: no cover - package import path
     from .mutation_backend import ALLOWED_MUTATION_AGENT_TOOLS, MutationBackend
+    from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
     from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from mutation_backend import ALLOWED_MUTATION_AGENT_TOOLS, MutationBackend
+    from prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
     from skill_snapshot import SkillSnapshotError, capture_skill_snapshot
 
 SKILL_AGENT_TASK_TYPES = {
@@ -151,6 +153,9 @@ def build_mutation_agent_prompt(task: dict[str, Any]) -> str:
 
 Task kind: {task_kind}
 Targets: {json.dumps(targets, ensure_ascii=False, sort_keys=True)}
+
+Skill vs memory classification:
+{SKILL_MEMORY_CLASSIFICATION_BLOCK}
 
 Instructions:
 {instructions}

@@ -10,9 +10,11 @@ from typing import Any
 try:  # pragma: no cover - package import path
     from .config import get_hermes_home
     from .observer import _redact_text
+    from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from config import get_hermes_home
     from observer import _redact_text
+    from prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
 
 def score_proposals_impl(
     proposals: list[dict[str, Any]],
@@ -395,6 +397,7 @@ def _call_llm_scorer(
             "risk": ["low", "medium", "high"],
             "recommendation": ["report_only", "human_review", "review_for_possible_low_risk_apply"],
             "safety": "無人での skill/memory 自動適用を許可しない。auto_apply は常に false とみなす。",
+            "skill_memory_classification": SKILL_MEMORY_CLASSIFICATION_BLOCK,
         },
     }
     messages = [
