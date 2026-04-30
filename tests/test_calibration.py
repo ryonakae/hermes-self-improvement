@@ -278,3 +278,20 @@ def test_calibration_rollback_restores_active_before_state(monkeypatch, tmp_path
 
     assert rollback["current_status"] == "rolled_back"
     assert active_pointer.read_text(encoding="utf-8") == before_content
+
+
+def test_collect_calibration_evidence_distinguishes_explicit_human_outcomes(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    import hermes_self_improvement.outcome_store as outcome_store
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 1}}}
+    outcome_store.record_review_outcome(config=config, outcome={
+        "outcome": "edited_before_apply",
+        "plan_id": "plan-1",
+        "item_id": "step-001",
+        "source": "cli",
+    })
+
+    evidence = calibration.collect_calibration_evidence(config)
+    assert evidence["review_outcomes"] == 1
+    assert evidence["explicit_human_review_outcomes"] == 1
+    assert evidence["ledger_inferred_outcomes"] == 0

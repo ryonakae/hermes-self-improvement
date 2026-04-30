@@ -152,3 +152,17 @@ def test_improve_preview_summary_prints_next_actions(monkeypatch, tmp_path, caps
     assert "Self-improvement preview" in out
     assert "Next actions:" in out
     assert "bin/hermes-self-improve apply plan-preview --execute" in out
+
+
+def test_outcome_command_accepts_from_plan_item_convenience():
+    parser = build_parser()
+    args = parser.parse_args([
+        "outcome",
+        "--outcome", "ignored_stale",
+        "--from-plan-item", "plan-1:step-002",
+        "--reason", "stale",
+    ])
+
+    assert args.from_plan_item == "plan-1:step-002"
+    assert args.plan_id is None
+    assert args.item_id is None

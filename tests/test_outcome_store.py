@@ -75,3 +75,23 @@ def test_infer_outcomes_from_apply_ledger_counts_applied_and_failed(tmp_path):
     assert inferred["summary"]["by_outcome"]["applied_successfully"] == 1
     assert inferred["summary"]["by_outcome"]["apply_failed"] == 1
     assert inferred["target_changed"] is False
+
+
+def test_record_rejection_requires_plan_and_item_for_human_review(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = record_review_outcome(config=config, outcome={"outcome": "rejected_by_human", "reason": "too broad"})
+    assert result["status"] == "failed"
+    assert "plan_id_missing" in result["reasons"]
+    assert "item_id_missing" in result["reasons"]
+
+
+def test_summarize_review_outcomes_distinguishes_human_and_ledger_sources():
+    summary = summarize_review_outcomes([
+        {"outcome": "rejected_by_human", "source": "cli"},
+        {"outcome": "edited_before_apply", "source": "tool"},
+        {"outcome": "apply_failed", "source": "ledger_inference"},
+    ])
+    assert summary["total"] == 3
+    assert summary["explicit_human_review_outcomes"] == 2
+    assert summary["ledger_inferred_outcomes"] == 1
+    assert summary["bad_outcomes"] == 2

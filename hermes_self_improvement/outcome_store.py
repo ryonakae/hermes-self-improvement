@@ -28,8 +28,10 @@ OUTCOME_VALUES = {
 }
 
 _BAD_OUTCOME_VALUES = {"rejected_by_human", "apply_failed", "rolled_back", "rollback_failed"}
+_HUMAN_REVIEW_OUTCOME_VALUES = {"accepted_for_apply", "rejected_by_human", "edited_before_apply", "ignored_stale"}
 _SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_-]{6,}"),
+
     re.compile(r"(?i)(token|password|secret|api[_-]?key)\s*[:=]\s*\S+"),
     re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+"),
 ]
@@ -60,6 +62,11 @@ def _normalize_outcome(raw: dict[str, Any], *, now: datetime, source_default: st
     outcome = str(raw.get("outcome") or "")
     if outcome not in OUTCOME_VALUES:
         reasons.append("unknown_outcome")
+    if outcome in _HUMAN_REVIEW_OUTCOME_VALUES:
+        if not raw.get("plan_id"):
+            reasons.append("plan_id_missing")
+        if not raw.get("item_id"):
+            reasons.append("item_id_missing")
 
     reason = raw.get("reason")
     redacted_reason = _redact(str(reason)) if reason is not None else None
@@ -130,6 +137,8 @@ def summarize_review_outcomes(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
     by_source = Counter(str(row.get("source") or "unknown") for row in outcomes)
     return {
         "total": len(outcomes),
+        "explicit_human_review_outcomes": sum(by_outcome.get(name, 0) for name in _HUMAN_REVIEW_OUTCOME_VALUES),
+        "ledger_inferred_outcomes": by_source.get("ledger_inference", 0),
         "bad_outcomes": sum(by_outcome.get(name, 0) for name in _BAD_OUTCOME_VALUES),
         "by_outcome": dict(by_outcome),
         "by_target_kind": dict(by_target_kind),

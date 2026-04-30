@@ -91,6 +91,8 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
     outcomes = load_review_outcomes(config=config, limit=1000)
     outcome_summary = summarize_review_outcomes(outcomes)
     summary["review_outcomes"] = outcome_summary["total"]
+    summary["explicit_human_review_outcomes"] = outcome_summary.get("explicit_human_review_outcomes", 0)
+    summary["ledger_inferred_outcomes"] = outcome_summary.get("ledger_inferred_outcomes", 0)
     summary["review_outcome_summary"] = outcome_summary
     if outcome_summary["total"]:
         summary["bad_outcomes"] += int(outcome_summary.get("bad_outcomes") or 0)

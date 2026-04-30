@@ -166,3 +166,6 @@ Expected: enabled true, error null, hooks > 0。Tool を追加・削除した場
 - GEPA optimizer / trainset 変換では malformed eval case を `rejected` として記録するだけで終わらせず、optimizer training / compile path では non-empty rejected set を fail-closed にする。report / non-optimizer path では rejected を表示して継続してよいが、partial train silently は避ける。
 
 Implementation note: skill rollback is implemented through ledger-bound snapshots. Memory rollback currently has read-only store probing, hashable built-in memory state capture, ledger metadata, and a preview-only compensating-action planner. Execution remains fail-closed as `unsupported_pending_store_validation` because cache/session visibility is not proven. Built-in memory direct restore, external provider direct restore, and sensitive delete re-add are forbidden. `status` exposes this as `memory_rollback.supported=false` with proof plan `.hermes/plans/2026-04-30_081449-memory-rollback-store-validation.md`.
+
+
+Outcome recording requires plan/item binding for human review outcomes; use `--from-plan-item <plan-id>:<item-id>` or explicit `--plan-id` / `--item-id`.

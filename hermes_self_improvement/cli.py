@@ -1126,6 +1126,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_outcome.add_argument("--outcome", required=True, choices=sorted(OUTCOME_VALUES))
     p_outcome.add_argument("--plan-id")
     p_outcome.add_argument("--item-id")
+    p_outcome.add_argument("--from-plan-item", help="Convenience form: plan-id:item-id")
     p_outcome.add_argument("--proposal-id")
     p_outcome.add_argument("--ledger-id")
     p_outcome.add_argument("--reason")
@@ -1240,12 +1241,19 @@ def _handle_cli(args: argparse.Namespace) -> None:
         return
 
     if cmd == "outcome":
+        from_plan_item = str(getattr(args, "from_plan_item", None) or "")
+        derived_plan_id = getattr(args, "plan_id", None)
+        derived_item_id = getattr(args, "item_id", None)
+        if from_plan_item and ":" in from_plan_item:
+            plan_part, item_part = from_plan_item.split(":", 1)
+            derived_plan_id = derived_plan_id or plan_part or None
+            derived_item_id = derived_item_id or item_part or None
         payload = record_review_outcome(
             config=config,
             outcome={
                 "outcome": getattr(args, "outcome", None),
-                "plan_id": getattr(args, "plan_id", None),
-                "item_id": getattr(args, "item_id", None),
+                "plan_id": derived_plan_id,
+                "item_id": derived_item_id,
                 "proposal_id": getattr(args, "proposal_id", None),
                 "ledger_id": getattr(args, "ledger_id", None),
                 "reason": getattr(args, "reason", None),
