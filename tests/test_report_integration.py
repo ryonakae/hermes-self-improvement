@@ -156,3 +156,17 @@ def test_report_integration_is_quiet_when_no_artifacts(tmp_path):
     assert "## Calibration summary" not in out["report"]
     assert "## Approval gate summary" not in out["report"]
     assert "## Retention summary" not in out["report"]
+
+
+def test_report_includes_review_outcome_summary(tmp_path):
+    mod = load_plugin_module()
+    import hermes_self_improvement.outcome_store as outcome_store
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    outcome_store.record_review_outcome(config=config, outcome={"outcome": "rejected_by_human", "source": "cli"})
+
+    out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")
+
+    assert out["operational_reports"]["review_outcomes"]["summary"]["total"] == 1
+    assert out["operational_reports"]["review_outcomes"]["auto_apply_permission"] is False
+    assert "## Review outcomes" in out["report"]
+    assert "does not grant auto-apply permission" in out["report"]

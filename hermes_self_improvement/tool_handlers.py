@@ -8,7 +8,7 @@ try:  # pragma: no cover - package import path
     from .apply_engine import apply_plan, rollback_apply_ledger
     from .apply_plan import build_apply_plan, write_apply_plan
     from .calibration import run_calibration
-    from .cli import run_improve, run_pipeline
+    from .cli import build_review_outcome_report_payload, run_improve, run_pipeline
     from .config import DEFAULT_RETENTION_DAYS, load_config
     from .mutation_backend import mutation_backend_status
     from .observer import _event_path, _load_events
@@ -18,7 +18,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/plugin 
     from apply_engine import apply_plan, rollback_apply_ledger
     from apply_plan import build_apply_plan, write_apply_plan
     from calibration import run_calibration
-    from cli import run_improve, run_pipeline
+    from cli import build_review_outcome_report_payload, run_improve, run_pipeline
     from config import DEFAULT_RETENTION_DAYS, load_config
     from mutation_backend import mutation_backend_status
     from observer import _event_path, _load_events
@@ -84,6 +84,7 @@ def _handle_self_improvement_status_tool(args: dict[str, Any] | None = None, **_
         "mutation_backend": mutation_backend_status(config),
         "merge_judge": merge_judge_status(config),
         "memory_rollback": memory_rollback_status(config),
+        "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
         "target_changed": False,
     })
 

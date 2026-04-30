@@ -114,3 +114,19 @@ def test_primary_cli_surface_does_not_accept_hash_or_mode_flags():
             assert exc.code == 2
         else:  # pragma: no cover
             raise AssertionError(f"legacy flag should not parse: {argv}")
+
+
+def test_outcome_command_accepts_required_fields():
+    parser = build_parser()
+    args = parser.parse_args([
+        "outcome",
+        "--outcome", "rejected_by_human",
+        "--plan-id", "plan-1",
+        "--item-id", "step-001",
+        "--reason", "too broad",
+        "--json",
+    ])
+
+    assert args.self_improvement_cmd == "outcome"
+    assert args.outcome == "rejected_by_human"
+    assert args.as_json is True

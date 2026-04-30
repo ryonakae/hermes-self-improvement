@@ -25,6 +25,8 @@ bin/hermes-self-improve improve --since-hours 24 --json
 
 Do not schedule legacy approval/low-risk/hash-confirmation commands; they are not part of the surface.
 
+Review outcome feedback is append-only evidence for human/apply/rollback outcomes. Record rejected, edited, ignored, failed, or rolled-back items with short non-secret reasons; reasons are redacted and hashed. Review outcomes are summarized in reports and counted as calibration evidence, but they do not grant auto-apply permission.
+
 When debugging scorer behavior, use `report`, `plan`, and `calibrate` rather than old GEPA-specific CLI commands. GEPA/DSPy details are internal to scorer and calibration modules.
 
 Validation after code or docs changes:

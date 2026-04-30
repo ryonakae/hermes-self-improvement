@@ -8,9 +8,11 @@ from typing import Any
 try:  # pragma: no cover - package import path
     from .config import normalize_calibration_config
     from .observer import _reports_dir, _sha256_text, _stable_json
+    from .outcome_store import load_review_outcomes, summarize_review_outcomes
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from config import normalize_calibration_config
     from observer import _reports_dir, _sha256_text, _stable_json
+    from outcome_store import load_review_outcomes, summarize_review_outcomes
 
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -86,7 +88,18 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
         "sources": [],
     }
 
+    outcomes = load_review_outcomes(config=config, limit=1000)
+    outcome_summary = summarize_review_outcomes(outcomes)
+    summary["review_outcomes"] = outcome_summary["total"]
+    summary["review_outcome_summary"] = outcome_summary
+    if outcome_summary["total"]:
+        summary["bad_outcomes"] += int(outcome_summary.get("bad_outcomes") or 0)
+        summary["total_events"] += int(outcome_summary.get("total") or 0)
+        summary["sources"].extend(str(row.get("path")) for row in outcomes if row.get("path"))
+
     for path, payload in _iter_recent_json(root, window_days=window_days, now=now) or []:
+        if payload.get("schema_name") == "self_improvement_review_outcome":
+            continue
         schema = payload.get("schema_name")
         source_recorded = False
 

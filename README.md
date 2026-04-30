@@ -115,6 +115,12 @@ GEPA の score が高くても、そのまま自動適用はしません。mutat
 
 ## 自己改善の流れ
 
+### Review outcome feedback
+
+After a plan item is accepted, rejected, edited before apply, ignored as stale, applied, failed, or rolled back, the outcome can be recorded as an append-only review outcome. Review outcomes are summarized in reports and counted as calibration evidence. They do not grant auto-apply permission; evaluator changes still require `calibrate --execute` and regression gates.
+
+理由には secret を入れないでください。短い reason は保存前に redaction され、元文は hash だけを calibration evidence の紐づけに使います。Slack/agent workflows からの tool-native outcome recording は現時点では deferred で、明示 CLI 記録を使います。
+
 普段は `improve` を使います。
 
 ```bash

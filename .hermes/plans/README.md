@@ -2,7 +2,9 @@
 
 ## Current source of truth
 
-As of 2026-04-30, there is **no active unfinished implementation plan** in this directory.
+As of 2026-04-30, the active implementation plan in this directory is:
+
+- `2026-04-30_114059-memory-visibility-proof.md`
 
 The current implementation direction is:
 
@@ -19,17 +21,18 @@ When older plans conflict with this list, this index wins unless a newer plan ex
 
 ## Active plans
 
-- `2026-04-30_114058-review-outcome-feedback-loop.md`
-  - **Priority:** first.
-  - Adds append-only review outcome records, CLI/report/calibration integration, and a dogfood feedback loop so human/apply/rollback outcomes can improve evaluator evidence without granting auto-apply permission.
-
 - `2026-04-30_114059-memory-visibility-proof.md`
-  - **Priority:** second.
+  - **Priority:** first.
   - Adds memory visibility/cache/session proof harnesses and status/reporting around why memory rollback execution remains blocked. This is a proof plan, not an execution-enablement plan.
 
-New implementation work should start from these active plans or from a newer timestamped plan that references this index and current code/docs. Do not continue old approval/mode/low-risk command plans directly.
+New implementation work should start from this active plan or from a newer timestamped plan that references this index and current code/docs. Do not continue old approval/mode/low-risk command plans directly.
 
 ## Completed canonical implementation records
+
+- `2026-04-30_114058-review-outcome-feedback-loop.md`
+  - **Status:** completed.
+  - Added append-only review outcome records, CLI/report/calibration integration, read-only ledger inference, docs, and dogfood feedback loop without granting auto-apply permission.
+  - Tool-native `self_improvement_record_outcome` was deliberately deferred to keep the primary plugin tool surface at seven tools.
 
 - `2026-04-28_133233-simplified-self-improvement-surface.md`
   - **Status:** completed / canonical historical baseline.

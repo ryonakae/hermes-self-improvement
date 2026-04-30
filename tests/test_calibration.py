@@ -204,6 +204,29 @@ def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     assert active_pointer.exists() is False
 
 
+def test_collect_calibration_evidence_counts_review_outcomes(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    import hermes_self_improvement.outcome_store as outcome_store
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 2}}}
+    outcome_store.record_review_outcome(config=config, outcome={
+        "outcome": "rejected_by_human",
+        "plan_id": "plan-1",
+        "item_id": "step-001",
+        "source": "cli",
+    })
+    outcome_store.record_review_outcome(config=config, outcome={
+        "outcome": "rolled_back",
+        "plan_id": "plan-1",
+        "item_id": "step-002",
+        "source": "cli",
+    })
+
+    evidence = calibration.collect_calibration_evidence(config)
+    assert evidence["review_outcomes"] == 2
+    assert evidence["bad_outcomes"] >= 2
+    assert evidence["review_outcome_summary"]["by_outcome"]["rolled_back"] == 1
+
+
 def test_calibration_execute_promotes_active_pointer_after_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"

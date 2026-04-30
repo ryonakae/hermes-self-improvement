@@ -45,6 +45,14 @@ def test_tool_handler_docs_use_non_shadowing_module_name():
     assert "shadow" in combined
 
 
+def test_docs_document_review_outcome_feedback_loop():
+    combined = "\n\n".join(read(path) for path in (README, SKILL, OPERATIONS))
+
+    assert "review outcome" in combined.lower()
+    assert "calibration evidence" in combined.lower()
+    assert "does not grant auto-apply" in combined.lower()
+
+
 def test_docs_define_mutation_agent_recovery_boundary():
     mutation_ref = ROOT / "skills" / "operations" / "references" / "mutation-agent-and-recovery.md"
     combined = "\n\n".join(read(path) for path in (README, AGENTS, SKILL, ROOT / "skills" / "operations" / "references" / "safety-and-apply.md", mutation_ref))

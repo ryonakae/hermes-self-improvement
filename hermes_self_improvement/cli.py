@@ -19,6 +19,7 @@ try:  # pragma: no cover - package import path
     )
     from .mutation_backend import mutation_backend_status
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
+    from .outcome_store import OUTCOME_VALUES, infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
     from .recovery_engine import memory_rollback_status
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
     from .verification import merge_judge_status
@@ -33,6 +34,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     )
     from mutation_backend import mutation_backend_status
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
+    from outcome_store import OUTCOME_VALUES, infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
     from recovery_engine import memory_rollback_status
     from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
     from verification import merge_judge_status
@@ -710,12 +712,31 @@ def _format_score_breakdown(raw: Any) -> str:
     return "; ".join(parts)
 
 
+def build_review_outcome_report_payload(*, config: dict[str, Any], limit: int = 100) -> dict[str, Any]:
+    explicit = load_review_outcomes(config=config, limit=limit)
+    inferred = infer_review_outcomes_from_ledgers(config=config, limit=limit)
+    return {
+        "schema_name": "self_improvement_review_outcome_report",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "limit": limit,
+        "total": len(explicit),
+        "summary": summarize_review_outcomes(explicit),
+        "inferred_from_ledgers": inferred.get("summary") if isinstance(inferred, dict) else {},
+        "outcomes": explicit[: min(limit, 10)],
+        "recording_tool": "cli",
+        "tool_native_recording": "deferred",
+        "auto_apply_permission": False,
+    }
+
+
 def _build_operational_report_payloads(config: dict[str, Any]) -> dict[str, Any]:
     return {
         "recent_plans": build_recent_plan_report_payload(config=config, limit=5),
         "recent_apply": build_ledger_report_payload(config=config, status="all", limit=5, operation="apply"),
         "calibration": build_calibration_report_payload(config=config, limit=5),
         "retention": build_retention_report_payload(config=config, limit=5),
+        "review_outcomes": build_review_outcome_report_payload(config=config, limit=100),
     }
 
 
@@ -790,6 +811,16 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
                 f"- `{ledger.get('ledger_id')}`: regression `{ledger.get('regression_status')}`, "
                 f"reason `{ledger.get('candidate_reason')}`"
             )
+
+    review_payload = payloads.get("review_outcomes") if isinstance(payloads.get("review_outcomes"), dict) else {}
+    review_summary = review_payload.get("summary") if isinstance(review_payload.get("summary"), dict) else {}
+    if int(review_summary.get("total") or 0):
+        lines.extend(["", "## Review outcomes"])
+        lines.append(f"- total: {int(review_summary.get('total') or 0)}")
+        by_outcome = review_summary.get("by_outcome") if isinstance(review_summary.get("by_outcome"), dict) else {}
+        for name, count in sorted(by_outcome.items()):
+            lines.append(f"- {name}: {count}")
+        lines.append("- does not grant auto-apply permission")
 
     retention_payload = payloads.get("retention") if isinstance(payloads.get("retention"), dict) else {}
     expired_count = int(retention_payload.get("expired_candidate_count") or 0)
@@ -1072,6 +1103,23 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     _add_config_argument(p_rollback)
     p_rollback.set_defaults(func=_handle_cli)
 
+    p_outcome = sub.add_parser("outcome", help="Record an append-only review/apply/rollback outcome")
+    p_outcome.add_argument("--outcome", required=True, choices=sorted(OUTCOME_VALUES))
+    p_outcome.add_argument("--plan-id")
+    p_outcome.add_argument("--item-id")
+    p_outcome.add_argument("--proposal-id")
+    p_outcome.add_argument("--ledger-id")
+    p_outcome.add_argument("--reason")
+    p_outcome.add_argument("--source", default="cli")
+    p_outcome.add_argument("--risk")
+    p_outcome.add_argument("--recommendation")
+    p_outcome.add_argument("--scorer")
+    p_outcome.add_argument("--target-kind")
+    p_outcome.add_argument("--change-type")
+    p_outcome.add_argument("--json", action="store_true", dest="as_json")
+    _add_config_argument(p_outcome)
+    p_outcome.set_defaults(func=_handle_cli)
+
 
 def _handle_cli(args: argparse.Namespace) -> None:
     config = load_config(Path(__file__).resolve().parents[1] / "config.json", cli_config_path=getattr(args, "config_path", None))
@@ -1106,6 +1154,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "mutation_backend": mutation_backend_status(config),
             "merge_judge": merge_judge_status(config),
             "memory_rollback": memory_rollback_status(config),
+            "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
         }
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
@@ -1166,6 +1215,36 @@ def _handle_cli(args: argparse.Namespace) -> None:
             print(f"Status: {payload.get('current_status')}")
             if payload.get("reasons"):
                 print("Reasons: " + ", ".join(payload.get("reasons") or []))
+        return
+
+    if cmd == "outcome":
+        payload = record_review_outcome(
+            config=config,
+            outcome={
+                "outcome": getattr(args, "outcome", None),
+                "plan_id": getattr(args, "plan_id", None),
+                "item_id": getattr(args, "item_id", None),
+                "proposal_id": getattr(args, "proposal_id", None),
+                "ledger_id": getattr(args, "ledger_id", None),
+                "reason": getattr(args, "reason", None),
+                "source": getattr(args, "source", None) or "cli",
+                "risk": getattr(args, "risk", None),
+                "recommendation": getattr(args, "recommendation", None),
+                "scorer": getattr(args, "scorer", None),
+                "target_kind": getattr(args, "target_kind", None),
+                "change_type": getattr(args, "change_type", None),
+            },
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"Outcome: {payload.get('status')}")
+            if payload.get("path"):
+                print(f"Path: {payload.get('path')}")
+            if payload.get("reasons"):
+                print("Reasons: " + ", ".join(payload.get("reasons") or []))
+        if payload.get("status") != "recorded":
+            raise SystemExit(1)
         return
 
     if cmd == "report":

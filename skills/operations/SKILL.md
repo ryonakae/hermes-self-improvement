@@ -55,6 +55,10 @@ Runtime artifact は既定で `${HERMES_HOME:-~/.hermes}/self-improvement/` 配�
 
 ## 日常コマンド
 
+Review outcome feedback は明示的に記録する。人間が plan を rejected / edited / ignored と判断したとき、apply/rollback の結果を dogfood evidence として残したいときは `outcome` CLI を使う。これは append-only の review outcome record で、report と calibration evidence にだけ使われる。It does not grant auto-apply permission.
+
+理由には secret を入れない。reason は redaction され、元文は hash 化される。rollback 後は rollback reason を短く残す。tool-native `self_improvement_record_outcome` は primary seven tools を増やすため現時点では deferred。
+
 Repository root から実行する。
 
 ```bash

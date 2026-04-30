@@ -1,5 +1,7 @@
 # Self-Improvement Review Outcome Feedback Loop Implementation Plan
 
+> **Status:** completed on 2026-04-30. Implemented append-only outcome store, CLI `outcome`, read-only ledger inference, calibration/report/status integration, docs, and tests. Tool-native outcome recording was deliberately deferred to keep primary plugin tools at seven.
+
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task. Do not add a new broad command surface. Keep hooks observational and keep `--execute` as the only mutation boundary.
 
 **Goal:** Teach `hermes-self-improvement` to record human/apply/rollback outcomes for proposals and feed those outcomes into calibration/evaluator evidence without enabling auto-apply.
