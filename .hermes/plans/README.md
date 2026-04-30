@@ -2,17 +2,17 @@
 
 ## Current source of truth
 
-As of 2026-04-30, there is **one active unfinished implementation plan** in this directory:
+As of 2026-04-30, there is **one active unfinished redesign plan** in this directory:
 
-- `2026-04-30_185745-semantic-drift-adjudication-and-local-target-gates.md`
-  - Reopens the apply safety slice to add plan-time mutable-local skill gating, apply-time identity/provenance revalidation, structured content drift classification, bounded LLM semantic drift adjudication, mutation-agent stale/conflict stop outcomes, and ledger/report/calibration visibility for skipped/stopped applications.
+- `2026-04-30_234117-curator-aligned-self-improvement-runner.md`
+  - Reworks the plugin toward a Curator-aligned runner with four primary surfaces (`improve`, `calibrate`, `report`, `status`) and removes the legacy plan/apply/rollback/outcome surface. Do not mix this redesign into older apply-plan safety work unless that plan explicitly says so.
 
 The latest completed implementation record is archived at:
 
-- `archive/2026-04-30_155711-static-validation-next-actions-outcome-feedback.md`
-  - Implemented hard static invariant validation before apply-plan readiness, clarified invariant vs `apply_policy` boundaries, added non-interactive `next_actions` to preview flows, strengthened plan/item-bound outcome feedback, exposed append-only `self_improvement_record_outcome`, and kept old plan cleanup archive-first.
+- `archive/2026-04-30_185745-semantic-drift-adjudication-and-local-target-gates.md`
+  - Implemented plan-time mutable-local skill gating, apply-time identity/provenance revalidation, structured content drift classification, bounded semantic drift adjudication routing, mutation-agent stale/conflict stop outcomes, and ledger/report/calibration visibility for skipped/stopped applications.
 
-The current implementation direction is:
+The current implemented baseline, until the active redesign plan is executed, is:
 
 - Primary CLI surface: `improve / calibrate / plan / apply / rollback / report / status`.
 - Primary tool surface: the same seven operational tools plus append-only `self_improvement_record_outcome`.
@@ -38,6 +38,14 @@ Old completed, absorbed, superseded, and historical plans are archived under:
 This keeps the active implementation surface small while preserving design history for audit and regression checks. Do not continue archived plans directly. If an archived plan contains useful unfinished work, create a new timestamped plan that explicitly reopens that slice and references this index.
 
 ## Archived canonical implementation records
+
+- `archive/2026-04-30_185745-semantic-drift-adjudication-and-local-target-gates.md`
+  - **Status:** completed.
+  - Added plan-time mutable-local skill gating, apply-time identity/provenance revalidation, structured content drift classification, bounded semantic adjudication routing, mutation-agent skipped/stopped outcomes, and drift outcome visibility in ledgers/reports/calibration evidence.
+
+- `archive/2026-04-30_155711-static-validation-next-actions-outcome-feedback.md`
+  - **Status:** completed.
+  - Implemented hard static invariant validation before apply-plan readiness, clarified invariant vs `apply_policy` boundaries, added non-interactive `next_actions` to preview flows, strengthened plan/item-bound outcome feedback, exposed append-only `self_improvement_record_outcome`, and kept old plan cleanup archive-first.
 
 - `archive/2026-04-30_114059-memory-visibility-proof.md`
   - **Status:** completed with safe outcome: visibility proof exists, rollback execution remains blocked.

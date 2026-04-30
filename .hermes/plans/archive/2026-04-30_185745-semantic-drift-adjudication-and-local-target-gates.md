@@ -1,6 +1,8 @@
+> **Status:** Completed 2026-04-30. Implemented plan-time mutable-local skill target gates, content drift classification, semantic drift adjudication routing, mutation-agent stale/conflict stop outcomes, and ledger/report/calibration visibility for drift outcomes.
+
 # Semantic Drift Adjudication and Local Target Gates Implementation Plan
 
-> **Status:** Active plan created 2026-04-30. Do not implement code while writing this plan. This plan reopens the apply safety slice after `archive/2026-04-30_155711-static-validation-next-actions-outcome-feedback.md`.
+> This plan reopened the apply safety slice after `archive/2026-04-30_155711-static-validation-next-actions-outcome-feedback.md`.
 
 ## Goal
 

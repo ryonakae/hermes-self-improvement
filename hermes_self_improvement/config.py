@@ -31,7 +31,8 @@ HARD_STATIC_INVARIANTS = {
     "provider_internal_restore_forbidden": True,
     "sensitive_delete_readd_forbidden": True,
     "rollback_agent_forbidden": True,
-    "target_hash_drift_blocks_apply": True,
+    "target_identity_drift_blocks_apply": True,
+    "content_hash_drift_requires_classification": True,
 }
 DEFAULT_APPLY_POLICY = {
     "max_risk": "low",

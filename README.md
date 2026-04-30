@@ -37,7 +37,7 @@ Memory visibility proof exists to test whether built-in memory tool changes are 
 - tool error、warning、失敗した手順、繰り返し説明から改善候補を作る
 - 候補を heuristic / LLM / DSPy-backed GEPA scorer で採点する
 - report、apply plan、apply ledger、calibration ledger を artifact として残す
-- policy で許可された低リスクな skill / memory mutation を、内部 hash と drift check 付きで適用する
+- policy で許可された低リスクな skill / memory mutation を、内部 hash、target identity/provenance 再確認、content drift 分類付きで適用する
 - skill mutation は、semantic `skill_agent_task` を主軸にし、agent が公式 Hermes skill tools（`skills_list`, `skill_view`, `skill_manage`）だけを使って適用する。移行期間の低リスク互換 path も直接ファイル編集ではなく `skill_manage` の create / patch / edit / delete / write_file / remove_file だけを使う。対象は Hermes が内部 registry / provenance で mutable local と判定する skill だけで、`hermes skills list --source local` を subprocess 実行して判定するわけではない。hub-installed / built-in / plugin-bundled / external read-only skill dirs は対象外。skill に同梱された README / reference などの supporting file も、skill の一部として必要な場合だけ `skill_manage` 経由で扱う
 - built-in memory mutation は `memory` tool の add / replace / remove だけを使って適用する。外部 memory provider は capability policy に解決し、stale/incorrect/duplicate `memory_delete` は各 provider の correction tool（例: `hindsight_retain`, `honcho_conclude`, `mem0_conclude`, `brv_curate`, `viking_remember`, `fact_store`, `retaindb_remember`, `supermemory_store`）で実行可能。native delete は provider-native ID がある場合だけ実行し、sensitive delete や provider tool 不在時は fail-closed
 - plugin 自身の README / AGENTS.md / config を自己改善対象として編集しない。docs/config target は apply policy override でも mutation 不可
@@ -113,7 +113,7 @@ active evaluator
 future proposal scoring
 ```
 
-GEPA の score が高くても、そのまま自動適用はしません。mutation は `apply_policy`、internal hash、target drift check を通った item だけです。
+GEPA の score が高くても、そのまま自動適用はしません。mutation は `apply_policy`、internal item hash、target identity/provenance check、content drift classification / semantic adjudication を通った item だけです。identity/provenance drift は hard stop、content drift は `compatible_drift` / `superseded` / `conflicting_drift` などに分類されます。
 
 ## 自己改善の流れ
 
@@ -142,7 +142,7 @@ bin/hermes-self-improve improve
 bin/hermes-self-improve improve --execute
 ```
 
-ただし、`--execute` は「何でも変えてよい」という意味ではありません。実際に変更されるのは、policy と検証を通った item だけです。review が必要な item、drift した target、scorer disagreement がある item は止まります。
+ただし、`--execute` は「何でも変えてよい」という意味ではありません。実際に変更されるのは、policy と検証を通った item だけです。review が必要な item、identity/provenance が変わった target、conflicting/unknown drift、scorer disagreement がある item は止まります。superseded drift は skip され、compatible drift は記録されたうえで続行できます。
 
 手動で分けて確認したい場合:
 
