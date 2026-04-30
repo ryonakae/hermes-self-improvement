@@ -39,6 +39,18 @@ Rollback is not agent-driven. `rollback --execute` uses plugin-owned `ledger_bou
 
 Direct programmatic restore is allowed only in this ledger-bound rollback path. It is not a forward mutation mechanism and must not be exposed through apply planning.
 
+## Static invariants
+
+Hard static invariants are not `apply_policy` knobs and are not advisory LLM/GEPA judgments. Apply-plan construction and execution validation mechanically reject:
+
+- plugin-owned files: `README.md`, `AGENTS.md`, `config*`, `plugin.yaml`, `.hermes/plans/**`, and `skills/operations/**`;
+- arbitrary docs/config target kinds;
+- direct forward file/DB/provider-internal mutation types;
+- provider-internal exact restore;
+- sensitive delete re-add.
+
+Invalid candidates may still exist as raw proposals for reporting, but they must become `rejected_by_planner`, never `ready`. `apply_policy` can only expand automation within this invariant boundary.
+
 ## Apply policy
 
 `apply_policy` controls normal skill/memory improvement application. Default policy allows low-risk, non-destructive skill/memory changes only.

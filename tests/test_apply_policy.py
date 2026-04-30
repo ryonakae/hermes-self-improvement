@@ -121,3 +121,38 @@ def test_calibration_defaults_and_yaml_threshold_overrides(tmp_path):
     assert config["calibration"]["evidence"]["min_bad_outcomes"] == 2
     assert config["calibration"]["optimizer"]["max_full_evals"] == 4
     assert "regression" not in config["calibration"]
+
+
+def test_apply_policy_cannot_override_static_apply_plan_invariants(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "doc.md"
+    target.write_text("# Doc\n\nUse teh browser.\n", encoding="utf-8")
+    config = {
+        "apply_policy": {
+            "max_risk": "critical",
+            "allowed_target_kinds": ["skill", "memory", "docs", "config"],
+            "allowed_change_types": ["direct_file_mutation", "typo_fix"],
+            "allow_destructive": True,
+        }
+    }
+    plan = mod.build_apply_plan(
+        proposals=[{
+            "id": "proposal-doc",
+            "target": "docs",
+            "target_path": str(target),
+            "action": "typo_fix",
+            "risk": "low",
+            "scorer": "compare-v0.1",
+            "old_text": "teh",
+            "new_text": "the",
+        }],
+        summary={},
+        execution_mode="preview",
+        config=config,
+    )
+
+    item = plan["items"][0]
+    assert item["status"] == "rejected_by_planner"
+    assert "non_mutable_target_kind" in item["reasons"]
+    assert item["mutation"] is None
+    assert mod.HARD_STATIC_INVARIANTS["arbitrary_docs_config_targets_forbidden"] is True

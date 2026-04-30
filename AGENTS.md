@@ -73,6 +73,8 @@ PY
 
 ## 安全境界
 
+- Hard static invariants are code-enforced before `apply_policy`: plugin-owned docs/config/plans/bundled skill files, arbitrary docs/config targets, direct forward file/DB/provider-internal mutation types, provider-internal exact restore, and sensitive delete re-add are rejected as `rejected_by_planner` and cannot become `ready`.
+- `apply_policy` expands automation only inside that invariant boundary; do not add hard safety boundaries as policy knobs.
 - hook 内で LLM call、GEPA optimizer、skill patch、memory edit、重い集計を動かさないでください。
 - `--execute` なしの `improve`, `calibrate`, `apply`, `rollback` は preview-only です。
 - `--execute` は mutation intent ですが、実変更は policy と内部検証を通った item だけです。

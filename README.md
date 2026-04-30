@@ -160,6 +160,8 @@ bin/hermes-self-improve rollback <ledger-id> --execute
 
 ## Safety model
 
+Hard static invariants are enforced before apply policy or scorer judgment. Plugin-owned files (`README.md`, `AGENTS.md`, `config*`, `.hermes/plans/**`, `skills/operations/**`), arbitrary docs/config targets, direct forward file/DB/provider-internal mutation types, provider-internal exact restore, and sensitive delete re-add are programmatically rejected. These candidates may appear as raw proposals, but apply-plan construction marks them `rejected_by_planner`; they cannot become `ready`, and `apply_policy` cannot override this boundary.
+
 Primary surface の安全境界は `--execute` です。
 
 - `improve`, `calibrate`, `apply`, `rollback` は `--execute` なしでは preview-only

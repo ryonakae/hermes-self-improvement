@@ -1383,3 +1383,79 @@ def test_skill_agent_task_has_no_file_or_terminal_tools_in_constraints(tmp_path)
     assert "skills_list" in constraints and "skill_view" in constraints and "skill_manage" in constraints
     assert "terminal/file/git/direct filesystem" in constraints
     assert "browser" not in constraints
+
+
+def test_build_apply_plan_rejects_plugin_owned_readme_static_invariant(tmp_path):
+    mod = load_plugin_module()
+    plugin_root = tmp_path / "plugin"
+    target = plugin_root / "README.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("# Plugin\n\nUse teh browser.\n", encoding="utf-8")
+    proposal = sample_typo_proposal()
+    proposal["target"] = "docs"
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="preview",
+        config={"_plugin_root": str(plugin_root), "_mutable_local_skill_roots": [str(tmp_path / "skills")]},
+        created_at=datetime(2026, 4, 30, 8, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["status"] == "rejected_by_planner"
+    assert "plugin_owned_target_forbidden" in item["reasons"]
+    assert "non_mutable_target_kind" in item["reasons"]
+    assert item["mutation"] is None
+
+
+def test_build_apply_plan_rejects_docs_target_even_if_policy_would_allow(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "arbitrary-doc.md"
+    target.write_text("# Doc\n\nUse teh browser.\n", encoding="utf-8")
+    proposal = sample_typo_proposal()
+    proposal["target"] = "docs"
+    proposal["target_path"] = str(target)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="preview",
+        config={"apply_policy": {"allowed_target_kinds": ["docs", "config", "skill"]}},
+        created_at=datetime(2026, 4, 30, 8, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["status"] == "rejected_by_planner"
+    assert "non_mutable_target_kind" in item["reasons"]
+    assert item.get("mutation") is None
+
+
+def test_build_apply_plan_rejects_direct_file_mutation_static_invariant(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "skills" / "demo" / "SKILL.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("# Skill\n", encoding="utf-8")
+    proposal = {
+        "id": "proposal-direct",
+        "target": "skill",
+        "target_path": str(target),
+        "change_type": "direct_file_mutation",
+        "risk": "low",
+        "scorer": "compare-v0.1",
+        "mutation": {"type": "replace_text_once", "old_text": "Skill", "new_text": "Better Skill"},
+    }
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="preview",
+        config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
+        created_at=datetime(2026, 4, 30, 8, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["status"] == "rejected_by_planner"
+    assert "direct_mutation_type_forbidden" in item["reasons"]
+    assert item["mutation"] is None

@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 AGENTS = ROOT / "AGENTS.md"
 OPERATIONS = ROOT / "skills" / "operations" / "references" / "operations.md"
-PLAN = ROOT / ".hermes" / "plans" / "2026-04-28_133233-simplified-self-improvement-surface.md"
+PLAN = ROOT / ".hermes" / "plans" / "archive" / "2026-04-28_133233-simplified-self-improvement-surface.md"
 SKILL = ROOT / "skills" / "operations" / "SKILL.md"
 
 

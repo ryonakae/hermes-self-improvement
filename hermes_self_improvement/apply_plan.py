@@ -9,10 +9,12 @@ try:  # pragma: no cover - package import path
     from .config import get_hermes_home
     from .mutation_policy import build_memory_mutation_context, build_skill_manage_context, build_skill_patch_context
     from .observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
+    from .static_validation import validate_proposal_static_invariants
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from config import get_hermes_home
     from mutation_policy import build_memory_mutation_context, build_skill_manage_context, build_skill_patch_context
     from observer import _parse_dt, _reports_dir, _sha256_text, _stable_json
+    from static_validation import validate_proposal_static_invariants
 
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -1167,7 +1169,13 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
     target_path = _target_path_for_proposal(proposal, config)
     target_meta = _target_metadata(target_path)
     before_hash = proposal.get("before_hash") or target_meta["before_hash"]
-    mutation, mutation_blockers = _plan_mutation_for_item(
+    validation_proposal = dict(proposal)
+    validation_proposal.setdefault("change_type", change_type)
+    validation_proposal.setdefault("target_path", target_path)
+    validation_proposal.setdefault("target_kind", proposal.get("target_kind") or proposal.get("target"))
+    static_validation = validate_proposal_static_invariants(proposal=validation_proposal, config=config)
+    static_reasons = list(static_validation.get("reasons") or []) if static_validation.get("status") == "rejected" else []
+    mutation, mutation_blockers = (None, static_reasons) if static_reasons else _plan_mutation_for_item(
         change_type=change_type,
         proposal=proposal,
         target_content=target_meta.get("content"),
@@ -1186,7 +1194,7 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
     )
     approval_only = change_type in _APPROVAL_REQUIRED_CHANGE_TYPES
     eligible_for_unattended = eligibility["status"] == "eligible" and change_type in _LOW_RISK_UNATTENDED_CHANGE_TYPES
-    plan_status = "ready" if eligibility["status"] == "eligible" and mutation is not None and (target_path or (change_type in {"memory_add", "memory_replace", "memory_delete"} and mutation.get("type") in {"memory_tool_operation", "memory_provider_tool_operation"})) else "needs_review"
+    plan_status = "rejected_by_planner" if static_reasons else "ready" if eligibility["status"] == "eligible" and mutation is not None and (target_path or (change_type in {"memory_add", "memory_replace", "memory_delete"} and mutation.get("type") in {"memory_tool_operation", "memory_provider_tool_operation"})) else "needs_review"
     rollback_preview = _rollback_preview_for_item(
         target_path=target_path,
         target_content=target_meta.get("content"),
@@ -1198,7 +1206,7 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         "item_id": f"step-{idx:03d}",
         "status": plan_status,
         "order": idx,
-        "planner_reasons": [],
+        "planner_reasons": list(static_reasons),
         "legacy_item_id": f"item-{idx}",
         "proposal_id": proposal.get("id"),
         "proposal_hash": _sha256_text(_stable_json(proposal)),
@@ -1222,6 +1230,8 @@ def _build_apply_plan_item(idx: int, proposal: dict[str, Any], config: dict[str,
         "eligible_for_unattended": eligible_for_unattended,
         "requires_approval": not eligible_for_unattended,
         "eligibility": eligibility,
+        "static_validation": static_validation,
+        "reasons": list(static_reasons),
         "evidence": {
             "tool_name": proposal.get("tool_name"),
             "error_kind": proposal.get("error_kind"),

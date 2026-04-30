@@ -24,6 +24,15 @@ DEFAULT_RETENTION_DAYS = 30
 ENV_CONFIG_PATH = "HERMES_SELF_IMPROVE_CONFIG"
 RISK_ORDER = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 NON_MUTABLE_TARGET_KINDS = {"docs", "doc", "documentation", "config", "configuration", "evaluator"}
+HARD_STATIC_INVARIANTS = {
+    "plugin_owned_targets_forbidden": True,
+    "arbitrary_docs_config_targets_forbidden": True,
+    "direct_forward_mutation_forbidden": True,
+    "provider_internal_restore_forbidden": True,
+    "sensitive_delete_readd_forbidden": True,
+    "rollback_agent_forbidden": True,
+    "target_hash_drift_blocks_apply": True,
+}
 DEFAULT_APPLY_POLICY = {
     "max_risk": "low",
     "allow_destructive": False,
