@@ -180,3 +180,26 @@ def test_operational_report_sections_include_runner_artifact_summary():
     assert "runs: 1 recent artifacts" in text
     assert "latest evidence 2, ignored 3" in text
     assert "runtime-private eval cases: 4" in text
+
+
+def test_package_init_does_not_reexport_removed_primary_surface_helpers():
+    sys.path.insert(0, str(PLUGIN_DIR))
+    try:
+        package = importlib.import_module("hermes_self_improvement")
+    finally:
+        try:
+            sys.path.remove(str(PLUGIN_DIR))
+        except ValueError:
+            pass
+
+    removed_helpers = [
+        "apply_plan",
+        "rollback_apply_ledger",
+        "build_apply_plan",
+        "write_apply_plan",
+        "build_pending_ledger",
+        "write_pending_ledger",
+    ]
+    for name in removed_helpers:
+        value = package.__dict__.get(name)
+        assert not callable(value), f"legacy helper should not be package-level API: {name}"

@@ -9,12 +9,28 @@ PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
 
 
 def load_plugin_module():
-    spec = importlib.util.spec_from_file_location("hermes_self_improvement_mutation_under_test", PLUGIN_INIT)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    try:
+        module = importlib.import_module("hermes_self_improvement.mutation_policy")
+        apply_plan = importlib.import_module("hermes_self_improvement.apply_plan")
+        apply_engine = importlib.import_module("hermes_self_improvement.apply_engine")
+        mutation_worker = importlib.import_module("hermes_self_improvement.mutation_worker")
+        observer = importlib.import_module("hermes_self_improvement.observer")
+        module.build_apply_plan = apply_plan.build_apply_plan
+        module.apply_plan = apply_engine.apply_plan
+        module.compute_apply_item_hash = apply_engine.compute_apply_item_hash
+        module._sha256_text = observer._sha256_text
+        module.execute_hindsight_retain_operation = mutation_worker.execute_hindsight_retain_operation
+        module.execute_memory_provider_tool_operation = mutation_worker.execute_memory_provider_tool_operation
+        module.execute_memory_tool_operation = mutation_worker.execute_memory_tool_operation
+        module.execute_skill_manage_operation = mutation_worker.execute_skill_manage_operation
+        return module
+    finally:
+        try:
+            sys.path.remove(str(Path(__file__).resolve().parents[1]))
+        except ValueError:
+            pass
+
 
 
 def test_provider_policy_resolves_stale_delete_to_correction_for_hindsight():

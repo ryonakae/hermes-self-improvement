@@ -11,12 +11,18 @@ PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
 
 
 def load_plugin_module():
-    spec = importlib.util.spec_from_file_location("hermes_self_improvement_apply_plan_under_test", PLUGIN_INIT)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    try:
+        module = importlib.import_module("hermes_self_improvement.apply_plan")
+        cli = importlib.import_module("hermes_self_improvement.cli")
+        module._setup_cli = cli._setup_cli
+        return module
+    finally:
+        try:
+            sys.path.remove(str(Path(__file__).resolve().parents[1]))
+        except ValueError:
+            pass
+
 
 
 def sample_proposals():

@@ -92,7 +92,6 @@ def _register_tools(ctx) -> None:
             emoji="🛡️",
         )
 try:  # pragma: no cover - package import path
-    from .apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash, rollback_apply_ledger
     from .calibration import collect_calibration_evidence, rollback_calibration, run_calibration
     from .mutation_policy import (
         PROVIDER_POLICIES,
@@ -109,7 +108,6 @@ try:  # pragma: no cover - package import path
     )
     from .mutation_worker import execute_hindsight_retain_operation, execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from apply_engine import APPLY_RESULT_STATUSES, apply_plan, compute_apply_item_hash, rollback_apply_ledger
     from calibration import collect_calibration_evidence, rollback_calibration, run_calibration
     from mutation_policy import (
         PROVIDER_POLICIES,
@@ -345,66 +343,6 @@ try:  # pragma: no cover - package import path
     from .outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
-
-try:  # pragma: no cover - package import path
-    from .apply_plan import (
-        APPLY_RESULT_STATUSES,
-        PLAN_ITEM_STATUSES,
-        _PITFALL_SECTION_HEADINGS,
-        _VALIDATION_SECTION_HEADINGS,
-        _apply_append_to_existing_section,
-        _apply_replace_text_once,
-        _build_apply_plan_item,
-        _classify_apply_change_type,
-        _custom_skill_path_for_proposal,
-        _custom_skill_roots,
-        _eligibility_for_apply_item,
-        _find_existing_section_heading,
-        _ledger_preview_for_item,
-        _path_inside_root,
-        _plan_mutation_for_item,
-        _preview_content,
-        _proposal_mutation_text,
-        _rollback_preview_for_item,
-        _safe_relative_name,
-        _target_metadata,
-        _target_path_for_proposal,
-        build_apply_plan,
-        write_apply_plan,
-    )
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from apply_plan import (
-        APPLY_RESULT_STATUSES,
-        PLAN_ITEM_STATUSES,
-        _PITFALL_SECTION_HEADINGS,
-        _VALIDATION_SECTION_HEADINGS,
-        _apply_append_to_existing_section,
-        _apply_replace_text_once,
-        _build_apply_plan_item,
-        _classify_apply_change_type,
-        _custom_skill_path_for_proposal,
-        _custom_skill_roots,
-        _eligibility_for_apply_item,
-        _find_existing_section_heading,
-        _ledger_preview_for_item,
-        _path_inside_root,
-        _plan_mutation_for_item,
-        _preview_content,
-        _proposal_mutation_text,
-        _rollback_preview_for_item,
-        _safe_relative_name,
-        _target_metadata,
-        _target_path_for_proposal,
-        build_apply_plan,
-        write_apply_plan,
-    )
-
-
-try:  # pragma: no cover - package import path
-    from .ledger import build_pending_ledger, write_pending_ledger
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from ledger import build_pending_ledger, write_pending_ledger
-
 
 
 if __name__ == "__main__":

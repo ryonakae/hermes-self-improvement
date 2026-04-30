@@ -10,12 +10,21 @@ PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
 
 
 def load_plugin_module():
-    spec = importlib.util.spec_from_file_location("hermes_self_improvement_ledger_report_under_test", PLUGIN_INIT)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    try:
+        module = importlib.import_module("hermes_self_improvement.cli")
+        apply_plan = importlib.import_module("hermes_self_improvement.apply_plan")
+        apply_engine = importlib.import_module("hermes_self_improvement.apply_engine")
+        module.build_apply_plan = apply_plan.build_apply_plan
+        module.write_apply_plan = apply_plan.write_apply_plan
+        module.apply_plan = apply_engine.apply_plan
+        return module
+    finally:
+        try:
+            sys.path.remove(str(Path(__file__).resolve().parents[1]))
+        except ValueError:
+            pass
+
 
 
 def write_applied_ledger(tmp_path, monkeypatch):
