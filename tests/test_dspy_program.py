@@ -45,7 +45,7 @@ class FakeDspy:
         def __call__(self, **kwargs):
             self.calls.append(kwargs)
             return FakePrediction(
-                '{"score": 91, "recommendation": "review_for_possible_low_risk_apply", '
+                '{"score": 91, "recommendation": "review_low_risk_candidate", '
                 '"risk": "low", "confidence": "high", "rationale": "Repeated evidence in findings.", '
                 '"auto_apply": true, "score_breakdown": {"evidence_strength": {"level": "high", "points": 30, "weight": 30, "reason": "seen repeatedly"}}}'
             )
@@ -77,7 +77,7 @@ def test_build_dspy_program_uses_structured_json_fields_without_importing_real_d
 
     assert result["id"] == "proposal-1"
     assert result["score"] == 91
-    assert result["recommendation"] == "review_for_possible_low_risk_apply"
+    assert result["recommendation"] == "review_low_risk_candidate"
     assert result["risk"] == "low"
     assert result["confidence"] == "high"
     assert result["auto_apply"] is False

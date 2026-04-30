@@ -12,7 +12,7 @@ from typing import Any
 ALLOWED_RECOMMENDATIONS = {
     "report_only",
     "human_review",
-    "review_for_possible_low_risk_apply",
+    "review_low_risk_candidate",
 }
 ALLOWED_RISKS = {"low", "medium", "high"}
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
@@ -591,7 +591,7 @@ def _recommendation_for(*, score: int, risk: str, auto_apply_requested: bool) ->
     if auto_apply_requested or risk == "high":
         return "human_review"
     if risk == "low" and score >= 70:
-        return "review_for_possible_low_risk_apply"
+        return "review_low_risk_candidate"
     if score >= 60:
         return "human_review"
     return "report_only"

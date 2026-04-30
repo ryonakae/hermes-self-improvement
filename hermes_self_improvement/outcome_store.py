@@ -89,7 +89,7 @@ def infer_review_outcomes_from_ledgers(*, config: dict[str, Any], limit: int = 2
             status = str(item.get("status") or "")
             mapped = None
             if operation.startswith("rollback"):
-                if status in {"rolled_back", "restored", "applied"}:
+                if status in {"rolled_back", "applied"}:
                     mapped = "rolled_back"
                 elif status == "failed":
                     mapped = "rollback_failed"

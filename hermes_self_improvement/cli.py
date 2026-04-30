@@ -18,7 +18,7 @@ try:  # pragma: no cover - package import path
     from .evidence import build_evidence_pack, write_evidence_pack
     from .mutation_backend import mutation_backend_status
     from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
-    from .next_actions import build_next_actions_for_apply_preview, render_next_actions
+    from .next_actions import build_next_actions_for_historical_artifact, render_next_actions
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from .outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
     from .recovery_engine import memory_rollback_status
@@ -34,7 +34,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from evidence import build_evidence_pack, write_evidence_pack
     from mutation_backend import mutation_backend_status
     from runner_steps import run_memory_improvement_step, run_skill_improvement_step
-    from next_actions import build_next_actions_for_apply_preview, render_next_actions
+    from next_actions import build_next_actions_for_historical_artifact, render_next_actions
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
     from recovery_engine import memory_rollback_status
@@ -174,7 +174,7 @@ def _summarize_apply_plan_for_report(plan: dict[str, Any]) -> dict[str, Any]:
         "status_counts": counts,
         "needs_review_highlights": highlights,
     }
-    summary["next_actions"] = build_next_actions_for_apply_preview({"plan_id": summary["plan_id"], "summary": {"ready": counts.get("ready", 0), "needs_review": counts.get("needs_review", 0)}})
+    summary["next_actions"] = build_next_actions_for_historical_artifact({"plan_id": summary["plan_id"], "summary": {"ready": counts.get("ready", 0), "needs_review": counts.get("needs_review", 0)}})
     return summary
 
 
@@ -298,7 +298,7 @@ def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
         "rollback_available": isinstance(ledger.get("rollback_data"), dict) or any(isinstance(item.get("rollback_data"), dict) for item in typed_items),
     }
     if summary_payload["current_status"] in {"previewed", "needs_review", "skipped_by_policy"}:
-        summary_payload["next_actions"] = build_next_actions_for_apply_preview({"plan_id": summary_payload.get("plan_id"), "summary": summary})
+        summary_payload["next_actions"] = build_next_actions_for_historical_artifact({"plan_id": summary_payload.get("plan_id"), "summary": summary})
     return summary_payload
 
 
@@ -700,7 +700,7 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operatio
     lines.extend([
         "## 注意",
         "- 採点は `--scorer heuristic`、`--scorer llm`、`--scorer gepa`、`--scorer compare` で切り替えます。`report` / `improve` は既定で `compare` です。",
-        "- LLM / GEPA / compare / heuristic scorer は proposal の優先順位づけだけを行い、skill / memory の変更許可にはなりません。GEPA が失敗した場合は `gepa_scorer_error` として明示し、unattended apply は許可しません。",
+        "- LLM / GEPA / compare / heuristic scorer は proposal の優先順位づけだけを行い、skill / memory の変更許可にはなりません。GEPA が失敗した場合は `gepa_scorer_error` として明示し、unattended mutation は許可しません。",
         "- plugin hook は観測専用で、skill / memory の変更は行いません。",
     ])
     return "\n".join(lines).rstrip() + "\n"
@@ -894,7 +894,7 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
         by_outcome = review_summary.get("by_outcome") if isinstance(review_summary.get("by_outcome"), dict) else {}
         for name, count in sorted(by_outcome.items()):
             lines.append(f"- {name}: {count}")
-        lines.append("- does not grant auto-apply permission")
+        lines.append("- does not grant unattended mutation permission")
 
     retention_payload = payloads.get("retention") if isinstance(payloads.get("retention"), dict) else {}
     expired_count = int(retention_payload.get("expired_candidate_count") or 0)

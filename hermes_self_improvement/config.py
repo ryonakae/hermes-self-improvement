@@ -31,10 +31,10 @@ HARD_STATIC_INVARIANTS = {
     "provider_internal_restore_forbidden": True,
     "sensitive_delete_readd_forbidden": True,
     "rollback_agent_forbidden": True,
-    "target_identity_drift_blocks_apply": True,
+    "target_identity_drift_blocks_mutation": True,
     "content_hash_drift_requires_classification": True,
 }
-DEFAULT_APPLY_POLICY = {
+DEFAULT_AUTOMATION_POLICY = {
     "max_risk": "low",
     "allow_destructive": False,
     "allowed_target_kinds": ["skill", "memory"],
@@ -60,7 +60,7 @@ def _default_config() -> dict[str, Any]:
         "enabled": True,
         "preview_chars": DEFAULT_PREVIEW_CHARS,
         "retention_days": DEFAULT_RETENTION_DAYS,
-        "apply_policy": copy.deepcopy(DEFAULT_APPLY_POLICY),
+        "automation_policy": copy.deepcopy(DEFAULT_AUTOMATION_POLICY),
         "calibration": copy.deepcopy(DEFAULT_CALIBRATION),
         "model": {
             "llm": {
@@ -224,14 +224,19 @@ def _peer_yaml_config_path(default_path: Path) -> Path:
 
 
 
-def normalize_apply_policy(config: dict[str, Any] | None) -> dict[str, Any]:
-    """Return a normalized normal-apply policy with fail-closed defaults."""
-    raw_policy = config.get("apply_policy") if isinstance(config, dict) else config
+def normalize_automation_policy(config: dict[str, Any] | None) -> dict[str, Any]:
+    """Return the normalized unattended mutation policy with fail-closed defaults."""
+    if isinstance(config, dict):
+        raw_policy = config.get("automation_policy")
+        if not isinstance(raw_policy, dict):
+            raw_policy = config.get("apply_policy")  # legacy config key, read-only compatibility
+    else:
+        raw_policy = config
     if not isinstance(raw_policy, dict):
         raw_policy = {}
-    policy = _deep_merge(copy.deepcopy(DEFAULT_APPLY_POLICY), raw_policy)
+    policy = _deep_merge(copy.deepcopy(DEFAULT_AUTOMATION_POLICY), raw_policy)
 
-    max_risk = str(policy.get("max_risk") or DEFAULT_APPLY_POLICY["max_risk"]).lower()
+    max_risk = str(policy.get("max_risk") or DEFAULT_AUTOMATION_POLICY["max_risk"]).lower()
     if max_risk not in RISK_ORDER:
         max_risk = "low"
     policy["max_risk"] = max_risk
@@ -255,15 +260,15 @@ def _item_field(item: dict[str, Any], *names: str, default: Any = None) -> Any:
     return default
 
 
-def apply_policy_allows_item(item: dict[str, Any], policy: dict[str, Any] | None) -> tuple[bool, list[str]]:
-    """Evaluate whether a planned item is allowed by normal apply_policy.
+def automation_policy_allows_item(item: dict[str, Any], policy: dict[str, Any] | None) -> tuple[bool, list[str]]:
+    """Evaluate whether a planned item is allowed by normal automation_policy.
 
     This is deliberately independent from legacy execution modes. Missing or
-    unknown risk/target/change data fails closed so the planner/apply engine can
-    surface a clear skip reason instead of mutating ambiguous targets.
+    unknown risk/target/change data fails closed so the runner can surface a
+    clear skip reason instead of mutating ambiguous targets.
     """
     item = item if isinstance(item, dict) else {}
-    normalized_policy = normalize_apply_policy({"apply_policy": policy or {}})
+    normalized_policy = normalize_automation_policy({"automation_policy": policy or {}})
     reasons: list[str] = []
 
     risk = str(_item_field(item, "risk", "risk_level", default="") or "").lower()
@@ -337,7 +342,11 @@ def _normalize_model_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = _normalize_model_config(config)
-    normalized["apply_policy"] = normalize_apply_policy(normalized)
+    legacy_policy = normalized.get("apply_policy")
+    if isinstance(legacy_policy, dict) and normalized.get("automation_policy") == DEFAULT_AUTOMATION_POLICY:
+        normalized["automation_policy"] = legacy_policy
+    normalized["automation_policy"] = normalize_automation_policy(normalized)
+    normalized.pop("apply_policy", None)
     normalized["calibration"] = normalize_calibration_config(normalized)
     return normalized
 

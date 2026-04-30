@@ -51,7 +51,7 @@ def test_compare_scorer_marks_llm_gepa_disagreements(monkeypatch):
                 {
                     "id": "proposal-1",
                     "score": 92,
-                    "recommendation": "review_for_possible_low_risk_apply",
+                    "recommendation": "review_low_risk_candidate",
                     "risk": "low",
                     "confidence": "high",
                     "rationale": "LLM thinks this is ready to apply after quick review.",
@@ -141,7 +141,7 @@ def test_compare_scorer_uses_change_type_aware_thresholds(monkeypatch):
     def fake_llm(*, proposals, findings, config):
         return {
             "scores": [
-                {"id": "low-risk-prose", "score": 88, "recommendation": "review_for_possible_low_risk_apply", "risk": "low", "confidence": "high", "rationale": "ok"},
+                {"id": "low-risk-prose", "score": 88, "recommendation": "review_low_risk_candidate", "risk": "low", "confidence": "high", "rationale": "ok"},
                 {"id": "strict-memory", "score": 80, "recommendation": "human_review", "risk": "medium", "confidence": "medium", "rationale": "ok"},
             ]
         }
@@ -149,7 +149,7 @@ def test_compare_scorer_uses_change_type_aware_thresholds(monkeypatch):
     def fake_gepa(*, proposals, findings, config):
         return {
             "scores": [
-                {"id": "low-risk-prose", "score": 70, "recommendation": "review_for_possible_low_risk_apply", "risk": "low", "confidence": "low", "rationale": "ok"},
+                {"id": "low-risk-prose", "score": 70, "recommendation": "review_low_risk_candidate", "risk": "low", "confidence": "low", "rationale": "ok"},
                 {"id": "strict-memory", "score": 74, "recommendation": "human_review", "risk": "medium", "confidence": "medium", "rationale": "ok"},
             ]
         }
@@ -178,7 +178,7 @@ def test_compare_scorer_always_blocks_risk_and_recommendation_mismatch(monkeypat
     proposals = [{"id": "typo", "change_type": "typo_fix", "risk": "low", "confidence": "high", "title": "Typo fix"}]
 
     def fake_llm(*, proposals, findings, config):
-        return {"scores": [{"id": "typo", "score": 90, "recommendation": "review_for_possible_low_risk_apply", "risk": "low", "confidence": "high", "rationale": "ok"}]}
+        return {"scores": [{"id": "typo", "score": 90, "recommendation": "review_low_risk_candidate", "risk": "low", "confidence": "high", "rationale": "ok"}]}
 
     def fake_gepa(*, proposals, findings, config):
         return {"scores": [{"id": "typo", "score": 89, "recommendation": "human_review", "risk": "medium", "confidence": "high", "rationale": "ok"}]}

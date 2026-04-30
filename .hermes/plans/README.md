@@ -2,12 +2,17 @@
 
 ## Current source of truth
 
-As of 2026-05-01, there is **one active cleanup plan** in this directory:
+As of 2026-05-01, there are **no active cleanup plans** in this directory.
 
-- `2026-05-01_011409-obsolete-internal-legacy-cleanup.md`
-  - Continues the Curator-aligned runner cleanup by removing or shrinking internal legacy apply-plan / apply-engine / rollback / outcome helpers without reintroducing removed primary surfaces.
+The latest completed implementation records are:
 
-The latest completed implementation record is:
+- `archive/2026-05-01_015758-obsolete-terminology-cleanup.md`
+  - **Status:** completed.
+  - Canonicalized unattended mutation/scorer/restore/historical-reader terminology after the legacy internals cleanup, while preserving legacy artifact/config compatibility where needed.
+
+- `archive/2026-05-01_011409-obsolete-internal-legacy-cleanup.md`
+  - **Status:** completed.
+  - Removed stale next-action guidance, dropped legacy re-exports/runtime imports, deleted legacy apply/ledger/drift internals and legacy-only tests, and shrank recovery/verification/outcome helpers.
 
 - `2026-04-30_234117-curator-aligned-self-improvement-runner.md`
   - **Status:** completed.

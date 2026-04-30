@@ -37,7 +37,7 @@ def write_applied_ledger(tmp_path):
         "change_type": "typo_fix",
         "risk": "low",
         "score": 91,
-        "recommendation": "review_for_possible_low_risk_apply",
+        "recommendation": "review_low_risk_candidate",
         "review_summary": {"title": "Fix typo in skill prose", "validation_status": "passed"},
         "summary": {"would_apply": 0, "applied": 1, "skipped_by_policy": 0, "failed": 0, "needs_review": 0},
         "items": [{"item_id": "step-001", "status": "applied", "rollback_data": {"before_snapshot": "Use teh browser carefully."}}],

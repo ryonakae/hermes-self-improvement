@@ -17,31 +17,31 @@ if str(_PLUGIN_DIR) not in sys.path:
 try:  # pragma: no cover - package import path
     from .config import (
         DEFAULT_CALIBRATION,
-        DEFAULT_APPLY_POLICY,
+        DEFAULT_AUTOMATION_POLICY,
         DEFAULT_PREVIEW_CHARS,
         DEFAULT_RETENTION_DAYS,
         HARD_STATIC_INVARIANTS,
         RISK_ORDER,
         _load_config,
-        apply_policy_allows_item,
+        automation_policy_allows_item,
         get_hermes_home,
         load_config,
-        normalize_apply_policy,
+        normalize_automation_policy,
         normalize_calibration_config,
     )
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from config import (
         DEFAULT_CALIBRATION,
-        DEFAULT_APPLY_POLICY,
+        DEFAULT_AUTOMATION_POLICY,
         DEFAULT_PREVIEW_CHARS,
         DEFAULT_RETENTION_DAYS,
         HARD_STATIC_INVARIANTS,
         RISK_ORDER,
         _load_config,
-        apply_policy_allows_item,
+        automation_policy_allows_item,
         get_hermes_home,
         load_config,
-        normalize_apply_policy,
+        normalize_automation_policy,
         normalize_calibration_config,
     )
 
@@ -92,7 +92,7 @@ def _register_tools(ctx) -> None:
             emoji="🛡️",
         )
 try:  # pragma: no cover - package import path
-    from .calibration import collect_calibration_evidence, rollback_calibration, run_calibration
+    from .calibration import collect_calibration_evidence, restore_previous_calibration, run_calibration
     from .mutation_policy import (
         PROVIDER_POLICIES,
         build_hindsight_tool_context,
@@ -108,7 +108,7 @@ try:  # pragma: no cover - package import path
     )
     from .mutation_worker import execute_hindsight_retain_operation, execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from calibration import collect_calibration_evidence, rollback_calibration, run_calibration
+    from calibration import collect_calibration_evidence, restore_previous_calibration, run_calibration
     from mutation_policy import (
         PROVIDER_POLICIES,
         build_hindsight_tool_context,

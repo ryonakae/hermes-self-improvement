@@ -1,5 +1,9 @@
 # Obsolete internal legacy cleanup plan
 
+## Status
+
+Completed and archived. Slice 1–4 and final verification landed in commits `dae0ccb`, `8a657ee`, `1103b36`, and `19a5ab9`. Do not continue this plan directly; use `2026-05-01_015758-obsolete-terminology-cleanup.md` for the remaining terminology-only follow-up.
+
 ## Goal
 
 Continue the Curator-aligned self-improvement runner cleanup after the public surface has already been reduced to four commands/tools. Remove or shrink legacy internal apply-plan / apply-engine / rollback / outcome helpers without reintroducing `plan`, `apply`, `rollback`, `outcome`, `--execute`, or `--items` as user-facing surfaces.

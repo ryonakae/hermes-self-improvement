@@ -277,10 +277,10 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
     assert (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8") == repo_cases_before
     ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
     assert ledger["operation"] == "calibrate"
-    assert ledger["rollback_data"]["active_before_content"] is None
+    assert ledger["restore_data"]["active_before_content"] is None
 
 
-def test_calibration_rollback_restores_active_before_state(monkeypatch, tmp_path):
+def test_restore_previous_calibration_restores_active_before_state(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
     write_json(active_pointer, {"candidate_hash": "before", "regression": {"status": "passed"}})
@@ -298,9 +298,9 @@ def test_calibration_rollback_restores_active_before_state(monkeypatch, tmp_path
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "passed", "cases": 3})
     result = calibration.run_calibration(config=cfg, execute=True)
 
-    rollback = calibration.rollback_calibration(ledger_id=Path(result["ledger_path"]).stem, config=cfg)
+    restore = calibration.restore_previous_calibration(ledger_id=Path(result["ledger_path"]).stem, config=cfg)
 
-    assert rollback["current_status"] == "rolled_back"
+    assert restore["current_status"] == "restored"
     assert active_pointer.read_text(encoding="utf-8") == before_content
 
 

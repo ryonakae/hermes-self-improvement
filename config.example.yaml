@@ -3,7 +3,7 @@
 # Do not commit real API keys or provider secrets. For custom endpoints, prefer
 # ${ENV_VAR} references in the local file.
 
-apply_policy:
+automation_policy:
   max_risk: low
   allow_destructive: false
   allowed_target_kinds:

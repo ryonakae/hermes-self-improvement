@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hermes_self_improvement.next_actions import build_next_actions_for_apply_preview, build_next_actions_for_improve, build_next_actions_for_plan, render_next_actions
+from hermes_self_improvement.next_actions import build_next_actions_for_historical_artifact, build_next_actions_for_improve, build_next_actions_for_historical_plan, render_next_actions
 
 
 def _commands(actions):
@@ -14,7 +14,7 @@ def test_historical_apply_preview_next_actions_do_not_emit_legacy_commands():
         "summary": {"would_apply": 2, "needs_review": 1, "failed": 0},
         "ledger_path": "/tmp/ledger.json",
     }
-    actions = build_next_actions_for_apply_preview(result, command_prefix="bin/hermes-self-improve")
+    actions = build_next_actions_for_historical_artifact(result, command_prefix="bin/hermes-self-improve")
 
     kinds = {item["kind"] for item in actions}
     commands = _commands(actions)
@@ -31,7 +31,7 @@ def test_historical_apply_preview_next_actions_do_not_emit_legacy_commands():
 
 
 def test_next_actions_for_plan_routes_to_current_runner_surface():
-    actions = build_next_actions_for_plan({
+    actions = build_next_actions_for_historical_plan({
         "plan_id": "plan-2",
         "items": [
             {"status": "ready", "item_id": "step-001"},

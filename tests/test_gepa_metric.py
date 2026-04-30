@@ -68,7 +68,7 @@ def test_gepa_metric_penalizes_auto_apply_and_missing_evidence_rationale():
     result = metric.evaluate_prediction(
         example=sample_example(),
         prediction=Prediction(
-            '{"id":"proposal-1","score":99,"recommendation":"review_for_possible_low_risk_apply",'
+            '{"id":"proposal-1","score":99,"recommendation":"review_low_risk_candidate",'
             '"risk":"low","confidence":"low","rationale":"Looks good.","auto_apply":true}'
         ),
     )

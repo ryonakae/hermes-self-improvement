@@ -199,7 +199,7 @@ def _proposal_case_from_item(*, source_path: Path, payload: dict[str, Any], item
         "source": {"kind": "scorer_disagreement", "path": str(source_path), "plan_id": payload.get("plan_id"), "item_id": item.get("item_id")},
         "proposal": proposal,
         "findings": [{"kind": "scorer_disagreement", "disagreements": disagreements}],
-        "expected": {"risk_max": "medium", "recommendation_not": "review_for_possible_low_risk_apply", "requires_human_review": True},
+        "expected": {"risk_max": "medium", "recommendation_not": "review_low_risk_candidate", "requires_human_review": True},
     }
     case["case_hash"] = _sha256_text(_stable_json(case))
     return case
@@ -328,7 +328,7 @@ def _write_calibration_ledger(
         "active_pointer_path": str(active_pointer_path),
         "active_before_hash": active_before_hash,
         "active_after_hash": active_after_hash,
-        "rollback_data": {
+        "restore_data": {
             "active_pointer_path": str(active_pointer_path),
             "active_before_content": active_before_content,
             "active_before_hash": active_before_hash,
@@ -350,14 +350,16 @@ def _find_calibration_ledger_path(*, ledger_id: str, config: dict[str, Any]) -> 
     return matches[-1] if matches else None
 
 
-def rollback_calibration(*, ledger_id: str, config: dict[str, Any]) -> dict[str, Any]:
+def restore_previous_calibration(*, ledger_id: str, config: dict[str, Any]) -> dict[str, Any]:
     path = _find_calibration_ledger_path(ledger_id=ledger_id, config=config)
     if path is None:
-        return {"schema_name": "self_improvement_calibration_rollback_result", "current_status": "failed", "reasons": ["ledger_not_found"]}
+        return {"schema_name": "self_improvement_calibration_restore_result", "current_status": "failed", "reasons": ["ledger_not_found"]}
     ledger = _load_json_file(path) or {}
-    rollback = ledger.get("rollback_data") if isinstance(ledger.get("rollback_data"), dict) else {}
-    pointer_path = Path(str(rollback.get("active_pointer_path") or ledger.get("active_pointer_path") or "")).expanduser()
-    before_content = rollback.get("active_before_content")
+    restore = ledger.get("restore_data") if isinstance(ledger.get("restore_data"), dict) else {}
+    if not restore:
+        restore = ledger.get("rollback_data") if isinstance(ledger.get("rollback_data"), dict) else {}
+    pointer_path = Path(str(restore.get("active_pointer_path") or ledger.get("active_pointer_path") or "")).expanduser()
+    before_content = restore.get("active_before_content")
     if before_content is None:
         if pointer_path.exists():
             pointer_path.unlink()
@@ -365,8 +367,8 @@ def rollback_calibration(*, ledger_id: str, config: dict[str, Any]) -> dict[str,
         pointer_path.parent.mkdir(parents=True, exist_ok=True)
         pointer_path.write_text(str(before_content), encoding="utf-8")
     return {
-        "schema_name": "self_improvement_calibration_rollback_result",
-        "current_status": "rolled_back",
+        "schema_name": "self_improvement_calibration_restore_result",
+        "current_status": "restored",
         "ledger_path": str(path),
         "active_evaluator_path": str(pointer_path),
     }

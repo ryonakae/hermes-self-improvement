@@ -36,7 +36,7 @@ def _current_runner_actions(*, command_prefix: str = "bin/hermes-self-improve", 
     return actions
 
 
-def build_next_actions_for_apply_preview(result: dict[str, Any], *, command_prefix: str = "bin/hermes-self-improve") -> list[dict[str, Any]]:
+def build_next_actions_for_historical_artifact(result: dict[str, Any], *, command_prefix: str = "bin/hermes-self-improve") -> list[dict[str, Any]]:
     """Return safe next actions for historical apply-plan artifacts.
 
     The legacy apply/outcome commands are no longer part of the primary product
@@ -75,14 +75,14 @@ def build_next_actions_for_apply_preview(result: dict[str, Any], *, command_pref
     return actions
 
 
-def build_next_actions_for_plan(plan_result: dict[str, Any], *, command_prefix: str = "bin/hermes-self-improve") -> list[dict[str, Any]]:
+def build_next_actions_for_historical_plan(plan_result: dict[str, Any], *, command_prefix: str = "bin/hermes-self-improve") -> list[dict[str, Any]]:
     plan = plan_result.get("apply_plan") if isinstance(plan_result.get("apply_plan"), dict) else plan_result
     items = plan.get("items") if isinstance(plan.get("items"), list) else []
     summary = {
         "ready": sum(1 for item in items if isinstance(item, dict) and item.get("status") == "ready"),
         "needs_review": sum(1 for item in items if isinstance(item, dict) and item.get("status") == "needs_review"),
     }
-    return build_next_actions_for_apply_preview({"plan_id": plan.get("plan_id"), "summary": summary}, command_prefix=command_prefix)
+    return build_next_actions_for_historical_artifact({"plan_id": plan.get("plan_id"), "summary": summary}, command_prefix=command_prefix)
 
 
 def build_next_actions_for_improve(result: dict[str, Any], *, command_prefix: str = "bin/hermes-self-improve") -> list[dict[str, Any]]:

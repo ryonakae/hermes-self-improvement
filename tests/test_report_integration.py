@@ -160,7 +160,7 @@ def test_report_includes_review_outcome_summary(tmp_path):
     assert out["operational_reports"]["review_outcomes"]["summary"]["total"] == 1
     assert out["operational_reports"]["review_outcomes"]["auto_apply_permission"] is False
     assert "## Review outcomes" in out["report"]
-    assert "does not grant auto-apply permission" in out["report"]
+    assert "does not grant unattended mutation permission" in out["report"]
 
 
 def test_recent_plan_report_payload_includes_next_actions(tmp_path):

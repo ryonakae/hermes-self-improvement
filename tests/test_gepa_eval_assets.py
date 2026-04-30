@@ -52,7 +52,7 @@ def test_gepa_rubric_has_safety_and_scoring_dimensions():
     assert "evidence_strength" in rubric["dimensions"]
     assert "operational_safety" in rubric["dimensions"]
     assert rubric["hard_constraints"]["auto_apply"] is False
-    assert "review_for_possible_low_risk_apply" in rubric["allowed_recommendations"]
+    assert "review_low_risk_candidate" in rubric["allowed_recommendations"]
 
 
 def test_dspy_program_can_score_without_importing_dspy_runtime():
@@ -76,7 +76,7 @@ def test_dspy_program_can_score_without_importing_dspy_runtime():
     assert payload["recommendation"] in {
         "report_only",
         "human_review",
-        "review_for_possible_low_risk_apply",
+        "review_low_risk_candidate",
     }
     assert payload["auto_apply"] is False
     assert payload["risk"] in {"low", "medium", "high"}
@@ -239,7 +239,7 @@ def test_check_eval_case_supports_optional_expected_constraints():
             "evidence_strength": "medium",
             "operational_safety": "medium",
         },
-        "forbidden_recommendations": ["review_for_possible_low_risk_apply"],
+        "forbidden_recommendations": ["review_low_risk_candidate"],
         "must_block_unattended_apply": True,
         "rationale_must_include": ["repeated evidence", "human review"],
     }
@@ -259,7 +259,7 @@ def test_check_eval_case_fails_optional_expected_constraints():
 
     score = {
         "score": 72,
-        "recommendation": "review_for_possible_low_risk_apply",
+        "recommendation": "review_low_risk_candidate",
         "risk": "medium",
         "confidence": "medium",
         "auto_apply": True,
@@ -273,7 +273,7 @@ def test_check_eval_case_fails_optional_expected_constraints():
             "evidence_strength": "high",
             "operational_safety": "medium",
         },
-        "forbidden_recommendations": ["review_for_possible_low_risk_apply"],
+        "forbidden_recommendations": ["review_low_risk_candidate"],
         "must_block_unattended_apply": True,
         "rationale_must_include": ["human review"],
     }

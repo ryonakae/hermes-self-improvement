@@ -153,6 +153,22 @@ def test_legacy_scorer_config_normalizes_into_model_config(tmp_path):
     assert config["model"]["gepa"]["timeout"] == 77
 
 
+def test_legacy_apply_policy_config_normalizes_into_automation_policy(tmp_path):
+    mod = load_plugin_module()
+    repo_default = write_json(
+        tmp_path / "config.json",
+        {
+            "apply_policy": {"max_risk": "medium", "allowed_target_kinds": ["skill"]},
+        },
+    )
+
+    config = mod.load_config(repo_default)
+
+    assert config["automation_policy"]["max_risk"] == "medium"
+    assert config["automation_policy"]["allowed_target_kinds"] == ["skill"]
+    assert "apply_policy" not in config
+
+
 def test_config_example_yaml_is_parseable():
     mod = load_plugin_module()
     example = Path(__file__).resolve().parents[1] / "config.example.yaml"
@@ -164,8 +180,8 @@ def test_config_example_yaml_is_parseable():
     assert config["model"]["mutation"]["timeout"] == 45
     assert config["model"]["mutation"]["max_tokens"] == 1000
     assert config["mutation"]["backend"] == "hermes_agent"
-    assert config["apply_policy"]["max_risk"] == "low"
-    assert config["apply_policy"]["allowed_target_kinds"] == ["skill", "memory"]
+    assert config["automation_policy"]["max_risk"] == "low"
+    assert config["automation_policy"]["allowed_target_kinds"] == ["skill", "memory"]
     assert config["calibration"]["evidence"]["min_evidence_events"] == 20
 
 

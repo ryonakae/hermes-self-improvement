@@ -85,7 +85,7 @@ def _score_proposals_heuristic(proposals: list[dict[str, Any]]) -> list[dict[str
             base -= 20
         p2 = dict(p)
         p2["score"] = max(0, min(100, base))
-        p2["recommendation"] = "report_only" if risk != "low" else "review_for_possible_low_risk_apply"
+        p2["recommendation"] = "report_only" if risk != "low" else "review_low_risk_candidate"
         p2["scorer"] = "heuristic-v0.1"
         p2["auto_apply"] = False
         scored.append(p2)
@@ -126,7 +126,7 @@ def _merge_external_scores(
         if scored_item.get("recommendation") in {
             "report_only",
             "human_review",
-            "review_for_possible_low_risk_apply",
+            "review_low_risk_candidate",
         }:
             p2["recommendation"] = scored_item["recommendation"]
         else:
@@ -135,7 +135,7 @@ def _merge_external_scores(
         if isinstance(scored_item.get("score_breakdown"), dict):
             p2["score_breakdown"] = _sanitize_score_breakdown(scored_item["score_breakdown"])
         p2["scorer"] = scorer_label
-        # Safety gate: external scoring never grants unattended apply permission.
+        # Safety gate: external scoring never grants unattended mutation permission.
         p2["auto_apply"] = False
         merged.append(p2)
     return sorted(merged, key=lambda item: item.get("score", 0), reverse=True)
@@ -395,7 +395,7 @@ def _call_llm_scorer(
         "rubric": {
             "score": "0-100。根拠が複数session/複数toolにまたがるほど高い。1回限り・再現性不明なら低い。",
             "risk": ["low", "medium", "high"],
-            "recommendation": ["report_only", "human_review", "review_for_possible_low_risk_apply"],
+            "recommendation": ["report_only", "human_review", "review_low_risk_candidate"],
             "safety": "無人での skill/memory 自動適用を許可しない。auto_apply は常に false とみなす。",
             "skill_memory_classification": SKILL_MEMORY_CLASSIFICATION_BLOCK,
         },
