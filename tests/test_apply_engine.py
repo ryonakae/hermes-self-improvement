@@ -663,3 +663,55 @@ def test_apply_plan_skips_superseded_content_drift(tmp_path):
     assert skipped["status"] == "skipped_by_policy"
     assert "skip_superseded" in skipped["reasons"]
     assert skipped["drift"]["class"] == "superseded"
+
+
+def test_apply_plan_invokes_semantic_drift_adjudicator_for_conflicting_drift(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("helo world\n", encoding="utf-8")
+    item = make_skill_manage_patch_item(mod, item_id="step-001", target=target, old="helo", new="hello")
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-adjudicated-drift", "items": [item]})
+    target.write_text("hola mundo\n", encoding="utf-8")
+    calls = []
+
+    def fake_adjudicator(payload):
+        calls.append(payload)
+        return {"outcome": "needs_review", "reason": "Current target no longer contains the planned anchor."}
+
+    result = mod.apply_plan(
+        plan_id="plan-adjudicated-drift",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_drift_adjudicator": fake_adjudicator},
+        execute=False,
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["drift"]["class"] == "conflicting_drift"
+    item_result = result["items"][0]
+    assert item_result["status"] == "needs_review"
+    assert item_result["drift_adjudication"]["outcome"] == "needs_review"
+    assert "semantic_drift_needs_review" in item_result["reasons"]
+
+
+def test_apply_plan_does_not_allow_adjudicator_to_override_identity_drift(tmp_path):
+    mod = load_plugin_module()
+    target = tmp_path / "SKILL.md"
+    target.write_text("helo world\n", encoding="utf-8")
+    item = make_skill_manage_patch_item(mod, item_id="step-001", target=target, old="helo", new="hello")
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-identity-drift", "items": [item]})
+    target.unlink()
+    calls = []
+
+    def fake_adjudicator(payload):
+        calls.append(payload)
+        return {"outcome": "apply_original", "reason": "should not be called"}
+
+    result = mod.apply_plan(
+        plan_id="plan-identity-drift",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_drift_adjudicator": fake_adjudicator},
+        execute=False,
+    )
+
+    assert calls == []
+    item_result = result["items"][0]
+    assert item_result["status"] == "failed"
+    assert item_result["drift"]["class"] == "target_identity_drift"

@@ -18,6 +18,7 @@ try:  # pragma: no cover - package import path
     from .mutation_agent import run_skill_agent_task
     from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from .drift import classify_content_drift
+    from .drift_adjudicator import adjudicate_semantic_drift
     from .observer import _reports_dir, _sha256_text, _stable_json
     from .recovery_engine import ledger_bound_restore, memory_ledger_bound_restore, recovery_action_from_snapshots
     from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
@@ -35,6 +36,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from mutation_agent import run_skill_agent_task
     from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
     from drift import classify_content_drift
+    from drift_adjudicator import adjudicate_semantic_drift
     from observer import _reports_dir, _sha256_text, _stable_json
     from recovery_engine import ledger_bound_restore, memory_ledger_bound_restore, recovery_action_from_snapshots
     from skill_snapshot import SkillSnapshotError, capture_skill_snapshot
@@ -677,12 +679,46 @@ def apply_plan(
             result_items.append(item_result)
             continue
         if drift.get("action") != "continue":
-            item_result["status"] = "failed" if drift.get("class") == "target_identity_drift" else "needs_review"
-            item_result["reasons"].append("target_hash_mismatch")
-            item_result["reasons"].extend(drift.get("reasons") or [])
-            summary[item_result["status"]] += 1
-            result_items.append(item_result)
-            continue
+            if drift.get("class") == "target_identity_drift":
+                item_result["status"] = "failed"
+                item_result["reasons"].append("target_hash_mismatch")
+                item_result["reasons"].extend(drift.get("reasons") or [])
+                summary["failed"] += 1
+                result_items.append(item_result)
+                continue
+            adjudication_payload = {
+                "plan_id": plan_id,
+                "item_id": item.get("item_id"),
+                "target_kind": item.get("target_kind"),
+                "target_path": target_path,
+                "baseline_hash": baseline,
+                "current_hash": current_hash,
+                "drift": drift,
+                "planned_change": item.get("proposed_change_summary") or item.get("title") or item.get("action"),
+                "mutation": mutation,
+                "risk": item.get("risk"),
+                "recommendation": item.get("recommendation"),
+                "confidence": item.get("confidence"),
+            }
+            adjudication = adjudicate_semantic_drift(payload=adjudication_payload, config=config)
+            item_result["drift_adjudication"] = adjudication
+            outcome = str(adjudication.get("outcome") or "")
+            if outcome == "skip_superseded":
+                item_result["status"] = "skipped_by_policy"
+                item_result["reasons"].append("skip_superseded")
+                item_result["reasons"].append(str(adjudication.get("reason") or "semantic_drift_superseded"))
+                summary["skipped_by_policy"] += 1
+                result_items.append(item_result)
+                continue
+            if outcome in {"apply_original", "rebase_with_semantic_mutation_agent"}:
+                item_result["reasons"].append(f"semantic_drift_{outcome}")
+            else:
+                item_result["status"] = "failed" if outcome == "reject" else "needs_review"
+                item_result["reasons"].append("semantic_drift_rejected" if outcome == "reject" else "semantic_drift_needs_review")
+                item_result["reasons"].append(str(adjudication.get("reason") or "semantic_drift_not_safe_to_apply"))
+                summary[item_result["status"]] += 1
+                result_items.append(item_result)
+                continue
 
         after_content = _apply_mutation(content, mutation)
         if after_content is None:
