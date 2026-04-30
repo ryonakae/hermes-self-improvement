@@ -123,6 +123,7 @@ def test_calibration_bad_outcome_threshold_requests_candidate(tmp_path):
 def test_calibration_preview_does_not_write_active_pointer(tmp_path):
     mod = load_plugin_module()
     active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    runtime_cases_dir = tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"
     plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
     write_json(
         plan_path,
@@ -138,6 +139,9 @@ def test_calibration_preview_does_not_write_active_pointer(tmp_path):
 
     assert result["current_status"] == "would_update"
     assert active_pointer.exists() is False
+    assert runtime_cases_dir.exists() is False
+    assert result["runtime_eval_cases"]["status"] == "would_write"
+    assert result["runtime_eval_cases"]["count"] == 1
     assert result["active_changed"] is False
 
 
@@ -185,6 +189,7 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
 def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    runtime_cases_dir = tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"
     plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
     write_json(
         plan_path,
@@ -203,9 +208,11 @@ def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     assert result["active_changed"] is False
     assert "regression_failed" in result["reasons"]
     assert active_pointer.exists() is False
+    assert runtime_cases_dir.exists() is False
+    assert result["runtime_eval_cases"]["status"] == "not_written_regression_failed"
 
 
-def test_collect_calibration_evidence_counts_review_outcomes(tmp_path):
+def test_build_runtime_eval_cases_uses_review_outcomes_and_disagreements(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     import hermes_self_improvement.outcome_store as outcome_store
     config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 2}}}
@@ -222,10 +229,23 @@ def test_collect_calibration_evidence_counts_review_outcomes(tmp_path):
         "source": "cli",
     })
 
+    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
+    write_json(
+        plan_path,
+        {
+            "schema_name": "self_improvement_apply_plan",
+            "plan_id": "plan-disagree",
+            "items": [{"item_id": "step-001", "target": "skill", "change_type": "patch", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
+        },
+    )
+
     evidence = calibration.collect_calibration_evidence(config)
+    cases = calibration.build_runtime_eval_cases(config)
     assert evidence["review_outcomes"] == 2
     assert evidence["bad_outcomes"] >= 2
     assert evidence["review_outcome_summary"]["by_outcome"]["rolled_back"] == 1
+    assert {case["source"]["kind"] for case in cases} == {"review_outcome", "scorer_disagreement"}
+    assert all("proposal" in case and "findings" in case and "expected" in case for case in cases)
 
 
 def test_calibration_execute_promotes_active_pointer_after_regression_pass(monkeypatch, tmp_path):
@@ -241,6 +261,7 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
         },
     )
     cfg = base_config(tmp_path)
+    repo_cases_before = (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8")
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "passed", "cases": 3})
 
     result = calibration.run_calibration(config=cfg, execute=True)
@@ -252,6 +273,12 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
     assert pointer["candidate_hash"] == result["candidate"]["candidate_hash"]
     assert pointer["regression"]["status"] == "passed"
     assert result["ledger_path"]
+    runtime_cases = result["runtime_eval_cases"]
+    assert runtime_cases["status"] == "written"
+    assert runtime_cases["count"] == 1
+    assert runtime_cases["path"].startswith(str(tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"))
+    assert Path(runtime_cases["path"]).exists()
+    assert (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8") == repo_cases_before
     ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
     assert ledger["operation"] == "calibrate"
     assert ledger["rollback_data"]["active_before_content"] is None

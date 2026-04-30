@@ -155,6 +155,28 @@ def load_eval_cases(path: Path | None = None) -> list[dict[str, Any]]:
     return cases
 
 
+def load_runtime_eval_cases(config: dict[str, Any] | None = None, *, limit: int = 200) -> list[dict[str, Any]]:
+    """Load user/runtime-derived eval cases from private self-improvement state only."""
+    root = _reports_dir(config or {}) / "gepa" / "runtime-eval-cases"
+    if not root.exists():
+        return []
+    cases: list[dict[str, Any]] = []
+    for path in sorted(root.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True):
+        for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            line = line.strip()
+            if not line:
+                continue
+            item = json.loads(line)
+            if not isinstance(item, dict):
+                raise ValueError(f"Runtime eval case line {line_no} is not a JSON object: {path}")
+            item.setdefault("runtime_private", True)
+            item.setdefault("runtime_private_path", str(path))
+            cases.append(item)
+            if len(cases) >= limit:
+                return cases
+    return cases
+
+
 def dspy_available() -> bool:
     """Return whether the required DSPy package is importable without importing it."""
     return importlib.util.find_spec("dspy") is not None
@@ -354,6 +376,7 @@ def build_gepa_payload(
         "findings": findings,
         "rubric": load_rubric(),
         "eval_cases": load_eval_cases(),
+        "runtime_eval_cases": load_runtime_eval_cases(config),
         "safety": {
             "advisory_only": True,
             "force_auto_apply_false": True,

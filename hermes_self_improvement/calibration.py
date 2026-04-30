@@ -176,6 +176,90 @@ def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, An
     return candidate
 
 
+def _runtime_eval_cases_dir(config: dict[str, Any]) -> Path:
+    return _reports_dir(config) / "gepa" / "runtime-eval-cases"
+
+
+def _runtime_eval_cases_path(config: dict[str, Any], candidate: dict[str, Any]) -> Path:
+    candidate_hash = str(candidate.get("candidate_hash") or "candidate")[:12]
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return _runtime_eval_cases_dir(config) / f"{stamp}-{candidate_hash}-cases.jsonl"
+
+
+def _proposal_case_from_item(*, source_path: Path, payload: dict[str, Any], item: dict[str, Any], index: int) -> dict[str, Any] | None:
+    disagreements = item.get("scorer_disagreements")
+    if not isinstance(disagreements, list) or not disagreements:
+        return None
+    proposal = {key: value for key, value in item.items() if key in {"id", "item_id", "title", "target", "target_kind", "change_type", "risk", "confidence", "recommendation", "score"}}
+    if not proposal:
+        proposal = {"item_id": item.get("item_id") or f"item-{index}", "change_type": item.get("change_type")}
+    case = {
+        "id": f"runtime-disagreement-{_sha256_text(str(source_path) + ':' + str(index))[:10]}",
+        "description": "Runtime-private scorer disagreement case generated from self-improvement artifacts.",
+        "source": {"kind": "scorer_disagreement", "path": str(source_path), "plan_id": payload.get("plan_id"), "item_id": item.get("item_id")},
+        "proposal": proposal,
+        "findings": [{"kind": "scorer_disagreement", "disagreements": disagreements}],
+        "expected": {"risk_max": "medium", "recommendation_not": "review_for_possible_low_risk_apply", "requires_human_review": True},
+    }
+    case["case_hash"] = _sha256_text(_stable_json(case))
+    return case
+
+
+def _review_outcome_case(row: dict[str, Any], index: int) -> dict[str, Any] | None:
+    outcome = str(row.get("outcome") or "")
+    if outcome not in {"rejected_by_human", "edited_before_apply", "apply_failed", "rolled_back", "rollback_failed"}:
+        return None
+    case = {
+        "id": f"runtime-review-outcome-{_sha256_text(_stable_json({'index': index, 'row': row}))[:10]}",
+        "description": "Runtime-private human/outcome feedback case generated from self-improvement review outcomes.",
+        "source": {"kind": "review_outcome", "path": row.get("path"), "plan_id": row.get("plan_id"), "item_id": row.get("item_id"), "outcome": outcome},
+        "proposal": {"id": row.get("proposal_id") or row.get("item_id") or f"review-outcome-{index}", "target": row.get("target_kind"), "change_type": row.get("change_type"), "risk": row.get("risk"), "recommendation": row.get("recommendation")},
+        "findings": [{"kind": "human_or_runtime_outcome", "outcome": outcome, "reason": row.get("reason")}],
+        "expected": {"risk_min": "medium", "recommendation": "human_review", "requires_human_review": True},
+    }
+    case["case_hash"] = _sha256_text(_stable_json(case))
+    return case
+
+
+def build_runtime_eval_cases(config: dict[str, Any], *, now: datetime | None = None) -> list[dict[str, Any]]:
+    calibration = normalize_calibration_config(config)
+    evidence_cfg = calibration.get("evidence") if isinstance(calibration.get("evidence"), dict) else {}
+    window_days = int(evidence_cfg.get("window_days", 30) or 0)
+    now = now or datetime.now(UTC)
+    cases: list[dict[str, Any]] = []
+
+    for index, row in enumerate(load_review_outcomes(config=config, limit=1000)):
+        case = _review_outcome_case(row, index)
+        if case is not None:
+            cases.append(case)
+
+    root = _reports_dir(config)
+    for path, payload in _iter_recent_json(root, window_days=window_days, now=now) or []:
+        if payload.get("schema_name") != "self_improvement_apply_plan":
+            continue
+        items = payload.get("items") if isinstance(payload.get("items"), list) else []
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            case = _proposal_case_from_item(source_path=path, payload=payload, item=item, index=index)
+            if case is not None:
+                cases.append(case)
+    deduped: dict[str, dict[str, Any]] = {}
+    for case in cases:
+        deduped[str(case.get("case_hash") or case.get("id"))] = case
+    return list(deduped.values())
+
+
+def write_runtime_eval_cases(config: dict[str, Any], *, candidate: dict[str, Any], cases: list[dict[str, Any]]) -> Path | None:
+    if not cases:
+        return None
+    path = _runtime_eval_cases_path(config, candidate)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    content = "\n".join(json.dumps(case, ensure_ascii=False, sort_keys=True, default=str) for case in cases) + "\n"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
 def _active_evaluator_pointer_path(config: dict[str, Any], calibration: dict[str, Any]) -> Path:
     return _reports_dir(config) / "gepa" / "active-evaluator.json"
 
@@ -305,6 +389,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         "active_changed": False,
         "active_evaluator_path": None,
         "ledger_path": None,
+        "runtime_eval_cases": {"status": "not_built", "count": 0, "path": None},
     }
     if not calibration.get("enabled", True):
         result["reasons"].append("calibration_disabled")
@@ -316,13 +401,26 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         return result
 
     result["candidate"] = candidate
+    runtime_cases = build_runtime_eval_cases(config)
+    result["runtime_eval_cases"] = {
+        "status": "would_write" if runtime_cases and not execute else "empty" if not runtime_cases else "pending_write",
+        "count": len(runtime_cases),
+        "path": None,
+        "storage": "runtime_private",
+    }
     if execute:
         regression = _run_calibration_regression(candidate=candidate, config=config)
         result["regression"] = regression
         if regression.get("status") != "passed":
             result["current_status"] = "failed"
+            result["runtime_eval_cases"]["status"] = "not_written_regression_failed" if runtime_cases else "empty"
             result["reasons"].append(str(regression.get("reason") or "regression_failed"))
             return result
+        if runtime_cases:
+            runtime_cases_path = write_runtime_eval_cases(config, candidate=candidate, cases=runtime_cases)
+            result["runtime_eval_cases"].update({"status": "written", "path": str(runtime_cases_path) if runtime_cases_path else None})
+            candidate["runtime_eval_cases_path"] = str(runtime_cases_path) if runtime_cases_path else None
+            candidate["runtime_eval_cases_count"] = len(runtime_cases)
         active_pointer_path = _active_evaluator_pointer_path(config, calibration)
         active_before_content, active_before_hash = _current_pointer_content(active_pointer_path)
         active_after_hash = _write_active_pointer(

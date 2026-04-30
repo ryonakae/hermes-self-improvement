@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -355,4 +356,24 @@ def test_build_gepa_payload_includes_eval_assets_and_program_name():
     assert payload["program"] == "ProposalScoringProgram"
     assert payload["rubric"]["version"] == "proposal-eval-v0.1"
     assert len(payload["eval_cases"]) >= 4
+    assert payload["runtime_eval_cases"] == []
     assert payload["proposals"][0]["id"] == "proposal-1"
+
+
+def test_gepa_payload_loads_runtime_private_eval_cases_from_state(tmp_path):
+    adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_runtime_cases")
+    runtime_dir = tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"
+    runtime_dir.mkdir(parents=True)
+    runtime_case = {
+        "id": "runtime-1",
+        "proposal": {"id": "p1"},
+        "findings": [{"kind": "review_outcome"}],
+        "expected": {"recommendation": "human_review"},
+    }
+    (runtime_dir / "cases.jsonl").write_text(json.dumps(runtime_case, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    payload = adapter.build_gepa_payload(proposals=[], findings=[], config={"_self_improvement_root": str(tmp_path / "self-improvement")})
+
+    assert payload["runtime_eval_cases"][0]["id"] == "runtime-1"
+    assert payload["runtime_eval_cases"][0]["runtime_private"] is True
+    assert str(runtime_dir) in payload["runtime_eval_cases"][0]["runtime_private_path"]
