@@ -212,8 +212,13 @@ def memory_rollback_status(config: dict[str, Any] | None = None) -> dict[str, An
     return {
         "supported": False,
         "reason": "unsupported_pending_store_validation",
+        "execution": "blocked",
+        "preview_modes": [
+            "built_in_memory_tool_preview",
+            "external_provider_compensating_correction_preview",
+        ],
         "proof_plan": ".hermes/plans/2026-04-30_081449-memory-rollback-store-validation.md",
-        "forbidden": ["sensitive_delete_readd", "external_provider_direct_restore"],
+        "forbidden": ["sensitive_delete_readd", "external_provider_direct_restore", "built_in_memory_direct_restore"],
     }
 
 

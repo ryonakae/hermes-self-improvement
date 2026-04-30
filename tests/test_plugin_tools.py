@@ -120,6 +120,9 @@ def test_status_tool_reports_memory_rollback_readiness(tmp_path):
 
     assert payload["memory_rollback"]["supported"] is False
     assert payload["memory_rollback"]["reason"] == "unsupported_pending_store_validation"
+    assert payload["memory_rollback"]["execution"] == "blocked"
+    assert "built_in_memory_tool_preview" in payload["memory_rollback"]["preview_modes"]
+    assert "external_provider_compensating_correction_preview" in payload["memory_rollback"]["preview_modes"]
     assert "memory-rollback-store-validation" in payload["memory_rollback"]["proof_plan"]
 
 
