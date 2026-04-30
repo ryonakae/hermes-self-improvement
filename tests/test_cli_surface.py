@@ -130,3 +130,25 @@ def test_outcome_command_accepts_required_fields():
     assert args.self_improvement_cmd == "outcome"
     assert args.outcome == "rejected_by_human"
     assert args.as_json is True
+
+
+def test_improve_preview_summary_prints_next_actions(monkeypatch, tmp_path, capsys):
+    cli = load_cli_module()
+    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"_self_improvement_root": str(tmp_path / "self-improvement")})
+    monkeypatch.setattr(cli, "run_calibration", lambda **kwargs: {"current_status": "no_op", "active_changed": False})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+
+    def fake_build_apply_plan(**kwargs):
+        return {"plan_id": "plan-preview", "items": [{"status": "ready"}], "summary": {}}
+
+    monkeypatch.setattr(cli, "build_apply_plan", fake_build_apply_plan)
+    monkeypatch.setattr(cli, "write_apply_plan", lambda plan, config: tmp_path / "plan.json")
+    monkeypatch.setattr(cli, "apply_plan", lambda **kwargs: {"plan_id": "plan-preview", "execute": False, "summary": {"would_apply": 1, "needs_review": 0, "failed": 0, "skipped_by_policy": 0}, "target_changed": False})
+    args = build_parser().parse_args(["improve"])
+
+    cli._handle_cli(args)
+
+    out = capsys.readouterr().out
+    assert "Self-improvement preview" in out
+    assert "Next actions:" in out
+    assert "bin/hermes-self-improve apply plan-preview --execute" in out

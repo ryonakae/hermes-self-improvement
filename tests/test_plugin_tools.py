@@ -230,3 +230,17 @@ def test_simplified_rollback_tool_requires_ledger_id(tmp_path):
     payload = parse_tool_payload(raw)
     assert payload["error"] == "ledger_id is required"
     assert payload["target_changed"] is False
+
+
+def test_plan_and_apply_tools_include_next_actions_for_previews(tmp_path):
+    mod = load_plugin_module()
+    config, plan, _target = _write_simple_plan(mod, tmp_path)
+
+    apply_raw = mod._handle_self_improvement_apply_tool({"plan_id": plan["plan_id"], "execute": False, "config": config})
+    apply_payload = parse_tool_payload(apply_raw)
+    assert any(action["kind"] == "execute_ready_items" for action in apply_payload["next_actions"])
+
+    plan_raw = mod._handle_self_improvement_plan_tool({"since_hours": 1, "scorer": "heuristic", "config": config})
+    plan_payload = parse_tool_payload(plan_raw)
+    assert "next_actions" in plan_payload
+    assert plan_payload["apply_plan"].get("next_actions") == plan_payload["next_actions"]

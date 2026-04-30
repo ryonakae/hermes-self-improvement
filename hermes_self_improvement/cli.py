@@ -18,6 +18,7 @@ try:  # pragma: no cover - package import path
         load_config,
     )
     from .mutation_backend import mutation_backend_status
+    from .next_actions import build_next_actions_for_apply_preview, build_next_actions_for_improve, build_next_actions_for_plan, render_next_actions
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from .outcome_store import OUTCOME_VALUES, infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
     from .recovery_engine import memory_rollback_status
@@ -33,6 +34,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         load_config,
     )
     from mutation_backend import mutation_backend_status
+    from next_actions import build_next_actions_for_apply_preview, build_next_actions_for_improve, build_next_actions_for_plan, render_next_actions
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from outcome_store import OUTCOME_VALUES, infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
     from recovery_engine import memory_rollback_status
@@ -163,7 +165,7 @@ def _summarize_apply_plan_for_report(plan: dict[str, Any]) -> dict[str, Any]:
         })
         if len(highlights) >= 5:
             break
-    return {
+    summary = {
         "plan_id": plan.get("plan_id"),
         "plan_path": plan.get("_artifact_path"),
         "created_at": plan.get("created_at"),
@@ -172,6 +174,8 @@ def _summarize_apply_plan_for_report(plan: dict[str, Any]) -> dict[str, Any]:
         "status_counts": counts,
         "needs_review_highlights": highlights,
     }
+    summary["next_actions"] = build_next_actions_for_apply_preview({"plan_id": summary["plan_id"], "summary": {"ready": counts.get("ready", 0), "needs_review": counts.get("needs_review", 0)}})
+    return summary
 
 
 def build_recent_plan_report_payload(*, config: dict[str, Any], limit: int = 5) -> dict[str, Any]:
@@ -255,7 +259,7 @@ def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
     items = ledger.get("items") if isinstance(ledger.get("items"), list) else []
     typed_items = [item for item in items if isinstance(item, dict)]
     item_status_counts = _status_counts(typed_items, ("would_apply", "applied", "skipped_by_policy", "failed", "needs_review"))
-    return {
+    summary_payload = {
         "ledger_id": ledger.get("ledger_id"),
         "ledger_path": ledger.get("_ledger_path"),
         "created_at": ledger.get("created_at"),
@@ -281,6 +285,9 @@ def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
         "applied_diff": ledger.get("applied_diff") if isinstance(ledger.get("applied_diff"), dict) else None,
         "rollback_available": isinstance(ledger.get("rollback_data"), dict) or any(isinstance(item.get("rollback_data"), dict) for item in typed_items),
     }
+    if summary_payload["current_status"] in {"previewed", "needs_review", "skipped_by_policy"}:
+        summary_payload["next_actions"] = build_next_actions_for_apply_preview({"plan_id": summary_payload.get("plan_id"), "summary": summary})
+    return summary_payload
 
 
 def build_ledger_report_payload(*, config: dict[str, Any], status: str = "applied", limit: int = 20, operation: str | None = None) -> dict[str, Any]:
@@ -914,6 +921,9 @@ def _render_apply_plan_summary(plan: dict[str, Any], path: str | Path) -> str:
             lines.append(f"- {target_kind}: {count}")
     else:
         lines.append("- none: 0")
+    rendered_actions = render_next_actions(plan.get("next_actions") if isinstance(plan.get("next_actions"), list) else [])
+    if rendered_actions:
+        lines.extend(["", rendered_actions])
     return "\n".join(lines)
 
 
@@ -937,6 +947,9 @@ def _render_apply_result_summary(result: dict[str, Any]) -> str:
     ]
     if result.get("ledger_path"):
         lines.append(f"Ledger: {result.get('ledger_path')}")
+    rendered_actions = render_next_actions(result.get("next_actions") if isinstance(result.get("next_actions"), list) else [])
+    if rendered_actions:
+        lines.extend(["", rendered_actions])
     return "\n".join(lines)
 
 
@@ -994,7 +1007,7 @@ def run_improve(
         item_ids=item_ids,
         execute=bool(execute),
     )
-    return {
+    result_payload = {
         "schema_name": "self_improvement_improve_result",
         "schema_version": "1.0",
         "execute": bool(execute),
@@ -1007,6 +1020,9 @@ def run_improve(
         },
         "apply": apply_result,
     }
+    if not execute:
+        result_payload["next_actions"] = build_next_actions_for_improve(result_payload)
+    return result_payload
 
 
 def _plan_status_counts(plan: dict[str, Any]) -> dict[str, int]:
@@ -1048,6 +1064,9 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         )
     if apply_result.get("ledger_path"):
         lines.append(f"Ledger: {apply_result.get('ledger_path')}")
+    rendered_actions = render_next_actions(result.get("next_actions") if isinstance(result.get("next_actions"), list) else [])
+    if rendered_actions:
+        lines.extend(["", rendered_actions])
     return "\n".join(lines)
 
 
@@ -1172,8 +1191,9 @@ def _handle_cli(args: argparse.Namespace) -> None:
             execution_mode="preview",
             config=config,
         )
+        plan["next_actions"] = build_next_actions_for_plan(plan)
         path = write_apply_plan(plan, config)
-        payload = {"apply_plan": plan, "apply_plan_path": str(path)}
+        payload = {"apply_plan": plan, "apply_plan_path": str(path), "next_actions": plan["next_actions"]}
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
@@ -1195,6 +1215,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
             item_ids=_parse_item_ids(getattr(args, "item_ids", None)),
             execute=bool(getattr(args, "execute", False)),
         )
+        if not bool(getattr(args, "execute", False)):
+            payload["next_actions"] = build_next_actions_for_apply_preview(payload)
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:

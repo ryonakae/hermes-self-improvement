@@ -11,6 +11,7 @@ try:  # pragma: no cover - package import path
     from .cli import build_review_outcome_report_payload, run_improve, run_pipeline
     from .config import DEFAULT_RETENTION_DAYS, load_config
     from .mutation_backend import mutation_backend_status
+    from .next_actions import build_next_actions_for_apply_preview, build_next_actions_for_plan
     from .observer import _event_path, _load_events
     from .recovery_engine import memory_rollback_status
     from .verification import merge_judge_status
@@ -21,6 +22,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/plugin 
     from cli import build_review_outcome_report_payload, run_improve, run_pipeline
     from config import DEFAULT_RETENTION_DAYS, load_config
     from mutation_backend import mutation_backend_status
+    from next_actions import build_next_actions_for_apply_preview, build_next_actions_for_plan
     from observer import _event_path, _load_events
     from recovery_engine import memory_rollback_status
     from verification import merge_judge_status
@@ -119,8 +121,9 @@ def _handle_self_improvement_plan_tool(args: dict[str, Any] | None = None, **_kw
         execution_mode="preview",
         config=config,
     )
+    plan["next_actions"] = build_next_actions_for_plan(plan)
     path = write_apply_plan(plan, config)
-    return tool_result({"schema_name": "self_improvement_plan_result", "apply_plan": plan, "apply_plan_path": str(path), "target_changed": False})
+    return tool_result({"schema_name": "self_improvement_plan_result", "apply_plan": plan, "apply_plan_path": str(path), "next_actions": plan["next_actions"], "target_changed": False})
 
 
 def _handle_self_improvement_apply_tool(args: dict[str, Any] | None = None, **_kw) -> str:
@@ -129,12 +132,15 @@ def _handle_self_improvement_apply_tool(args: dict[str, Any] | None = None, **_k
     if not plan_id:
         return tool_error("plan_id is required", target_changed=False)
     try:
-        return tool_result(apply_plan(
+        result = apply_plan(
             plan_id=plan_id,
             config=_config_from_args(args),
             item_ids=_items_from_args(args),
             execute=bool(args.get("execute", False)),
-        ))
+        )
+        if not bool(args.get("execute", False)):
+            result["next_actions"] = build_next_actions_for_apply_preview(result)
+        return tool_result(result)
     except Exception as exc:
         return tool_error("apply_failed", error_detail=str(exc), target_changed=False)
 

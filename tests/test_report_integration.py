@@ -170,3 +170,23 @@ def test_report_includes_review_outcome_summary(tmp_path):
     assert out["operational_reports"]["review_outcomes"]["auto_apply_permission"] is False
     assert "## Review outcomes" in out["report"]
     assert "does not grant auto-apply permission" in out["report"]
+
+
+def test_recent_plan_report_payload_includes_next_actions(tmp_path):
+    import json
+    from hermes_self_improvement.cli import build_recent_plan_report_payload
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    plan_dir = tmp_path / "self-improvement" / "apply-plans" / "2026-04-30"
+    plan_dir.mkdir(parents=True)
+    (plan_dir / "plan.json").write_text(json.dumps({
+        "schema_name": "self_improvement_apply_plan",
+        "plan_id": "plan-actions",
+        "created_at": "2026-04-30T00:00:00+00:00",
+        "items": [{"item_id": "step-001", "status": "ready"}, {"item_id": "step-002", "status": "needs_review"}],
+    }), encoding="utf-8")
+
+    payload = build_recent_plan_report_payload(config=config)
+
+    actions = payload["plans"][0]["next_actions"]
+    assert any(action["kind"] == "execute_ready_items" for action in actions)
+    assert any(action["kind"] == "record_rejection_outcome" for action in actions)
