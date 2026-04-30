@@ -19,6 +19,7 @@ try:  # pragma: no cover - package import path
     )
     from .evidence import build_evidence_pack, write_evidence_pack
     from .mutation_backend import mutation_backend_status
+    from .runner_steps import run_skill_improvement_step
     from .next_actions import build_next_actions_for_apply_preview, build_next_actions_for_improve, build_next_actions_for_plan, render_next_actions
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from .outcome_store import OUTCOME_VALUES, infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
@@ -36,6 +37,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     )
     from evidence import build_evidence_pack, write_evidence_pack
     from mutation_backend import mutation_backend_status
+    from runner_steps import run_skill_improvement_step
     from next_actions import build_next_actions_for_apply_preview, build_next_actions_for_improve, build_next_actions_for_plan, render_next_actions
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
     from outcome_store import OUTCOME_VALUES, infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
@@ -1049,6 +1051,7 @@ def run_improve(
     )
     proposals = pipeline.get("proposals") if isinstance(pipeline.get("proposals"), list) else []
     decisions_summary = _summarize_runner_decisions(proposals)
+    skill_step = run_skill_improvement_step(evidence_pack=evidence_pack, config=config, mutate=mutate)
     run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
     result_payload = {
         "schema_name": "self_improvement_run_result",
@@ -1066,15 +1069,15 @@ def run_improve(
         "step_decisions": {
             "summary": decisions_summary,
             "proposals_considered": proposals,
-            "skill": {"status": "not_yet_implemented", "changed": 0},
+            "skill": skill_step,
             "memory": {"status": "not_yet_implemented", "changed": 0},
             "scorer": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
             "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
         },
-        "skill_changes": [],
+        "skill_changes": skill_step.get("changed_skills") or [],
         "memory_changes": [],
         "summary": {
-            "skill_changes": 0,
+            "skill_changes": int(skill_step.get("changed") or 0),
             "memory_changes": 0,
             "scorer_evaluator_changed": bool(calibration.get("active_changed")),
             "dry_run": bool(dry_run),
