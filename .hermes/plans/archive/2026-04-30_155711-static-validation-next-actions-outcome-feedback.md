@@ -1,3 +1,5 @@
+> **Status:** Completed 2026-04-30. Implemented static invariant rejection, invariant/policy docs, non-interactive `next_actions`, strengthened outcome feedback, append-only `self_improvement_record_outcome` tool, and archived superseded plan noise.
+
 # Static Validation, Next Actions, and Outcome Feedback Implementation Plan
 
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task. Keep `improve` / `plan` / `apply` non-interactive. Do not revive approval artifacts, `apply-low-risk`, `execution_mode`, or user-facing expected-hash confirmation. Do not implement code while writing this plan.

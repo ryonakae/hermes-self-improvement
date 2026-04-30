@@ -162,7 +162,7 @@ def test_report_includes_review_outcome_summary(tmp_path):
     mod = load_plugin_module()
     import hermes_self_improvement.outcome_store as outcome_store
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    outcome_store.record_review_outcome(config=config, outcome={"outcome": "rejected_by_human", "source": "cli"})
+    outcome_store.record_review_outcome(config=config, outcome={"outcome": "rejected_by_human", "plan_id": "plan-1", "item_id": "step-001", "source": "cli"})
 
     out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")
 

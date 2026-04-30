@@ -79,7 +79,7 @@ bin/hermes-self-improve rollback <ledger-id> --execute
 bin/hermes-self-improve report --since-hours 24 --scorer compare
 ```
 
-Primary CLI / tool surface は `improve / calibrate / plan / apply / rollback / report / status`。`--execute` なしは preview-only。item hash / target hash / ledger hash は internal validation / drift detection / rollback 用で、user-facing option にしない。`rollback --execute` は事前に ledger hash と全 applied item の current target hash / rollback data を検証し、drift / tamper が 1 件でもあれば partial rollback しない。`report` は recent plan、recent apply、calibration、retention inventory、needs-review highlights を統合し、旧 approval gate summary は出さない。retention cleanup は read-only inventory に留め、削除・prune 用 command/tool は戻さない。
+Primary CLI surface は `improve / calibrate / plan / apply / rollback / report / status`。Primary plugin tool surface はこの 7 操作用 tool に append-only `self_improvement_record_outcome` を加えた 8 個。`--execute` なしは preview-only。item hash / target hash / ledger hash は internal validation / drift detection / rollback 用で、user-facing option にしない。`rollback --execute` は事前に ledger hash と全 applied item の current target hash / rollback data を検証し、drift / tamper が 1 件でもあれば partial rollback しない。`report` は recent plan、recent apply、calibration、retention inventory、needs-review highlights を統合し、旧 approval gate summary は出さない。retention cleanup は read-only inventory に留め、削除・prune 用 command/tool は戻さない。
 
 Legacy/debug commands (`generate-apply-plan`, `gepa-eval`, `gepa-optimize`, `ledger-report`, `approval-report`, `retention-report`, `retention-prune`, approval/low-risk commands) は CLI / tool surface から外す。内部 helper や古い module が残る場合も primary path から呼ばない。
 
@@ -93,6 +93,7 @@ self_improvement_calibrate
 self_improvement_plan
 self_improvement_apply
 self_improvement_rollback
+self_improvement_record_outcome
 ```
 
 ## 変更時の進め方

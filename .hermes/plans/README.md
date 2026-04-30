@@ -2,15 +2,17 @@
 
 ## Current source of truth
 
-As of 2026-04-30, there is **one active unfinished implementation plan** in this directory:
+As of 2026-04-30, there are **no active unfinished implementation plans** in this directory.
 
-- `2026-04-30_155711-static-validation-next-actions-outcome-feedback.md`
-  - **Priority:** first.
-  - Separates hard static invariants from configurable apply policy, adds non-interactive `next_actions` for preview flows, strengthens rejection/edit outcome feedback, optionally adds tool-native outcome recording, and archives/deletes superseded plan noise safely.
+The latest completed implementation record is archived at:
+
+- `archive/2026-04-30_155711-static-validation-next-actions-outcome-feedback.md`
+  - Implemented hard static invariant validation before apply-plan readiness, clarified invariant vs `apply_policy` boundaries, added non-interactive `next_actions` to preview flows, strengthened plan/item-bound outcome feedback, exposed append-only `self_improvement_record_outcome`, and kept old plan cleanup archive-first.
 
 The current implementation direction is:
 
-- Primary surface: `improve / calibrate / plan / apply / rollback / report / status`.
+- Primary CLI surface: `improve / calibrate / plan / apply / rollback / report / status`.
+- Primary tool surface: the same seven operational tools plus append-only `self_improvement_record_outcome`.
 - `--execute` is the only user-facing mutation boundary.
 - Forward skill mutation uses semantic `skill_agent_task` and a bounded skills-only mutation backend.
 - Runtime mutation backend may use only `skills_list`, `skill_view`, and `skill_manage`; no terminal/file/git/direct filesystem fallback.
@@ -18,8 +20,9 @@ The current implementation direction is:
 - Rollback is plugin-owned and ledger-bound; it does not run the mutation agent.
 - Built-in memory mutation uses the official `memory` tool; external memory mutation uses provider-native correction/delete tools only.
 - Memory rollback is **preview-only / execution blocked** until cache/session/store semantics are proven. Exact direct restore and sensitive delete re-add remain forbidden.
+- Static invariants reject plugin-owned targets, arbitrary docs/config targets, direct forward mutation types, provider-internal exact restore, and sensitive delete re-add before policy/scorer output can make an item `ready`.
 
-When archived plans conflict with this list or the active plan, this index wins unless a newer plan explicitly supersedes it.
+When archived plans conflict with this list, this index wins unless a newer active plan explicitly supersedes it.
 
 ## Archive policy
 
