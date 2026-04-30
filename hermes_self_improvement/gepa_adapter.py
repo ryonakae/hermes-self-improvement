@@ -268,7 +268,7 @@ def optimize_gepa(
     """Run an explicit GEPA compile operation and write a report artifact.
 
     This command writes only self-improvement evaluator artifacts. It does not
-    mutate skills, memories, apply plans, or the active evaluator pointer.
+    mutate skills, memories, runner artifacts, or the active evaluator pointer.
     """
     ts = datetime.now(UTC)
     gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}

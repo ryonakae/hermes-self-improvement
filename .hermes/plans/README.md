@@ -14,7 +14,7 @@ The latest completed implementation records are:
   - **Status:** completed.
   - Removed stale next-action guidance, dropped legacy re-exports/runtime imports, deleted legacy apply/ledger/drift internals and legacy-only tests, and shrank recovery/verification/outcome helpers.
 
-- `2026-04-30_234117-curator-aligned-self-improvement-runner.md`
+- `archive/2026-04-30_234117-curator-aligned-self-improvement-runner.md`
   - **Status:** completed.
   - Reworked the plugin toward a Curator-aligned runner with four primary surfaces (`improve`, `calibrate`, `report`, `status`) and removed the legacy plan/apply/rollback/outcome primary surface.
 
@@ -27,7 +27,7 @@ The current implemented baseline is:
 - Skill mutation runs through bounded official skill tools only; no terminal/file/git/direct filesystem fallback.
 - Memory mutation runs through provider-compatible memory/provider tools only; no direct memory store edits.
 - Runtime-private calibration eval cases are stored under runtime state, not repo-tracked eval assets.
-- Some historical internal modules and artifact readers may remain temporarily for report/calibration compatibility; the active cleanup plan decides what to shrink or delete.
+- Historical apply artifact readers are removed from report/calibration paths; reports now summarize current runner artifacts, calibration ledgers, and explicit review outcomes only.
 
 When archived or older plans conflict with this list, this index wins unless a newer active plan explicitly supersedes it.
 

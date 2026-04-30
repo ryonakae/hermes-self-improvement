@@ -39,12 +39,18 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-
 def write_review_outcome(config: dict, payload: dict, name: str = "outcome.json") -> Path:
     path = Path(config["_self_improvement_root"]) / "outcomes" / "2026-04-30" / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"schema_name": "self_improvement_review_outcome", **payload}, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def write_scorer_error(config: dict, name: str = "scorer-error.json") -> Path:
+    path = Path(config["_self_improvement_root"]) / "runs" / name
+    write_json(path, {"schema_name": "self_improvement_run", "llm_scorer_error": "timeout", "created_at": "2026-04-30T00:00:00+00:00"})
+    return path
+
 
 def base_config(tmp_path: Path, **calibration_overrides):
     calibration = {
@@ -82,45 +88,27 @@ def test_calibration_insufficient_evidence_returns_no_op(tmp_path):
     assert "insufficient_evidence" in result["reasons"]
 
 
-def test_calibration_disagreement_threshold_requests_candidate(tmp_path):
+def test_calibration_scorer_error_threshold_requests_candidate(tmp_path):
     mod = load_plugin_module()
-    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
-    write_json(
-        plan_path,
-        {
-            "schema_name": "self_improvement_apply_plan",
-            "plan_id": "plan-disagree",
-            "items": [
-                {"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]},
-            ],
-        },
-    )
+    cfg = base_config(tmp_path)
+    write_scorer_error(cfg, "one.json")
+    write_scorer_error(cfg, "two.json")
 
-    result = mod.run_calibration(config=base_config(tmp_path), execute=False)
+    result = mod.run_calibration(config=cfg, execute=False)
 
     assert result["current_status"] == "would_update"
-    assert result["evidence_summary"]["disagreements"] == 2
-    assert result["candidate"]["reason"] == "scorer_disagreements"
+    assert result["evidence_summary"]["scorer_errors"] == 2
+    assert result["candidate"]["reason"] == "scorer_errors"
     assert result["active_changed"] is False
 
 
 def test_calibration_bad_outcome_threshold_requests_candidate(tmp_path):
     mod = load_plugin_module()
-    ledger_path = tmp_path / "self-improvement" / "ledgers" / "2026-04-28" / "ledger.json"
-    write_json(
-        ledger_path,
-        {
-            "schema_name": "self_improvement_apply_ledger",
-            "operation": "apply",
-            "summary": {"applied": 1, "skipped_by_policy": 0, "failed": 2},
-            "items": [
-                {"item_id": "step-001", "status": "failed"},
-                {"item_id": "step-002", "status": "failed"},
-            ],
-        },
-    )
+    cfg = base_config(tmp_path)
+    write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
+    write_review_outcome(cfg, {"outcome": "rejected_by_human", "source": "user"}, "rejected.json")
 
-    result = mod.run_calibration(config=base_config(tmp_path), execute=False)
+    result = mod.run_calibration(config=cfg, execute=False)
 
     assert result["current_status"] == "would_update"
     assert result["evidence_summary"]["bad_outcomes"] == 2
@@ -129,18 +117,11 @@ def test_calibration_bad_outcome_threshold_requests_candidate(tmp_path):
 
 def test_calibration_preview_does_not_write_active_pointer(tmp_path):
     mod = load_plugin_module()
+    cfg = base_config(tmp_path)
     active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
     runtime_cases_dir = tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"
-    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
-    write_json(
-        plan_path,
-        {
-            "schema_name": "self_improvement_apply_plan",
-            "plan_id": "plan-disagree",
-            "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
-        },
-    )
-    cfg = base_config(tmp_path)
+    write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
+    write_review_outcome(cfg, {"outcome": "rejected_by_human", "source": "user"}, "rejected.json")
 
     result = mod.run_calibration(config=cfg, execute=False)
 
@@ -148,7 +129,7 @@ def test_calibration_preview_does_not_write_active_pointer(tmp_path):
     assert active_pointer.exists() is False
     assert runtime_cases_dir.exists() is False
     assert result["runtime_eval_cases"]["status"] == "would_write"
-    assert result["runtime_eval_cases"]["count"] == 1
+    assert result["runtime_eval_cases"]["count"] == 2
     assert result["active_changed"] is False
 
 
@@ -195,18 +176,11 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
 
 def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path)
     active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
     runtime_cases_dir = tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"
-    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
-    write_json(
-        plan_path,
-        {
-            "schema_name": "self_improvement_apply_plan",
-            "plan_id": "plan-disagree",
-            "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
-        },
-    )
-    cfg = base_config(tmp_path)
+    write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
+    write_review_outcome(cfg, {"outcome": "rejected_by_human", "source": "user"}, "rejected.json")
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "failed", "reason": "regression_failed"})
 
     result = calibration.run_calibration(config=cfg, execute=True)
@@ -219,45 +193,29 @@ def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     assert result["runtime_eval_cases"]["status"] == "not_written_regression_failed"
 
 
-def test_build_runtime_eval_cases_uses_review_outcomes_and_disagreements(tmp_path):
+def test_build_runtime_eval_cases_uses_review_outcomes_only(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 2}}}
-    write_review_outcome(config, {"outcome": "rejected_by_human", "plan_id": "plan-1", "item_id": "step-001", "source": "cli"}, "rejected.json")
-    write_review_outcome(config, {"outcome": "rolled_back", "plan_id": "plan-1", "item_id": "step-002", "source": "cli"}, "rolled-back.json")
-
-    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
-    write_json(
-        plan_path,
-        {
-            "schema_name": "self_improvement_apply_plan",
-            "plan_id": "plan-disagree",
-            "items": [{"item_id": "step-001", "target": "skill", "change_type": "patch", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
-        },
-    )
+    write_review_outcome(config, {"outcome": "rejected_by_human", "item_id": "step-001", "source": "user"}, "rejected.json")
+    write_review_outcome(config, {"outcome": "failed", "item_id": "step-002", "source": "runner"}, "failed.json")
 
     evidence = calibration.collect_calibration_evidence(config)
     cases = calibration.build_runtime_eval_cases(config)
+
     assert evidence["review_outcomes"] == 2
-    assert evidence["bad_outcomes"] >= 2
-    assert evidence["review_outcome_summary"]["by_outcome"]["rolled_back"] == 1
-    assert {case["source"]["kind"] for case in cases} == {"review_outcome", "scorer_disagreement"}
+    assert evidence["bad_outcomes"] == 2
+    assert evidence["review_outcome_summary"]["by_outcome"]["failed"] == 1
+    assert {case["source"]["kind"] for case in cases} == {"review_outcome"}
     assert all("proposal" in case and "findings" in case and "expected" in case for case in cases)
 
 
 def test_calibration_execute_promotes_active_pointer_after_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
-    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
-    write_json(
-        plan_path,
-        {
-            "schema_name": "self_improvement_apply_plan",
-            "plan_id": "plan-disagree",
-            "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
-        },
-    )
     cfg = base_config(tmp_path)
+    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
     repo_cases_before = (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8")
+    write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
+    write_review_outcome(cfg, {"outcome": "rejected_by_human", "source": "user"}, "rejected.json")
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "passed", "cases": 3})
 
     result = calibration.run_calibration(config=cfg, execute=True)
@@ -271,7 +229,7 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
     assert result["ledger_path"]
     runtime_cases = result["runtime_eval_cases"]
     assert runtime_cases["status"] == "written"
-    assert runtime_cases["count"] == 1
+    assert runtime_cases["count"] == 2
     assert runtime_cases["path"].startswith(str(tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"))
     assert Path(runtime_cases["path"]).exists()
     assert (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8") == repo_cases_before
@@ -282,19 +240,12 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
 
 def test_restore_previous_calibration_restores_active_before_state(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path)
     active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
     write_json(active_pointer, {"candidate_hash": "before", "regression": {"status": "passed"}})
     before_content = active_pointer.read_text(encoding="utf-8")
-    plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
-    write_json(
-        plan_path,
-        {
-            "schema_name": "self_improvement_apply_plan",
-            "plan_id": "plan-disagree",
-            "items": [{"item_id": "step-001", "scorer_disagreements": ["risk_disagreement", "score_gap"]}],
-        },
-    )
-    cfg = base_config(tmp_path)
+    write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
+    write_review_outcome(cfg, {"outcome": "rejected_by_human", "source": "user"}, "rejected.json")
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "passed", "cases": 3})
     result = calibration.run_calibration(config=cfg, execute=True)
 
@@ -307,9 +258,9 @@ def test_restore_previous_calibration_restores_active_before_state(monkeypatch, 
 def test_collect_calibration_evidence_distinguishes_explicit_human_outcomes(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 1}}}
-    write_review_outcome(config, {"outcome": "edited_before_apply", "plan_id": "plan-1", "item_id": "step-001", "source": "cli"}, "edited.json")
+    write_review_outcome(config, {"outcome": "accepted", "source": "runner"}, "accepted.json")
 
     evidence = calibration.collect_calibration_evidence(config)
+
     assert evidence["review_outcomes"] == 1
     assert evidence["explicit_human_review_outcomes"] == 1
-    assert evidence["ledger_inferred_outcomes"] == 0

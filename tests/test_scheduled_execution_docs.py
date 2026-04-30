@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 AGENTS = ROOT / "AGENTS.md"
 OPERATIONS = ROOT / "skills" / "operations" / "SKILL.md"
-PLAN = ROOT / ".hermes" / "plans" / "2026-04-30_234117-curator-aligned-self-improvement-runner.md"
+PLAN = ROOT / ".hermes" / "plans" / "archive" / "2026-04-30_234117-curator-aligned-self-improvement-runner.md"
 
 
 def read(path: Path) -> str:

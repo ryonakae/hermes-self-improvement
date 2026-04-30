@@ -306,12 +306,8 @@ try:  # pragma: no cover - package import path
         _handle_slash,
         _render_gepa_eval,
         _setup_cli,
-        build_ledger_report_payload,
-        build_retention_report_payload,
         build_review_outcome_report_payload,
         main,
-        render_ledger_report,
-        render_retention_report,
         render_report,
         run_improve,
         run_pipeline,
@@ -325,12 +321,8 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         _handle_slash,
         _render_gepa_eval,
         _setup_cli,
-        build_ledger_report_payload,
-        build_retention_report_payload,
         build_review_outcome_report_payload,
         main,
-        render_ledger_report,
-        render_retention_report,
         render_report,
         run_improve,
         run_pipeline,
@@ -340,9 +332,9 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 
 
 try:  # pragma: no cover - package import path
-    from .outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
+    from .outcome_store import load_review_outcomes, summarize_review_outcomes
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
+    from outcome_store import load_review_outcomes, summarize_review_outcomes
 
 
 if __name__ == "__main__":

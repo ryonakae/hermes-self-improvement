@@ -18,9 +18,9 @@ try:  # pragma: no cover - package import path
     from .evidence import build_evidence_pack, write_evidence_pack
     from .mutation_backend import mutation_backend_status
     from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
-    from .next_actions import build_next_actions_for_historical_artifact, render_next_actions
+    from .next_actions import render_next_actions
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
-    from .outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
+    from .outcome_store import load_review_outcomes, summarize_review_outcomes
     from .recovery_engine import memory_rollback_status
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
     from .verification import merge_judge_status
@@ -34,9 +34,9 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from evidence import build_evidence_pack, write_evidence_pack
     from mutation_backend import mutation_backend_status
     from runner_steps import run_memory_improvement_step, run_skill_improvement_step
-    from next_actions import build_next_actions_for_historical_artifact, render_next_actions
+    from next_actions import render_next_actions
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
-    from outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
+    from outcome_store import load_review_outcomes, summarize_review_outcomes
     from recovery_engine import memory_rollback_status
     from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
     from verification import merge_judge_status
@@ -116,93 +116,6 @@ def _load_ledger_file(path: Path) -> dict[str, Any] | None:
     return data
 
 
-def _load_json_artifact(path: Path) -> dict[str, Any] | None:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    if not isinstance(data, dict):
-        return None
-    data["_artifact_path"] = str(path)
-    return data
-
-
-def _apply_plan_files(config: dict[str, Any]) -> list[Path]:
-    root = _reports_dir(config) / "apply-plans"
-    if not root.exists():
-        return []
-    return sorted((p for p in root.glob("**/*.json") if p.is_file()), reverse=True)
-
-
-def _status_counts(items: list[dict[str, Any]], statuses: tuple[str, ...]) -> dict[str, int]:
-    counts = {name: 0 for name in statuses}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        status = str(item.get("status") or "unknown")
-        if status in counts:
-            counts[status] += 1
-    return counts
-
-
-def _summarize_apply_plan_for_report(plan: dict[str, Any]) -> dict[str, Any]:
-    items = plan.get("items") if isinstance(plan.get("items"), list) else []
-    typed_items = [item for item in items if isinstance(item, dict)]
-    counts = _status_counts(typed_items, ("ready", "needs_review", "rejected_by_planner"))
-    highlights: list[dict[str, Any]] = []
-    for item in typed_items:
-        status = str(item.get("status") or "needs_review")
-        if status not in {"needs_review", "rejected_by_planner"}:
-            continue
-        highlights.append({
-            "item_id": item.get("item_id"),
-            "status": status,
-            "title": item.get("title") or item.get("proposal_title") or item.get("proposal_id"),
-            "target_path": item.get("target_path"),
-            "change_type": item.get("change_type"),
-            "risk": item.get("risk"),
-            "reasons": item.get("reasons") if isinstance(item.get("reasons"), list) else [],
-        })
-        if len(highlights) >= 5:
-            break
-    summary = {
-        "plan_id": plan.get("plan_id"),
-        "plan_path": plan.get("_artifact_path"),
-        "created_at": plan.get("created_at"),
-        "execution_mode": plan.get("execution_mode"),
-        "item_count": len(typed_items),
-        "status_counts": counts,
-        "needs_review_highlights": highlights,
-    }
-    summary["next_actions"] = build_next_actions_for_historical_artifact({"plan_id": summary["plan_id"], "summary": {"ready": counts.get("ready", 0), "needs_review": counts.get("needs_review", 0)}})
-    return summary
-
-
-def build_recent_plan_report_payload(*, config: dict[str, Any], limit: int = 5) -> dict[str, Any]:
-    plans: list[dict[str, Any]] = []
-    for path in _apply_plan_files(config):
-        plan = _load_json_artifact(path)
-        if not plan or plan.get("schema_name") != "self_improvement_apply_plan":
-            continue
-        plans.append(_summarize_apply_plan_for_report(plan))
-        if len(plans) >= limit:
-            break
-    needs_review_count = sum(
-        int((plan.get("status_counts") or {}).get("needs_review") or 0)
-        + int((plan.get("status_counts") or {}).get("rejected_by_planner") or 0)
-        for plan in plans
-    )
-    return {
-        "schema_name": "self_improvement_recent_plan_report",
-        "schema_version": "1.0",
-        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
-        "limit": limit,
-        "plan_count": len(plans),
-        "needs_review_count": needs_review_count,
-        "plans": plans,
-    }
-
-
 def build_calibration_report_payload(*, config: dict[str, Any], limit: int = 5) -> dict[str, Any]:
     ledgers: list[dict[str, Any]] = []
     for path in _ledger_files(config):
@@ -233,477 +146,6 @@ def build_calibration_report_payload(*, config: dict[str, Any], limit: int = 5) 
         "ledgers": ledgers,
     }
 
-
-def _ledger_current_status(ledger: dict[str, Any]) -> str:
-    if ledger.get("current_status"):
-        return str(ledger.get("current_status"))
-    summary = ledger.get("summary") if isinstance(ledger.get("summary"), dict) else {}
-    if int(summary.get("failed") or 0):
-        return "failed"
-    if int(summary.get("applied") or 0):
-        return "applied"
-    if int(summary.get("would_apply") or 0):
-        return "previewed"
-    if int(summary.get("needs_review") or 0):
-        return "needs_review"
-    if int(summary.get("skipped_by_policy") or 0):
-        return "skipped_by_policy"
-    return "unknown"
-
-
-def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
-    review = ledger.get("review_summary") if isinstance(ledger.get("review_summary"), dict) else {}
-    validation = ledger.get("validation_result") if isinstance(ledger.get("validation_result"), dict) else {}
-    git_metadata = ledger.get("git_metadata") if isinstance(ledger.get("git_metadata"), dict) else {}
-    summary = ledger.get("summary") if isinstance(ledger.get("summary"), dict) else {}
-    items = ledger.get("items") if isinstance(ledger.get("items"), list) else []
-    typed_items = [item for item in items if isinstance(item, dict)]
-    item_status_counts = _status_counts(typed_items, ("would_apply", "applied", "skipped_by_policy", "failed", "needs_review"))
-    drift_class_counts: dict[str, int] = {}
-    mutation_agent_outcome_counts: dict[str, int] = {}
-    for item in typed_items:
-        drift = item.get("drift") if isinstance(item.get("drift"), dict) else {}
-        drift_class = str(drift.get("class") or "")
-        if drift_class:
-            drift_class_counts[drift_class] = drift_class_counts.get(drift_class, 0) + 1
-        agent_outcome = str(item.get("mutation_agent_outcome") or "")
-        if agent_outcome:
-            mutation_agent_outcome_counts[agent_outcome] = mutation_agent_outcome_counts.get(agent_outcome, 0) + 1
-    summary_payload = {
-        "ledger_id": ledger.get("ledger_id"),
-        "ledger_path": ledger.get("_ledger_path"),
-        "created_at": ledger.get("created_at"),
-        "operation": ledger.get("operation"),
-        "current_status": _ledger_current_status(ledger),
-        "plan_id": ledger.get("plan_id"),
-        "title": review.get("title") or ledger.get("proposal_id") or ledger.get("plan_id"),
-        "target_path": ledger.get("target_path"),
-        "change_type": review.get("change_type") or ledger.get("change_type"),
-        "risk": review.get("risk") or ledger.get("risk"),
-        "confidence": review.get("confidence") or ledger.get("confidence"),
-        "score": review.get("score") or ledger.get("score"),
-        "scorer": review.get("scorer") or ledger.get("scorer"),
-        "recommendation": review.get("recommendation") or ledger.get("recommendation"),
-        "validation_status": review.get("validation_status") or validation.get("status"),
-        "evidence_summary": review.get("evidence_summary"),
-        "summary": summary,
-        "item_status_counts": item_status_counts,
-        "drift_class_counts": drift_class_counts,
-        "mutation_agent_outcome_counts": mutation_agent_outcome_counts,
-        "git_commit_created": review.get("git_commit_created", bool(git_metadata.get("commit_created"))),
-        "git_metadata": git_metadata,
-        "target_before_hash": ledger.get("target_before_hash"),
-        "target_after_hash": ledger.get("target_after_hash"),
-        "applied_diff": ledger.get("applied_diff") if isinstance(ledger.get("applied_diff"), dict) else None,
-        "restore_available": isinstance(ledger.get("restore_data"), dict) or any(isinstance(item.get("restore_data"), dict) for item in typed_items),
-    }
-    if summary_payload["current_status"] in {"previewed", "needs_review", "skipped_by_policy"}:
-        summary_payload["next_actions"] = build_next_actions_for_historical_artifact({"plan_id": summary_payload.get("plan_id"), "summary": summary})
-    return summary_payload
-
-
-def build_ledger_report_payload(*, config: dict[str, Any], status: str = "applied", limit: int = 20, operation: str | None = None) -> dict[str, Any]:
-    selected: list[dict[str, Any]] = []
-    for path in _ledger_files(config):
-        ledger = _load_ledger_file(path)
-        if ledger is None:
-            continue
-        if operation is not None and str(ledger.get("operation") or "") != operation:
-            continue
-        current_status = _ledger_current_status(ledger)
-        if status != "all" and current_status != status:
-            continue
-        selected.append(_summarize_ledger_for_report(ledger))
-        if len(selected) >= limit:
-            break
-    return {
-        "schema_name": "self_improvement_ledger_report",
-        "schema_version": "1.0",
-        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
-        "status_filter": status,
-        "operation_filter": operation,
-        "limit": limit,
-        "ledger_count": len(selected),
-        "ledgers": selected,
-    }
-
-
-def render_ledger_report(payload: dict[str, Any]) -> str:
-    lines = [
-        "# Hermes self-improvement ledger report",
-        "",
-        f"- status_filter: `{payload.get('status_filter')}`",
-        f"- ledgers: {payload.get('ledger_count')}",
-        "",
-    ]
-    ledgers = payload.get("ledgers") if isinstance(payload.get("ledgers"), list) else []
-    if not ledgers:
-        lines.append("- ledger はありません。")
-        return "\n".join(lines).rstrip() + "\n"
-    for idx, ledger in enumerate(ledgers, 1):
-        lines.extend([
-            f"## {idx}. {ledger.get('title') or ledger.get('ledger_id')}",
-            f"- ledger_id: `{ledger.get('ledger_id')}`",
-            f"- status: `{ledger.get('current_status')}`",
-            f"- target: `{ledger.get('target_path')}`",
-            f"- change_type: `{ledger.get('change_type')}`",
-            f"- risk/score: `{ledger.get('risk')}` / {ledger.get('score')}",
-            f"- validation: `{ledger.get('validation_status')}`",
-            f"- git commit created: {ledger.get('git_commit_created')}",
-        ])
-        if ledger.get("evidence_summary"):
-            lines.append(f"- evidence: {ledger.get('evidence_summary')}")
-        if ledger.get("drift_class_counts"):
-            lines.append(f"- drift classes: `{ledger.get('drift_class_counts')}`")
-        if ledger.get("mutation_agent_outcome_counts"):
-            lines.append(f"- mutation agent outcomes: `{ledger.get('mutation_agent_outcome_counts')}`")
-        git_metadata = ledger.get("git_metadata") if isinstance(ledger.get("git_metadata"), dict) else {}
-        if git_metadata.get("is_git_managed"):
-            lines.append(f"- git target: `{git_metadata.get('target_relative_path')}` in `{git_metadata.get('repo_root')}`")
-            lines.append(f"- git status: `{git_metadata.get('target_status_short')}`")
-        if ledger.get("ledger_path"):
-            lines.append(f"- ledger_path: `{ledger.get('ledger_path')}`")
-        lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
-
-
-_RETENTION_ARTIFACT_CATEGORIES = ("apply-plans", "ledgers", "apply-attempts", "approvals")
-
-
-def _parse_artifact_dt(raw: Any) -> datetime | None:
-    if not raw:
-        return None
-    try:
-        value = str(raw).replace("Z", "+00:00")
-        parsed = datetime.fromisoformat(value)
-    except Exception:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
-def _artifact_dt_from_path(path: Path) -> datetime | None:
-    for part in reversed(path.parts):
-        try:
-            return datetime.strptime(part, "%Y-%m-%d").replace(tzinfo=UTC)
-        except Exception:
-            continue
-    return None
-
-
-def _load_artifact_for_retention(path: Path) -> tuple[dict[str, Any] | None, str | None]:
-    try:
-        if path.suffix == ".json":
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data, None
-            return None, "not_json_object"
-        return {}, None
-    except Exception:
-        return None, "malformed_json"
-
-
-def _artifact_id(category: str, payload: dict[str, Any], path: Path) -> str:
-    for key in ("ledger_id", "approval_id", "plan_id", "attempt_id", "id"):
-        if payload.get(key):
-            return str(payload.get(key))
-    return path.stem
-
-
-def _retention_artifact_files(config: dict[str, Any]) -> dict[str, list[Path]]:
-    root = _reports_dir(config)
-    return {
-        category: sorted((p for p in (root / category).glob("**/*") if p.is_file()), reverse=True)
-        if (root / category).exists() else []
-        for category in _RETENTION_ARTIFACT_CATEGORIES
-    }
-
-
-def build_retention_report_payload(
-    *,
-    config: dict[str, Any],
-    now: datetime | None = None,
-    retention_days: int | None = None,
-    limit: int = 20,
-    category: str = "all",
-) -> dict[str, Any]:
-    ts = (now or datetime.now(UTC)).astimezone(UTC)
-    category_filter = str(category or "all")
-    if category_filter != "all" and category_filter not in _RETENTION_ARTIFACT_CATEGORIES:
-        return {
-            "schema_name": "self_improvement_retention_report",
-            "schema_version": "1.0",
-            "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
-            "created_at": ts.isoformat(),
-            "mode": "read_only_preview",
-            "current_status": "rejected",
-            "target_changed": False,
-            "category_filter": category_filter,
-            "reasons": ["unknown_category"],
-            "allowed_categories": list(_RETENTION_ARTIFACT_CATEGORIES),
-            "total_files": 0,
-            "total_bytes": 0,
-            "expired_candidate_count": 0,
-            "malformed_count": 0,
-            "limit": int(limit),
-            "categories": {},
-            "expired_candidates": [],
-            "malformed_artifacts": [],
-        }
-    try:
-        days = int(retention_days if retention_days is not None else config.get("retention_days", DEFAULT_RETENTION_DAYS))
-    except Exception:
-        days = DEFAULT_RETENTION_DAYS
-    days = max(0, days)
-    cutoff = ts - timedelta(days=days)
-    categories: dict[str, Any] = {}
-    expired: list[dict[str, Any]] = []
-    malformed: list[dict[str, Any]] = []
-    total_files = 0
-    malformed_count = 0
-    total_bytes = 0
-
-    all_paths = _retention_artifact_files(config)
-    if category_filter != "all":
-        all_paths = {category_filter: all_paths.get(category_filter, [])}
-
-    for category, paths in all_paths.items():
-        category_total = 0
-        category_expired = 0
-        category_malformed = 0
-        category_bytes = 0
-        for path in paths:
-            category_total += 1
-            total_files += 1
-            try:
-                size = path.stat().st_size
-            except OSError:
-                size = 0
-            category_bytes += size
-            total_bytes += size
-            payload, error = _load_artifact_for_retention(path)
-            if error:
-                category_malformed += 1
-                malformed_count += 1
-                malformed.append({
-                    "category": category,
-                    "artifact_id": path.stem,
-                    "error": error,
-                    "size_bytes": size,
-                    "path": str(path),
-                })
-                continue
-            payload = payload or {}
-            artifact_dt = _parse_artifact_dt(payload.get("created_at")) or _artifact_dt_from_path(path)
-            if artifact_dt is None:
-                category_malformed += 1
-                malformed_count += 1
-                malformed.append({
-                    "category": category,
-                    "artifact_id": _artifact_id(category, payload, path),
-                    "error": "missing_created_at",
-                    "schema_name": payload.get("schema_name"),
-                    "size_bytes": size,
-                    "path": str(path),
-                })
-                continue
-            if artifact_dt < cutoff:
-                category_expired += 1
-                expired.append({
-                    "category": category,
-                    "artifact_id": _artifact_id(category, payload, path),
-                    "schema_name": payload.get("schema_name"),
-                    "current_status": payload.get("current_status"),
-                    "created_at": artifact_dt.isoformat(),
-                    "age_days": (ts - artifact_dt).days,
-                    "size_bytes": size,
-                    "path": str(path),
-                })
-        categories[category] = {
-            "total_files": category_total,
-            "expired_candidate_count": category_expired,
-            "retained_file_count": max(0, category_total - category_expired - category_malformed),
-            "malformed_count": category_malformed,
-            "total_bytes": category_bytes,
-            "legacy_primary_flow": category in {"apply-attempts", "approvals"},
-        }
-
-    legacy_categories = {
-        name: summary
-        for name, summary in categories.items()
-        if isinstance(summary, dict) and summary.get("legacy_primary_flow") and summary.get("total_files", 0)
-    }
-
-    expired.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("path") or "")))
-    malformed.sort(key=lambda item: str(item.get("path") or ""))
-    safe_limit = max(0, int(limit))
-    limited = expired[:safe_limit]
-    malformed_limited = malformed[:safe_limit]
-    return {
-        "schema_name": "self_improvement_retention_report",
-        "schema_version": "1.0",
-        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
-        "created_at": ts.isoformat(),
-        "runtime_root": str(_reports_dir(config)),
-        "retention_days": days,
-        "cutoff_at": cutoff.isoformat(),
-        "mode": "read_only_preview",
-        "current_status": "ok",
-        "target_changed": False,
-        "category_filter": category_filter,
-        "total_files": total_files,
-        "total_bytes": total_bytes,
-        "expired_candidate_count": len(expired),
-        "malformed_count": malformed_count,
-        "legacy_artifact_count": sum(int(summary.get("total_files", 0)) for summary in legacy_categories.values()),
-        "legacy_categories": legacy_categories,
-        "cleanup_policy": {
-            "primary_surface": "read_only_report_only",
-            "automatic_prune": False,
-            "manual_cleanup_required": True,
-            "reason": "retention cleanup is intentionally not exposed as CLI or plugin tool surface",
-        },
-        "limit": int(limit),
-        "categories": categories,
-        "expired_candidates": limited,
-        "malformed_artifacts": malformed_limited,
-    }
-
-
-
-def render_retention_report(payload: dict[str, Any]) -> str:
-    lines = [
-        "# Hermes self-improvement retention report",
-        "",
-        "- mode: read-only preview",
-        f"- runtime_root: `{payload.get('runtime_root')}`",
-        f"- category_filter: `{payload.get('category_filter', 'all')}`",
-        f"- retention_days: {payload.get('retention_days')}",
-        f"- cutoff_at: `{payload.get('cutoff_at')}`",
-        f"- total files: {payload.get('total_files')}",
-        f"- expired candidates: {payload.get('expired_candidate_count')}",
-        f"- malformed files: {payload.get('malformed_count')}",
-        f"- legacy artifacts: {payload.get('legacy_artifact_count', 0)}",
-        "- cleanup policy: read-only report only; no automatic artifact cleanup command/tool",
-        "",
-        "## Categories",
-    ]
-    categories = payload.get("categories") if isinstance(payload.get("categories"), dict) else {}
-    for name, summary in categories.items():
-        if not isinstance(summary, dict):
-            continue
-        legacy = " legacy-primary-flow" if summary.get("legacy_primary_flow") else ""
-        lines.append(
-            f"- `{name}`: total {summary.get('total_files')}, "
-            f"expired candidates {summary.get('expired_candidate_count')}, "
-            f"malformed {summary.get('malformed_count')}{legacy}"
-        )
-    legacy_categories = payload.get("legacy_categories") if isinstance(payload.get("legacy_categories"), dict) else {}
-    lines.extend(["", "## Legacy artifacts"])
-    if not legacy_categories:
-        lines.append("- legacy artifact はありません。")
-    for name, summary in legacy_categories.items():
-        if isinstance(summary, dict):
-            lines.append(f"- `{name}`: {summary.get('total_files')} files, {summary.get('total_bytes')} bytes")
-    lines.extend(["", "## Expired candidates"])
-    candidates = payload.get("expired_candidates") if isinstance(payload.get("expired_candidates"), list) else []
-    if not candidates:
-        lines.append("- expired candidate はありません。")
-    for item in candidates:
-        lines.append(
-            f"- `{item.get('category')}` {item.get('artifact_id')} "
-            f"age_days={item.get('age_days')} status=`{item.get('current_status')}` path=`{item.get('path')}`"
-        )
-    lines.extend(["", "## Malformed artifacts"])
-    malformed = payload.get("malformed_artifacts") if isinstance(payload.get("malformed_artifacts"), list) else []
-    if not malformed:
-        lines.append("- malformed artifact はありません。")
-    for item in malformed:
-        lines.append(
-            f"- `{item.get('category')}` {item.get('artifact_id')} "
-            f"error=`{item.get('error')}` path=`{item.get('path')}`"
-        )
-    lines.extend([
-        "",
-        "This is a read-only preview. It does not modify, remove, or rotate artifacts.",
-    ])
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operational_reports: dict[str, Any] | None = None) -> str:
-    s = result.summary
-    lines = [
-        "# Hermes self-improvement report",
-        "",
-        "## メタ情報",
-        f"- 対象期間: {result.since.astimezone().strftime('%Y-%m-%d %H:%M')} 〜 {result.until.astimezone().strftime('%Y-%m-%d %H:%M')}",
-        f"- 観測イベント: {s['event_count']}件",
-        f"- セッション: {s['session_count']}件",
-        f"- tool call: {s['post_tool_call_count']}件",
-        f"- tool warning/error: {s['tool_error_count']}件",
-    ]
-    if s.get("filtered_partial_event_count"):
-        lines.append(f"- 分析除外: partial `pre_tool_call` {s['filtered_partial_event_count']}件")
-    if s.get("reclassified_tool_result_count"):
-        lines.append(f"- 分析時再分類: tool result {s['reclassified_tool_result_count']}件")
-    lines.extend([
-        "",
-        "## 観測サマリー",
-    ])
-    if s["events_by_type"]:
-        for name, count in sorted(s["events_by_type"].items()):
-            lines.append(f"- `{name}`: {count}件")
-    else:
-        lines.append("- 観測イベントはまだありません。")
-    lines.extend(["", "## 問題候補"])
-    if not result.findings:
-        lines.append("- 現時点で繰り返し傾向のある問題候補はありません。")
-    for idx, f in enumerate(result.findings, 1):
-        lines.extend([
-            f"### {idx}. `{f.get('tool_name')}` `{f.get('error_kind')}` cluster",
-            f"- severity: {f.get('severity')}",
-            f"- count: {f.get('count')} / {f.get('total')} (rate={f.get('rate')})",
-        ])
-        examples = f.get("examples") or []
-        if examples:
-            lines.append("- examples:")
-            for ev in examples[:3]:
-                preview = str(ev.get("result_preview") or "").replace("\n", " ")[:180]
-                lines.append(f"  - {ev.get('ts')} `{ev.get('error_kind')}` {preview}")
-        lines.append("")
-    lines.extend(["## 採点済み proposal"])
-    if not scored:
-        lines.append("- proposal はありません。")
-    for p in scored:
-        lines.extend([
-            f"### {p.get('id')}: {p.get('title')}",
-            f"- target: `{p.get('target')}`",
-            f"- action: `{p.get('action')}`",
-            f"- risk: `{p.get('risk')}`",
-            f"- score: {p.get('score')}",
-            f"- recommendation: `{p.get('recommendation')}`",
-        ])
-        if p.get("scorer"):
-            lines.append(f"- scorer: `{p.get('scorer')}`")
-        compare = _format_scorer_compare(p)
-        if compare:
-            lines.append(f"- scorer_compare: {compare}")
-        breakdown = _format_score_breakdown(p.get("score_breakdown"))
-        if breakdown:
-            lines.append(f"- score_breakdown: {breakdown}")
-        lines.extend([
-            f"- reason: {p.get('reason')}",
-            "",
-        ])
-    lines.extend(_render_operational_report_sections(operational_reports))
-    lines.extend([
-        "## 注意",
-        "- 採点は `--scorer heuristic`、`--scorer llm`、`--scorer gepa`、`--scorer compare` で切り替えます。`report` / `improve` は既定で `compare` です。",
-        "- LLM / GEPA / compare / heuristic scorer は proposal の優先順位づけだけを行い、skill / memory の変更許可にはなりません。GEPA が失敗した場合は `gepa_scorer_error` として明示し、unattended mutation は許可しません。",
-        "- plugin hook は観測専用で、skill / memory の変更は行いません。",
-    ])
-    return "\n".join(lines).rstrip() + "\n"
 
 
 def _format_scorer_compare(p: dict[str, Any]) -> str:
@@ -737,7 +179,6 @@ def _format_score_breakdown(raw: Any) -> str:
 
 def build_review_outcome_report_payload(*, config: dict[str, Any], limit: int = 100) -> dict[str, Any]:
     explicit = load_review_outcomes(config=config, limit=limit)
-    inferred = infer_review_outcomes_from_ledgers(config=config, limit=limit)
     return {
         "schema_name": "self_improvement_review_outcome_report",
         "schema_version": "1.0",
@@ -745,10 +186,7 @@ def build_review_outcome_report_payload(*, config: dict[str, Any], limit: int = 
         "limit": limit,
         "total": len(explicit),
         "summary": summarize_review_outcomes(explicit),
-        "inferred_from_ledgers": inferred.get("summary") if isinstance(inferred, dict) else {},
         "outcomes": explicit[: min(limit, 10)],
-        "recording_tool": "cli_or_self_improvement_record_outcome",
-        "tool_native_recording": "append_only_feedback",
         "auto_apply_permission": False,
     }
 
@@ -788,10 +226,7 @@ def _build_operational_report_payloads(config: dict[str, Any]) -> dict[str, Any]
         "recent_runs": _recent_json_files(_reports_dir(config) / "runs", limit=5),
         "recent_evidence": _recent_json_files(_reports_dir(config) / "evidence", pattern="evidence-*.json", limit=5),
         "runtime_eval_cases": _runtime_private_eval_case_summary(config),
-        "recent_plans": build_recent_plan_report_payload(config=config, limit=5),
-        "recent_apply": build_ledger_report_payload(config=config, status="all", limit=5, operation="apply"),
         "calibration": build_calibration_report_payload(config=config, limit=5),
-        "retention": build_retention_report_payload(config=config, limit=5),
         "review_outcomes": build_review_outcome_report_payload(config=config, limit=100),
     }
 
@@ -819,59 +254,10 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
             f"stored outside repo eval assets"
         )
 
-    plan_payload = payloads.get("recent_plans") if isinstance(payloads.get("recent_plans"), dict) else {}
-    plans = plan_payload.get("plans") if isinstance(plan_payload.get("plans"), list) else []
-    if plans:
-        lines.extend(["", "## Recent plan summary"])
-        for plan in plans[:5]:
-            counts = plan.get("status_counts") if isinstance(plan.get("status_counts"), dict) else {}
-            lines.append(
-                f"- `{plan.get('plan_id')}`: "
-                f"items {int(plan.get('item_count') or 0)}, "
-                f"ready {int(counts.get('ready') or 0)}, "
-                f"needs_review {int(counts.get('needs_review') or 0)}, "
-                f"rejected {int(counts.get('rejected_by_planner') or 0)}"
-            )
-        highlights: list[dict[str, Any]] = []
-        for plan in plans:
-            for item in plan.get("needs_review_highlights") if isinstance(plan.get("needs_review_highlights"), list) else []:
-                if isinstance(item, dict):
-                    highlights.append(item)
-                if len(highlights) >= 5:
-                    break
-            if len(highlights) >= 5:
-                break
-        if highlights:
-            lines.append("- needs-review highlights:")
-            for item in highlights:
-                reason_suffix = ""
-                reasons = item.get("reasons") if isinstance(item.get("reasons"), list) else []
-                if reasons:
-                    reason_suffix = " reasons: " + ", ".join(str(reason) for reason in reasons[:3])
-                lines.append(
-                    f"  - `{item.get('item_id')}` {item.get('title') or item.get('change_type')}: "
-                    f"status `{item.get('status')}`, risk `{item.get('risk')}`{reason_suffix}"
-                )
-
-    apply_payload = payloads.get("recent_apply") if isinstance(payloads.get("recent_apply"), dict) else {}
-    ledgers = apply_payload.get("ledgers") if isinstance(apply_payload.get("ledgers"), list) else []
-    if ledgers:
-        lines.extend(["", "## Recent apply summary"])
-        for ledger in ledgers[:5]:
-            counts = ledger.get("item_status_counts") if isinstance(ledger.get("item_status_counts"), dict) else {}
-            lines.append(
-                f"- `{ledger.get('ledger_id')}` for `{ledger.get('plan_id')}`: "
-                f"status `{ledger.get('current_status')}`, "
-                f"applied {int(counts.get('applied') or 0)}, "
-                f"skipped {int(counts.get('skipped_by_policy') or 0)}, "
-                f"failed {int(counts.get('failed') or 0)}, "
-                f"restore_available {bool(ledger.get('restore_available'))}"
-            )
-
     calibration_payload = payloads.get("calibration") if isinstance(payloads.get("calibration"), dict) else {}
     evidence = calibration_payload.get("evidence_summary") if isinstance(calibration_payload.get("evidence_summary"), dict) else {}
     calibration_ledgers = calibration_payload.get("ledgers") if isinstance(calibration_payload.get("ledgers"), list) else []
-    evidence_has_signal = any(int(evidence.get(key) or 0) for key in ("total_events", "disagreements", "bad_outcomes", "scorer_errors", "rollback_events"))
+    evidence_has_signal = any(int(evidence.get(key) or 0) for key in ("total_events", "disagreements", "bad_outcomes", "scorer_errors"))
     if evidence_has_signal or calibration_ledgers:
         lines.extend(["", "## Calibration summary"])
         lines.append(
@@ -896,26 +282,79 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
             lines.append(f"- {name}: {count}")
         lines.append("- does not grant unattended mutation permission")
 
-    retention_payload = payloads.get("retention") if isinstance(payloads.get("retention"), dict) else {}
-    expired_count = int(retention_payload.get("expired_candidate_count") or 0)
-    malformed_count = int(retention_payload.get("malformed_count") or 0)
-    if expired_count or malformed_count:
-        lines.extend(["", "## Retention summary"])
-        lines.append(
-            f"- read-only preview: expired candidates: {expired_count}, "
-            f"malformed files: {malformed_count}, retention_days: {retention_payload.get('retention_days')}"
-        )
-        categories = retention_payload.get("categories") if isinstance(retention_payload.get("categories"), dict) else {}
-        for name, summary in categories.items():
-            if not isinstance(summary, dict):
-                continue
-            if not summary.get("expired_candidate_count") and not summary.get("malformed_count"):
-                continue
-            lines.append(
-                f"- `{name}`: expired {summary.get('expired_candidate_count')}, "
-                f"malformed {summary.get('malformed_count')}"
-            )
     return lines
+
+
+def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operational_reports: dict[str, Any] | None = None) -> str:
+    s = result.summary
+    lines = [
+        "# Hermes self-improvement report",
+        "",
+        "## メタ情報",
+        f"- 対象期間: {result.since.astimezone().strftime('%Y-%m-%d %H:%M')} 〜 {result.until.astimezone().strftime('%Y-%m-%d %H:%M')}",
+        f"- 観測イベント: {s['event_count']}件",
+        f"- セッション: {s['session_count']}件",
+        f"- tool call: {s['post_tool_call_count']}件",
+        f"- tool warning/error: {s['tool_error_count']}件",
+    ]
+    if s.get("filtered_partial_event_count"):
+        lines.append(f"- 分析除外: partial `pre_tool_call` {s['filtered_partial_event_count']}件")
+    if s.get("reclassified_tool_result_count"):
+        lines.append(f"- 分析時再分類: tool result {s['reclassified_tool_result_count']}件")
+    lines.extend(["", "## 観測サマリー"])
+    if s["events_by_type"]:
+        for name, count in sorted(s["events_by_type"].items()):
+            lines.append(f"- `{name}`: {count}件")
+    else:
+        lines.append("- 観測イベントはまだありません。")
+    lines.extend(["", "## 問題候補"])
+    if not result.findings:
+        lines.append("- 現時点で繰り返し傾向のある問題候補はありません。")
+    for idx, finding in enumerate(result.findings, 1):
+        lines.extend([
+            f"### {idx}. `{finding.get('tool_name')}` `{finding.get('error_kind')}` cluster",
+            f"- severity: {finding.get('severity')}",
+            f"- count: {finding.get('count')} / {finding.get('total')} (rate={finding.get('rate')})",
+        ])
+        examples = finding.get("examples") or []
+        if examples:
+            lines.append("- examples:")
+            for ev in examples[:3]:
+                preview = str(ev.get("result_preview") or "").replace("\n", " ")[:180]
+                lines.append(f"  - {ev.get('ts')} `{ev.get('error_kind')}` {preview}")
+        lines.append("")
+    lines.extend(["## 採点済み proposal"])
+    if not scored:
+        lines.append("- proposal はありません。")
+    for proposal in scored:
+        lines.extend([
+            f"### {proposal.get('id')}: {proposal.get('title')}",
+            f"- target: `{proposal.get('target')}`",
+            f"- action: `{proposal.get('action')}`",
+            f"- risk: `{proposal.get('risk')}`",
+            f"- score: {proposal.get('score')}",
+            f"- recommendation: `{proposal.get('recommendation')}`",
+        ])
+        if proposal.get("scorer"):
+            lines.append(f"- scorer: `{proposal.get('scorer')}`")
+        compare = _format_scorer_compare(proposal)
+        if compare:
+            lines.append(f"- scorer_compare: {compare}")
+        breakdown = _format_score_breakdown(proposal.get("score_breakdown"))
+        if breakdown:
+            lines.append(f"- score_breakdown: {breakdown}")
+        lines.extend([
+            f"- reason: {proposal.get('reason')}",
+            "",
+        ])
+    lines.extend(_render_operational_report_sections(operational_reports))
+    lines.extend([
+        "## 注意",
+        "- 採点は `--scorer heuristic`、`--scorer llm`、`--scorer gepa`、`--scorer compare` で切り替えます。`report` / `improve` は既定で `compare` です。",
+        "- LLM / GEPA / compare / heuristic scorer は proposal の優先順位づけだけを行い、skill / memory の変更許可にはなりません。GEPA が失敗した場合は `gepa_scorer_error` として明示し、unattended mutation は許可しません。",
+        "- plugin hook は観測専用で、skill / memory の変更は行いません。",
+    ])
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def run_pipeline(

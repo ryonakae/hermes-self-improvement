@@ -252,5 +252,4 @@ def test_partial_legacy_modules_only_export_report_compatibility_helpers():
 
     assert callable(outcome_store.load_review_outcomes)
     assert callable(outcome_store.summarize_review_outcomes)
-    assert callable(outcome_store.infer_review_outcomes_from_ledgers)
     assert "record_review_outcome" not in outcome_store.__dict__

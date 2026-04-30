@@ -84,7 +84,6 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
         "disagreements": 0,
         "bad_outcomes": 0,
         "scorer_errors": 0,
-        "rollback_events": 0,
         "sources": [],
     }
 
@@ -92,7 +91,6 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
     outcome_summary = summarize_review_outcomes(outcomes)
     summary["review_outcomes"] = outcome_summary["total"]
     summary["explicit_human_review_outcomes"] = outcome_summary.get("explicit_human_review_outcomes", 0)
-    summary["ledger_inferred_outcomes"] = outcome_summary.get("ledger_inferred_outcomes", 0)
     summary["review_outcome_summary"] = outcome_summary
     if outcome_summary["total"]:
         summary["bad_outcomes"] += int(outcome_summary.get("bad_outcomes") or 0)
@@ -104,38 +102,6 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
             continue
         schema = payload.get("schema_name")
         source_recorded = False
-
-        if schema == "self_improvement_apply_plan":
-            plan_disagreements = 0
-            items = payload.get("items") if isinstance(payload.get("items"), list) else []
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                disagreements = item.get("scorer_disagreements")
-                if isinstance(disagreements, list):
-                    plan_disagreements += len(disagreements)
-            if plan_disagreements:
-                summary["disagreements"] += plan_disagreements
-                summary["total_events"] += 1
-                source_recorded = True
-
-        if schema == "self_improvement_apply_ledger":
-            operation = str(payload.get("operation") or "")
-            if operation.startswith("rollback"):
-                summary["rollback_events"] += 1
-                summary["bad_outcomes"] += 1
-                summary["total_events"] += 1
-                source_recorded = True
-            items = payload.get("items") if isinstance(payload.get("items"), list) else []
-            failed_items = sum(1 for item in items if isinstance(item, dict) and item.get("status") == "failed")
-            failed_summary = 0
-            if isinstance(payload.get("summary"), dict):
-                failed_summary = int(payload["summary"].get("failed") or 0)
-            bad = max(failed_items, failed_summary)
-            if bad:
-                summary["bad_outcomes"] += bad
-                summary["total_events"] += 1
-                source_recorded = True
 
         scorer_errors = _count_scorer_errors(payload)
         if scorer_errors:
@@ -186,28 +152,10 @@ def _runtime_eval_cases_path(config: dict[str, Any], candidate: dict[str, Any]) 
     return _runtime_eval_cases_dir(config) / f"{stamp}-{candidate_hash}-cases.jsonl"
 
 
-def _proposal_case_from_item(*, source_path: Path, payload: dict[str, Any], item: dict[str, Any], index: int) -> dict[str, Any] | None:
-    disagreements = item.get("scorer_disagreements")
-    if not isinstance(disagreements, list) or not disagreements:
-        return None
-    proposal = {key: value for key, value in item.items() if key in {"id", "item_id", "title", "target", "target_kind", "change_type", "risk", "confidence", "recommendation", "score"}}
-    if not proposal:
-        proposal = {"item_id": item.get("item_id") or f"item-{index}", "change_type": item.get("change_type")}
-    case = {
-        "id": f"runtime-disagreement-{_sha256_text(str(source_path) + ':' + str(index))[:10]}",
-        "description": "Runtime-private scorer disagreement case generated from self-improvement artifacts.",
-        "source": {"kind": "scorer_disagreement", "path": str(source_path), "plan_id": payload.get("plan_id"), "item_id": item.get("item_id")},
-        "proposal": proposal,
-        "findings": [{"kind": "scorer_disagreement", "disagreements": disagreements}],
-        "expected": {"risk_max": "medium", "recommendation_not": "review_low_risk_candidate", "requires_human_review": True},
-    }
-    case["case_hash"] = _sha256_text(_stable_json(case))
-    return case
-
 
 def _review_outcome_case(row: dict[str, Any], index: int) -> dict[str, Any] | None:
     outcome = str(row.get("outcome") or "")
-    if outcome not in {"rejected_by_human", "edited_before_apply", "apply_failed", "rolled_back", "rollback_failed"}:
+    if outcome not in {"rejected_by_human", "failed"}:
         return None
     case = {
         "id": f"runtime-review-outcome-{_sha256_text(_stable_json({'index': index, 'row': row}))[:10]}",
@@ -223,27 +171,12 @@ def _review_outcome_case(row: dict[str, Any], index: int) -> dict[str, Any] | No
 
 def build_runtime_eval_cases(config: dict[str, Any], *, now: datetime | None = None) -> list[dict[str, Any]]:
     calibration = normalize_calibration_config(config)
-    evidence_cfg = calibration.get("evidence") if isinstance(calibration.get("evidence"), dict) else {}
-    window_days = int(evidence_cfg.get("window_days", 30) or 0)
-    now = now or datetime.now(UTC)
     cases: list[dict[str, Any]] = []
 
     for index, row in enumerate(load_review_outcomes(config=config, limit=1000)):
         case = _review_outcome_case(row, index)
         if case is not None:
             cases.append(case)
-
-    root = _reports_dir(config)
-    for path, payload in _iter_recent_json(root, window_days=window_days, now=now) or []:
-        if payload.get("schema_name") != "self_improvement_apply_plan":
-            continue
-        items = payload.get("items") if isinstance(payload.get("items"), list) else []
-        for index, item in enumerate(items):
-            if not isinstance(item, dict):
-                continue
-            case = _proposal_case_from_item(source_path=path, payload=payload, item=item, index=index)
-            if case is not None:
-                cases.append(case)
     deduped: dict[str, dict[str, Any]] = {}
     for case in cases:
         deduped[str(case.get("case_hash") or case.get("id"))] = case
