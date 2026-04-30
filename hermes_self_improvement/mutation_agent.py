@@ -22,6 +22,12 @@ SKILL_AGENT_TASK_TYPES = {
     "skill_remove_file",
     "skill_large_rewrite",
 }
+NON_MUTATING_AGENT_OUTCOMES = {
+    "skipped_superseded",
+    "stopped_stale_target",
+    "stopped_conflict",
+    "stopped_uncertain_needs_review",
+}
 Backend = Callable[[str, dict[str, Any], dict[str, Any] | None], dict[str, Any] | str] | MutationBackend
 
 
@@ -153,6 +159,10 @@ Hard constraints:
 - Use only these Hermes skill tools: skills_list, skill_view, skill_manage.
 - Do not use terminal, file tools, git, browser, web, delegation, cron, direct filesystem access, direct database/provider internals, or plugin README/AGENTS/config mutation.
 - Operate only on the declared mutable-local skill targets.
+- Before applying any mutation, read the current target through the allowed skill tools and compare it with the plan baseline, rationale, and intended change.
+- If the current target is materially different from the plan premise, already fixed, stale, contradictory, or uncertain, do not call skill_manage. Return a non-mutating outcome instead.
+- Allowed non-mutating outcomes: skipped_superseded, stopped_stale_target, stopped_conflict, stopped_uncertain_needs_review.
+- Never invent a broader improvement, edit unrelated sections, or modify unrelated skills to make the plan fit.
 - Stop and return success=false if the task asks you to operate outside scope.
 """ + "\n".join(f"- {item}" for item in constraints) + f"""
 
@@ -165,6 +175,8 @@ Verification contract:
 Return only JSON with this shape:
 {{
   "success": true,
+  "outcome": "applied | skipped_superseded | stopped_stale_target | stopped_conflict | stopped_uncertain_needs_review",
+  "reason": "short reason when outcome is not applied",
   "task_kind": "{task_kind}",
   "used_tools": [{{"tool": "skill_view", "target": "..."}}, {{"tool": "skill_manage", "action": "edit", "name": "..."}}],
   "changed_skills": [],
@@ -195,6 +207,10 @@ def parse_mutation_agent_result(raw: dict[str, Any] | str) -> dict[str, Any]:
         return {"success": False, "error": "mutation_agent_result_missing_success"}
     if not parsed.get("success"):
         return parsed
+    outcome = str(parsed.get("outcome") or "applied")
+    if outcome != "applied" and outcome not in NON_MUTATING_AGENT_OUTCOMES:
+        return {"success": False, "error": "mutation_agent_result_invalid_outcome", "outcome": outcome}
+    parsed["outcome"] = outcome
     for key in ("used_tools", "changed_skills", "created_skills", "deleted_skills", "verification_notes", "rollback_hints"):
         if key not in parsed or not isinstance(parsed.get(key), list):
             return {"success": False, "error": f"mutation_agent_result_{key}_missing"}

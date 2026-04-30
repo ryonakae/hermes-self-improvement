@@ -45,6 +45,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
+NON_MUTATING_AGENT_OUTCOMES = {"skipped_superseded", "stopped_stale_target", "stopped_conflict", "stopped_uncertain_needs_review"}
 APPLY_RESULT_STATUSES = {"would_apply", "applied", "skipped_by_policy", "failed", "needs_review"}
 TOOL_MEDIATED_APPLY_MUTATION_TYPES = {
     "skill_manage_patch",
@@ -356,6 +357,14 @@ def _run_skill_agent_mutation(
         result["reasons"].append(str(agent_result.get("error") or "mutation_agent_failed"))
         result["reasons"].extend(agent_result.get("reasons") or [])
         return result
+    outcome = str(agent_result.get("outcome") or "applied")
+    if outcome in NON_MUTATING_AGENT_OUTCOMES:
+        result["status"] = outcome
+        result["target_changed"] = False
+        result["reasons"].append(outcome)
+        if agent_result.get("reason"):
+            result["reasons"].append(str(agent_result.get("reason")))
+        return result
     if str(mutation.get("task_kind") or "") in {"skill_rename", "skill_merge"}:
         lifecycle = _run_lifecycle_skill_agent_mutation(mutation=mutation, config=config, before_snapshots=before_snapshots, agent_result=agent_result)
         result["verification"] = lifecycle.get("verification")
@@ -638,6 +647,12 @@ def apply_plan(
                 item_result["after_hash"] = _sha256_text(_stable_json((agent_apply.get("verification") or {}).get("after_snapshots") or {}))
                 summary["applied"] += 1
                 target_changed = True
+            elif agent_apply.get("status") in NON_MUTATING_AGENT_OUTCOMES:
+                outcome = str(agent_apply.get("status"))
+                item_result["mutation_agent_outcome"] = outcome
+                item_result["status"] = "skipped_by_policy" if outcome == "skipped_superseded" else "needs_review"
+                item_result["reasons"].extend(agent_apply.get("reasons") or [outcome])
+                summary[item_result["status"]] += 1
             else:
                 item_result["status"] = "failed"
                 item_result["reasons"].extend(agent_apply.get("reasons") or ["skill_agent_task_failed"])

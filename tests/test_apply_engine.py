@@ -715,3 +715,40 @@ def test_apply_plan_does_not_allow_adjudicator_to_override_identity_drift(tmp_pa
     item_result = result["items"][0]
     assert item_result["status"] == "failed"
     assert item_result["drift"]["class"] == "target_identity_drift"
+
+
+def test_apply_execute_records_mutation_agent_stale_stop_without_mutating(tmp_path):
+    mod = load_plugin_module()
+    skills_root = tmp_path / "skills"
+    skill_dir = _write_skill(skills_root, "demo-skill", "# Before\n")
+    item = _skill_agent_item(mod)
+    write_plan(tmp_path, {"schema_name": "self_improvement_apply_plan", "plan_id": "plan-agent-stale-stop", "items": [item]})
+
+    def stale_backend(prompt, task, config):
+        assert "stopped_stale_target" in prompt
+        return {
+            "success": True,
+            "outcome": "stopped_stale_target",
+            "reason": "Current skill no longer matches the plan baseline.",
+            "used_tools": [{"tool": "skill_view", "target": "demo-skill"}],
+            "tool_trace": [{"tool": "skill_view", "success": True, "name": "demo-skill"}],
+            "changed_skills": [],
+            "created_skills": [],
+            "deleted_skills": [],
+            "verification_notes": ["No mutation performed."],
+            "rollback_hints": [],
+        }
+
+    result = mod.apply_plan(
+        plan_id="plan-agent-stale-stop",
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [skills_root], "_mutation_agent_backend": stale_backend},
+        execute=True,
+    )
+
+    assert result["summary"]["needs_review"] == 1
+    assert result["target_changed"] is False
+    item_result = result["items"][0]
+    assert item_result["status"] == "needs_review"
+    assert item_result["mutation_agent_outcome"] == "stopped_stale_target"
+    assert "stopped_stale_target" in item_result["reasons"]
+    assert "# Before" in (skill_dir / "SKILL.md").read_text(encoding="utf-8")

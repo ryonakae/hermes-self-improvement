@@ -124,3 +124,37 @@ def test_runner_rejects_self_reported_disallowed_tools(tmp_path):
 def test_validate_reported_tools_allows_only_skill_tools():
     assert validate_reported_tools({"used_tools": [{"tool": "skills_list"}, {"tool": "skill_view"}, {"tool": "skill_manage"}]})["status"] == "ok"
     assert validate_reported_tools({"used_tools": [{"tool": "file"}]})["status"] == "failed"
+
+
+def test_mutation_agent_prompt_includes_stale_target_stop_contract(tmp_path):
+    from hermes_self_improvement.mutation_agent import build_mutation_agent_prompt
+
+    prompt = build_mutation_agent_prompt({
+        "type": "skill_agent_task",
+        "task_kind": "skill_improve",
+        "targets": {"primary_skill": "demo-skill"},
+        "instructions": "Improve stale instructions.",
+        "constraints": ["Use only skills_list, skill_view, skill_manage."],
+    })
+
+    assert "stopped_stale_target" in prompt
+    assert "skipped_superseded" in prompt
+    assert "read the current target" in prompt
+
+
+def test_parse_mutation_agent_result_accepts_non_mutating_stop_outcome():
+    from hermes_self_improvement.mutation_agent import parse_mutation_agent_result
+
+    parsed = parse_mutation_agent_result({
+        "success": True,
+        "outcome": "stopped_stale_target",
+        "used_tools": [{"tool": "skill_view", "target": "demo-skill"}],
+        "changed_skills": [],
+        "created_skills": [],
+        "deleted_skills": [],
+        "verification_notes": ["Target changed since plan creation; no mutation performed."],
+        "rollback_hints": [],
+    })
+
+    assert parsed["success"] is True
+    assert parsed["outcome"] == "stopped_stale_target"
