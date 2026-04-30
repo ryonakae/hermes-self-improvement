@@ -50,7 +50,7 @@ def test_primary_cli_surface_defaults_to_compare_scorer():
     assert report.scorer == "compare"
 
 
-def test_status_accepts_json_flag_as_noop():
+def test_status_accepts_json_flag_as_full_status_output():
     parser = build_parser()
 
     status = parser.parse_args(["status", "--json"])
@@ -129,3 +129,57 @@ def test_improve_dry_run_summary_prints_next_actions(monkeypatch, tmp_path, caps
     out = capsys.readouterr().out
     assert "Self-improvement dry run" in out
     assert "Next actions:" in out
+
+
+def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 2, "memory_changes": 1, "scorer_evaluator_changed": False},
+        "calibration": {"current_status": "updated", "runtime_eval_cases": {"count": 3, "status": "written"}},
+        "step_decisions": {"summary": {"total": 4}},
+        "artifact_path": "/tmp/run.json",
+    })
+
+    assert "Self-improvement result" in text
+    assert "Skill improvements:" in text
+    assert "- changed 2 skills" in text
+    assert "Memory improvements:" in text
+    assert "- changed 1 memories" in text
+    assert "private eval cases: 3 written" in text
+    assert "Artifact: /tmp/run.json" in text
+    assert "ledger" not in text.lower()
+
+
+def test_status_summary_is_human_readable_not_json():
+    cli = load_cli_module()
+    text = cli._render_status_summary({
+        "enabled": True,
+        "event_path": "/tmp/events.jsonl",
+        "event_count_sample": 5,
+        "last_event_ts": "2026-04-30T00:00:00Z",
+        "last_run_artifact": "/tmp/run.json",
+        "dspy_available": False,
+        "mutation_backend": {"available": True},
+        "curator_compatibility": {"skill_telemetry_source": "Hermes Curator", "hook_mode": "observation_only"},
+    })
+
+    assert text.startswith("hermes-self-improvement status")
+    assert "Readiness:" in text
+    assert "Curator compatibility:" in text
+    assert '"enabled"' not in text
+
+
+def test_operational_report_sections_include_runner_artifact_summary():
+    cli = load_cli_module()
+    lines = cli._render_operational_report_sections({
+        "recent_runs": [{"path": "/tmp/run.json", "summary": {"skill_changes": 1}}],
+        "recent_evidence": [{"path": "/tmp/evidence.json", "summary": {"evidence_count": 2, "ignored_count": 3}}],
+        "runtime_eval_cases": {"case_count": 4, "storage": "runtime_private"},
+    })
+    text = "\n".join(lines)
+
+    assert "Recent runner artifacts" in text
+    assert "runs: 1 recent artifacts" in text
+    assert "latest evidence 2, ignored 3" in text
+    assert "runtime-private eval cases: 4" in text

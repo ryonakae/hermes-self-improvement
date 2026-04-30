@@ -703,7 +703,7 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operatio
     lines.extend(_render_operational_report_sections(operational_reports))
     lines.extend([
         "## 注意",
-        "- 採点は `--scorer heuristic`、`--scorer llm`、`--scorer gepa`、`--scorer compare` で切り替えます。`report` / `plan` / `improve` は既定で `compare` です。",
+        "- 採点は `--scorer heuristic`、`--scorer llm`、`--scorer gepa`、`--scorer compare` で切り替えます。`report` / `improve` は既定で `compare` です。",
         "- LLM / GEPA / compare / heuristic scorer は proposal の優先順位づけだけを行い、skill / memory の変更許可にはなりません。GEPA が失敗した場合は `gepa_scorer_error` として明示し、unattended apply は許可しません。",
         "- plugin hook は観測専用で、skill / memory の変更は行いません。",
     ])
@@ -757,8 +757,41 @@ def build_review_outcome_report_payload(*, config: dict[str, Any], limit: int = 
     }
 
 
+def _load_report_json(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _recent_json_files(root: Path, pattern: str = "*.json", limit: int = 5) -> list[dict[str, Any]]:
+    if not root.exists():
+        return []
+    rows = []
+    for path in sorted((p for p in root.glob(pattern) if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
+        payload = _load_report_json(path) or {}
+        rows.append({"path": str(path), "schema_name": payload.get("schema_name"), "created_at": payload.get("created_at"), "summary": payload.get("summary"), "run_id": payload.get("run_id")})
+    return rows
+
+
+def _runtime_private_eval_case_summary(config: dict[str, Any]) -> dict[str, Any]:
+    root = _reports_dir(config) / "gepa" / "runtime-eval-cases"
+    files = []
+    total = 0
+    if root.exists():
+        for path in sorted(root.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)[:10]:
+            count = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+            total += count
+            files.append({"path": str(path), "case_count": count})
+    return {"case_count": total, "files": files, "storage": "runtime_private"}
+
+
 def _build_operational_report_payloads(config: dict[str, Any]) -> dict[str, Any]:
     return {
+        "recent_runs": _recent_json_files(_reports_dir(config) / "runs", limit=5),
+        "recent_evidence": _recent_json_files(_reports_dir(config) / "evidence", pattern="evidence-*.json", limit=5),
+        "runtime_eval_cases": _runtime_private_eval_case_summary(config),
         "recent_plans": build_recent_plan_report_payload(config=config, limit=5),
         "recent_apply": build_ledger_report_payload(config=config, status="all", limit=5, operation="apply"),
         "calibration": build_calibration_report_payload(config=config, limit=5),
@@ -771,6 +804,24 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
     if not isinstance(payloads, dict):
         return []
     lines: list[str] = []
+
+    recent_runs = payloads.get("recent_runs") if isinstance(payloads.get("recent_runs"), list) else []
+    recent_evidence = payloads.get("recent_evidence") if isinstance(payloads.get("recent_evidence"), list) else []
+    runtime_eval_cases = payloads.get("runtime_eval_cases") if isinstance(payloads.get("runtime_eval_cases"), dict) else {}
+    if recent_runs or recent_evidence or int(runtime_eval_cases.get("case_count") or 0):
+        lines.extend(["", "## Recent runner artifacts"])
+        if recent_runs:
+            lines.append(f"- runs: {len(recent_runs)} recent artifacts; latest `{recent_runs[0].get('path')}`")
+        if recent_evidence:
+            summary = recent_evidence[0].get("summary") if isinstance(recent_evidence[0].get("summary"), dict) else {}
+            lines.append(
+                f"- evidence packs: {len(recent_evidence)} recent artifacts; "
+                f"latest evidence {int(summary.get('evidence_count') or 0)}, ignored {int(summary.get('ignored_count') or 0)}"
+            )
+        lines.append(
+            f"- runtime-private eval cases: {int(runtime_eval_cases.get('case_count') or 0)} "
+            f"stored outside repo eval assets"
+        )
 
     plan_payload = payloads.get("recent_plans") if isinstance(payloads.get("recent_plans"), dict) else {}
     plans = plan_payload.get("plans") if isinstance(plan_payload.get("plans"), list) else []
@@ -1106,11 +1157,42 @@ def _plan_status_counts(plan: dict[str, Any]) -> dict[str, int]:
     return counts
 
 
+def _latest_run_artifact(config: dict[str, Any]) -> Path | None:
+    runs_dir = _reports_dir(config) / "runs"
+    if not runs_dir.exists():
+        return None
+    matches = sorted((path for path in runs_dir.glob("*.json") if path.is_file()), key=lambda path: path.stat().st_mtime)
+    return matches[-1] if matches else None
+
+
+def _render_status_summary(payload: dict[str, Any]) -> str:
+    mutation = payload.get("mutation_backend") if isinstance(payload.get("mutation_backend"), dict) else {}
+    lines = [
+        f"{PLUGIN_NAME} status",
+        "",
+        "Readiness:",
+        f"- plugin enabled: {bool(payload.get('enabled'))}",
+        f"- mutation backend: {'available' if mutation.get('available') else 'unavailable'}",
+        f"- DSPy available: {bool(payload.get('dspy_available'))}",
+        "Runtime:",
+        f"- event path: {payload.get('event_path')}",
+        f"- recent sample events: {int(payload.get('event_count_sample') or 0)}",
+        f"- last event: {payload.get('last_event_ts') or 'none'}",
+        f"- last run: {payload.get('last_run_artifact') or 'none'}",
+        "Curator compatibility:",
+        f"- skill telemetry source: {payload.get('curator_compatibility', {}).get('skill_telemetry_source') if isinstance(payload.get('curator_compatibility'), dict) else 'unknown'}",
+        f"- hook mode: {payload.get('curator_compatibility', {}).get('hook_mode') if isinstance(payload.get('curator_compatibility'), dict) else 'unknown'}",
+    ]
+    return "\n".join(lines)
+
+
 def _render_improve_summary(result: dict[str, Any]) -> str:
     summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
     step_decisions = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
     decision_summary = step_decisions.get("summary") if isinstance(step_decisions.get("summary"), dict) else {}
     title = "Self-improvement dry run" if result.get("dry_run") else "Self-improvement result"
+    calibration = result.get("calibration") if isinstance(result.get("calibration"), dict) else {}
+    runtime_eval_cases = calibration.get("runtime_eval_cases") if isinstance(calibration.get("runtime_eval_cases"), dict) else {}
     lines = [
         title,
         "",
@@ -1119,7 +1201,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Memory improvements:",
         f"- changed {int(summary.get('memory_changes') or 0)} memories",
         "Scorer/evaluator:",
-        f"- calibration status: {(result.get('calibration') or {}).get('current_status') if isinstance(result.get('calibration'), dict) else 'unknown'}",
+        f"- calibration status: {calibration.get('current_status') or 'unknown'}",
+        f"- private eval cases: {int(runtime_eval_cases.get('count') or 0)} {runtime_eval_cases.get('status') or 'not_built'}",
         f"- active evaluator changed: {bool(summary.get('scorer_evaluator_changed'))}",
         "Evidence/proposals:",
         f"- considered {int(decision_summary.get('total') or 0)} proposal signals",
@@ -1144,7 +1227,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_improve.set_defaults(func=_handle_cli)
 
     p_status = sub.add_parser("status", help="Show observer status")
-    p_status.add_argument("--json", action="store_true", dest="as_json", help="Print JSON output (default for status).")
+    p_status.add_argument("--json", action="store_true", dest="as_json", help="Print full JSON status.")
     _add_config_argument(p_status)
     p_status.set_defaults(func=_handle_cli)
 
@@ -1195,8 +1278,17 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "merge_judge": merge_judge_status(config),
             "memory_rollback": memory_rollback_status(config),
             "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
+            "last_run_artifact": str(_latest_run_artifact(config)) if _latest_run_artifact(config) else None,
+            "curator_compatibility": {
+                "skill_telemetry_source": "Hermes Curator",
+                "hook_mode": "observation_only",
+                "mutation_targets": ["skill", "memory", "scorer", "evaluator"],
+            },
         }
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print(_render_status_summary(payload))
         return
 
     if cmd == "calibrate":
