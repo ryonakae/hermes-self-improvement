@@ -356,8 +356,6 @@ def restore_previous_calibration(*, ledger_id: str, config: dict[str, Any]) -> d
         return {"schema_name": "self_improvement_calibration_restore_result", "current_status": "failed", "reasons": ["ledger_not_found"]}
     ledger = _load_json_file(path) or {}
     restore = ledger.get("restore_data") if isinstance(ledger.get("restore_data"), dict) else {}
-    if not restore:
-        restore = ledger.get("rollback_data") if isinstance(ledger.get("rollback_data"), dict) else {}
     pointer_path = Path(str(restore.get("active_pointer_path") or ledger.get("active_pointer_path") or "")).expanduser()
     before_content = restore.get("active_before_content")
     if before_content is None:

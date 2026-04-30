@@ -8,9 +8,9 @@ Completed and archived. This follow-up canonicalized unattended mutation/scorer/
 
 Make current self-improvement internals and docs use Curator-aligned vocabulary after the legacy apply/rollback cleanup:
 
-- Canonicalize `apply_policy` to a current unattended mutation policy name.
+- Canonicalize `apply_policy` to a current unattended mutation policy name with no legacy input fallback.
 - Rename scorer recommendation value `review_for_possible_low_risk_apply` away from apply-era wording.
-- Rename calibration rollback internals to previous-evaluator restore terminology while preserving historical artifact compatibility.
+- Rename calibration rollback internals to previous-evaluator restore terminology without writing or reading obsolete rollback metadata keys.
 - Rename historical apply-preview next-action reader helpers so their purpose is audit/report compatibility, not an active apply flow.
 
 ## Non-goals
@@ -31,7 +31,7 @@ Make current self-improvement internals and docs use Curator-aligned vocabulary 
 
 - Rename defaults/helpers from apply policy to automation/mutation-safe vocabulary.
 - Prefer a new config key such as `automation_policy` as canonical.
-- Keep read compatibility for legacy `apply_policy` input, but do not expose it as the primary normalized key unless tests require explicit compatibility.
+- Use only `automation_policy`; do not support the obsolete `apply_policy` input key.
 - Update example config and tests.
 
 ### Slice 3: Scorer recommendation vocabulary
@@ -43,8 +43,8 @@ Make current self-improvement internals and docs use Curator-aligned vocabulary 
 ### Slice 4: Calibration restore vocabulary
 
 - Rename `rollback_calibration()` to `restore_previous_calibration()`.
-- Rename new calibration ledger metadata from `rollback_data` to `restore_data`.
-- Read old `rollback_data` when loading historical ledgers, but write only `restore_data` going forward.
+- Rename calibration ledger metadata from obsolete rollback wording to `restore_data`.
+- Do not read or write old `rollback_data` keys; this is unreleased, so current schema wins.
 - Keep this internal; do not add a primary rollback command.
 
 ### Slice 5: Historical reader helper naming

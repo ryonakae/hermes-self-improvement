@@ -295,7 +295,7 @@ def _summarize_ledger_for_report(ledger: dict[str, Any]) -> dict[str, Any]:
         "target_before_hash": ledger.get("target_before_hash"),
         "target_after_hash": ledger.get("target_after_hash"),
         "applied_diff": ledger.get("applied_diff") if isinstance(ledger.get("applied_diff"), dict) else None,
-        "rollback_available": isinstance(ledger.get("rollback_data"), dict) or any(isinstance(item.get("rollback_data"), dict) for item in typed_items),
+        "restore_available": isinstance(ledger.get("restore_data"), dict) or any(isinstance(item.get("restore_data"), dict) for item in typed_items),
     }
     if summary_payload["current_status"] in {"previewed", "needs_review", "skipped_by_policy"}:
         summary_payload["next_actions"] = build_next_actions_for_historical_artifact({"plan_id": summary_payload.get("plan_id"), "summary": summary})
@@ -865,7 +865,7 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
                 f"applied {int(counts.get('applied') or 0)}, "
                 f"skipped {int(counts.get('skipped_by_policy') or 0)}, "
                 f"failed {int(counts.get('failed') or 0)}, "
-                f"rollback_available {bool(ledger.get('rollback_available'))}"
+                f"restore_available {bool(ledger.get('restore_available'))}"
             )
 
     calibration_payload = payloads.get("calibration") if isinstance(payloads.get("calibration"), dict) else {}

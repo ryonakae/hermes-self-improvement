@@ -8,7 +8,7 @@ The latest completed implementation records are:
 
 - `archive/2026-05-01_015758-obsolete-terminology-cleanup.md`
   - **Status:** completed.
-  - Canonicalized unattended mutation/scorer/restore/historical-reader terminology after the legacy internals cleanup, while preserving legacy artifact/config compatibility where needed.
+  - Canonicalized unattended mutation/scorer/restore/historical-reader terminology after the legacy internals cleanup, then removed unreleased compatibility shims for obsolete config/ledger keys.
 
 - `archive/2026-05-01_011409-obsolete-internal-legacy-cleanup.md`
   - **Status:** completed.

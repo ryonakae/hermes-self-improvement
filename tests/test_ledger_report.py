@@ -40,8 +40,8 @@ def write_applied_ledger(tmp_path):
         "recommendation": "review_low_risk_candidate",
         "review_summary": {"title": "Fix typo in skill prose", "validation_status": "passed"},
         "summary": {"would_apply": 0, "applied": 1, "skipped_by_policy": 0, "failed": 0, "needs_review": 0},
-        "items": [{"item_id": "step-001", "status": "applied", "rollback_data": {"before_snapshot": "Use teh browser carefully."}}],
-        "rollback_data": {"before_snapshot": "Use teh browser carefully."},
+        "items": [{"item_id": "step-001", "status": "applied", "restore_data": {"before_snapshot": "Use teh browser carefully."}}],
+        "restore_data": {"before_snapshot": "Use teh browser carefully."},
         "git_metadata": {"commit_created": False},
     }
     ledger_path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -63,7 +63,7 @@ def test_build_ledger_report_payload_summarizes_applied_ledgers_for_review(tmp_p
     assert summary["current_status"] == "applied"
     assert summary["plan_id"] == ledger["plan_id"]
     assert summary["item_status_counts"]["applied"] == 1
-    assert summary["rollback_available"] is True
+    assert summary["restore_available"] is True
 
 
 def test_render_ledger_report_includes_human_readable_applied_summary(tmp_path):

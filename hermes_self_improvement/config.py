@@ -226,12 +226,7 @@ def _peer_yaml_config_path(default_path: Path) -> Path:
 
 def normalize_automation_policy(config: dict[str, Any] | None) -> dict[str, Any]:
     """Return the normalized unattended mutation policy with fail-closed defaults."""
-    if isinstance(config, dict):
-        raw_policy = config.get("automation_policy")
-        if not isinstance(raw_policy, dict):
-            raw_policy = config.get("apply_policy")  # legacy config key, read-only compatibility
-    else:
-        raw_policy = config
+    raw_policy = config.get("automation_policy") if isinstance(config, dict) else config
     if not isinstance(raw_policy, dict):
         raw_policy = {}
     policy = _deep_merge(copy.deepcopy(DEFAULT_AUTOMATION_POLICY), raw_policy)
@@ -342,11 +337,7 @@ def _normalize_model_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = _normalize_model_config(config)
-    legacy_policy = normalized.get("apply_policy")
-    if isinstance(legacy_policy, dict) and normalized.get("automation_policy") == DEFAULT_AUTOMATION_POLICY:
-        normalized["automation_policy"] = legacy_policy
     normalized["automation_policy"] = normalize_automation_policy(normalized)
-    normalized.pop("apply_policy", None)
     normalized["calibration"] = normalize_calibration_config(normalized)
     return normalized
 
