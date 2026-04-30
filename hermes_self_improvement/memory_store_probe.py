@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -150,3 +151,81 @@ def capture_builtin_memory_state(config: dict[str, Any] | None = None) -> dict[s
         "cache_invalidation_verified": False,
         "direct_restore_allowed": False,
     }
+
+
+UTC = timezone.utc
+
+
+def _self_improvement_root(config: dict[str, Any] | None = None) -> Path:
+    cfg = config if isinstance(config, dict) else {}
+    if cfg.get("_self_improvement_root"):
+        return Path(str(cfg["_self_improvement_root"])).expanduser()
+    return get_hermes_home() / "self-improvement"
+
+
+def memory_visibility_proof_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Report built-in memory visibility proof gates without enabling rollback."""
+    probe = probe_builtin_memory_store(config)
+    gates = {
+        "store_discovery": "passed" if probe.get("status") == "validated" else "blocked",
+        "state_hashing": "passed" if probe.get("status") == "validated" else "not_run",
+        "same_process_visibility": "not_run",
+        "new_process_visibility": "not_run",
+        "cache_invalidation": "not_run",
+        "drift_detection": "not_run",
+        "production_isolation": "not_run",
+    }
+    reasons: list[str] = []
+    if probe.get("status") != "validated":
+        reasons.extend(probe.get("reasons") or ["memory_store_probe_failed"])
+    reasons.append("cache_session_visibility_unproven")
+    return {
+        "status": "not_proven",
+        "execution_allowed": False,
+        "provider": probe.get("provider") or "built-in",
+        "proof_gates": gates,
+        "reasons": sorted(set(str(reason) for reason in reasons)),
+        "store_files": probe.get("store_files") or [],
+        "direct_restore_allowed": False,
+    }
+
+
+def validate_builtin_memory_state_for_rollback(*, config: dict[str, Any] | None = None, expected_state_hash: str | None) -> dict[str, Any]:
+    if not expected_state_hash:
+        return {"status": "blocked", "reasons": ["expected_memory_state_hash_missing"], "current_state_hash": None, "target_changed": False}
+    current = capture_builtin_memory_state(config)
+    if current.get("status") != "captured":
+        return {
+            "status": "blocked",
+            "reasons": current.get("reasons") or ["memory_state_capture_failed"],
+            "current_state_hash": current.get("state_hash"),
+            "target_changed": False,
+        }
+    if current.get("state_hash") != expected_state_hash:
+        return {
+            "status": "blocked",
+            "reasons": ["memory_state_hash_mismatch"],
+            "current_state_hash": current.get("state_hash"),
+            "expected_state_hash": expected_state_hash,
+            "target_changed": False,
+        }
+    return {"status": "validated", "reasons": [], "current_state_hash": current.get("state_hash"), "target_changed": False}
+
+
+def write_memory_visibility_proof_report(*, config: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+    now = (now or datetime.now(UTC)).astimezone(UTC)
+    status = memory_visibility_proof_status(config)
+    out_dir = _self_improvement_root(config) / "memory-proof"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = now.strftime("%Y%m%dT%H%M%SZ")
+    path = out_dir / f"{stamp}-memory-visibility-proof.json"
+    payload = {
+        "schema_name": "self_improvement_memory_visibility_proof",
+        "schema_version": "1.0",
+        "created_at": now.isoformat(),
+        "status": status,
+        "execution_allowed": False,
+        "target_changed": False,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return {"status": "written", "path": str(path), "proof_status": status["status"], "target_changed": False}

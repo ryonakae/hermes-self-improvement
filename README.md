@@ -25,6 +25,8 @@ Skill lifecycle meanings:
 Rollback storage follows the same boundary: skill rollback uses full `SKILL.md` and supporting-file snapshots; built-in memory direct restore is allowed only after store format, locking, hashes, and cache invalidation are validated; external memory provider internals are never touched; sensitive/secret/PII deletes are not rolled back by re-adding sensitive content.
 Current implementation note: skill rollback is implemented through ledger-bound snapshots. Memory rollback currently has read-only store probing, hashable built-in memory state capture, ledger metadata, and a preview-only compensating-action planner. Execution remains fail-closed as `unsupported_pending_store_validation` because cache/session visibility is not proven. Built-in memory direct restore, external provider direct restore, and sensitive delete re-add remain forbidden. `status` exposes this as `memory_rollback.supported=false` and points to `.hermes/plans/2026-04-30_081449-memory-rollback-store-validation.md` for the proof/implementation plan.
 
+Memory visibility proof exists to test whether built-in memory tool changes are observable and cache-safe. It does not enable rollback execution; execution remains blocked. Default tests use fake adapters and temp `HERMES_HOME`; live smoke is opt-in with `HERMES_SELF_IMPROVE_LIVE_MEMORY_SMOKE=1`, skips safely if the official memory tool is unavailable, and does not touch production ~/.hermes.
+
 ## 何をする plugin か
 
 この plugin は、Hermes の自己改善を「ログを見る」「候補を作る」「採点する」「人間が確認できる形にする」「安全に適用する」に分けます。

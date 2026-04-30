@@ -2,9 +2,7 @@
 
 ## Current source of truth
 
-As of 2026-04-30, the active implementation plan in this directory is:
-
-- `2026-04-30_114059-memory-visibility-proof.md`
+As of 2026-04-30, there is **no active unfinished implementation plan** in this directory.
 
 The current implementation direction is:
 
@@ -21,13 +19,16 @@ When older plans conflict with this list, this index wins unless a newer plan ex
 
 ## Active plans
 
-- `2026-04-30_114059-memory-visibility-proof.md`
-  - **Priority:** first.
-  - Adds memory visibility/cache/session proof harnesses and status/reporting around why memory rollback execution remains blocked. This is a proof plan, not an execution-enablement plan.
+No active unfinished implementation plans.
 
-New implementation work should start from this active plan or from a newer timestamped plan that references this index and current code/docs. Do not continue old approval/mode/low-risk command plans directly.
+New implementation work should start from a newer timestamped plan that references this index and current code/docs. Do not continue old approval/mode/low-risk command plans directly.
 
 ## Completed canonical implementation records
+
+- `2026-04-30_114059-memory-visibility-proof.md`
+  - **Status:** completed with safe outcome: visibility proof exists, rollback execution remains blocked.
+  - Added structured proof status, fake same/new-process harness, drift validation helper, proof report writer, status/reporting docs, and default-skipped live smoke boundary.
+  - This does **not** enable built-in memory rollback execution; `memory_rollback.visibility_proof.status=not_proven` and `execution_allowed=false` remain the safe default until a newer plan proves cache/session visibility.
 
 - `2026-04-30_114058-review-outcome-feedback-loop.md`
   - **Status:** completed.

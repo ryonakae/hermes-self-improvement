@@ -1,5 +1,7 @@
 # Built-in Memory Rollback Cache and Session Visibility Proof Plan
 
+> **Status:** completed on 2026-04-30 with safe outcome. Visibility proof/status/report helpers and fake/opt-in smoke harnesses exist, but memory rollback execution remains blocked (`execution_allowed=false`) because cache/session visibility is not proven.
+
 > **For Hermes:** Use subagent-driven-development skill to implement this proof task-by-task. This is not an execution-enablement plan. Keep memory rollback execution blocked unless every proof gate passes and a newer plan explicitly enables a narrow mode.
 
 **Goal:** Prove whether built-in memory tool mutations are observable across store files, process/session boundaries, and cache invalidation paths strongly enough to ever support safe memory rollback execution.

@@ -94,3 +94,20 @@ def test_live_builtin_memory_tool_semantics_requires_env(monkeypatch, tmp_path):
         pytest.skip("live memory smoke is opt-in")
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hermes-home"))
     pytest.skip("official Hermes memory tool is not available as a safe test adapter in this pytest process")
+
+
+def test_fake_memory_visibility_same_process_and_new_process(tmp_path):
+    import subprocess
+    import sys
+    hermes_home = tmp_path / "hermes-home"
+    memory_file = hermes_home / "MEMORY.md"
+    tool = FakeBuiltinMemoryTool(memory_file)
+    config = {"_hermes_home": str(hermes_home), "_builtin_memory_store_files": [str(memory_file)]}
+
+    before = capture_builtin_memory_state(config)
+    tool(action="add", content="User prefers concise updates.")
+    after = capture_builtin_memory_state(config)
+    new_process_text = subprocess.check_output([sys.executable, "-c", "from pathlib import Path; import sys; print(Path(sys.argv[1]).read_text(encoding='utf-8'), end='')", str(memory_file)], text=True)
+
+    assert after["state_hash"] != before["state_hash"]
+    assert "User prefers concise updates." in new_process_text

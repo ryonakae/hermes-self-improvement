@@ -210,3 +210,11 @@ def test_provider_compensation_never_repeats_sensitive_content():
 
     assert result["status"] == "would_write_provider_correction"
     assert "secret token value" not in str(result)
+
+
+def test_memory_rollback_status_includes_visibility_proof_summary():
+    status = memory_rollback_status({})
+    assert status["supported"] is False
+    assert status["execution"] == "blocked"
+    assert status["visibility_proof"]["status"] == "not_proven"
+    assert status["visibility_proof"]["execution_allowed"] is False

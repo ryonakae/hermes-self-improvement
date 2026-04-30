@@ -93,3 +93,41 @@ def test_memory_store_probe_blocks_missing_explicit_file(tmp_path):
 
     assert result["status"] == "blocked"
     assert "memory_store_file_missing" in result["reasons"]
+
+
+from hermes_self_improvement.memory_store_probe import (
+    capture_builtin_memory_state,
+    memory_visibility_proof_status,
+    validate_builtin_memory_state_for_rollback,
+    write_memory_visibility_proof_report,
+)
+
+
+def test_memory_visibility_proof_status_defaults_to_not_proven(tmp_path):
+    status = memory_visibility_proof_status({"_hermes_home": str(tmp_path / "hermes-home")})
+    assert status["status"] == "not_proven"
+    assert status["execution_allowed"] is False
+    assert "cache_session_visibility_unproven" in status["reasons"]
+    assert status["proof_gates"]["store_discovery"] in {"blocked", "not_run"}
+
+
+def test_validate_builtin_memory_state_blocks_drift(tmp_path):
+    hermes_home = tmp_path / "hermes-home"
+    memory_file = hermes_home / "MEMORY.md"
+    memory_file.parent.mkdir(parents=True)
+    memory_file.write_text("before\n", encoding="utf-8")
+    config = {"_hermes_home": str(hermes_home), "_builtin_memory_store_files": [str(memory_file)]}
+    before = capture_builtin_memory_state(config)
+    memory_file.write_text("before\ndrift\n", encoding="utf-8")
+
+    result = validate_builtin_memory_state_for_rollback(config=config, expected_state_hash=before["state_hash"])
+    assert result["status"] == "blocked"
+    assert "memory_state_hash_mismatch" in result["reasons"]
+
+
+def test_memory_visibility_proof_report_writes_runtime_artifact(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "_hermes_home": str(tmp_path / "hermes-home")}
+    result = write_memory_visibility_proof_report(config=config)
+    assert result["status"] == "written"
+    assert result["path"].endswith(".json")
+    assert result["proof_status"] == "not_proven"

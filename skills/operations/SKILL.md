@@ -57,6 +57,8 @@ Runtime artifact は既定で `${HERMES_HOME:-~/.hermes}/self-improvement/` 配�
 
 Review outcome feedback は明示的に記録する。人間が plan を rejected / edited / ignored と判断したとき、apply/rollback の結果を dogfood evidence として残したいときは `outcome` CLI を使う。これは append-only の review outcome record で、report と calibration evidence にだけ使われる。It does not grant auto-apply permission.
 
+Memory visibility proof は built-in memory tool の変更が store / cache / session 境界で観測できるかを検証するためのもの。execution remains blocked で、rollback execution を有効化しない。default tests は fake adapters と temp `HERMES_HOME` だけを使い、live smoke is opt-in (`HERMES_SELF_IMPROVE_LIVE_MEMORY_SMOKE=1`) で、does not touch production ~/.hermes。
+
 理由には secret を入れない。reason は redaction され、元文は hash 化される。rollback 後は rollback reason を短く残す。tool-native `self_improvement_record_outcome` は primary seven tools を増やすため現時点では deferred。
 
 Repository root から実行する。

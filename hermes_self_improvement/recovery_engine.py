@@ -6,9 +6,11 @@ from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover - package import path
+    from .memory_store_probe import memory_visibility_proof_status, validate_builtin_memory_state_for_rollback
     from .observer import _sha256_text, _stable_json
     from .skill_snapshot import ALLOWED_SUPPORTING_DIRS, SkillSnapshotError, capture_skill_snapshot
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
+    from memory_store_probe import memory_visibility_proof_status, validate_builtin_memory_state_for_rollback
     from observer import _sha256_text, _stable_json
     from skill_snapshot import ALLOWED_SUPPORTING_DIRS, SkillSnapshotError, capture_skill_snapshot
 
@@ -213,6 +215,7 @@ def memory_rollback_status(config: dict[str, Any] | None = None) -> dict[str, An
         "supported": False,
         "reason": "unsupported_pending_store_validation",
         "execution": "blocked",
+        "visibility_proof": memory_visibility_proof_status(config),
         "preview_modes": [
             "built_in_memory_tool_preview",
             "external_provider_compensating_correction_preview",
@@ -234,8 +237,18 @@ def plan_memory_ledger_bound_restore(action: dict[str, Any], *, config: dict[str
         return {**base, "status": "failed", "reasons": ["target_kind_not_memory"]}
     expected = action.get("expected_current_state_hash")
     current = action.get("current_state_hash")
-    if expected and current and expected != current:
-        return {**base, "status": "failed", "reasons": ["memory_state_hash_mismatch"], "expected_current_state_hash": expected, "current_state_hash": current}
+    if expected:
+        if current and expected != current:
+            return {**base, "status": "failed", "reasons": ["memory_state_hash_mismatch"], "expected_current_state_hash": expected, "current_state_hash": current}
+        validation = validate_builtin_memory_state_for_rollback(config=config, expected_state_hash=str(expected))
+        if validation.get("status") == "blocked" and validation.get("current_state_hash") is not None:
+            return {
+                **base,
+                "status": "failed",
+                "reasons": validation.get("reasons") or ["memory_state_validation_failed"],
+                "expected_current_state_hash": expected,
+                "current_state_hash": validation.get("current_state_hash"),
+            }
     if action.get("sensitive_delete") is True:
         return {**base, "status": "failed", "reasons": ["sensitive_delete_restore_forbidden"]}
 

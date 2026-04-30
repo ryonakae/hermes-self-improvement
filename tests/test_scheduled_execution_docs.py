@@ -53,6 +53,17 @@ def test_docs_document_review_outcome_feedback_loop():
     assert "does not grant auto-apply" in combined.lower()
 
 
+
+
+def test_docs_document_memory_visibility_proof_boundary():
+    mutation_ref = ROOT / "skills" / "operations" / "references" / "mutation-agent-and-recovery.md"
+    combined = "\n\n".join(read(path) for path in (README, SKILL, mutation_ref))
+
+    assert "memory visibility proof" in combined.lower()
+    assert "execution remains blocked" in combined.lower()
+    assert "live smoke is opt-in" in combined.lower()
+    assert "does not touch production ~/.hermes" in combined.lower()
+
 def test_docs_define_mutation_agent_recovery_boundary():
     mutation_ref = ROOT / "skills" / "operations" / "references" / "mutation-agent-and-recovery.md"
     combined = "\n\n".join(read(path) for path in (README, AGENTS, SKILL, ROOT / "skills" / "operations" / "references" / "safety-and-apply.md", mutation_ref))
