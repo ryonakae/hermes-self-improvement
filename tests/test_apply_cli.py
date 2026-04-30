@@ -37,29 +37,6 @@ def test_apply_command_is_removed_from_primary_surface():
     assert_rejected(["apply", "plan-123", "--execute"])
 
 
-def test_apply_summary_helper_is_legacy_internal_only():
-    cli = load_cli_module()
-
-    text = cli._render_apply_result_summary(
-        {
-            "plan_id": "plan-123",
-            "execute": False,
-            "summary": {
-                "would_apply": 2,
-                "applied": 0,
-                "skipped_by_policy": 1,
-                "failed": 1,
-                "needs_review": 1,
-            },
-            "ledger_path": None,
-        }
-    )
-
-    assert "Apply plan: plan-123" in text
-    assert "Mode: preview" in text
-    assert "Would apply: 2" in text
-
-
 def test_improve_cli_handler_writes_run_artifact_without_apply_command(monkeypatch, tmp_path, capsys):
     cli = load_cli_module()
     calls = []

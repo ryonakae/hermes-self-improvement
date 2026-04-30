@@ -1,77 +1,55 @@
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
-PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
+
+PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 
 def load_plugin_module():
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    sys.path.insert(0, str(PLUGIN_DIR))
     try:
-        module = importlib.import_module("hermes_self_improvement.cli")
-        apply_plan = importlib.import_module("hermes_self_improvement.apply_plan")
-        apply_engine = importlib.import_module("hermes_self_improvement.apply_engine")
-        module.build_apply_plan = apply_plan.build_apply_plan
-        module.write_apply_plan = apply_plan.write_apply_plan
-        module.apply_plan = apply_engine.apply_plan
-        return module
+        return importlib.import_module("hermes_self_improvement.cli")
     finally:
         try:
-            sys.path.remove(str(Path(__file__).resolve().parents[1]))
+            sys.path.remove(str(PLUGIN_DIR))
         except ValueError:
             pass
 
 
-
-def write_applied_ledger(tmp_path, monkeypatch):
+def write_applied_ledger(tmp_path):
     mod = load_plugin_module()
-    import hermes_self_improvement.apply_engine as apply_engine
-    target = tmp_path / "skills" / "demo-skill" / "SKILL.md"
-    target.parent.mkdir(parents=True)
-    target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
-    proposal = {
-        "id": "proposal-4",
-        "title": "Fix typo in skill prose",
-        "target": "skill",
-        "target_path": str(target),
-        "action": "typo_fix",
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    ledger_path = tmp_path / "self-improvement" / "ledgers" / "2026-04-26" / "20260426T153000Z-ledger-applied.json"
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger = {
+        "schema_name": "self_improvement_apply_ledger",
+        "schema_version": "1.0",
+        "operation": "apply",
+        "ledger_id": "ledger-applied",
+        "created_at": "2026-04-26T15:30:00+00:00",
+        "plan_id": "plan-applied",
+        "proposal_id": "proposal-4",
+        "target_path": str(tmp_path / "skills" / "demo-skill" / "SKILL.md"),
+        "change_type": "typo_fix",
         "risk": "low",
-        "confidence": "high",
         "score": 91,
         "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "compare-v0.1",
-        "count": 3,
-        "tool_name": "read_file",
-        "error_kind": "typo_detected",
-        "reason": "Replace teh with the in prose.",
-        "old_text": "teh",
-        "new_text": "the",
+        "review_summary": {"title": "Fix typo in skill prose", "validation_status": "passed"},
+        "summary": {"would_apply": 0, "applied": 1, "skipped_by_policy": 0, "failed": 0, "needs_review": 0},
+        "items": [{"item_id": "step-001", "status": "applied", "rollback_data": {"before_snapshot": "Use teh browser carefully."}}],
+        "rollback_data": {"before_snapshot": "Use teh browser carefully."},
+        "git_metadata": {"commit_created": False},
     }
-    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "_mutable_local_skill_roots": [str(tmp_path / "skills")]}
-    plan = mod.build_apply_plan(
-        proposals=[proposal],
-        summary={"event_count": 10},
-        execution_mode="dry_run_plan",
-        config=config,
-        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
-    )
-    mod.write_apply_plan(plan, config)
-
-    def fake_execute(tool_args):
-        target.write_text(target.read_text(encoding="utf-8").replace(tool_args["old_string"], tool_args["new_string"], 1), encoding="utf-8")
-        return {"success": True, "direct_fallback_used": False}
-
-    monkeypatch.setattr(apply_engine, "execute_skill_manage_operation", fake_execute)
-    result = mod.apply_plan(plan_id=plan["plan_id"], config=config, execute=True)
-    return mod, config, Path(result["ledger_path"])
+    ledger_path.write_text(json.dumps(ledger, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return mod, config, ledger_path
 
 
-def test_build_ledger_report_payload_summarizes_applied_ledgers_for_review(tmp_path, monkeypatch):
-    mod, config, ledger_path = write_applied_ledger(tmp_path, monkeypatch)
+def test_build_ledger_report_payload_summarizes_applied_ledgers_for_review(tmp_path):
+    mod, config, ledger_path = write_applied_ledger(tmp_path)
 
     payload = mod.build_ledger_report_payload(config=config, status="applied", limit=10)
 
@@ -84,13 +62,12 @@ def test_build_ledger_report_payload_summarizes_applied_ledgers_for_review(tmp_p
     assert summary["ledger_path"] == str(ledger_path)
     assert summary["current_status"] == "applied"
     assert summary["plan_id"] == ledger["plan_id"]
-    assert summary["current_status"] == "applied"
     assert summary["item_status_counts"]["applied"] == 1
     assert summary["rollback_available"] is True
 
 
-def test_render_ledger_report_includes_human_readable_applied_summary(tmp_path, monkeypatch):
-    mod, config, _ledger_path = write_applied_ledger(tmp_path, monkeypatch)
+def test_render_ledger_report_includes_human_readable_applied_summary(tmp_path):
+    mod, config, _ledger_path = write_applied_ledger(tmp_path)
     payload = mod.build_ledger_report_payload(config=config, status="applied", limit=10)
 
     report = mod.render_ledger_report(payload)

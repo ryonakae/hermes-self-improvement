@@ -1,80 +1,67 @@
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
-PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
+
+PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 
 def load_plugin_module():
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    sys.path.insert(0, str(PLUGIN_DIR))
     try:
-        module = importlib.import_module("hermes_self_improvement.cli")
-        apply_plan = importlib.import_module("hermes_self_improvement.apply_plan")
-        apply_engine = importlib.import_module("hermes_self_improvement.apply_engine")
-        module.build_apply_plan = apply_plan.build_apply_plan
-        module.write_apply_plan = apply_plan.write_apply_plan
-        module.apply_plan = apply_engine.apply_plan
-        return module
+        return importlib.import_module("hermes_self_improvement.cli")
     finally:
         try:
-            sys.path.remove(str(Path(__file__).resolve().parents[1]))
+            sys.path.remove(str(PLUGIN_DIR))
         except ValueError:
             pass
 
 
-
-def typo_proposal(target: Path, proposal_id: str = "proposal-typo") -> dict:
-    return {
-        "id": proposal_id,
-        "title": "Fix typo in skill prose",
-        "target": "file_workflow_skills",
-        "target_path": str(target),
-        "action": "typo_fix",
-        "risk": "low",
-        "confidence": "high",
-        "score": 91,
-        "recommendation": "review_for_possible_low_risk_apply",
-        "scorer": "compare-v0.1",
-        "count": 3,
-        "tool_name": "read_file",
-        "error_kind": "typo_detected",
-        "reason": "Replace teh with the in prose.",
-        "old_text": "teh",
-        "new_text": "the",
-    }
-
-
-def create_plan_and_apply_ledger(mod, tmp_path: Path, config: dict) -> None:
-    target = tmp_path / "applied" / "SKILL.md"
-    target.parent.mkdir(parents=True)
-    target.write_text("# Skill\n\nUse teh browser carefully.\n", encoding="utf-8")
-    plan = mod.build_apply_plan(
-        proposals=[typo_proposal(target, "proposal-applied")],
-        summary={"event_count": 10},
-        execution_mode="preview",
-        config=config,
-        created_at=datetime(2026, 4, 26, 15, 30, tzinfo=timezone.utc),
-    )
-    mod.write_apply_plan(plan, config)
-    mod.apply_plan(plan_id=plan["plan_id"], config=config, execute=True)
+def create_plan_artifacts(config: dict) -> None:
+    plan_dir = Path(config["_self_improvement_root"]) / "apply-plans" / "2026-04-27"
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    (plan_dir / "20260426T153000Z-plan-applied.json").write_text(json.dumps({
+        "schema_name": "self_improvement_apply_plan",
+        "schema_version": "1.0",
+        "plan_id": "plan-applied",
+        "created_at": "2026-04-26T15:30:00+00:00",
+        "items": [{"item_id": "step-001", "status": "ready", "title": "Fix typo in skill prose", "risk": "low"}],
+    }, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    (plan_dir / "20260427T153000Z-plan-needs-review.json").write_text(json.dumps({
+        "schema_name": "self_improvement_apply_plan",
+        "schema_version": "1.0",
+        "plan_id": "plan-needs-review",
+        "created_at": "2026-04-27T15:30:00+00:00",
+        "items": [{
+            "item_id": "step-001",
+            "status": "needs_review",
+            "title": "Fix typo in skill prose",
+            "risk": "low",
+            "reasons": ["target_text_not_found"],
+        }],
+    }, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def create_needs_review_plan(mod, tmp_path: Path, config: dict) -> None:
-    target = tmp_path / "needs-review" / "SKILL.md"
-    target.parent.mkdir(parents=True)
-    target.write_text("# Skill\n\nNo matching typo here.\n", encoding="utf-8")
-    plan = mod.build_apply_plan(
-        proposals=[typo_proposal(target, "proposal-needs-review")],
-        summary={"event_count": 3},
-        execution_mode="preview",
-        config=config,
-        created_at=datetime(2026, 4, 27, 15, 30, tzinfo=timezone.utc),
-    )
-    mod.write_apply_plan(plan, config)
+def create_apply_ledger(config: dict) -> None:
+    ledger_dir = Path(config["_self_improvement_root"]) / "ledgers" / "2026-04-26"
+    ledger_dir.mkdir(parents=True, exist_ok=True)
+    (ledger_dir / "20260426T160000Z-ledger-applied.json").write_text(json.dumps({
+        "schema_name": "self_improvement_apply_ledger",
+        "schema_version": "1.0",
+        "operation": "apply",
+        "ledger_id": "ledger-applied",
+        "created_at": "2026-04-26T16:00:00+00:00",
+        "plan_id": "plan-applied",
+        "review_summary": {"title": "Fix typo in skill prose"},
+        "summary": {"would_apply": 0, "applied": 1, "skipped_by_policy": 1, "failed": 0, "needs_review": 0},
+        "items": [
+            {"item_id": "step-001", "status": "applied"},
+            {"item_id": "step-002", "status": "skipped_by_policy"},
+        ],
+    }, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def create_calibration_ledger(tmp_path: Path, config: dict) -> None:
@@ -89,14 +76,13 @@ def create_calibration_ledger(tmp_path: Path, config: dict) -> None:
         "active_pointer_path": str(tmp_path / "active-evaluator.json"),
         "active_before_hash": "before",
         "active_after_hash": "after",
-        "rollback_data": {"active_pointer_path": str(tmp_path / "active-evaluator.json"), "active_before_content": None},
     }
     out = Path(config["_self_improvement_root"]) / "ledgers" / "2026-04-27" / "20260427T170000Z-calibration-ledger-test.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(ledger, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def create_retention_candidates(tmp_path: Path, config: dict) -> None:
+def create_retention_candidates(config: dict) -> None:
     reports = Path(config["_self_improvement_root"])
     old_plan = reports / "apply-plans" / "2000-01-01" / "old-plan.json"
     old_plan.parent.mkdir(parents=True, exist_ok=True)
@@ -111,14 +97,11 @@ def create_retention_candidates(tmp_path: Path, config: dict) -> None:
 
 def test_run_pipeline_report_includes_plan_apply_and_calibration_summaries(tmp_path):
     mod = load_plugin_module()
-    config = {
-        "_self_improvement_root": str(tmp_path / "self-improvement"),
-        "_mutable_local_skill_roots": [str(tmp_path)],
-    }
-    create_plan_and_apply_ledger(mod, tmp_path, config)
-    create_needs_review_plan(mod, tmp_path, config)
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    create_plan_artifacts(config)
+    create_apply_ledger(config)
     create_calibration_ledger(tmp_path, config)
-    create_retention_candidates(tmp_path, config)
+    create_retention_candidates(config)
 
     out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")
     report = out["report"]
@@ -148,9 +131,7 @@ def test_run_pipeline_report_includes_plan_apply_and_calibration_summaries(tmp_p
 
 def test_report_integration_is_quiet_when_no_artifacts(tmp_path):
     mod = load_plugin_module()
-    config = {
-        "_self_improvement_root": str(tmp_path / "self-improvement"),
-    }
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
 
     out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")
 
@@ -182,7 +163,6 @@ def test_report_includes_review_outcome_summary(tmp_path):
 
 
 def test_recent_plan_report_payload_includes_next_actions(tmp_path):
-    import json
     from hermes_self_improvement.cli import build_recent_plan_report_payload
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     plan_dir = tmp_path / "self-improvement" / "apply-plans" / "2026-04-30"

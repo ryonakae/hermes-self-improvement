@@ -996,61 +996,6 @@ def _add_config_argument(parser: argparse.ArgumentParser) -> None:
 
 
 
-def _render_apply_plan_summary(plan: dict[str, Any], path: str | Path) -> str:
-    items = plan.get("items") if isinstance(plan.get("items"), list) else []
-    counts = {"ready": 0, "needs_review": 0, "rejected_by_planner": 0}
-    target_counts: dict[str, int] = {}
-    for item in items:
-        status = str(item.get("status") or "needs_review")
-        if status in counts:
-            counts[status] += 1
-        target_kind = str(item.get("target_kind") or item.get("target") or "unknown")
-        target_counts[target_kind] = target_counts.get(target_kind, 0) + 1
-    lines = [
-        f"Plan written: {path}",
-        f"Plan id: {plan.get('plan_id')}",
-        f"Ready improvements: {counts['ready']}",
-        f"Needs review: {counts['needs_review']}",
-        f"Rejected by planner: {counts['rejected_by_planner']}",
-        "Top targets:",
-    ]
-    if target_counts:
-        for target_kind, count in sorted(target_counts.items(), key=lambda pair: (-pair[1], pair[0]))[:5]:
-            lines.append(f"- {target_kind}: {count}")
-    else:
-        lines.append("- none: 0")
-    rendered_actions = render_next_actions(plan.get("next_actions") if isinstance(plan.get("next_actions"), list) else [])
-    if rendered_actions:
-        lines.extend(["", rendered_actions])
-    return "\n".join(lines)
-
-
-def _parse_item_ids(value: str | None) -> list[str] | None:
-    if not value:
-        return None
-    item_ids = [part.strip() for part in value.split(",") if part.strip()]
-    return item_ids or None
-
-
-def _render_apply_result_summary(result: dict[str, Any]) -> str:
-    summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
-    lines = [
-        f"Apply plan: {result.get('plan_id')}",
-        f"Mode: {'execute' if result.get('execute') else 'preview'}",
-        f"Would apply: {int(summary.get('would_apply') or 0)}",
-        f"Applied: {int(summary.get('applied') or 0)}",
-        f"Skipped by policy: {int(summary.get('skipped_by_policy') or 0)}",
-        f"Failed: {int(summary.get('failed') or 0)}",
-        f"Needs review: {int(summary.get('needs_review') or 0)}",
-    ]
-    if result.get("ledger_path"):
-        lines.append(f"Ledger: {result.get('ledger_path')}")
-    rendered_actions = render_next_actions(result.get("next_actions") if isinstance(result.get("next_actions"), list) else [])
-    if rendered_actions:
-        lines.extend(["", rendered_actions])
-    return "\n".join(lines)
-
-
 def _render_calibration_summary(result: dict[str, Any]) -> str:
     evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
     lines = [
@@ -1142,15 +1087,6 @@ def run_improve(
             }
         ]
     return result_payload
-
-
-def _plan_status_counts(plan: dict[str, Any]) -> dict[str, int]:
-    counts = {"ready": 0, "needs_review": 0, "rejected_by_planner": 0}
-    for item in plan.get("items") if isinstance(plan.get("items"), list) else []:
-        status = str(item.get("status") or "needs_review")
-        if status in counts:
-            counts[status] += 1
-    return counts
 
 
 def _latest_run_artifact(config: dict[str, Any]) -> Path | None:

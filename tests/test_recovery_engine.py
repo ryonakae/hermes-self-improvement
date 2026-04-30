@@ -126,10 +126,8 @@ def test_ledger_bound_restore_rejects_external_skill_path(tmp_path):
     assert "skill_outside_mutable_local_roots" in result["reasons"]
 
 
-def test_ledger_bound_restore_is_not_available_from_apply_mutation_path():
+def test_ledger_bound_restore_is_recovery_only_not_primary_surface():
     action = {"type": "ledger_bound_restore"}
-    assert action["type"] == "ledger_bound_restore"
-    # Forward apply engines should treat this as outside TOOL_MEDIATED_APPLY_MUTATION_TYPES.
-    from hermes_self_improvement.apply_engine import TOOL_MEDIATED_APPLY_MUTATION_TYPES
 
-    assert "ledger_bound_restore" not in TOOL_MEDIATED_APPLY_MUTATION_TYPES
+    assert action["type"] == "ledger_bound_restore"
+    assert ledger_bound_restore.__name__ == "ledger_bound_restore"

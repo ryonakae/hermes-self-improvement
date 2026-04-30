@@ -203,3 +203,22 @@ def test_package_init_does_not_reexport_removed_primary_surface_helpers():
     for name in removed_helpers:
         value = package.__dict__.get(name)
         assert not callable(value), f"legacy helper should not be package-level API: {name}"
+
+
+def test_legacy_apply_modules_are_not_importable():
+    sys.path.insert(0, str(PLUGIN_DIR))
+    try:
+        removed_modules = [
+            "hermes_self_improvement.apply_plan",
+            "hermes_self_improvement.apply_engine",
+            "hermes_self_improvement.ledger",
+            "hermes_self_improvement.drift",
+            "hermes_self_improvement.drift_adjudicator",
+        ]
+        for module_name in removed_modules:
+            assert importlib.util.find_spec(module_name) is None, f"legacy module should be removed: {module_name}"
+    finally:
+        try:
+            sys.path.remove(str(PLUGIN_DIR))
+        except ValueError:
+            pass

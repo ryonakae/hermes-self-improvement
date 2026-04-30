@@ -35,28 +35,3 @@ def test_removed_commands_do_not_parse():
             assert exc.code == 2
         else:
             raise AssertionError(f"removed command should not parse: {command}")
-
-
-def test_render_apply_plan_summary_is_user_friendly():
-    cli = load_cli_module()
-
-    text = cli._render_apply_plan_summary(
-        {
-            "plan_id": "plan-123",
-            "items": [
-                {"status": "ready", "target_kind": "skill"},
-                {"status": "ready", "target_kind": "memory"},
-                {"status": "needs_review", "target_kind": "skill"},
-                {"status": "rejected_by_planner", "target_kind": "skill"},
-            ],
-        },
-        "/tmp/plan.json",
-    )
-
-    assert "Plan written: /tmp/plan.json" in text
-    assert "Plan id: plan-123" in text
-    assert "Ready improvements: 2" in text
-    assert "Needs review: 1" in text
-    assert "Rejected by planner: 1" in text
-    assert "- skill: 3" in text
-    assert "- memory: 1" in text
