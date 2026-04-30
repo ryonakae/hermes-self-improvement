@@ -1,6 +1,8 @@
 # Semantic mutation agent and ledger-bound restore implementation plan
 
-> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task in a new session. Do not skip the safety gates; this plan intentionally separates forward mutation from rollback recovery.
+> **Status: completed / absorbed into later real-backend hardening as of 2026-04-30.** This plan established the current architecture, but it is not an active checklist. The relevant work landed across the semantic mutation commits, real mutation backend plan, hardening plan, and memory rollback validation plan. Use `.hermes/plans/README.md` as the current source of truth.
+
+> **For Hermes:** Historical implementation record. Do not restart this plan from Slice 1; create a new follow-up plan if new semantic mutation work is needed.
 
 **Goal:** Move skill and memory mutation from low-level mutation dict execution toward semantic mutation-agent tasks, while making rollback a plugin-owned deterministic `ledger_bound_restore` path.
 

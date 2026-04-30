@@ -1,5 +1,7 @@
 # self-improvement runtime home 移行計画
 
+> **Status: completed.** Runtime artifacts use `${HERMES_HOME:-~/.hermes}/self-improvement/`; this is a completed supporting plan, not an active migration checklist.
+
 ## Goal
 
 `hermes-self-improvement` の runtime artifact 保存先を、暫定的な `~/.hermes/reports/self-improvement/` から専用 runtime home の `~/.hermes/self-improvement/` へ移す。

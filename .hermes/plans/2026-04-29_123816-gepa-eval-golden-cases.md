@@ -1,5 +1,7 @@
 # GEPA eval golden cases 強化計画
 
+> **Status: completed / implementation baseline.** Proposal eval assets now live under `evals/proposal/` as public synthetic golden cases and rubric. Treat this as a completed supporting plan unless a newer evaluator plan reopens the dataset/rubric.
+
 ## Goal
 
 `hermes-self-improvement` の GEPA / DSPy scorer を「動く」状態から「育てられる」状態へ進める。

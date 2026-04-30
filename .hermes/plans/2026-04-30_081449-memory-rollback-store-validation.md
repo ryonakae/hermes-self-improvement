@@ -1,6 +1,8 @@
 # Memory Rollback Store Validation Implementation Plan
 
-> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task. This plan intentionally starts with proof and fail-closed tests. Do not implement direct memory rollback until the store/provider semantics below are proven in isolated temp runtimes.
+> **Status: completed with safe outcome: preview-only / execution blocked as of 2026-04-30.** Phases 1–4 and 6–7 landed; Phase 5 narrow execution was intentionally skipped because cache/session visibility is not proven. Memory rollback remains `supported=false`, `execution=blocked`, with preview modes only.
+
+> **For Hermes:** Historical proof/implementation record. Do not enable direct memory rollback from this plan; create a new proof plan if cache/session visibility is later investigated.
 
 **Goal:** Decide whether `hermes-self-improvement` can safely support memory rollback, and if so implement only the narrow proven rollback modes. Until the proof gates pass, memory rollback must remain fail-closed with explicit reasons.
 

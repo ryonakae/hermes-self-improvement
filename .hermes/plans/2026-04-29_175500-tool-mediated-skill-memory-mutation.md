@@ -2,7 +2,9 @@
 
 Created: 2026-04-29 17:55 JST
 Repository: `/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement`
-Status: draft / initial design decisions captured
+Status: completed / absorbed into later semantic mutation and memory-safety implementation
+
+> **Current note (2026-04-30):** This plan is no longer an active implementation checklist. Its still-relevant direction—tool-mediated skill mutation, built-in memory through the official memory tool, external provider-native correction/delete tools, and no direct fallback—has been implemented or refined by the semantic mutation / real backend / memory rollback validation plans. Do not restart from the old draft/Slice wording.
 
 ## Goal
 

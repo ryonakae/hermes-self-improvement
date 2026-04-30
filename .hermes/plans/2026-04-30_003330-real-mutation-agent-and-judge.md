@@ -1,6 +1,8 @@
 # Real Mutation Agent Backend and Judge Implementation Plan
 
-> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task. Do not skip the fail-closed gates. This plan is specifically for the parts that were previously only interface/fake-backend complete.
+> **Status: completed / implemented with follow-up hardening as of 2026-04-30.** The real backend, runtime resolver readiness, tool trace verification, protocol hardening, merge judge readiness/failure semantics, smoke isolation, and memory rollback follow-up have landed. This file is historical; use `.hermes/plans/README.md` for current direction.
+
+> **For Hermes:** Historical implementation record. Do not treat unchecked boxes below as remaining work unless a newer plan explicitly reopens an item.
 
 **Goal:** Make `hermes-self-improvement` execute semantic skill mutations in real Hermes runtime, not only with injected test backends, while preserving bounded tools, ledger-bound rollback, and fail-closed behavior.
 

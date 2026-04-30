@@ -1,6 +1,8 @@
 # Real Mutation Agent Hardening Detailed Implementation Plan
 
-> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task. This is a follow-up/detail plan after the first real mutation backend commits landed. Keep fail-closed behavior. Do not mutate Hermes core.
+> **Status: completed as of 2026-04-30.** All hardening slices landed: `status --json`, runtime skill tool resolver readiness, actual tool trace verification, auxiliary protocol hardening, merge judge status/failure clarity, smoke isolation, and memory rollback readiness/status alignment.
+
+> **For Hermes:** Historical implementation record. Do not restart this plan; create a new plan for new hardening work.
 
 **Goal:** Harden the current real mutation backend / merge judge implementation until it is not just present, but operationally trustworthy: runtime callable resolution is verified, output surfaces are consistent, tool traces are auditable, live smoke is isolated, and docs match actual behavior.
 
