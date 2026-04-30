@@ -188,8 +188,13 @@ def test_recent_plan_report_payload_includes_next_actions(tmp_path):
     payload = build_recent_plan_report_payload(config=config)
 
     actions = payload["plans"][0]["next_actions"]
-    assert any(action["kind"] == "execute_ready_items" for action in actions)
-    assert any(action["kind"] == "record_rejection_outcome" for action in actions)
+    rendered_commands = "\n".join(str(action.get("command") or "") for action in actions)
+    assert any(action["kind"] == "preview_current_runner" for action in actions)
+    assert any(action["kind"] == "use_current_evidence_flow" for action in actions)
+    assert "improve --dry-run" in rendered_commands
+    assert "apply" not in rendered_commands
+    assert "outcome" not in rendered_commands
+    assert "--execute" not in rendered_commands
 
 
 def test_ledger_report_surfaces_drift_and_agent_stop_counts(tmp_path):

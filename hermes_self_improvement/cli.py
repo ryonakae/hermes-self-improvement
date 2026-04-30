@@ -10,8 +10,6 @@ from typing import Any
 
 try:  # pragma: no cover - package import path
     from .analysis import AnalysisResult, analyze_events
-    from .apply_engine import apply_plan, rollback_apply_ledger
-    from .apply_plan import build_apply_plan, write_apply_plan
     from .calibration import collect_calibration_evidence, run_calibration
     from .config import (
         DEFAULT_RETENTION_DAYS,
@@ -20,16 +18,14 @@ try:  # pragma: no cover - package import path
     from .evidence import build_evidence_pack, write_evidence_pack
     from .mutation_backend import mutation_backend_status
     from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
-    from .next_actions import build_next_actions_for_apply_preview, build_next_actions_for_improve, build_next_actions_for_plan, render_next_actions
+    from .next_actions import build_next_actions_for_apply_preview, render_next_actions
     from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
-    from .outcome_store import OUTCOME_VALUES, infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
+    from .outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
     from .recovery_engine import memory_rollback_status
     from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
     from .verification import merge_judge_status
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from analysis import AnalysisResult, analyze_events
-    from apply_engine import apply_plan, rollback_apply_ledger
-    from apply_plan import build_apply_plan, write_apply_plan
     from calibration import collect_calibration_evidence, run_calibration
     from config import (
         DEFAULT_RETENTION_DAYS,
@@ -38,9 +34,9 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
     from evidence import build_evidence_pack, write_evidence_pack
     from mutation_backend import mutation_backend_status
     from runner_steps import run_memory_improvement_step, run_skill_improvement_step
-    from next_actions import build_next_actions_for_apply_preview, build_next_actions_for_improve, build_next_actions_for_plan, render_next_actions
+    from next_actions import build_next_actions_for_apply_preview, render_next_actions
     from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
-    from outcome_store import OUTCOME_VALUES, infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
+    from outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
     from recovery_engine import memory_rollback_status
     from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
     from verification import merge_judge_status

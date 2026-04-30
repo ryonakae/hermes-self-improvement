@@ -1,5 +1,7 @@
 # Curator-Aligned Self-Improvement Runner Implementation Plan
 
+> **Status (2026-05-01): completed.** The primary Curator-aligned runner refactor has landed. Remaining internal legacy cleanup is tracked separately in `2026-05-01_011409-obsolete-internal-legacy-cleanup.md`.
+
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task if delegating. Do not implement broad rollback/apply-plan compatibility while following this plan.
 
 **Goal:** Rework `hermes-self-improvement` from an apply-plan/rollback framework into a Curator-aligned runner for skill, memory, and scorer/evaluator self-improvement.

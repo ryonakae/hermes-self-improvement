@@ -2,30 +2,29 @@
 
 ## Current source of truth
 
-As of 2026-04-30, there is **one active unfinished redesign plan** in this directory:
+As of 2026-05-01, there is **one active cleanup plan** in this directory:
+
+- `2026-05-01_011409-obsolete-internal-legacy-cleanup.md`
+  - Continues the Curator-aligned runner cleanup by removing or shrinking internal legacy apply-plan / apply-engine / rollback / outcome helpers without reintroducing removed primary surfaces.
+
+The latest completed implementation record is:
 
 - `2026-04-30_234117-curator-aligned-self-improvement-runner.md`
-  - Reworks the plugin toward a Curator-aligned runner with four primary surfaces (`improve`, `calibrate`, `report`, `status`) and removes the legacy plan/apply/rollback/outcome surface. Do not mix this redesign into older apply-plan safety work unless that plan explicitly says so.
+  - **Status:** completed.
+  - Reworked the plugin toward a Curator-aligned runner with four primary surfaces (`improve`, `calibrate`, `report`, `status`) and removed the legacy plan/apply/rollback/outcome primary surface.
 
-The latest completed implementation record is archived at:
+The current implemented baseline is:
 
-- `archive/2026-04-30_185745-semantic-drift-adjudication-and-local-target-gates.md`
-  - Implemented plan-time mutable-local skill gating, apply-time identity/provenance revalidation, structured content drift classification, bounded semantic drift adjudication routing, mutation-agent stale/conflict stop outcomes, and ledger/report/calibration visibility for skipped/stopped applications.
+- Primary CLI surface: `improve / calibrate / report / status`.
+- Primary tool surface: `self_improvement_improve / self_improvement_calibrate / self_improvement_report / self_improvement_status`.
+- `improve` and `calibrate` are mutation-capable by default; `--dry-run` is the preview boundary.
+- Legacy primary `plan / apply / rollback / outcome`, `--execute`, `--items`, and `self_improvement_record_outcome` are removed from the user-facing surface.
+- Skill mutation runs through bounded official skill tools only; no terminal/file/git/direct filesystem fallback.
+- Memory mutation runs through provider-compatible memory/provider tools only; no direct memory store edits.
+- Runtime-private calibration eval cases are stored under runtime state, not repo-tracked eval assets.
+- Some historical internal modules and artifact readers may remain temporarily for report/calibration compatibility; the active cleanup plan decides what to shrink or delete.
 
-The current implemented baseline, until the active redesign plan is executed, is:
-
-- Primary CLI surface: `improve / calibrate / plan / apply / rollback / report / status`.
-- Primary tool surface: the same seven operational tools plus append-only `self_improvement_record_outcome`.
-- `--execute` is the only user-facing mutation boundary.
-- Forward skill mutation uses semantic `skill_agent_task` and a bounded skills-only mutation backend.
-- Runtime mutation backend may use only `skills_list`, `skill_view`, and `skill_manage`; no terminal/file/git/direct filesystem fallback.
-- Merge/rename deletion is gated by deterministic checks plus merge judge where applicable.
-- Rollback is plugin-owned and ledger-bound; it does not run the mutation agent.
-- Built-in memory mutation uses the official `memory` tool; external memory mutation uses provider-native correction/delete tools only.
-- Memory rollback is **preview-only / execution blocked** until cache/session/store semantics are proven. Exact direct restore and sensitive delete re-add remain forbidden.
-- Static invariants reject plugin-owned targets, arbitrary docs/config targets, direct forward mutation types, provider-internal exact restore, and sensitive delete re-add before policy/scorer output can make an item `ready`.
-
-When archived plans conflict with this list, this index wins unless a newer active plan explicitly supersedes it.
+When archived or older plans conflict with this list, this index wins unless a newer active plan explicitly supersedes it.
 
 ## Archive policy
 
