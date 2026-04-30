@@ -150,9 +150,10 @@ def test_report_integration_is_quiet_when_no_artifacts(tmp_path):
 
 def test_report_includes_review_outcome_summary(tmp_path):
     mod = load_plugin_module()
-    import hermes_self_improvement.outcome_store as outcome_store
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    outcome_store.record_review_outcome(config=config, outcome={"outcome": "rejected_by_human", "plan_id": "plan-1", "item_id": "step-001", "source": "cli"})
+    outcome_path = tmp_path / "self-improvement" / "outcomes" / "2026-04-30" / "rejected.json"
+    outcome_path.parent.mkdir(parents=True, exist_ok=True)
+    outcome_path.write_text(json.dumps({"schema_name": "self_improvement_review_outcome", "outcome": "rejected_by_human", "plan_id": "plan-1", "item_id": "step-001", "source": "cli"}), encoding="utf-8")
 
     out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")
 

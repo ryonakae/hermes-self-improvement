@@ -340,9 +340,9 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
 
 
 try:  # pragma: no cover - package import path
-    from .outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
+    from .outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, record_review_outcome, summarize_review_outcomes
+    from outcome_store import infer_review_outcomes_from_ledgers, load_review_outcomes, summarize_review_outcomes
 
 
 if __name__ == "__main__":

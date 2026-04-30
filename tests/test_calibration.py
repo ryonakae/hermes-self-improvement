@@ -39,6 +39,13 @@ def write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+
+def write_review_outcome(config: dict, payload: dict, name: str = "outcome.json") -> Path:
+    path = Path(config["_self_improvement_root"]) / "outcomes" / "2026-04-30" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"schema_name": "self_improvement_review_outcome", **payload}, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
 def base_config(tmp_path: Path, **calibration_overrides):
     calibration = {
         "enabled": True,
@@ -214,20 +221,9 @@ def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
 
 def test_build_runtime_eval_cases_uses_review_outcomes_and_disagreements(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    import hermes_self_improvement.outcome_store as outcome_store
     config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 2}}}
-    outcome_store.record_review_outcome(config=config, outcome={
-        "outcome": "rejected_by_human",
-        "plan_id": "plan-1",
-        "item_id": "step-001",
-        "source": "cli",
-    })
-    outcome_store.record_review_outcome(config=config, outcome={
-        "outcome": "rolled_back",
-        "plan_id": "plan-1",
-        "item_id": "step-002",
-        "source": "cli",
-    })
+    write_review_outcome(config, {"outcome": "rejected_by_human", "plan_id": "plan-1", "item_id": "step-001", "source": "cli"}, "rejected.json")
+    write_review_outcome(config, {"outcome": "rolled_back", "plan_id": "plan-1", "item_id": "step-002", "source": "cli"}, "rolled-back.json")
 
     plan_path = tmp_path / "self-improvement" / "apply-plans" / "2026-04-28" / "plan.json"
     write_json(
@@ -310,14 +306,8 @@ def test_calibration_rollback_restores_active_before_state(monkeypatch, tmp_path
 
 def test_collect_calibration_evidence_distinguishes_explicit_human_outcomes(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    import hermes_self_improvement.outcome_store as outcome_store
     config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 1}}}
-    outcome_store.record_review_outcome(config=config, outcome={
-        "outcome": "edited_before_apply",
-        "plan_id": "plan-1",
-        "item_id": "step-001",
-        "source": "cli",
-    })
+    write_review_outcome(config, {"outcome": "edited_before_apply", "plan_id": "plan-1", "item_id": "step-001", "source": "cli"}, "edited.json")
 
     evidence = calibration.collect_calibration_evidence(config)
     assert evidence["review_outcomes"] == 1

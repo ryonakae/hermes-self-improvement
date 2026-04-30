@@ -222,3 +222,35 @@ def test_legacy_apply_modules_are_not_importable():
             sys.path.remove(str(PLUGIN_DIR))
         except ValueError:
             pass
+
+
+def test_partial_legacy_modules_only_export_report_compatibility_helpers():
+    sys.path.insert(0, str(PLUGIN_DIR))
+    try:
+        recovery = importlib.import_module("hermes_self_improvement.recovery_engine")
+        verification = importlib.import_module("hermes_self_improvement.verification")
+        outcome_store = importlib.import_module("hermes_self_improvement.outcome_store")
+    finally:
+        try:
+            sys.path.remove(str(PLUGIN_DIR))
+        except ValueError:
+            pass
+
+    assert callable(recovery.memory_rollback_status)
+    for name in [
+        "ledger_bound_restore",
+        "memory_ledger_bound_restore",
+        "plan_memory_ledger_bound_restore",
+        "recovery_action_from_snapshots",
+        "preview_ledger_bound_restore_from_ledger",
+    ]:
+        assert name not in recovery.__dict__, f"rollback feature helper should be removed: {name}"
+
+    assert callable(verification.merge_judge_status)
+    for name in ["verify_skill_rename_phase", "verify_skill_merge_phase", "build_merge_judge", "auxiliary_merge_judge"]:
+        assert name not in verification.__dict__, f"apply-phase verification helper should be removed: {name}"
+
+    assert callable(outcome_store.load_review_outcomes)
+    assert callable(outcome_store.summarize_review_outcomes)
+    assert callable(outcome_store.infer_review_outcomes_from_ledgers)
+    assert "record_review_outcome" not in outcome_store.__dict__

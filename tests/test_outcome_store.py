@@ -7,47 +7,21 @@ from hermes_self_improvement.outcome_store import (
     OUTCOME_VALUES,
     infer_review_outcomes_from_ledgers,
     load_review_outcomes,
-    record_review_outcome,
     summarize_review_outcomes,
 )
 
 
-def test_record_review_outcome_writes_append_only_redacted_payload(tmp_path):
-    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    result = record_review_outcome(
-        config=config,
-        outcome={
-            "plan_id": "plan-1",
-            "item_id": "step-001",
-            "proposal_id": "proposal-1",
-            "outcome": "rejected_by_human",
-            "reason": "secret token should not be stored: sk-abc123",
-            "source": "cli",
-            "risk": "high",
-            "target_kind": "memory",
-        },
-    )
-
-    assert result["status"] == "recorded"
-    path = Path(result["path"])
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["schema_name"] == "self_improvement_review_outcome"
-    assert payload["outcome"] == "rejected_by_human"
-    assert "sk-abc123" not in json.dumps(payload)
-    assert payload["content_hashes"]["reason_hash"]
-
-
-def test_record_review_outcome_rejects_unknown_outcome(tmp_path):
-    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    result = record_review_outcome(config=config, outcome={"outcome": "approve_all"})
-    assert result["status"] == "failed"
-    assert "unknown_outcome" in result["reasons"]
+def write_review_outcome(config: dict, payload: dict, name: str = "outcome.json") -> Path:
+    path = Path(config["_self_improvement_root"]) / "outcomes" / "2026-04-30" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"schema_name": "self_improvement_review_outcome", **payload}, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    return path
 
 
 def test_load_and_summarize_review_outcomes(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    record_review_outcome(config=config, outcome={"outcome": "applied_successfully", "plan_id": "p", "item_id": "1", "source": "cli"})
-    record_review_outcome(config=config, outcome={"outcome": "rolled_back", "plan_id": "p", "item_id": "1", "source": "cli"})
+    write_review_outcome(config, {"outcome": "applied_successfully", "plan_id": "p", "item_id": "1", "source": "cli"}, "1.json")
+    write_review_outcome(config, {"outcome": "rolled_back", "plan_id": "p", "item_id": "1", "source": "cli"}, "2.json")
 
     loaded = load_review_outcomes(config=config, limit=10)
     summary = summarize_review_outcomes(loaded)
@@ -75,14 +49,6 @@ def test_infer_outcomes_from_apply_ledger_counts_applied_and_failed(tmp_path):
     assert inferred["summary"]["by_outcome"]["applied_successfully"] == 1
     assert inferred["summary"]["by_outcome"]["apply_failed"] == 1
     assert inferred["target_changed"] is False
-
-
-def test_record_rejection_requires_plan_and_item_for_human_review(tmp_path):
-    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    result = record_review_outcome(config=config, outcome={"outcome": "rejected_by_human", "reason": "too broad"})
-    assert result["status"] == "failed"
-    assert "plan_id_missing" in result["reasons"]
-    assert "item_id_missing" in result["reasons"]
 
 
 def test_summarize_review_outcomes_distinguishes_human_and_ledger_sources():
