@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from hermes_self_improvement.runner_steps import build_skill_agent_task, run_skill_improvement_step
+import json
+
+from hermes_self_improvement.runner_steps import build_skill_agent_task, run_memory_improvement_step, run_skill_improvement_step
 
 
 def write_skill(root, name="demo-skill"):
@@ -99,3 +101,79 @@ def test_skill_step_rejects_external_skill_before_backend(tmp_path):
     assert result["changed"] == 0
     assert result["decisions"][0]["decision"] == "rejected"
     assert result["decisions"][0]["reason"] == "invalid_skill_agent_task"
+
+
+def memory_evidence_pack(operation):
+    event = {"event": "post_tool_call", "tool_name": "memory", "status": "error", "args_preview": json.dumps(operation)}
+    evidence = [{"id": "mem1", "kind": "memory_evidence", "event": event, "likely_targets": [{"target": "memory", "weight": 0.8}]}]
+    return {"evidence": evidence, "views": {"skill": [], "memory": ["mem1"], "scorer": [], "evaluator": []}}
+
+
+def test_memory_step_dry_run_records_executable_built_in_context():
+    result = run_memory_improvement_step(
+        evidence_pack=memory_evidence_pack({"action": "add", "target": "memory", "content": "User prefers concise summaries."}),
+        config={"memory": {"provider": "built-in"}},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert result["status"] == "completed"
+    assert result["provider"] == "built-in"
+    assert decision["decision"] == "accepted"
+    assert decision["reason"] == "dry_run_would_execute_memory_tool"
+    assert decision["context"]["tool_name"] == "memory"
+    assert decision["context"]["tool_args"]["action"] == "add"
+
+
+def test_memory_step_executes_built_in_memory_tool_when_mutating():
+    calls = []
+
+    def fake_memory(**kwargs):
+        calls.append(kwargs)
+        return json.dumps({"success": True, "message": "stored"})
+
+    result = run_memory_improvement_step(
+        evidence_pack=memory_evidence_pack({"operation": "memory_add", "target_store": "user", "content": "User prefers short progress updates."}),
+        config={"memory": {"provider": "built-in"}, "_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["changed"] == 1
+    assert result["changed_memories"] == ["mem1"]
+    assert calls == [{"action": "add", "target": "user", "content": "User prefers short progress updates."}]
+
+
+def test_memory_step_rejects_unsupported_provider_delete_without_identity():
+    result = run_memory_improvement_step(
+        evidence_pack=memory_evidence_pack({"operation": "memory_delete", "reason": "secret", "target": "sensitive value"}),
+        config={"memory": {"provider": "hindsight"}},
+        mutate=True,
+    )
+
+    decision = result["decisions"][0]
+    assert result["changed"] == 0
+    assert decision["decision"] == "rejected"
+    assert decision["reason"] == "sensitive_delete_requires_provider_native_delete"
+
+
+def test_memory_step_uses_provider_correction_tool_for_hindsight_stale_delete():
+    calls = []
+
+    def fake_provider_tool(**kwargs):
+        calls.append(kwargs)
+        return {"success": True, "id": "h1"}
+
+    result = run_memory_improvement_step(
+        evidence_pack=memory_evidence_pack({
+            "operation": "memory_delete",
+            "reason": "stale",
+            "target": "User prefers old workflow",
+            "current_claim": "User prefers new workflow",
+        }),
+        config={"memory": {"provider": "hindsight"}, "_memory_provider_tool_fn": fake_provider_tool},
+        mutate=True,
+    )
+
+    assert result["changed"] == 1
+    assert result["decisions"][0]["context"]["tool_name"] == "hindsight_retain"
+    assert calls and "User prefers new workflow" in calls[0]["content"]

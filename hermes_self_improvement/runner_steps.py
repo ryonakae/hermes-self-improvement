@@ -6,9 +6,13 @@ from typing import Any
 try:  # pragma: no cover - package import path
     from .mutation_agent import run_skill_agent_task
     from .mutation_backend import build_mutation_backend
+    from .mutation_policy import build_memory_mutation_context, normalize_memory_provider
+    from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from mutation_agent import run_skill_agent_task
     from mutation_backend import build_mutation_backend
+    from mutation_policy import build_memory_mutation_context, normalize_memory_provider
+    from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
 
 
 def _parse_preview(value: Any) -> dict[str, Any]:
@@ -47,6 +51,45 @@ def _evidence_by_ids(pack: dict[str, Any], evidence_ids: list[str]) -> list[dict
     evidence = pack.get("evidence") if isinstance(pack.get("evidence"), list) else []
     wanted = {str(item) for item in evidence_ids}
     return [item for item in evidence if str(item.get("id") or "") in wanted]
+
+
+def _memory_provider(config: dict[str, Any] | None) -> str:
+    cfg = config or {}
+    memory_cfg = cfg.get("memory") if isinstance(cfg.get("memory"), dict) else {}
+    return normalize_memory_provider(cfg.get("active_memory_provider") or memory_cfg.get("provider") or cfg.get("memory_provider") or "built-in")
+
+
+def _memory_operation_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
+    for key in ("memory_operation", "operation"):
+        value = item.get(key)
+        if isinstance(value, dict):
+            return dict(value)
+    event = item.get("event") if isinstance(item.get("event"), dict) else {}
+    for preview_key in ("args_preview", "result_preview"):
+        preview = _parse_preview(event.get(preview_key))
+        if isinstance(preview.get("memory_operation"), dict):
+            return dict(preview["memory_operation"])
+        if isinstance(preview.get("operation"), dict):
+            return dict(preview["operation"])
+        op_name = preview.get("operation") or preview.get("action") or preview.get("type")
+        if op_name:
+            operation = dict(preview)
+            op_text = str(op_name)
+            if op_text in {"add", "replace", "remove"}:
+                op_text = {"add": "memory_add", "replace": "memory_replace", "remove": "memory_delete"}[op_text]
+            operation["operation"] = op_text
+            return operation
+    preview_text = str(event.get("result_preview") or event.get("message") or "").strip()
+    if preview_text:
+        return {"operation": "memory_add", "content": preview_text, "reason": "memory_evidence"}
+    return None
+
+
+def _execute_memory_context(context: dict[str, Any], config: dict[str, Any] | None) -> dict[str, Any]:
+    cfg = config or {}
+    if context.get("tool_name") == "memory":
+        return execute_memory_tool_operation(context.get("tool_args") or {}, memory_fn=cfg.get("_memory_tool_fn"))
+    return execute_memory_provider_tool_operation(context, provider_tool_fn=cfg.get("_memory_provider_tool_fn"))
 
 
 def build_skill_agent_task(*, skill_name: str, evidence: list[dict[str, Any]]) -> dict[str, Any]:
@@ -128,5 +171,72 @@ def run_skill_improvement_step(
         "status": "completed" if decisions else "no_skill_evidence",
         "changed": len(set(changed_skills)),
         "changed_skills": sorted(set(changed_skills)),
+        "decisions": decisions,
+    }
+
+
+def run_memory_improvement_step(
+    *,
+    evidence_pack: dict[str, Any],
+    config: dict[str, Any] | None = None,
+    mutate: bool = False,
+) -> dict[str, Any]:
+    views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
+    memory_ids = [str(item) for item in views.get("memory", [])]
+    memory_evidence = _evidence_by_ids(evidence_pack, memory_ids)
+    provider = _memory_provider(config)
+    decisions: list[dict[str, Any]] = []
+    changed = 0
+
+    for item in memory_evidence:
+        evidence_id = str(item.get("id") or "")
+        operation = _memory_operation_from_evidence(item)
+        if not operation:
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "rejected",
+                "reason": "memory_operation_missing",
+                "changed": False,
+            })
+            continue
+        context = build_memory_mutation_context(provider=provider, operation=operation)
+        if not context.get("execution_enabled"):
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "rejected",
+                "reason": (context.get("reasons") or [context.get("resolved_strategy") or "memory_context_not_executable"])[0],
+                "changed": False,
+                "operation": operation,
+                "context": context,
+            })
+            continue
+        if not mutate:
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "accepted",
+                "reason": "dry_run_would_execute_memory_tool",
+                "changed": False,
+                "operation": operation,
+                "context": context,
+            })
+            continue
+        result = _execute_memory_context(context, config)
+        did_change = bool(result.get("success"))
+        changed += 1 if did_change else 0
+        decisions.append({
+            "evidence_id": evidence_id,
+            "decision": "accepted" if did_change else "rejected",
+            "reason": result.get("error") or context.get("resolved_strategy") or "memory_tool_completed",
+            "changed": did_change,
+            "operation": operation,
+            "context": context,
+            "result": result,
+        })
+
+    return {
+        "status": "completed" if decisions else "no_memory_evidence",
+        "provider": provider,
+        "changed": changed,
+        "changed_memories": [str(decision.get("evidence_id")) for decision in decisions if decision.get("changed")],
         "decisions": decisions,
     }
