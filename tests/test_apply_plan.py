@@ -1184,10 +1184,10 @@ def test_build_apply_plan_refuses_explicit_external_skill_path(tmp_path):
     item = plan["items"][0]
     assert item["target_path"] == str(external_file)
     assert item["target_exists"] is True
-    assert item["mutation"]["type"] == "append_to_existing_section"
+    assert item["status"] == "rejected_by_planner"
+    assert item["mutation"] is None
     assert item["eligible_for_unattended"] is False
-    assert "skill_name_missing_for_tool_mediated_append" in item["eligibility"]["reasons"]
-    assert "direct_file_mutation_unsupported" in item["eligibility"]["reasons"]
+    assert "skill_target_not_mutable_local" in item["planner_reasons"]
 
 
 def test_build_apply_plan_ignores_legacy_custom_skill_roots_for_mutation(tmp_path):
@@ -1459,3 +1459,44 @@ def test_build_apply_plan_rejects_direct_file_mutation_static_invariant(tmp_path
     assert item["status"] == "rejected_by_planner"
     assert "direct_mutation_type_forbidden" in item["reasons"]
     assert item["mutation"] is None
+
+
+def test_build_apply_plan_rejects_non_local_skill_target_path_at_plan_time(tmp_path):
+    mod = load_plugin_module()
+    mutable_root = tmp_path / "local-skills"
+    external = tmp_path / "external-skills" / "demo" / "SKILL.md"
+    external.parent.mkdir(parents=True)
+    external.write_text("# Demo\n\nUse teh browser carefully.\n", encoding="utf-8")
+    proposal = sample_typo_proposal()
+    proposal["target_path"] = str(external)
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(mutable_root)]},
+        created_at=datetime(2026, 4, 30, 18, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["status"] == "rejected_by_planner"
+    assert "skill_target_not_mutable_local" in item["planner_reasons"]
+    assert item["static_validation"]["status"] == "rejected"
+
+
+def test_build_apply_plan_rejects_missing_skill_hint_at_plan_time(tmp_path):
+    mod = load_plugin_module()
+    proposal = sample_pitfall_proposal()
+    proposal["target_skill"] = "missing-skill"
+
+    plan = mod.build_apply_plan(
+        proposals=[proposal],
+        summary={},
+        execution_mode="dry_run_plan",
+        config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
+        created_at=datetime(2026, 4, 30, 18, 0, tzinfo=timezone.utc),
+    )
+
+    item = plan["items"][0]
+    assert item["status"] == "rejected_by_planner"
+    assert "skill_target_missing" in item["planner_reasons"]

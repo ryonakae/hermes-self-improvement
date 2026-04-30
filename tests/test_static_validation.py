@@ -64,6 +64,50 @@ def test_normal_mutable_local_skill_proposal_passes_static_validation(tmp_path):
     skill.write_text("# Demo\n", encoding="utf-8")
     result = validate_proposal_static_invariants(
         proposal={"target_path": str(skill), "target_kind": "skill", "change_type": "typo_fix"},
-        config={"_plugin_root": str(plugin_root)},
+        config={"_plugin_root": str(plugin_root), "_mutable_local_skill_roots": [str(tmp_path / "skills")]},
     )
     assert result == {"status": "passed", "reasons": [], "target_changed": False}
+
+
+def test_rejects_skill_target_outside_mutable_local_roots(tmp_path):
+    mutable_root = tmp_path / "skills"
+    external = tmp_path / "external" / "demo" / "SKILL.md"
+    external.parent.mkdir(parents=True)
+    external.write_text("# Demo\n", encoding="utf-8")
+
+    result = validate_proposal_static_invariants(
+        proposal={"target_path": str(external), "target_kind": "skill", "change_type": "typo_fix"},
+        config={"_mutable_local_skill_roots": [str(mutable_root)]},
+    )
+
+    assert result["status"] == "rejected"
+    assert "skill_target_not_mutable_local" in result["reasons"]
+
+
+def test_rejects_unsafe_skill_target_hint_at_plan_time(tmp_path):
+    result = validate_proposal_static_invariants(
+        proposal={"target_skill": "../outside", "target_kind": "skill", "change_type": "typo_fix"},
+        config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
+    )
+
+    assert result["status"] == "rejected"
+    assert "skill_target_path_escape" in result["reasons"]
+
+
+def test_rejects_missing_skill_target_for_non_create_changes(tmp_path):
+    result = validate_proposal_static_invariants(
+        proposal={"target_skill": "missing-skill", "target_kind": "skill", "change_type": "pitfall_addition_existing_section"},
+        config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
+    )
+
+    assert result["status"] == "rejected"
+    assert "skill_target_missing" in result["reasons"]
+
+
+def test_allows_missing_skill_target_for_skill_create(tmp_path):
+    result = validate_proposal_static_invariants(
+        proposal={"target_skill": "new-skill", "target_kind": "skill", "change_type": "skill_create"},
+        config={"_mutable_local_skill_roots": [str(tmp_path / "skills")]},
+    )
+
+    assert "skill_target_missing" not in result["reasons"]
