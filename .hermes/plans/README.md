@@ -2,7 +2,10 @@
 
 ## Current source of truth
 
-As of 2026-04-30, there are **no active unfinished implementation plans** in this directory.
+As of 2026-04-30, there is **one active unfinished implementation plan** in this directory:
+
+- `2026-04-30_185745-semantic-drift-adjudication-and-local-target-gates.md`
+  - Reopens the apply safety slice to add plan-time mutable-local skill gating, apply-time identity/provenance revalidation, structured content drift classification, bounded LLM semantic drift adjudication, mutation-agent stale/conflict stop outcomes, and ledger/report/calibration visibility for skipped/stopped applications.
 
 The latest completed implementation record is archived at:
 
