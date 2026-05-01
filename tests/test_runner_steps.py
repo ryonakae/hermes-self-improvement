@@ -33,6 +33,12 @@ def test_build_skill_agent_task_uses_skills_only_constraints():
     assert task["type"] == "skill_agent_task"
     assert task["task_kind"] == "skill_improve"
     assert task["targets"] == {"primary_skill": "demo-skill"}
+    assert "You are the Hermes self-improvement skill editor." in task["instructions"]
+    assert "Target skill:" in task["instructions"]
+    assert "Planner decision:" in task["instructions"]
+    assert "Selected evidence:" in task["instructions"]
+    assert "Hard stops:" in task["instructions"]
+    assert "Call skill_view" in task["instructions"]
     joined = "\n".join(task["constraints"])
     assert "skills_list" in joined and "skill_view" in joined and "skill_manage" in joined
     assert "direct filesystem" in joined
@@ -44,6 +50,9 @@ def test_skill_step_dry_run_records_planner_editor_preview_without_mutating():
     assert result["status"] == "completed"
     assert result["changed"] == 0
     assert result["planner"]["summary"]["selected_for_editor"] == 1
+    assert result["planner_quality"]["selected_with_evidence"] == 1
+    assert result["planner_quality"]["action_like_skips"] == 0
+    assert result["planner_quality"]["editor_prompt_chars"]["max"] > 0
     assert result["decisions"][0]["decision"] == "run_editor_preview"
     assert result["decisions"][0]["reason"] == "planner_run_editor_preview"
     assert result["decisions"][0]["candidate_source"] == "curator"
@@ -172,6 +181,8 @@ def test_skill_step_executes_only_mutable_local_skill_via_backend(tmp_path):
     assert result["changed"] == 1
     assert result["changed_skills"] == ["demo-skill"]
     assert seen["task"]["targets"] == {"primary_skill": "demo-skill"}
+    assert "You are the Hermes self-improvement skill editor." in seen["task"]["instructions"]
+    assert "Planner decision:" in seen["task"]["instructions"]
     assert "skill_manage" in seen["prompt"]
 
 

@@ -8,7 +8,7 @@ from .mutation_backend import build_mutation_backend
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
 from .memory_context import build_related_memory_lookup_context
-from .planner import build_skill_planner_digest, run_skill_planner
+from .planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
 
 
 def _parse_preview(value: Any) -> dict[str, Any]:
@@ -136,24 +136,72 @@ def _execute_memory_context(context: dict[str, Any], config: dict[str, Any] | No
     return execute_memory_provider_tool_operation(context, provider_tool_fn=cfg.get("_memory_provider_tool_fn"))
 
 
+def _compact_editor_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        event = item.get("event") if isinstance(item.get("event"), dict) else {}
+        compact.append({
+            "id": str(item.get("id") or ""),
+            "kind": item.get("kind"),
+            "tool_name": event.get("tool_name") or item.get("tool_name"),
+            "status": event.get("status") or item.get("status"),
+            "error_kind": event.get("error_kind") or item.get("error_kind"),
+            "args_preview": event.get("args_preview"),
+            "result_preview": event.get("result_preview") or event.get("message"),
+        })
+    return compact
+
+
+def _format_json_section(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str, indent=2)
+
+
 def build_skill_agent_task(*, skill_name: str, evidence: list[dict[str, Any]], candidate: dict[str, Any] | None = None, planner_decision: dict[str, Any] | None = None) -> dict[str, Any]:
     candidate_meta = candidate or {}
     planner_meta = planner_decision or {}
+    compact_evidence = _compact_editor_evidence(evidence)
+    instructions = "\n".join([
+        "You are the Hermes self-improvement skill editor.",
+        "",
+        "Role:",
+        "- Apply a small, reusable procedural improvement only when the planner decision and selected evidence still fit the current skill.",
+        "- Prefer a non-mutating skipped outcome over a speculative or stale edit.",
+        "",
+        "Target skill:",
+        f"- {skill_name}",
+        "",
+        "Candidate metadata:",
+        _format_json_section(candidate_meta),
+        "",
+        "Planner decision:",
+        _format_json_section(planner_meta),
+        "",
+        "Selected evidence:",
+        _format_json_section(compact_evidence),
+        "",
+        "Allowed tools:",
+        "- skills_list",
+        "- skill_view",
+        "- skill_manage",
+        "",
+        "Hard stops:",
+        "- Call skill_view for the target skill before proposing any mutation.",
+        "- Stop without mutation if the skill is missing, stale, conflicting with the planner intent, ambiguous, memory-shaped, or outside this skill.",
+        "- Do not mutate plugin-bundled, hub-installed, external-dir, built-in, pinned, archived, or Hermes core files.",
+        "- Do not edit README, AGENTS, config, repo docs, or arbitrary files outside skill lifecycle tools.",
+        "- Do not rename, delete, archive, merge, or create skills unless the planner explicitly selected that action; this task is for small local edits only.",
+        "",
+        "Expected output:",
+        "- Return changed/skipped status, reason, skill name, used tool calls, and a short verification checklist.",
+    ])
     return {
         "type": "skill_agent_task",
         "task_kind": "skill_improve",
         "targets": {"primary_skill": skill_name},
         "candidate": candidate_meta,
-        "instructions": (
-            "Review the supplied self-improvement evidence for this Curator-selected mutable local skill. "
-            "Patch, edit, or update supporting files only when the evidence or Curator lifecycle/usage metadata clearly identifies a reusable procedural improvement. "
-            "If the evidence is stale, ambiguous, memory-shaped, or outside this skill, return a non-mutating outcome with a reason.\n\n"
-            f"Candidate: {json.dumps(candidate_meta, ensure_ascii=False, sort_keys=True, default=str)}\n"
-            f"Planner decision: {json.dumps(planner_meta, ensure_ascii=False, sort_keys=True, default=str)}\n"
-            "The global planner selected this task for editor execution when decision=run_editor. "
-            "Follow planner editor_instructions, but first read the current skill and stop if stale, conflicting, or unsafe.\n"
-            f"Evidence: {json.dumps(evidence, ensure_ascii=False, sort_keys=True, default=str)}"
-        ),
+        "instructions": instructions,
         "constraints": [
             "Use only skills_list, skill_view, skill_manage.",
             "Do not use terminal/file/git/direct filesystem tools.",
@@ -259,12 +307,14 @@ def run_skill_improvement_step(
             "result": result,
         })
 
+    quality = build_planner_quality_report(digest=digest, planner=planner, runner_decisions=decisions)
     return {
         "status": "completed" if decisions else "no_planner_decisions",
         "changed": len(set(changed_skills)),
         "changed_skills": sorted(set(changed_skills)),
         "planner": planner,
         "planner_digest": digest,
+        "planner_quality": quality,
         "decisions": decisions,
     }
 

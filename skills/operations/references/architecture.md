@@ -64,6 +64,8 @@ GEPA / DSPy are not live proposal scorers. They belong to `calibrate`, where the
 
 Dry-run executes the planner and writes the planner payload plus digest into the run artifact, but does not execute editor mutation. Mutating runs send only `run_editor` decisions to the bounded skill editor, together with the planner's `change_intent`, `editor_instructions`, and selected `evidence_ids`. If planner LLM routing fails, the runner falls back to a deterministic evidence-attached plan rather than dropping all low-risk local skill improvements.
 
+Planner normalization is deliberately strict: `run_editor` without attached evidence becomes `skip` with `run_editor_without_attached_evidence`; `skip` decisions do not retain action fields such as `change_intent` or `editor_instructions`. Planner quality proof counts are stored in the artifact and compact tool result: attached candidate count, unmatched evidence count/reasons, selected-with-evidence count, action-like skips, and editor prompt length. The editor prompt is structured into role, target skill, candidate metadata, planner decision, selected evidence, allowed tools, hard stops, and expected output.
+
 ## GEPA / DSPy assets
 
 - `evals/proposal/cases.jsonl`: repo-tracked public golden regression cases for proposal scoring (for example repeated tool failure, one-off low evidence, dangerous auto-apply denial, and stale memory review). Plugin users do not mutate this file; runtime/private cases belong under `~/.hermes/self-improvement/evals/proposal/` in later phases.

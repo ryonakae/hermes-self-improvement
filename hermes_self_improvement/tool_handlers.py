@@ -88,6 +88,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
     planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
     planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
+    planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
     artifact_path = result.get("artifact_path")
     return {
@@ -124,6 +125,14 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
                 "human_review": int(planner_summary.get("human_review") or 0),
                 "memory_candidates": int(planner_summary.get("memory_candidates") or 0),
                 "evaluator_candidates": int(planner_summary.get("evaluator_candidates") or 0),
+                "quality": {
+                    "attached_candidate_count": int(planner_quality.get("attached_candidate_count") or 0),
+                    "unmatched_evidence_count": int(planner_quality.get("unmatched_evidence_count") or 0),
+                    "selected_with_evidence": int(planner_quality.get("selected_with_evidence") or 0),
+                    "action_like_skips": int(planner_quality.get("action_like_skips") or 0),
+                    "editor_task_count": int(planner_quality.get("editor_task_count") or 0),
+                    "editor_prompt_chars": planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {},
+                },
             },
             "memory": _compact_step("memory", step_decisions.get("memory")),
             "scorer": _compact_step("scorer", step_decisions.get("scorer")),

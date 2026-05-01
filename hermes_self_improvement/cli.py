@@ -573,6 +573,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
     planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
     planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
+    planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
+    editor_prompt_chars = planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {}
     planner_decisions = planner.get("decisions") if isinstance(planner.get("decisions"), list) else []
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "run_editor"][:5]
     human_review_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "human_review"][:5]
@@ -599,6 +601,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Skill planner:",
         f"- source: {planner.get('planner_source') or 'unknown'}, status: {planner.get('status') or skill_step.get('status') or 'unknown'}",
         f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for editor: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, human review: {int(planner_summary.get('human_review') or 0)}",
+        f"- proof: attached candidates {int(planner_quality.get('attached_candidate_count') or 0)}, unmatched evidence {int(planner_quality.get('unmatched_evidence_count') or 0)}, selected with evidence {int(planner_quality.get('selected_with_evidence') or 0)}, action-like skips {int(planner_quality.get('action_like_skips') or 0)}",
+        f"- editor prompts: tasks {int(planner_quality.get('editor_task_count') or 0)}, max chars {int(editor_prompt_chars.get('max') or 0)}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Memory improvements:",

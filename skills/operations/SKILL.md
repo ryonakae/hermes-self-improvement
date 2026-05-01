@@ -106,6 +106,7 @@ Expected: enabled true, error null, tools 4。
 ## Pitfalls
 
 - Evidence skill target names may be bare (`skill-name`) or qualified (`dir-name:skill-name`). Resolve exact qualified Curator candidate matches first; otherwise fall back to bare-name matching and attach evidence to every mutable candidate with that bare name so the mutation agent can decide. Do not hardcode a user-specific prefix such as `hermes-custom:`.
+- Planner quality should be judged from proof counts, not selected count alone. Watch `attached_candidate_count`, `unmatched_evidence_count`, `selected_with_evidence`, `action_like_skips`, and editor prompt chars in dry-run output/artifacts.
 - Agent tool handlers must not return full run/calibration payloads. Return compact summaries with artifact paths; keep full payloads in runtime artifacts or CLI `--json` only.
 - root 直下に `tools.py` や `tools/` package を置かない。Hermes core `tools.registry` を shadow する。
 - Plugin-bundled skills は repo file として編集する。`skill_manage` で plugin-bundled skill を編集しない。

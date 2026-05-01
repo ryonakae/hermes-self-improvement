@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hermes_self_improvement.planner as planner
-from hermes_self_improvement.planner import build_skill_planner_digest, run_skill_planner
+from hermes_self_improvement.planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
 
 
 def pack():
@@ -112,3 +112,63 @@ def test_skill_planner_falls_back_when_llm_planner_fails(monkeypatch):
     assert result["planner_source"] == "deterministic_fallback_after_error"
     assert result["summary"]["selected_for_editor"] == 1
     assert "planner down" in result["error"]
+
+
+def test_planner_normalization_strips_action_fields_from_skips_and_requires_evidence_for_editor():
+    def fake_planner(*, digest, config):
+        return {
+            "decisions": [
+                {
+                    "skill": "demo-skill",
+                    "decision": "run_editor",
+                    "evidence_ids": [],
+                    "change_intent": "should not become an edit",
+                    "editor_instructions": "do something",
+                    "rationale": "no attached evidence",
+                },
+                {
+                    "skill": "unused-skill",
+                    "decision": "skip",
+                    "evidence_ids": [],
+                    "change_intent": "tempting edit",
+                    "editor_instructions": "patch it",
+                },
+            ]
+        }
+
+    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    by_skill = {item["skill"]: item for item in result["decisions"]}
+
+    assert by_skill["demo-skill"]["decision"] == "skip"
+    assert by_skill["demo-skill"]["reason"] == "run_editor_without_attached_evidence"
+    assert "editor_instructions" not in by_skill["demo-skill"]
+    assert "change_intent" not in by_skill["demo-skill"]
+    assert by_skill["unused-skill"]["decision"] == "skip"
+    assert "editor_instructions" not in by_skill["unused-skill"]
+    assert "change_intent" not in by_skill["unused-skill"]
+    assert by_skill["unused-skill"]["notes"] == "tempting edit"
+
+
+def test_planner_quality_report_counts_evidence_and_action_like_skips():
+    digest = build_skill_planner_digest(pack())
+    planner = {
+        "decisions": [
+            {"skill": "demo-skill", "decision": "run_editor", "evidence_ids": ["ev1"]},
+            {"skill": "unused-skill", "decision": "skip", "evidence_ids": []},
+            {"skill": "memory-ish", "decision": "memory_candidate", "evidence_ids": []},
+        ]
+    }
+    report = build_planner_quality_report(
+        digest=digest,
+        planner=planner,
+        runner_decisions=[{"task": {"instructions": "hello"}}],
+    )
+
+    assert report["candidate_count"] == 2
+    assert report["attached_candidate_count"] == 1
+    assert report["unmatched_evidence_count"] == 1
+    assert report["selected_for_editor"] == 1
+    assert report["selected_with_evidence"] == 1
+    assert report["action_like_skips"] == 0
+    assert report["memory_candidates"] == 1
+    assert report["editor_prompt_chars"]["max"] == 5

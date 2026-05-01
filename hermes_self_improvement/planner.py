@@ -156,8 +156,11 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
         evidence = attached.get(name) or []
         row = {
             "name": name,
+            "description": _redacted_preview(candidate.get("description") or candidate.get("summary") or "", max_chars=180),
             "state": candidate.get("state"),
+            "provenance": candidate.get("provenance"),
             "source": candidate.get("source") or "curator",
+            "mutable": bool(candidate.get("mutable", True)),
             "usage": candidate.get("usage") if isinstance(candidate.get("usage"), dict) else {},
             "attached_evidence_count": len(evidence),
             "evidence_ids": [str(item.get("id") or "") for item in evidence if item.get("id")],
@@ -242,8 +245,10 @@ def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evide
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item)]
     allowed_evidence = evidence_by_candidate.get(skill) or set()
     evidence_ids = [item for item in evidence_ids if item in allowed_evidence]
+    forced_skip_reason: str | None = None
     if decision == "run_editor" and not evidence_ids:
         decision = "skip"
+        forced_skip_reason = "run_editor_without_attached_evidence"
     normalized = {
         "skill": skill,
         "decision": decision,
@@ -251,9 +256,23 @@ def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evide
         "priority": str(raw.get("priority") or "medium") if str(raw.get("priority") or "medium") in ALLOWED_PRIORITIES else "medium",
         "risk": str(raw.get("risk") or "medium") if str(raw.get("risk") or "medium") in ALLOWED_RISKS else "medium",
     }
-    for key, max_chars in (("reason", 240), ("change_intent", 280), ("editor_instructions", 900), ("rationale", 600)):
-        if raw.get(key) is not None:
-            normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
+    if raw.get("reason") is not None:
+        normalized["reason"] = _redacted_preview(raw.get("reason"), max_chars=240)
+    if raw.get("rationale") is not None:
+        normalized["rationale"] = _redacted_preview(raw.get("rationale"), max_chars=600)
+    if decision == "run_editor":
+        for key, max_chars in (("change_intent", 280), ("editor_instructions", 900)):
+            if raw.get(key) is not None:
+                normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
+    elif decision in {"memory_candidate", "evaluator_candidate", "human_review"}:
+        if raw.get("change_intent") is not None:
+            normalized["change_intent"] = _redacted_preview(raw.get("change_intent"), max_chars=280)
+    else:
+        notes = raw.get("notes") or raw.get("change_intent") or raw.get("editor_instructions")
+        if notes is not None:
+            normalized["notes"] = _redacted_preview(notes, max_chars=360)
+    if forced_skip_reason:
+        normalized["reason"] = forced_skip_reason
     if decision == "skip" and not normalized.get("reason"):
         normalized["reason"] = "planner_skip"
     return normalized
@@ -330,6 +349,43 @@ def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict
         timeout=timeout,
     )
     return _extract_json_object(extract_content_or_reasoning(response))
+
+
+def build_planner_quality_report(
+    *,
+    digest: dict[str, Any],
+    planner: dict[str, Any],
+    runner_decisions: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    candidates = [item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)]
+    planner_decisions = [item for item in planner.get("decisions") or [] if isinstance(item, dict)]
+    selected = [item for item in planner_decisions if item.get("decision") == "run_editor"]
+    skipped = [item for item in planner_decisions if item.get("decision") == "skip"]
+    runner_decisions = runner_decisions or []
+    prompt_lengths = []
+    for item in runner_decisions:
+        task = item.get("task") if isinstance(item, dict) and isinstance(item.get("task"), dict) else {}
+        instructions = task.get("instructions")
+        if isinstance(instructions, str):
+            prompt_lengths.append(len(instructions))
+    unmatched = digest.get("unmatched_evidence") if isinstance(digest.get("unmatched_evidence"), dict) else {}
+    return {
+        "candidate_count": len(candidates),
+        "attached_candidate_count": sum(1 for item in candidates if int(item.get("attached_evidence_count") or 0) > 0),
+        "unmatched_evidence_count": int(unmatched.get("count") or 0),
+        "unmatched_by_reason": unmatched.get("by_reason") if isinstance(unmatched.get("by_reason"), dict) else {},
+        "selected_for_editor": len(selected),
+        "selected_with_evidence": sum(1 for item in selected if item.get("evidence_ids")),
+        "action_like_skips": sum(1 for item in skipped if item.get("change_intent") or item.get("editor_instructions")),
+        "memory_candidates": sum(1 for item in planner_decisions if item.get("decision") == "memory_candidate"),
+        "evaluator_candidates": sum(1 for item in planner_decisions if item.get("decision") == "evaluator_candidate"),
+        "editor_task_count": len(prompt_lengths),
+        "editor_prompt_chars": {
+            "min": min(prompt_lengths) if prompt_lengths else 0,
+            "max": max(prompt_lengths) if prompt_lengths else 0,
+            "total": sum(prompt_lengths),
+        },
+    }
 
 
 def run_skill_planner(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:

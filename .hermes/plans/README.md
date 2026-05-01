@@ -4,6 +4,10 @@
 
 As of 2026-05-02, the latest completed implementation plan is:
 
+- `2026-05-02_020641-planner-editor-quality-proof.md`
+  - **Status:** completed.
+  - Added planner quality proof counts, strict planner normalization for evidence-backed editor work, and structured editor prompts.
+
 - `2026-05-02_013520-global-planner-before-editor.md`
   - **Status:** completed.
   - Renamed the decision role to `planner`, added a global skill planner before the per-skill editor, made dry-run execute planner preview without editor mutation, and routed mutating runs only through planner `run_editor` decisions.
