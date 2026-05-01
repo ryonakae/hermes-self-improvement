@@ -41,9 +41,40 @@ def _skill_name_from_evidence(item: dict[str, Any]) -> str | None:
 
 
 def _evidence_by_ids(pack: dict[str, Any], evidence_ids: list[str]) -> list[dict[str, Any]]:
-    evidence = pack.get("evidence") if isinstance(pack.get("evidence"), list) else []
+    evidence = pack.get("evidence") if isinstance(pack.get("evidence", []), list) else []
     wanted = {str(item) for item in evidence_ids}
     return [item for item in evidence if str(item.get("id") or "") in wanted]
+
+
+def _bare_skill_name(name: str) -> str:
+    text = str(name or "").strip()
+    if ":" not in text:
+        return text
+    return text.rsplit(":", 1)[1].strip()
+
+
+def _candidate_names_by_bare_name(candidate_names: list[str]) -> dict[str, list[str]]:
+    by_bare: dict[str, list[str]] = {}
+    for name in candidate_names:
+        bare = _bare_skill_name(name)
+        if not bare:
+            continue
+        by_bare.setdefault(bare, []).append(name)
+    return by_bare
+
+
+def _resolve_candidate_skill_names(raw_skill_name: str, candidate_by_name: dict[str, dict[str, Any]]) -> tuple[list[str], str, str]:
+    raw = str(raw_skill_name or "").strip()
+    bare = _bare_skill_name(raw)
+    if not raw or not bare:
+        return [], bare, "missing"
+    if ":" in raw and raw in candidate_by_name:
+        return [raw], bare, "exact"
+    by_bare = _candidate_names_by_bare_name(list(candidate_by_name))
+    matches = by_bare.get(bare) or []
+    if matches:
+        return matches, bare, "bare_name"
+    return [], bare, "not_found"
 
 
 def _external_memory_provider(config: dict[str, Any] | None) -> str | None:
@@ -156,6 +187,7 @@ def run_skill_improvement_step(
         }
 
     evidence_by_candidate: dict[str, list[dict[str, Any]]] = {name: [] for name in candidate_by_name}
+    evidence_match_by_candidate: dict[str, dict[str, str]] = {}
     for item in skill_evidence:
         evidence_id = str(item.get("id") or "")
         skill_name = _skill_name_from_evidence(item)
@@ -167,16 +199,24 @@ def run_skill_improvement_step(
                 "changed": False,
             })
             continue
-        if skill_name not in candidate_by_name:
+        matched_names, normalized_skill, match_kind = _resolve_candidate_skill_names(skill_name, candidate_by_name)
+        if not matched_names:
             decisions.append({
                 "evidence_id": evidence_id,
                 "skill": skill_name,
+                "normalized_skill": normalized_skill,
                 "decision": "rejected",
                 "reason": "skill_not_in_curator_candidates",
                 "changed": False,
             })
             continue
-        evidence_by_candidate[skill_name].append(item)
+        for matched_name in matched_names:
+            evidence_by_candidate[matched_name].append(item)
+            evidence_match_by_candidate[matched_name] = {
+                "raw_evidence_skill": skill_name,
+                "normalized_skill": normalized_skill,
+                "evidence_match": match_kind,
+            }
 
     for skill_name, candidate in candidate_by_name.items():
         attached_evidence = evidence_by_candidate.get(skill_name) or []
@@ -187,6 +227,7 @@ def run_skill_improvement_step(
             "candidate_source": candidate.get("source") or "curator",
             "candidate_state": candidate.get("state"),
             "evidence_ids": evidence_ids,
+            **evidence_match_by_candidate.get(skill_name, {}),
         }
         if not mutate:
             decisions.append({

@@ -63,6 +63,63 @@ def test_skill_step_runs_curator_candidate_even_without_hook_evidence():
     assert decision["evidence_ids"] == []
 
 
+def test_skill_step_matches_qualified_evidence_to_bare_candidate_name():
+    result = run_skill_improvement_step(
+        evidence_pack=evidence_pack_for(
+            "dir-name-a:skill-name",
+            candidates=[{"name": "skill-name", "state": "active", "source": "curator"}],
+        ),
+        config={},
+        mutate=False,
+    )
+
+    decision = result["decisions"][-1]
+    assert decision["skill"] == "skill-name"
+    assert decision["decision"] == "accepted"
+    assert decision["evidence_ids"] == ["ev1"]
+    assert decision["evidence_match"] == "bare_name"
+    assert decision["raw_evidence_skill"] == "dir-name-a:skill-name"
+
+
+def test_skill_step_matches_bare_evidence_to_all_same_name_candidates():
+    result = run_skill_improvement_step(
+        evidence_pack=evidence_pack_for(
+            "skill-name",
+            candidates=[
+                {"name": "dir-name-a:skill-name", "state": "active", "source": "curator"},
+                {"name": "dir-name-b:skill-name", "state": "active", "source": "curator"},
+            ],
+        ),
+        config={},
+        mutate=False,
+    )
+
+    accepted = [decision for decision in result["decisions"] if decision.get("decision") == "accepted"]
+    assert {decision["skill"] for decision in accepted} == {"dir-name-a:skill-name", "dir-name-b:skill-name"}
+    assert all(decision["evidence_ids"] == ["ev1"] for decision in accepted)
+    assert all(decision["evidence_match"] == "bare_name" for decision in accepted)
+    assert all(decision["raw_evidence_skill"] == "skill-name" for decision in accepted)
+
+
+def test_skill_step_prefers_exact_qualified_candidate_match():
+    result = run_skill_improvement_step(
+        evidence_pack=evidence_pack_for(
+            "dir-name-a:skill-name",
+            candidates=[
+                {"name": "skill-name", "state": "active", "source": "curator"},
+                {"name": "dir-name-a:skill-name", "state": "active", "source": "curator"},
+            ],
+        ),
+        config={},
+        mutate=False,
+    )
+
+    decisions_by_skill = {decision.get("skill"): decision for decision in result["decisions"] if decision.get("decision") == "accepted"}
+    assert decisions_by_skill["dir-name-a:skill-name"]["evidence_ids"] == ["ev1"]
+    assert decisions_by_skill["dir-name-a:skill-name"]["evidence_match"] == "exact"
+    assert decisions_by_skill["skill-name"]["evidence_ids"] == []
+
+
 def test_skill_step_rejects_hook_evidence_for_non_candidate_skill():
     result = run_skill_improvement_step(
         evidence_pack=evidence_pack_for("external-skill", candidates=[{"name": "candidate-skill", "state": "active", "source": "curator"}]),
@@ -71,7 +128,9 @@ def test_skill_step_rejects_hook_evidence_for_non_candidate_skill():
     )
 
     assert result["changed"] == 0
-    assert any(decision.get("reason") == "skill_not_in_curator_candidates" for decision in result["decisions"])
+    rejected = [decision for decision in result["decisions"] if decision.get("skill") == "external-skill"]
+    assert rejected[0]["reason"] == "skill_not_in_curator_candidates"
+    assert rejected[0]["normalized_skill"] == "external-skill"
     assert all(decision.get("skill") != "external-skill" or decision.get("decision") == "rejected" for decision in result["decisions"])
 
 
