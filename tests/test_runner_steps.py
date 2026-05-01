@@ -12,12 +12,19 @@ def write_skill(root, name="demo-skill"):
     return skill_dir
 
 
-def evidence_pack_for(skill_name=None):
+def evidence_pack_for(skill_name=None, *, candidates=None, rejected=None):
     event = {"event": "post_tool_call", "tool_name": "skill_manage", "status": "error"}
     if skill_name is not None:
         event["args_preview"] = f'{{"name":"{skill_name}","action":"patch"}}'
     evidence = [{"id": "ev1", "kind": "tool_failure_evidence", "event": event, "likely_targets": [{"target": "skill", "weight": 0.8}]}]
-    return {"evidence": evidence, "views": {"skill": ["ev1"], "memory": [], "scorer": [], "evaluator": []}}
+    if candidates is None and skill_name is not None:
+        candidates = [{"name": skill_name, "state": "active", "source": "curator", "usage": {}}]
+    return {
+        "evidence": evidence,
+        "views": {"skill": ["ev1"], "memory": [], "scorer": [], "evaluator": []},
+        "skill_candidates": candidates or [],
+        "rejected_skill_candidates": rejected or [],
+    }
 
 
 def test_build_skill_agent_task_uses_skills_only_constraints():
@@ -38,15 +45,42 @@ def test_skill_step_dry_run_records_agent_task_without_mutating():
     assert result["changed"] == 0
     assert result["decisions"][0]["decision"] == "accepted"
     assert result["decisions"][0]["reason"] == "dry_run_would_run_skill_agent"
+    assert result["decisions"][0]["candidate_source"] == "curator"
+    assert result["decisions"][0]["candidate_state"] == "active"
+    assert result["decisions"][0]["evidence_ids"] == ["ev1"]
     assert result["decisions"][0]["task"]["targets"]["primary_skill"] == "demo-skill"
 
 
-def test_skill_step_rejects_evidence_without_skill_target():
-    result = run_skill_improvement_step(evidence_pack=evidence_pack_for(), config={}, mutate=True)
+def test_skill_step_runs_curator_candidate_even_without_hook_evidence():
+    pack = {"evidence": [], "views": {"skill": [], "memory": [], "scorer": [], "evaluator": []}, "skill_candidates": [{"name": "candidate-skill", "state": "stale", "source": "curator", "usage": {"use_count": 0}}]}
+
+    result = run_skill_improvement_step(evidence_pack=pack, config={}, mutate=False)
+
+    assert result["status"] == "completed"
+    decision = result["decisions"][0]
+    assert decision["skill"] == "candidate-skill"
+    assert decision["candidate_state"] == "stale"
+    assert decision["evidence_ids"] == []
+
+
+def test_skill_step_rejects_hook_evidence_for_non_candidate_skill():
+    result = run_skill_improvement_step(
+        evidence_pack=evidence_pack_for("external-skill", candidates=[{"name": "candidate-skill", "state": "active", "source": "curator"}]),
+        config={},
+        mutate=False,
+    )
 
     assert result["changed"] == 0
-    assert result["decisions"][0]["decision"] == "rejected"
-    assert result["decisions"][0]["reason"] == "skill_target_missing"
+    assert any(decision.get("reason") == "skill_not_in_curator_candidates" for decision in result["decisions"])
+    assert all(decision.get("skill") != "external-skill" or decision.get("decision") == "rejected" for decision in result["decisions"])
+
+
+def test_skill_step_rejects_evidence_without_skill_target():
+    result = run_skill_improvement_step(evidence_pack=evidence_pack_for(candidates=[]), config={}, mutate=True)
+
+    assert result["status"] == "no_skill_candidates"
+    assert result["changed"] == 0
+    assert result["decisions"] == []
 
 
 def test_skill_step_executes_only_mutable_local_skill_via_backend(tmp_path):

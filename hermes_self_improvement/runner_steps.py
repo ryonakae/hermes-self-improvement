@@ -92,15 +92,18 @@ def _execute_memory_context(context: dict[str, Any], config: dict[str, Any] | No
     return execute_memory_provider_tool_operation(context, provider_tool_fn=cfg.get("_memory_provider_tool_fn"))
 
 
-def build_skill_agent_task(*, skill_name: str, evidence: list[dict[str, Any]]) -> dict[str, Any]:
+def build_skill_agent_task(*, skill_name: str, evidence: list[dict[str, Any]], candidate: dict[str, Any] | None = None) -> dict[str, Any]:
+    candidate_meta = candidate or {}
     return {
         "type": "skill_agent_task",
         "task_kind": "skill_improve",
         "targets": {"primary_skill": skill_name},
+        "candidate": candidate_meta,
         "instructions": (
-            "Review the supplied self-improvement evidence for this mutable local skill. "
-            "Patch, edit, or update supporting files only when the evidence clearly identifies a reusable procedural improvement. "
+            "Review the supplied self-improvement evidence for this Curator-selected mutable local skill. "
+            "Patch, edit, or update supporting files only when the evidence or Curator lifecycle/usage metadata clearly identifies a reusable procedural improvement. "
             "If the evidence is stale, ambiguous, memory-shaped, or outside this skill, return a non-mutating outcome with a reason.\n\n"
+            f"Candidate: {json.dumps(candidate_meta, ensure_ascii=False, sort_keys=True, default=str)}\n"
             f"Evidence: {json.dumps(evidence, ensure_ascii=False, sort_keys=True, default=str)}"
         ),
         "constraints": [
@@ -128,10 +131,21 @@ def run_skill_improvement_step(
     views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
     skill_ids = [str(item) for item in views.get("skill", [])]
     skill_evidence = _evidence_by_ids(evidence_pack, skill_ids)
+    candidates = evidence_pack.get("skill_candidates") if isinstance(evidence_pack.get("skill_candidates"), list) else []
+    candidate_by_name = {str(item.get("name") or ""): item for item in candidates if isinstance(item, dict) and str(item.get("name") or "")}
     decisions: list[dict[str, Any]] = []
     changed_skills: list[str] = []
     backend = build_mutation_backend(config) if mutate else None
 
+    if not candidate_by_name:
+        return {
+            "status": "no_skill_candidates",
+            "changed": 0,
+            "changed_skills": [],
+            "decisions": [],
+        }
+
+    evidence_by_candidate: dict[str, list[dict[str, Any]]] = {name: [] for name in candidate_by_name}
     for item in skill_evidence:
         evidence_id = str(item.get("id") or "")
         skill_name = _skill_name_from_evidence(item)
@@ -143,11 +157,30 @@ def run_skill_improvement_step(
                 "changed": False,
             })
             continue
-        task = build_skill_agent_task(skill_name=skill_name, evidence=[item])
-        if not mutate:
+        if skill_name not in candidate_by_name:
             decisions.append({
                 "evidence_id": evidence_id,
                 "skill": skill_name,
+                "decision": "rejected",
+                "reason": "skill_not_in_curator_candidates",
+                "changed": False,
+            })
+            continue
+        evidence_by_candidate[skill_name].append(item)
+
+    for skill_name, candidate in candidate_by_name.items():
+        attached_evidence = evidence_by_candidate.get(skill_name) or []
+        evidence_ids = [str(item.get("id") or "") for item in attached_evidence if item.get("id")]
+        task = build_skill_agent_task(skill_name=skill_name, evidence=attached_evidence, candidate=candidate)
+        base_decision = {
+            "skill": skill_name,
+            "candidate_source": candidate.get("source") or "curator",
+            "candidate_state": candidate.get("state"),
+            "evidence_ids": evidence_ids,
+        }
+        if not mutate:
+            decisions.append({
+                **base_decision,
                 "decision": "accepted",
                 "reason": "dry_run_would_run_skill_agent",
                 "changed": False,
@@ -159,8 +192,7 @@ def run_skill_improvement_step(
         if changed:
             changed_skills.extend(str(name) for name in (result.get("changed_skills") or []))
         decisions.append({
-            "evidence_id": evidence_id,
-            "skill": skill_name,
+            **base_decision,
             "decision": "accepted" if result.get("success") else "rejected",
             "reason": result.get("reason") or result.get("error") or result.get("outcome") or "skill_agent_completed",
             "changed": changed,
@@ -168,7 +200,7 @@ def run_skill_improvement_step(
         })
 
     return {
-        "status": "completed" if decisions else "no_skill_evidence",
+        "status": "completed" if decisions else "no_skill_candidates",
         "changed": len(set(changed_skills)),
         "changed_skills": sorted(set(changed_skills)),
         "decisions": decisions,
