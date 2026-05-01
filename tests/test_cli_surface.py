@@ -54,14 +54,64 @@ def test_status_and_setup_accept_json_flags_as_full_status_output():
     parser = build_parser()
 
     status = parser.parse_args(["status", "--json"])
-    setup = parser.parse_args(["setup", "--check", "--reset", "--json"])
+    setup = parser.parse_args(["setup", "--check", "--reset", "--yes", "--json"])
 
     assert status.self_improvement_cmd == "status"
     assert status.as_json is True
     assert setup.self_improvement_cmd == "setup"
     assert setup.check is True
     assert setup.reset is True
+    assert setup.yes is True
     assert setup.as_json is True
+
+
+def test_setup_reset_confirmation_requires_tty_or_yes(monkeypatch, tmp_path):
+    cli = load_cli_module()
+
+    class NonTTY:
+        def isatty(self):
+            return False
+
+    monkeypatch.setattr(cli.sys, "stdin", NonTTY())
+    try:
+        cli._confirm_setup_reset(config={"_self_improvement_root": str(tmp_path / "self-improvement")})
+    except SystemExit as exc:
+        assert "--yes" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("non-interactive reset should require --yes")
+
+    cli._confirm_setup_reset(config={"_self_improvement_root": str(tmp_path / "self-improvement")}, assume_yes=True)
+
+
+def test_setup_reset_confirmation_accepts_y(monkeypatch, tmp_path):
+    cli = load_cli_module()
+
+    class TTY:
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(cli.sys, "stdin", TTY())
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+
+    cli._confirm_setup_reset(config={"_self_improvement_root": str(tmp_path / "self-improvement")})
+
+
+def test_setup_reset_confirmation_rejects_default_no(monkeypatch, tmp_path):
+    cli = load_cli_module()
+
+    class TTY:
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(cli.sys, "stdin", TTY())
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+
+    try:
+        cli._confirm_setup_reset(config={"_self_improvement_root": str(tmp_path / "self-improvement")})
+    except SystemExit as exc:
+        assert "cancelled" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("empty confirmation should cancel reset")
 
 
 def test_removed_cli_commands_are_absent_from_primary_surface():

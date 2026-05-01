@@ -23,7 +23,7 @@ from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .recovery_engine import memory_rollback_status
 from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
-from .setup_runtime import check_runtime_setup, run_setup
+from .setup_runtime import check_runtime_setup, run_setup, runtime_layout
 from .verification import merge_judge_status
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -627,6 +627,17 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _confirm_setup_reset(*, config: dict[str, Any], assume_yes: bool = False) -> None:
+    if assume_yes:
+        return
+    root = runtime_layout(config)["root"]
+    if not sys.stdin.isatty():
+        raise SystemExit("setup --reset requires interactive confirmation; pass --yes to confirm non-interactively")
+    answer = input(f"Delete and recreate self-improvement runtime at {root}? [y/N] ").strip().lower()
+    if answer not in {"y", "yes"}:
+        raise SystemExit("setup reset cancelled")
+
+
 def _render_setup_summary(payload: dict[str, Any]) -> str:
     active = payload.get("active_evaluator") if isinstance(payload.get("active_evaluator"), dict) else {}
     defaults = payload.get("default_assets") if isinstance(payload.get("default_assets"), dict) else {}
@@ -676,6 +687,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_setup = sub.add_parser("setup", help="Initialize self-improvement runtime files")
     p_setup.add_argument("--check", action="store_true", help="Check runtime setup without writing files")
     p_setup.add_argument("--reset", action="store_true", help="Delete and recreate the self-improvement runtime directory")
+    p_setup.add_argument("--yes", action="store_true", help="Confirm --reset without an interactive prompt")
     p_setup.add_argument("--json", action="store_true", dest="as_json", help="Print JSON setup status")
     _add_config_argument(p_setup)
     p_setup.set_defaults(func=_handle_cli)
@@ -699,6 +711,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
 
     if cmd == "setup":
+        if bool(getattr(args, "reset", False)):
+            _confirm_setup_reset(config=config, assume_yes=bool(getattr(args, "yes", False)))
         payload = run_setup(
             config,
             check=bool(getattr(args, "check", False)),

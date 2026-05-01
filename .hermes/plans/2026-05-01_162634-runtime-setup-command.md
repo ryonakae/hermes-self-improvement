@@ -88,6 +88,7 @@ Add:
 bin/hermes-self-improve setup
 bin/hermes-self-improve setup --check
 bin/hermes-self-improve setup --reset
+bin/hermes-self-improve setup --reset --yes
 bin/hermes-self-improve setup --json
 ```
 
@@ -95,7 +96,7 @@ Semantics:
 
 - `setup`: create missing dirs/files and seed defaults if absent. Idempotent. Does not overwrite existing active evaluator/default copies unless a file is missing or invalid enough to fail readiness.
 - `setup --check`: read-only readiness check. Must not create or modify files.
-- `setup --reset`: delete/recreate `${HERMES_HOME}/self-improvement` contents, then seed from repo defaults. This is the explicit destructive mode. Use it during this implementation because the current local runtime content may be discarded.
+- `setup --reset`: delete/recreate `${HERMES_HOME}/self-improvement` contents, then seed from repo defaults. This is the explicit destructive mode. It requires y/N confirmation in an interactive terminal and fails non-interactively unless `--yes` is passed.
 - `setup --json`: print full payload for tests/automation.
 
 Default human output should be short:
