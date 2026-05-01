@@ -108,4 +108,5 @@ Expected: enabled true, error null, tools 4。
 - root 直下に `tools.py` や `tools/` package を置かない。Hermes core `tools.registry` を shadow する。
 - Plugin-bundled skills は repo file として編集する。`skill_manage` で plugin-bundled skill を編集しない。
 - `importlib.util.module_from_spec` で unit test する場合は、`exec_module` 前に `sys.modules[spec.name] = module` を入れる。
+- Runtime code で relative import を含む plugin module を読む場合は、file-location spec の単体名で `exec_module` しない。`importlib.import_module("hermes_self_improvement.<module>")` など package context 付きで読む。単体名だと `from .prompts ...` が `attempted relative import with no known parent package` で落ちる。
 - DSPy/GEPA scorer tests は基本 fake dependency で書く。runtime hook / normal import が `dspy` を eager import しないことを守る。
