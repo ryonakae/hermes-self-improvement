@@ -136,6 +136,20 @@ def _views_for_evidence(evidence: list[dict[str, Any]]) -> dict[str, list[str]]:
     return views
 
 
+def _curator_summary(curator_telemetry: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(curator_telemetry, dict):
+        return {"available": False, "source": "curator", "candidate_count": 0, "rejected_count": 0, "rejected_by_reason": {}}
+    summary = curator_telemetry.get("summary") if isinstance(curator_telemetry.get("summary"), dict) else {}
+    return {
+        "available": bool(curator_telemetry.get("available")),
+        "source": curator_telemetry.get("source") or "curator",
+        "candidate_count": int(summary.get("candidate_count") or len(curator_telemetry.get("candidates") or [])),
+        "rejected_count": int(summary.get("rejected_count") or len(curator_telemetry.get("rejected") or [])),
+        "rejected_by_reason": summary.get("rejected_by_reason") if isinstance(summary.get("rejected_by_reason"), dict) else {},
+        **({"reasons": curator_telemetry.get("reasons")} if isinstance(curator_telemetry.get("reasons"), list) else {}),
+    }
+
+
 def build_evidence_pack(
     events: list[dict[str, Any]],
     since: datetime,
@@ -165,6 +179,8 @@ def build_evidence_pack(
         kind_counts[kind] += 1
 
     views = _views_for_evidence(evidence)
+    skill_candidates = curator_telemetry.get("candidates") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("candidates"), list) else []
+    rejected_skill_candidates = curator_telemetry.get("rejected") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("rejected"), list) else []
     return {
         "schema_name": SCHEMA_NAME,
         "schema_version": SCHEMA_VERSION,
@@ -179,7 +195,9 @@ def build_evidence_pack(
         },
         "evidence": evidence,
         "views": views,
-        "curator_telemetry_summary": curator_telemetry or {"available": False},
+        "skill_candidates": skill_candidates,
+        "rejected_skill_candidates": rejected_skill_candidates,
+        "curator_telemetry_summary": _curator_summary(curator_telemetry),
         "ignored": ignored,
     }
 

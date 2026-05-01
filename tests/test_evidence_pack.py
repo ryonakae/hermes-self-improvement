@@ -60,6 +60,43 @@ def test_evidence_pack_routes_corrections_subagents_and_llm_failures():
     assert pack["views"]["evaluator"]
 
 
+def test_evidence_pack_carries_curator_skill_candidates_separately():
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    telemetry = {
+        "available": True,
+        "source": "curator",
+        "candidates": [
+            {"name": "active-skill", "state": "active", "source": "curator"},
+            {"name": "stale-skill", "state": "stale", "source": "curator"},
+        ],
+        "rejected": [
+            {"name": "pinned-skill", "decision": "rejected", "reason": "pinned", "source": "curator"},
+            {"name": "archived-skill", "decision": "rejected", "reason": "archived", "source": "curator"},
+        ],
+        "summary": {"candidate_count": 2, "rejected_count": 2, "rejected_by_reason": {"pinned": 1, "archived": 1}},
+    }
+    events = [
+        {"ts": since.isoformat(), "event": "post_tool_call", "tool_name": "skill_view", "status": "success", "result_preview": "loaded"},
+        {"ts": since.isoformat(), "event": "post_tool_call", "tool_name": "skill_manage", "status": "error", "result_preview": '{"error":"failed"}'},
+    ]
+
+    pack = build_evidence_pack(events, since, until, curator_telemetry=telemetry)
+
+    assert pack["skill_candidates"] == telemetry["candidates"]
+    assert pack["rejected_skill_candidates"] == telemetry["rejected"]
+    assert pack["curator_telemetry_summary"] == {
+        "available": True,
+        "source": "curator",
+        "candidate_count": 2,
+        "rejected_count": 2,
+        "rejected_by_reason": {"pinned": 1, "archived": 1},
+    }
+    assert any(item["ignored_reason"] == "curator_redundant" for item in pack["ignored"])
+    assert pack["summary"]["evidence_count"] == 1
+
+
+
 def test_write_evidence_pack_writes_runtime_artifact(tmp_path):
     since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
     until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
