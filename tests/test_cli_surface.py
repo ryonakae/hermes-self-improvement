@@ -178,7 +178,9 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
         "dry_run": False,
         "summary": {"skill_changes": 2, "memory_changes": 1, "scorer_evaluator_changed": False},
         "calibration": {"current_status": "updated", "runtime_eval_cases": {"count": 3, "status": "written"}},
-        "step_decisions": {"summary": {"total": 4}},
+        "step_decisions": {"summary": {"total": 4}, "memory": {"decisions": [{"related_memory_lookup": {"status": "completed"}}]}},
+        "curator_telemetry": {"available": True, "candidate_count": 3, "rejected_count": 2},
+        "evidence_pack": {"summary": {"evidence_count": 5, "ignored_count": 1}},
         "artifact_path": "/tmp/run.json",
     })
 
@@ -187,6 +189,10 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "- changed 2 skills" in text
     assert "Memory improvements:" in text
     assert "- changed 1 memories" in text
+    assert "Curator telemetry:" in text
+    assert "- skill candidates: 3" in text
+    assert "Hook evidence:" in text
+    assert "related lookups: completed 1" in text
     assert "private eval cases: 3 written" in text
     assert "Artifact: /tmp/run.json" in text
     assert "ledger" not in text.lower()
@@ -203,11 +209,13 @@ def test_status_summary_is_human_readable_not_json():
         "dspy_available": False,
         "mutation_backend": {"available": True},
         "curator_compatibility": {"skill_telemetry_source": "Hermes Curator", "hook_mode": "observation_only"},
+        "curator_telemetry": {"available": True, "candidate_count": 7, "rejected_count": 3},
     })
 
     assert text.startswith("hermes-self-improvement status")
     assert "Readiness:" in text
     assert "Curator compatibility:" in text
+    assert "skill candidates: 7" in text
     assert '"enabled"' not in text
 
 

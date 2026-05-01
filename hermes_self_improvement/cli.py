@@ -572,6 +572,14 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         f"- skill telemetry source: {payload.get('curator_compatibility', {}).get('skill_telemetry_source') if isinstance(payload.get('curator_compatibility'), dict) else 'unknown'}",
         f"- hook mode: {payload.get('curator_compatibility', {}).get('hook_mode') if isinstance(payload.get('curator_compatibility'), dict) else 'unknown'}",
     ]
+    telemetry = payload.get("curator_telemetry") if isinstance(payload.get("curator_telemetry"), dict) else {}
+    if telemetry:
+        lines.extend([
+            "Curator telemetry:",
+            f"- available: {'yes' if telemetry.get('available') else 'no'}",
+            f"- skill candidates: {int(telemetry.get('candidate_count') or 0)}",
+            f"- rejected: {int(telemetry.get('rejected_count') or 0)}",
+        ])
     return "\n".join(lines)
 
 
@@ -579,16 +587,34 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
     step_decisions = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
     decision_summary = step_decisions.get("summary") if isinstance(step_decisions.get("summary"), dict) else {}
+    curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
+    evidence_pack = result.get("evidence_pack") if isinstance(result.get("evidence_pack"), dict) else {}
+    evidence_summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
+    memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
+    lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
+    for decision in memory_step.get("decisions") or []:
+        if isinstance(decision, dict):
+            lookup = decision.get("related_memory_lookup") if isinstance(decision.get("related_memory_lookup"), dict) else {}
+            status = str(lookup.get("status") or "")
+            if status in lookup_counts:
+                lookup_counts[status] += 1
     title = "Self-improvement dry run" if result.get("dry_run") else "Self-improvement result"
     calibration = result.get("calibration") if isinstance(result.get("calibration"), dict) else {}
     runtime_eval_cases = calibration.get("runtime_eval_cases") if isinstance(calibration.get("runtime_eval_cases"), dict) else {}
     lines = [
         title,
         "",
+        "Curator telemetry:",
+        f"- available: {'yes' if curator.get('available') else 'no'}",
+        f"- skill candidates: {int(curator.get('candidate_count') or 0)}",
+        f"- rejected: {int(curator.get('rejected_count') or 0)}",
+        "Hook evidence:",
+        f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Memory improvements:",
         f"- changed {int(summary.get('memory_changes') or 0)} memories",
+        f"- related lookups: completed {lookup_counts['completed']}, unavailable {lookup_counts['unavailable']}, failed {lookup_counts['failed']}, skipped {lookup_counts['skipped']}",
         "Scorer/evaluator:",
         f"- calibration status: {calibration.get('current_status') or 'unknown'}",
         f"- private eval cases: {int(runtime_eval_cases.get('count') or 0)} {runtime_eval_cases.get('status') or 'not_built'}",
@@ -654,6 +680,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
     if cmd == "status":
         path = _event_path(config)
         events = _load_events(path, limit=1000)
+        curator_telemetry = load_curator_telemetry(config)
+        curator_summary = curator_telemetry.get("summary") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("summary"), dict) else {}
         payload = {
             "plugin": PLUGIN_NAME,
             "enabled": bool(config.get("enabled", True)),
@@ -672,6 +700,13 @@ def _handle_cli(args: argparse.Namespace) -> None:
                 "skill_telemetry_source": "Hermes Curator",
                 "hook_mode": "observation_only",
                 "mutation_targets": ["skill", "memory", "scorer", "evaluator"],
+            },
+            "curator_telemetry": {
+                "available": bool(curator_telemetry.get("available")) if isinstance(curator_telemetry, dict) else False,
+                "candidate_count": int(curator_summary.get("candidate_count") or 0),
+                "rejected_count": int(curator_summary.get("rejected_count") or 0),
+                "rejected_by_reason": curator_summary.get("rejected_by_reason") if isinstance(curator_summary.get("rejected_by_reason"), dict) else {},
+                "reasons": curator_telemetry.get("reasons") if isinstance(curator_telemetry, dict) else None,
             },
         }
         if getattr(args, "as_json", False):
