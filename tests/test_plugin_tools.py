@@ -97,7 +97,7 @@ def test_status_tool_reports_memory_rollback_readiness(tmp_path):
 
 def test_calibrate_tool_dry_run_does_not_promote(tmp_path):
     mod = load_plugin_module()
-    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
 
     raw = mod._handle_self_improvement_calibrate_tool({
         "dry_run": True,

@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import importlib
+import json
+import sys
+from pathlib import Path
+
+PLUGIN_DIR = Path(__file__).resolve().parents[1]
+
+
+def load_setup_module():
+    if str(PLUGIN_DIR) not in sys.path:
+        sys.path.insert(0, str(PLUGIN_DIR))
+    return importlib.import_module("hermes_self_improvement.setup_runtime")
+
+
+def test_setup_check_reports_missing_runtime_without_writing(tmp_path):
+    setup = load_setup_module()
+    root = tmp_path / "self-improvement"
+    config = {"_self_improvement_root": str(root)}
+
+    result = setup.run_setup(config, check=True)
+
+    assert result["operation"] == "check"
+    assert result["initialized"] is False
+    assert "missing_directories" in result["reasons"]
+    assert root.exists() is False
+
+
+def test_setup_creates_evaluator_runtime_layout_and_seed_files(tmp_path):
+    setup = load_setup_module()
+    root = tmp_path / "self-improvement"
+    config = {"_self_improvement_root": str(root)}
+
+    result = setup.run_setup(config)
+
+    assert result["initialized"] is True
+    expected_dirs = [
+        "state",
+        "daily",
+        "runs",
+        "evidence",
+        "outcomes",
+        "ledgers",
+        "evaluator",
+        "evaluator/defaults",
+        "evaluator/programs",
+        "evaluator/candidates",
+        "evaluator/runtime-eval-cases",
+        "cache/dspy",
+    ]
+    for rel in expected_dirs:
+        assert (root / rel).is_dir(), rel
+    expected_files = [
+        "state/events.jsonl",
+        "state/install.json",
+        "evaluator/active.json",
+        "evaluator/defaults/proposal-evaluator.json",
+        "evaluator/defaults/proposal-rubric.json",
+        "evaluator/defaults/proposal-cases.jsonl",
+    ]
+    for rel in expected_files:
+        assert (root / rel).exists(), rel
+    pointer = json.loads((root / "evaluator/active.json").read_text(encoding="utf-8"))
+    assert pointer["schema_name"] == "self_improvement_active_evaluator_pointer"
+    assert pointer["mode"] == "dspy_program_eval"
+    assert pointer["compiled_program_path"] is None
+    assert "/evaluator/defaults/" in pointer["evaluator_path"]
+
+
+def test_setup_is_idempotent_and_preserves_existing_active_evaluator(tmp_path):
+    setup = load_setup_module()
+    root = tmp_path / "self-improvement"
+    config = {"_self_improvement_root": str(root)}
+    setup.run_setup(config)
+    active = root / "evaluator" / "active.json"
+    custom = {"schema_name": "self_improvement_active_evaluator_pointer", "custom": True}
+    active.write_text(json.dumps(custom, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    result = setup.run_setup(config)
+
+    assert result["initialized"] is True
+    assert result["created_or_updated"]["active_evaluator"] is False
+    assert json.loads(active.read_text(encoding="utf-8"))["custom"] is True
+
+
+def test_setup_reset_runtime_removes_stale_files_and_reseeds(tmp_path):
+    setup = load_setup_module()
+    root = tmp_path / "self-improvement"
+    config = {"_self_improvement_root": str(root)}
+    stale = root / "gepa" / "stale.json"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale", encoding="utf-8")
+
+    result = setup.run_setup(config, reset_runtime=True)
+
+    assert result["initialized"] is True
+    assert result["reset_runtime"] is True
+    assert stale.exists() is False
+    assert (root / "evaluator" / "active.json").exists()
+    assert (root / "gepa").exists() is False
+
+
+def test_setup_records_seed_hashes_in_install_and_active_pointer(tmp_path):
+    setup = load_setup_module()
+    root = tmp_path / "self-improvement"
+    config = {"_self_improvement_root": str(root)}
+
+    setup.run_setup(config)
+
+    install = json.loads((root / "state" / "install.json").read_text(encoding="utf-8"))
+    pointer = json.loads((root / "evaluator" / "active.json").read_text(encoding="utf-8"))
+    assert install["default_asset_hashes"] == pointer["hashes"]
+    assert all(value and value.startswith("sha256:") for value in pointer["hashes"].values())
+
+
+def test_setup_module_does_not_import_dspy():
+    sys.modules.pop("dspy", None)
+    load_setup_module()
+
+    assert "dspy" not in sys.modules

@@ -28,7 +28,7 @@ def create_calibration_ledger(tmp_path: Path, config: dict) -> None:
         "created_at": "2026-04-27T17:00:00+00:00",
         "candidate": {"reason": "scorer error drift"},
         "regression": {"status": "passed"},
-        "active_pointer_path": str(tmp_path / "active-evaluator.json"),
+        "active_pointer_path": str(tmp_path / "evaluator" / "active.json"),
         "active_before_hash": "before",
         "active_after_hash": "after",
     }

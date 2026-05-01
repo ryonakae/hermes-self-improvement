@@ -16,6 +16,7 @@ bin/hermes-self-improve status
 ## よく使うコマンド
 
 ```bash
+bin/hermes-self-improve setup --check
 bin/hermes-self-improve status
 bin/hermes-self-improve report --since-hours 24 --json
 bin/hermes-self-improve improve
@@ -24,7 +25,7 @@ bin/hermes-self-improve calibrate
 bin/hermes-self-improve calibrate --dry-run
 ```
 
-Primary surface は `improve / calibrate / report / status` の4つです。`plan / apply / rollback / outcome`、`--execute`、item/hash 指定 flag、legacy/debug command は primary surface に戻しません。
+CLI の primary runner/tool surface は `improve / calibrate / report / status` の4つです。`setup` は CLI-only の安全な runtime bootstrap で、agent tool には出しません。`plan / apply / rollback / outcome`、`--execute`、item/hash 指定 flag、legacy/debug command は primary surface に戻しません。
 
 ## 検証
 
@@ -80,4 +81,4 @@ PY
 - `skills/operations/`: bundled operational skill
 - `tests/`: pytest suite
 
-Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存します。run artifact は `runs/`、event は `state/events.jsonl`。
+Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存します。`setup` が `state/`, `daily/`, `runs/`, `evidence/`, `outcomes/`, `ledgers/`, `evaluator/`, `cache/dspy/` を作ります。run artifact は `runs/`、event は `state/events.jsonl`、active evaluator pointer は `evaluator/active.json`、runtime-private eval cases は `evaluator/runtime-eval-cases/`。

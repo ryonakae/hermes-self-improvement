@@ -1,8 +1,11 @@
 # Operations
 
-Use the repository-local wrapper CLI. The primary surface is intentionally small:
+Use the repository-local wrapper CLI. The mutation-capable runner surface is intentionally small; `setup` is a safe CLI-only runtime bootstrap:
 
 ```bash
+bin/hermes-self-improve setup
+bin/hermes-self-improve setup --check
+bin/hermes-self-improve setup --reset-runtime
 bin/hermes-self-improve status
 bin/hermes-self-improve report --since-hours 24 --scorer compare
 bin/hermes-self-improve improve
@@ -13,6 +16,9 @@ bin/hermes-self-improve calibrate --dry-run
 
 Semantics:
 
+- `setup` creates `${HERMES_HOME:-~/.hermes}/self-improvement` runtime directories, default evaluator assets, and `evaluator/active.json`. It does not call LLMs, GEPA, skill mutation, or memory mutation.
+- `setup --check` is read-only.
+- `setup --reset-runtime` is destructive for the runtime directory only; do not use it unless current runtime artifacts may be discarded.
 - `improve` is mutation-capable by default, but internal runner gates still decide whether anything changes.
 - `improve --dry-run` builds evidence and run artifacts without mutation.
 - `calibrate` may promote scorer/evaluator state only when evidence and regression gates pass.

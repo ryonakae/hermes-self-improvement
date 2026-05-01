@@ -118,8 +118,8 @@ def test_calibration_bad_outcome_threshold_requests_candidate(tmp_path):
 def test_calibration_preview_does_not_write_active_pointer(tmp_path):
     mod = load_plugin_module()
     cfg = base_config(tmp_path)
-    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
-    runtime_cases_dir = tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"
+    active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
+    runtime_cases_dir = tmp_path / "self-improvement" / "evaluator" / "runtime-eval-cases"
     write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
     write_review_outcome(cfg, {"outcome": "rejected_by_human", "source": "user"}, "rejected.json")
 
@@ -177,8 +177,8 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
 def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path)
-    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
-    runtime_cases_dir = tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"
+    active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
+    runtime_cases_dir = tmp_path / "self-improvement" / "evaluator" / "runtime-eval-cases"
     write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
     write_review_outcome(cfg, {"outcome": "rejected_by_human", "source": "user"}, "rejected.json")
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "failed", "reason": "regression_failed"})
@@ -212,7 +212,7 @@ def test_build_runtime_eval_cases_uses_review_outcomes_only(tmp_path):
 def test_calibration_execute_promotes_active_pointer_after_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path)
-    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
     repo_cases_before = (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8")
     write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
     write_review_outcome(cfg, {"outcome": "rejected_by_human", "source": "user"}, "rejected.json")
@@ -230,7 +230,7 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
     runtime_cases = result["runtime_eval_cases"]
     assert runtime_cases["status"] == "written"
     assert runtime_cases["count"] == 2
-    assert runtime_cases["path"].startswith(str(tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"))
+    assert runtime_cases["path"].startswith(str(tmp_path / "self-improvement" / "evaluator" / "runtime-eval-cases"))
     assert Path(runtime_cases["path"]).exists()
     assert (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8") == repo_cases_before
     ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
@@ -241,7 +241,7 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
 def test_restore_previous_calibration_restores_active_before_state(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path)
-    active_pointer = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
     write_json(active_pointer, {"candidate_hash": "before", "regression": {"status": "passed"}})
     before_content = active_pointer.read_text(encoding="utf-8")
     write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")

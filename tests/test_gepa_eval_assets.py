@@ -367,7 +367,7 @@ def test_build_gepa_payload_includes_eval_assets_and_program_name():
 
 def test_gepa_payload_loads_runtime_private_eval_cases_from_state(tmp_path):
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_runtime_cases")
-    runtime_dir = tmp_path / "self-improvement" / "gepa" / "runtime-eval-cases"
+    runtime_dir = tmp_path / "self-improvement" / "evaluator" / "runtime-eval-cases"
     runtime_dir.mkdir(parents=True)
     runtime_case = {
         "id": "runtime-1",

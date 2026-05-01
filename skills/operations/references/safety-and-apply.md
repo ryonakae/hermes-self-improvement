@@ -36,7 +36,7 @@ Provider capability decides the executable operation. Unsupported delete/replace
 
 ## Scorer/evaluator safety
 
-Scorer/evaluator self-improvement is advisory and regression-gated. Runtime-derived eval cases are stored under `${HERMES_HOME:-~/.hermes}/self-improvement/gepa/runtime-eval-cases/` and are not written into repo-tracked `evals/proposal/`.
+Scorer/evaluator self-improvement is advisory and regression-gated. Runtime-derived eval cases are stored under `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/runtime-eval-cases/` and are not written into repo-tracked `evals/proposal/`.
 
 DSPy/GEPA dependencies stay lazy. Hook and plugin discovery paths must not import heavy optional dependencies.
 

@@ -87,7 +87,7 @@ def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _active_evaluator_pointer_path(config: dict[str, Any]) -> Path:
-    return _reports_dir(config) / "gepa" / "active-evaluator.json"
+    return _reports_dir(config) / "evaluator" / "active.json"
 
 
 def _resolve_compiled_program_path(config: dict[str, Any], gepa_config: dict[str, Any]) -> Path | None:
@@ -149,7 +149,7 @@ def load_eval_cases(path: Path | None = None) -> list[dict[str, Any]]:
 
 def load_runtime_eval_cases(config: dict[str, Any] | None = None, *, limit: int = 200) -> list[dict[str, Any]]:
     """Load user/runtime-derived eval cases from private self-improvement state only."""
-    root = _reports_dir(config or {}) / "gepa" / "runtime-eval-cases"
+    root = _reports_dir(config or {}) / "evaluator" / "runtime-eval-cases"
     if not root.exists():
         return []
     cases: list[dict[str, Any]] = []
@@ -309,7 +309,7 @@ def optimize_gepa(
 
     artifact_id = ts.strftime("%Y%m%dT%H%M%SZ") + "-gepa-compile"
     program_path = None
-    programs_dir = _reports_dir(config) / "gepa" / "programs"
+    programs_dir = _reports_dir(config) / "evaluator" / "programs"
     programs_dir.mkdir(parents=True, exist_ok=True)
     candidate_path = programs_dir / f"{artifact_id}.json"
     saved_program = False
@@ -343,7 +343,7 @@ def optimize_gepa(
         "safety": {"advisory_only": True, "active_evaluator_promoted": False, "requires_approval_for_promotion": True},
         "stats": getattr(optimizer, "stats", None),
     }
-    out_dir = _reports_dir(config) / "gepa" / ts.strftime("%Y-%m-%d")
+    out_dir = _reports_dir(config) / "evaluator" / ts.strftime("%Y-%m-%d")
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{artifact_id}.json"
     out_path.write_text(_stable_json(payload) + "\n", encoding="utf-8")

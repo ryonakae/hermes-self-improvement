@@ -50,13 +50,18 @@ def test_primary_cli_surface_defaults_to_compare_scorer():
     assert report.scorer == "compare"
 
 
-def test_status_accepts_json_flag_as_full_status_output():
+def test_status_and_setup_accept_json_flags_as_full_status_output():
     parser = build_parser()
 
     status = parser.parse_args(["status", "--json"])
+    setup = parser.parse_args(["setup", "--check", "--reset-runtime", "--json"])
 
     assert status.self_improvement_cmd == "status"
     assert status.as_json is True
+    assert setup.self_improvement_cmd == "setup"
+    assert setup.check is True
+    assert setup.reset_runtime is True
+    assert setup.as_json is True
 
 
 def test_removed_cli_commands_are_absent_from_primary_surface():
@@ -208,15 +213,38 @@ def test_status_summary_is_human_readable_not_json():
         "last_run_artifact": "/tmp/run.json",
         "dspy_available": False,
         "mutation_backend": {"available": True},
+        "runtime_setup": {"initialized": False, "active_evaluator": {"status": "missing"}, "default_assets": {"status": "missing"}},
         "curator_integration": {"skill_telemetry_source": "Hermes Curator", "hook_mode": "observation_only"},
         "curator_telemetry": {"available": True, "candidate_count": 7, "rejected_count": 3},
     })
 
     assert text.startswith("hermes-self-improvement status")
     assert "Readiness:" in text
+    assert "Runtime setup:" in text
+    assert "active evaluator: missing" in text
+    assert "next: bin/hermes-self-improve setup" in text
     assert "Curator integration:" in text
     assert "skill candidates: 7" in text
     assert '"enabled"' not in text
+
+
+def test_setup_summary_is_human_readable_not_json():
+    cli = load_cli_module()
+    text = cli._render_setup_summary({
+        "operation": "setup",
+        "runtime_root": "/tmp/self-improvement",
+        "initialized": True,
+        "reset_runtime": False,
+        "writable": True,
+        "active_evaluator": {"path": "/tmp/self-improvement/evaluator/active.json", "status": "ready"},
+        "default_assets": {"status": "ready"},
+        "event_log": {"status": "ready"},
+        "dspy_cache": {"status": "ready"},
+    })
+
+    assert text.startswith("hermes-self-improvement setup")
+    assert "active pointer: /tmp/self-improvement/evaluator/active.json" in text
+    assert '"initialized"' not in text
 
 
 def test_operational_report_sections_include_runner_artifact_summary():

@@ -8,6 +8,7 @@ from typing import Any
 from .config import normalize_calibration_config
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
+from .setup_runtime import check_runtime_setup
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
@@ -137,7 +138,7 @@ def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, An
 
 
 def _runtime_eval_cases_dir(config: dict[str, Any]) -> Path:
-    return _reports_dir(config) / "gepa" / "runtime-eval-cases"
+    return _reports_dir(config) / "evaluator" / "runtime-eval-cases"
 
 
 def _runtime_eval_cases_path(config: dict[str, Any], candidate: dict[str, Any]) -> Path:
@@ -188,7 +189,7 @@ def write_runtime_eval_cases(config: dict[str, Any], *, candidate: dict[str, Any
 
 
 def _active_evaluator_pointer_path(config: dict[str, Any], calibration: dict[str, Any]) -> Path:
-    return _reports_dir(config) / "gepa" / "active-evaluator.json"
+    return _reports_dir(config) / "evaluator" / "active.json"
 
 
 def _current_pointer_content(path: Path) -> tuple[str | None, str | None]:
@@ -317,6 +318,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         "active_evaluator_path": None,
         "ledger_path": None,
         "runtime_eval_cases": {"status": "not_built", "count": 0, "path": None},
+        "runtime_setup": check_runtime_setup(config),
     }
     if not calibration.get("enabled", True):
         result["reasons"].append("calibration_disabled")

@@ -10,6 +10,7 @@ from .config import DEFAULT_RETENTION_DAYS, load_config
 from .mutation_backend import mutation_backend_status
 from .observer import _event_path, _load_events
 from .recovery_engine import memory_rollback_status
+from .setup_runtime import check_runtime_setup
 from .verification import merge_judge_status
 try:  # pragma: no cover - available in Hermes runtime
     from tools.registry import tool_error, tool_result
@@ -62,6 +63,7 @@ def _handle_self_improvement_status_tool(args: dict[str, Any] | None = None, **_
         "merge_judge": merge_judge_status(config),
         "memory_rollback": memory_rollback_status(config),
         "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
+        "runtime_setup": check_runtime_setup(config),
         "target_changed": False,
     })
 

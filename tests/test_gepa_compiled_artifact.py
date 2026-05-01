@@ -151,7 +151,7 @@ def test_gepa_adapter_compiled_mode_can_resolve_active_evaluator_pointer(monkeyp
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_compiled_pointer")
     artifact_path = tmp_path / "compiled-from-pointer.json"
     artifact_path.write_text(json.dumps({"compiled": True}), encoding="utf-8")
-    pointer_path = tmp_path / "self-improvement" / "gepa" / "active-evaluator.json"
+    pointer_path = tmp_path / "self-improvement" / "evaluator" / "active.json"
     pointer_path.parent.mkdir(parents=True, exist_ok=True)
     pointer_path.write_text(json.dumps({"compiled_program_path": str(artifact_path)}), encoding="utf-8")
 

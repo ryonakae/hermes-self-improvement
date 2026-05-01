@@ -1,0 +1,47 @@
+{
+  "assets": {
+    "eval_cases": "proposal-cases.jsonl",
+    "rubric": "proposal-rubric.json"
+  },
+  "evaluator_id": "proposal-evaluator-default-v1",
+  "evaluator_version": "1.0.0",
+  "input_fields": [
+    "proposal_json",
+    "findings_json",
+    "rubric_json"
+  ],
+  "mode": "dspy_program_eval",
+  "output_contract": {
+    "auto_apply": false,
+    "confidence": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "id": "string",
+    "rationale": "string mentioning evidence and safety constraints",
+    "recommendation": [
+      "report_only",
+      "human_review",
+      "review_low_risk_candidate"
+    ],
+    "risk": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "score": "integer 0-100",
+    "score_breakdown": "optional rubric dimension breakdown"
+  },
+  "program": "ProposalScoringDspyProgram",
+  "safety": {
+    "advisory_only": true,
+    "auto_apply_grants_permission": false,
+    "force_auto_apply_false": true,
+    "promotion_requires_regression_gate": true,
+    "python_implementation_self_mutation_allowed": false
+  },
+  "schema_name": "self_improvement_default_evaluator",
+  "schema_version": "1.0",
+  "target": "proposal_scoring"
+}

@@ -23,6 +23,7 @@ from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .recovery_engine import memory_rollback_status
 from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
+from .setup_runtime import check_runtime_setup, run_setup
 from .verification import merge_judge_status
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -193,7 +194,7 @@ def _recent_json_files(root: Path, pattern: str = "*.json", limit: int = 5) -> l
 
 
 def _runtime_private_eval_case_summary(config: dict[str, Any]) -> dict[str, Any]:
-    root = _reports_dir(config) / "gepa" / "runtime-eval-cases"
+    root = _reports_dir(config) / "evaluator" / "runtime-eval-cases"
     files = []
     total = 0
     if root.exists():
@@ -545,6 +546,20 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         f"- plugin enabled: {bool(payload.get('enabled'))}",
         f"- mutation backend: {'available' if mutation.get('available') else 'unavailable'}",
         f"- DSPy available: {bool(payload.get('dspy_available'))}",
+    ]
+    setup = payload.get("runtime_setup") if isinstance(payload.get("runtime_setup"), dict) else {}
+    if setup:
+        active = setup.get("active_evaluator") if isinstance(setup.get("active_evaluator"), dict) else {}
+        defaults = setup.get("default_assets") if isinstance(setup.get("default_assets"), dict) else {}
+        lines.extend([
+            "Runtime setup:",
+            f"- initialized: {'yes' if setup.get('initialized') else 'no'}",
+            f"- active evaluator: {active.get('status') or 'unknown'}",
+            f"- default assets: {defaults.get('status') or 'unknown'}",
+        ])
+        if not setup.get("initialized"):
+            lines.append("- next: bin/hermes-self-improve setup")
+    lines.extend([
         "Runtime:",
         f"- event path: {payload.get('event_path')}",
         f"- recent sample events: {int(payload.get('event_count_sample') or 0)}",
@@ -553,7 +568,7 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         "Curator integration:",
         f"- skill telemetry source: {curator_integration.get('skill_telemetry_source') or 'unknown'}",
         f"- hook mode: {curator_integration.get('hook_mode') or 'unknown'}",
-    ]
+    ])
     telemetry = payload.get("curator_telemetry") if isinstance(payload.get("curator_telemetry"), dict) else {}
     if telemetry:
         lines.extend([
@@ -612,6 +627,36 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _render_setup_summary(payload: dict[str, Any]) -> str:
+    active = payload.get("active_evaluator") if isinstance(payload.get("active_evaluator"), dict) else {}
+    defaults = payload.get("default_assets") if isinstance(payload.get("default_assets"), dict) else {}
+    event_log = payload.get("event_log") if isinstance(payload.get("event_log"), dict) else {}
+    dspy_cache = payload.get("dspy_cache") if isinstance(payload.get("dspy_cache"), dict) else {}
+    title = f"{PLUGIN_NAME} setup check" if payload.get("operation") == "check" else f"{PLUGIN_NAME} setup"
+    lines = [
+        title,
+        "",
+        "Runtime:",
+        f"- root: {payload.get('runtime_root')}",
+        f"- initialized: {'yes' if payload.get('initialized') else 'no'}",
+        f"- reset: {'yes' if payload.get('reset_runtime') else 'no'}",
+        "Evaluator:",
+        f"- active pointer: {active.get('path') or 'unknown'}",
+        f"- active evaluator: {active.get('status') or 'unknown'}",
+        f"- default assets: {defaults.get('status') or 'unknown'}",
+        "Readiness:",
+        f"- writable: {'yes' if payload.get('writable') else 'no'}",
+        f"- event log: {event_log.get('status') or 'unknown'}",
+        f"- DSPy cache: {dspy_cache.get('status') or 'unknown'}",
+    ]
+    reasons = payload.get("reasons") if isinstance(payload.get("reasons"), list) else []
+    if reasons:
+        lines.append("Reasons: " + ", ".join(str(reason) for reason in reasons))
+    if not payload.get("initialized") and payload.get("operation") == "check":
+        lines.append("Next: bin/hermes-self-improve setup")
+    return "\n".join(lines)
+
+
 def _setup_cli(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="self_improvement_cmd")
 
@@ -627,6 +672,13 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_status.add_argument("--json", action="store_true", dest="as_json", help="Print full JSON status.")
     _add_config_argument(p_status)
     p_status.set_defaults(func=_handle_cli)
+
+    p_setup = sub.add_parser("setup", help="Initialize self-improvement runtime files")
+    p_setup.add_argument("--check", action="store_true", help="Check runtime setup without writing files")
+    p_setup.add_argument("--reset-runtime", action="store_true", help="Delete and recreate the self-improvement runtime directory")
+    p_setup.add_argument("--json", action="store_true", dest="as_json", help="Print JSON setup status")
+    _add_config_argument(p_setup)
+    p_setup.set_defaults(func=_handle_cli)
 
     p_report = sub.add_parser("report", help="Analyze and write Markdown report")
     p_report.add_argument("--since-hours", type=int, default=24)
@@ -645,6 +697,18 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 def _handle_cli(args: argparse.Namespace) -> None:
     config = load_config(cli_config_path=getattr(args, "config_path", None))
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
+
+    if cmd == "setup":
+        payload = run_setup(
+            config,
+            check=bool(getattr(args, "check", False)),
+            reset_runtime=bool(getattr(args, "reset_runtime", False)),
+        )
+        if getattr(args, "as_json", False):
+            print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(_render_setup_summary(payload))
+        return
 
     if cmd == "improve":
         payload = run_improve(
@@ -677,6 +741,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "merge_judge": merge_judge_status(config),
             "memory_rollback": memory_rollback_status(config),
             "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
+            "runtime_setup": check_runtime_setup(config),
             "last_run_artifact": str(_latest_run_artifact(config)) if _latest_run_artifact(config) else None,
             "curator_integration": {
                 "skill_telemetry_source": "Hermes Curator",

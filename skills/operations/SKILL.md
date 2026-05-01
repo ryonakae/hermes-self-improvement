@@ -43,11 +43,12 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - `evals/proposal/`: repo-tracked public scorer regression seed。user-specific runtime eval cases はここに混ぜない
 - `skills/operations/SKILL.md`: この bundled operational skill
 
-Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下。主な subdir は `state/`, `daily/`, `runs/`, `gepa/`, `cache/`。
+Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下。主な subdir は `state/`, `daily/`, `runs/`, `evaluator/`, `cache/`。`evaluator/` は scorer/evaluator の runtime state と default asset copy を置く場所で、GEPA はその中の optimizer 実装の一つとして扱う。
 
 ## 日常コマンド
 
 ```bash
+bin/hermes-self-improve setup --check
 bin/hermes-self-improve status
 bin/hermes-self-improve report --since-hours 24 --json
 bin/hermes-self-improve improve

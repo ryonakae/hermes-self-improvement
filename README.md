@@ -6,9 +6,12 @@ hook は観測専用です。hook 内で LLM call、GEPA optimizer、skill patch
 
 ## Primary surface
 
-CLI / plugin tool surface は4つです。
+CLI surface は5つ、plugin tool surface は4つです。`setup` は初回インストール/runtime scaffold 用の CLI-only command で、agent tool には出しません。
 
 ```bash
+bin/hermes-self-improve setup
+bin/hermes-self-improve setup --check
+bin/hermes-self-improve setup --reset-runtime
 bin/hermes-self-improve status
 bin/hermes-self-improve report --since-hours 24 --json
 bin/hermes-self-improve improve
@@ -22,6 +25,9 @@ bin/hermes-self-improve calibrate --dry-run
 - `calibrate`: scorer/evaluator calibration。regression gate を通った場合だけ active state を更新する。default は mutation-capable。
 - `calibrate --dry-run`: calibration の preview。
 - `report`: 直近 event / artifact の読み取りレポート。mutation しない。
+- `setup`: `${HERMES_HOME:-~/.hermes}/self-improvement` の runtime directory、event log、default evaluator assets、active evaluator pointer を初期化する。LLM/GEPA/mutation は実行しない。
+- `setup --check`: runtime setup の read-only readiness check。
+- `setup --reset-runtime`: runtime directory を削除して作り直す破壊的 bootstrap。repo files は触らない。
 - `status`: plugin readiness と runtime path の読み取り表示。
 
 削除済みの primary surface: `plan`, `apply`, `rollback`, `outcome` / `record_outcome`。`--execute`, item 指定、hash 確認 flag は primary CLI/tool schema に出しません。
@@ -88,6 +94,27 @@ calibrate
 
 Run artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` に保存します。詳細な evidence、step decisions、summary は artifact に残し、通常出力は Curator 風に短くします。
 
+Runtime layout は `setup` が作ります。
+
+```text
+${HERMES_HOME}/self-improvement/
+  state/events.jsonl
+  state/install.json
+  daily/
+  runs/
+  evidence/
+  outcomes/
+  ledgers/
+  evaluator/active.json
+  evaluator/defaults/
+  evaluator/programs/
+  evaluator/candidates/
+  evaluator/runtime-eval-cases/
+  cache/dspy/
+```
+
+Repo-tracked default evaluator assets は `defaults/evaluator/`、public regression seed は `evals/proposal/` に置きます。
+
 ## Scope and safety
 
 改善対象はこの4カテゴリだけです。
@@ -117,7 +144,7 @@ DSPy / GEPA は scorer/evaluator の改善に使います。skill や memory を
 
 - scorer/evaluator の自己改善は prompt / rubric / runtime-private eval cases が対象です。
 - Python implementation code は自己変更しません。
-- Runtime-private eval cases は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に置き、repo-tracked `evals/` に勝手に混ぜません。
+- Runtime-private eval cases は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/runtime-eval-cases/` 配下に置き、repo-tracked `evals/` に勝手に混ぜません。
 - calibration の active promotion は regression gate を通った場合だけです。
 
 ## 主要パス
