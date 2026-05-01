@@ -160,6 +160,28 @@ def test_memory_step_dry_run_records_executable_built_in_context():
     assert decision["related_memory_lookup"]["status"] == "skipped"
 
 
+def test_memory_tool_evidence_targets_built_in_even_with_external_provider_active():
+    result = run_memory_improvement_step(
+        evidence_pack=memory_evidence_pack({"action": "add", "target": "memory", "content": "User prefers concise summaries."}),
+        config={
+            "memory": {"provider": "hindsight"},
+            "memory_runtime": {
+                "built_in": {"enabled": True, "memory_enabled": True, "user_profile_enabled": True, "tool": "memory"},
+                "external": {"provider": "hindsight", "enabled": True},
+            },
+        },
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert result["provider"] == "hindsight"
+    assert decision["decision"] == "accepted"
+    assert decision["context"]["target_layer"] == "built_in"
+    assert decision["context"]["active_external_provider"] == "hindsight"
+    assert decision["context"]["tool_name"] == "memory"
+    assert decision["context"]["tool_args"]["action"] == "add"
+
+
 def test_memory_step_attaches_related_lookup_for_correction_evidence():
     calls = []
 
@@ -167,7 +189,7 @@ def test_memory_step_attaches_related_lookup_for_correction_evidence():
         calls.append(query)
         return [{"content": "Old preference"}, {"content": "New preference"}]
 
-    pack = memory_evidence_pack({"operation": "memory_delete", "reason": "stale", "target": "old", "current_claim": "new"})
+    pack = memory_evidence_pack({"operation": "memory_delete", "target_kind": "external_memory", "reason": "stale", "target": "old", "current_claim": "new"})
     pack["evidence"][0]["kind"] = "correction_evidence"
     result = run_memory_improvement_step(
         evidence_pack=pack,
@@ -185,7 +207,7 @@ def test_memory_step_lookup_failure_does_not_block_safe_memory_operation():
     def lookup(query):
         raise RuntimeError("lookup down")
 
-    pack = memory_evidence_pack({"operation": "memory_delete", "reason": "stale", "target": "old", "current_claim": "new"})
+    pack = memory_evidence_pack({"operation": "memory_delete", "target_kind": "external_memory", "reason": "stale", "target": "old", "current_claim": "new"})
     pack["evidence"][0]["kind"] = "correction_evidence"
     result = run_memory_improvement_step(
         evidence_pack=pack,
@@ -218,7 +240,7 @@ def test_memory_step_executes_built_in_memory_tool_when_mutating():
 
 def test_memory_step_rejects_unsupported_provider_delete_without_identity():
     result = run_memory_improvement_step(
-        evidence_pack=memory_evidence_pack({"operation": "memory_delete", "reason": "secret", "target": "sensitive value"}),
+        evidence_pack=memory_evidence_pack({"operation": "memory_delete", "target_kind": "external_memory", "reason": "secret", "target": "sensitive value"}),
         config={"memory": {"provider": "hindsight"}},
         mutate=True,
     )
@@ -239,6 +261,7 @@ def test_memory_step_uses_provider_correction_tool_for_hindsight_stale_delete():
     result = run_memory_improvement_step(
         evidence_pack=memory_evidence_pack({
             "operation": "memory_delete",
+            "target_kind": "external_memory",
             "reason": "stale",
             "target": "User prefers old workflow",
             "current_claim": "User prefers new workflow",
@@ -250,3 +273,59 @@ def test_memory_step_uses_provider_correction_tool_for_hindsight_stale_delete():
     assert result["changed"] == 1
     assert result["decisions"][0]["context"]["tool_name"] == "hindsight_retain"
     assert calls and "User prefers new workflow" in calls[0]["content"]
+
+
+def test_memory_step_external_target_uses_hindsight_retain_for_add():
+    result = run_memory_improvement_step(
+        evidence_pack=memory_evidence_pack({"operation": "memory_add", "target": "external_memory", "content": "Long context belongs in search memory."}),
+        config={"memory": {"provider": "hindsight"}},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert result["external_provider"] == "hindsight"
+    assert decision["decision"] == "accepted"
+    assert decision["context"]["normalized_target"] == "external_memory"
+    assert decision["context"]["tool_name"] == "hindsight_retain"
+    assert decision["context"]["tool_args"]["content"] == "Long context belongs in search memory."
+
+
+def test_memory_step_missing_target_does_not_default_to_hindsight():
+    event = {
+        "event": "post_tool_call",
+        "status": "error",
+        "args_preview": json.dumps({"operation": "memory_add", "content": "Ambiguous memory."}),
+    }
+    pack = {
+        "evidence": [{"id": "mem1", "kind": "memory_evidence", "event": event, "likely_targets": [{"target": "memory", "weight": 0.8}]}],
+        "views": {"skill": [], "memory": ["mem1"], "scorer": [], "evaluator": []},
+    }
+    result = run_memory_improvement_step(
+        evidence_pack=pack,
+        config={"memory": {"provider": "hindsight"}},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert decision["decision"] == "rejected"
+    assert decision["reason"] == "memory_target_missing"
+    assert decision["context"]["tool_name"] is None
+
+
+def test_memory_step_extracts_external_target_from_provider_tool_evidence():
+    event = {
+        "event": "post_tool_call",
+        "tool_name": "hindsight_retain",
+        "status": "success",
+        "args_preview": json.dumps({"content": "Prior implementation summary."}),
+    }
+    pack = {
+        "evidence": [{"id": "mem1", "kind": "memory_evidence", "event": event, "likely_targets": [{"target": "memory", "weight": 0.8}]}],
+        "views": {"skill": [], "memory": ["mem1"], "scorer": [], "evaluator": []},
+    }
+
+    result = run_memory_improvement_step(evidence_pack=pack, config={"memory": {"provider": "hindsight"}}, mutate=False)
+
+    decision = result["decisions"][0]
+    assert decision["operation"]["target"] == "external_memory"
+    assert decision["context"]["tool_name"] == "hindsight_retain"

@@ -5,9 +5,16 @@ import importlib.util
 import json
 import sys
 import textwrap
+
+import pytest
 from pathlib import Path
 
 PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_ambient_hermes_home(monkeypatch):
+    monkeypatch.delenv("HERMES_HOME", raising=False)
 
 
 def load_plugin_module():
@@ -151,6 +158,41 @@ def test_legacy_scorer_config_normalizes_into_model_config(tmp_path):
     assert config["model"]["llm"]["max_tokens"] == 444
     assert config["model"]["gepa"]["model"] == "gepa-task"
     assert config["model"]["gepa"]["timeout"] == 77
+
+
+def test_load_config_imports_runtime_memory_layers_from_hermes_config(tmp_path, monkeypatch):
+    mod = load_plugin_module()
+    repo_default = write_json(tmp_path / "config.json", {"memory": {"provider": "built-in"}})
+    hermes_home = tmp_path / "hermes-home"
+    hermes_home.mkdir()
+    write_yaml(
+        hermes_home / "config.yaml",
+        """
+        memory:
+          memory_enabled: true
+          user_profile_enabled: true
+          provider: hindsight
+          memory_char_limit: 2200
+          user_char_limit: 1375
+        """,
+    )
+    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+
+    config = mod.load_config(repo_default)
+
+    assert config["memory"]["provider"] == "hindsight"
+    assert config["memory_runtime"] == {
+        "built_in": {
+            "enabled": True,
+            "memory_enabled": True,
+            "user_profile_enabled": True,
+            "tool": "memory",
+        },
+        "external": {
+            "provider": "hindsight",
+            "enabled": True,
+        },
+    }
 
 
 def test_config_example_yaml_is_parseable():

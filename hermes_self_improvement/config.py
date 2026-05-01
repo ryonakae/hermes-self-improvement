@@ -223,6 +223,37 @@ def _peer_yaml_config_path(default_path: Path) -> Path:
     return default_path.with_suffix(".yaml")
 
 
+def _runtime_hermes_config_path() -> Path:
+    return get_hermes_home() / "config.yaml"
+
+
+def _runtime_memory_overlay() -> dict[str, Any]:
+    if not os.environ.get("HERMES_HOME"):
+        return {}
+    data = _read_config_file(_runtime_hermes_config_path(), required=False)
+    memory = data.get("memory") if isinstance(data.get("memory"), dict) else {}
+    if not memory:
+        return {}
+    provider = str(memory.get("provider") or "").strip()
+    memory_enabled = bool(memory.get("memory_enabled", False))
+    user_profile_enabled = bool(memory.get("user_profile_enabled", False))
+    overlay: dict[str, Any] = {
+        "memory": copy.deepcopy(memory),
+        "memory_runtime": {
+            "built_in": {
+                "enabled": bool(memory_enabled or user_profile_enabled),
+                "memory_enabled": memory_enabled,
+                "user_profile_enabled": user_profile_enabled,
+                "tool": "memory",
+            },
+            "external": {
+                "provider": provider,
+                "enabled": bool(provider),
+            },
+        },
+    }
+    return overlay
+
 
 def normalize_automation_policy(config: dict[str, Any] | None) -> dict[str, Any]:
     """Return the normalized unattended mutation policy with fail-closed defaults."""
@@ -390,6 +421,11 @@ def load_config(default_path: Path | None = None, *, cli_config_path: str | Path
         path = Path(cli_config_path).expanduser()
         config = _deep_merge(config, _read_config_file(path, required=True))
         sources.append(str(path))
+
+    runtime_memory = _runtime_memory_overlay()
+    if runtime_memory:
+        config = _deep_merge(config, runtime_memory)
+        sources.append(str(_runtime_hermes_config_path()))
 
     config["config_sources"] = sources
     return _normalize_config(config)

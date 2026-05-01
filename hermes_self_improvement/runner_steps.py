@@ -6,13 +6,13 @@ from typing import Any
 try:  # pragma: no cover - package import path
     from .mutation_agent import run_skill_agent_task
     from .mutation_backend import build_mutation_backend
-    from .mutation_policy import build_memory_mutation_context, normalize_memory_provider
+    from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
     from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
     from .memory_context import build_related_memory_lookup_context
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from mutation_agent import run_skill_agent_task
     from mutation_backend import build_mutation_backend
-    from mutation_policy import build_memory_mutation_context, normalize_memory_provider
+    from mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
     from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
     from memory_context import build_related_memory_lookup_context
 
@@ -55,24 +55,39 @@ def _evidence_by_ids(pack: dict[str, Any], evidence_ids: list[str]) -> list[dict
     return [item for item in evidence if str(item.get("id") or "") in wanted]
 
 
-def _memory_provider(config: dict[str, Any] | None) -> str:
+def _external_memory_provider(config: dict[str, Any] | None) -> str | None:
     cfg = config or {}
+    runtime = cfg.get("memory_runtime") if isinstance(cfg.get("memory_runtime"), dict) else {}
+    external = runtime.get("external") if isinstance(runtime.get("external"), dict) else {}
     memory_cfg = cfg.get("memory") if isinstance(cfg.get("memory"), dict) else {}
-    return normalize_memory_provider(cfg.get("active_memory_provider") or memory_cfg.get("provider") or cfg.get("memory_provider") or "built-in")
+    provider = external.get("provider") or memory_cfg.get("provider") or cfg.get("memory_provider")
+    normalized = normalize_memory_provider(provider) if provider else None
+    return None if normalized in {None, "", "built-in"} else normalized
 
 
 def _memory_operation_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
+    event = item.get("event") if isinstance(item.get("event"), dict) else {}
+    tool_name = str(event.get("tool_name") or item.get("tool_name") or "").strip()
+
+    def enriched(operation: dict[str, Any]) -> dict[str, Any]:
+        op = dict(operation)
+        if tool_name and not op.get("tool_name"):
+            op["tool_name"] = tool_name
+        target = normalize_memory_target(op)
+        if target and str(op.get("target") or "").strip() in {"", "user", "profile", "memory", "external", "provider"}:
+            op["target"] = target
+        return op
+
     for key in ("memory_operation", "operation"):
         value = item.get(key)
         if isinstance(value, dict):
-            return dict(value)
-    event = item.get("event") if isinstance(item.get("event"), dict) else {}
+            return enriched(value)
     for preview_key in ("args_preview", "result_preview"):
         preview = _parse_preview(event.get(preview_key))
         if isinstance(preview.get("memory_operation"), dict):
-            return dict(preview["memory_operation"])
+            return enriched(preview["memory_operation"])
         if isinstance(preview.get("operation"), dict):
-            return dict(preview["operation"])
+            return enriched(preview["operation"])
         op_name = preview.get("operation") or preview.get("action") or preview.get("type")
         if op_name:
             operation = dict(preview)
@@ -80,10 +95,12 @@ def _memory_operation_from_evidence(item: dict[str, Any]) -> dict[str, Any] | No
             if op_text in {"add", "replace", "remove"}:
                 op_text = {"add": "memory_add", "replace": "memory_replace", "remove": "memory_delete"}[op_text]
             operation["operation"] = op_text
-            return operation
+            return enriched(operation)
+        if preview.get("content") and tool_name:
+            return enriched({"operation": "memory_add", "content": preview.get("content")})
     preview_text = str(event.get("result_preview") or event.get("message") or "").strip()
     if preview_text:
-        return {"operation": "memory_add", "content": preview_text, "reason": "memory_evidence"}
+        return enriched({"operation": "memory_add", "content": preview_text, "reason": "memory_evidence"})
     return None
 
 
@@ -218,7 +235,7 @@ def run_memory_improvement_step(
     views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
     memory_ids = [str(item) for item in views.get("memory", [])]
     memory_evidence = _evidence_by_ids(evidence_pack, memory_ids)
-    provider = _memory_provider(config)
+    external_provider = _external_memory_provider(config)
     decisions: list[dict[str, Any]] = []
     changed = 0
 
@@ -233,9 +250,9 @@ def run_memory_improvement_step(
                 "changed": False,
             })
             continue
-        context = build_memory_mutation_context(provider=provider, operation=operation)
+        context = build_memory_mutation_context(provider=external_provider, operation=operation)
         related_lookup = build_related_memory_lookup_context(
-            provider=provider,
+            provider=external_provider,
             evidence=[item],
             lookup_fn=(config or {}).get("_memory_lookup_fn"),
         )
@@ -279,7 +296,8 @@ def run_memory_improvement_step(
 
     return {
         "status": "completed" if decisions else "no_memory_evidence",
-        "provider": provider,
+        "external_provider": external_provider,
+        "provider": external_provider or "built-in",
         "changed": changed,
         "changed_memories": [str(decision.get("evidence_id")) for decision in decisions if decision.get("changed")],
         "decisions": decisions,

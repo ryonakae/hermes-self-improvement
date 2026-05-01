@@ -6,6 +6,10 @@ As of 2026-05-01, there is **no active implementation plan** in this directory.
 
 The latest completed implementation records are:
 
+- `archive/2026-05-01_112925-target-based-memory-mutation.md`
+  - **Status:** completed.
+  - Reworked memory mutation routing so tool selection follows the normalized edit target (`builtin_user`, `builtin_memory`, `external_memory`) instead of a provider-first memory setting. Built-in targets use the `memory` tool, external targets use provider tools, and ambiguous targets fail closed.
+
 - `archive/2026-05-01_094555-curator-telemetry-source-of-truth.md`
   - **Status:** completed.
   - Implemented Curator/Hermes telemetry as the skill candidate source-of-truth, automatic Curator lifecycle transition preview/run before telemetry loading, candidate-aware evidence packs, candidate-driven skill runner, evidence-triggered related-memory lookup context, calibrate-only scorer/evaluator judgment-loop responsibility, and Curator-vs-hook visibility in report/status.
@@ -31,7 +35,7 @@ The current implemented baseline is:
 - `calibrate` owns classifier/editor/evaluator judgment-loop improvement; `improve` does not run DSPy/GEPA calibration.
 - Legacy primary `plan / apply / rollback / outcome`, `--execute`, `--items`, and `self_improvement_record_outcome` are removed from the user-facing surface.
 - Skill mutation runs through bounded official skill tools only; no terminal/file/git/direct filesystem fallback.
-- Memory mutation runs through provider-compatible memory/provider tools only; no direct memory store edits.
+- Memory mutation is target-routed: `builtin_user` / `builtin_memory` use the built-in `memory` tool; `external_memory` uses the active external provider tool; missing targets fail closed. No direct memory store edits.
 - Runtime-private calibration eval cases are stored under runtime state, not repo-tracked eval assets.
 - Historical apply artifact readers are removed from report/calibration paths; reports now summarize current runner artifacts, calibration ledgers, and explicit review outcomes only.
 

@@ -137,6 +137,7 @@ def test_external_provider_corrections_resolve_to_native_tool_contexts():
             provider=provider,
             operation={
                 "operation": "memory_delete",
+                "target_kind": "external_memory",
                 "reason": "incorrect",
                 "target": "User prefers old workflow",
                 "current_claim": "User prefers new workflow",
@@ -152,7 +153,7 @@ def test_native_delete_context_requires_provider_identity():
     mod = load_plugin_module()
     missing = mod.build_memory_mutation_context(
         provider="retaindb",
-        operation={"operation": "memory_delete", "reason": "secret", "target": "long enough stale memory text"},
+        operation={"operation": "memory_delete", "target_kind": "external_memory", "reason": "secret", "target": "long enough stale memory text"},
     )
     assert missing["execution_enabled"] is False
     assert missing["resolved_strategy"] == "native_delete"
@@ -167,7 +168,7 @@ def test_native_delete_context_requires_provider_identity():
     for provider, identity, tool_name, expected_args in cases:
         context = mod.build_memory_mutation_context(
             provider=provider,
-            operation={"operation": "memory_delete", "reason": "secret", **identity},
+            operation={"operation": "memory_delete", "target_kind": "external_memory", "reason": "secret", **identity},
         )
         assert context["execution_enabled"] is True
         assert context["tool_name"] == tool_name
@@ -199,3 +200,131 @@ def test_generic_provider_tool_executor_validates_supported_surfaces():
     )
     assert rejected["success"] is False
     assert rejected["error"] == "fact_store_args_missing:fact_id"
+
+
+def test_normalize_memory_target_maps_explicit_and_tool_hints():
+    mod = load_plugin_module()
+
+    cases = [
+        ({"target_kind": "builtin_user"}, "builtin_user"),
+        ({"target_kind": "built_in_memory"}, "builtin_memory"),
+        ({"target_kind": "external_memory"}, "external_memory"),
+        ({"target_layer": "builtin", "target_store": "user"}, "builtin_user"),
+        ({"target_layer": "built_in", "target_store": "memory"}, "builtin_memory"),
+        ({"target_layer": "external"}, "external_memory"),
+        ({"target_store": "profile"}, "builtin_user"),
+        ({"memory_target": "memory"}, "builtin_memory"),
+        ({"tool_name": "memory", "tool_args": {"target": "user"}}, "builtin_user"),
+        ({"tool_name": "memory"}, "builtin_memory"),
+        ({"tool_name": "hindsight_retain"}, "external_memory"),
+    ]
+    for operation, expected in cases:
+        assert mod.normalize_memory_target(operation) == expected
+
+    assert mod.normalize_memory_target({"provider": "hindsight"}) is None
+
+
+def test_build_memory_context_routes_built_in_targets_to_memory_despite_external_provider():
+    mod = load_plugin_module()
+
+    user_context = mod.build_memory_mutation_context(
+        provider="hindsight",
+        operation={"operation": "memory_add", "target": "builtin_user", "content": "User prefers concise replies."},
+    )
+    memory_context = mod.build_memory_mutation_context(
+        provider="hindsight",
+        operation={"operation": "memory_add", "target": "builtin_memory", "content": "Repo uses pytest."},
+    )
+
+    assert user_context["execution_enabled"] is True
+    assert user_context["normalized_target"] == "builtin_user"
+    assert user_context["target_layer"] == "built_in"
+    assert user_context["active_external_provider"] == "hindsight"
+    assert user_context["tool_name"] == "memory"
+    assert user_context["tool_args"] == {"action": "add", "target": "user", "content": "User prefers concise replies."}
+    assert memory_context["execution_enabled"] is True
+    assert memory_context["normalized_target"] == "builtin_memory"
+    assert memory_context["tool_name"] == "memory"
+    assert memory_context["tool_args"]["target"] == "memory"
+
+
+def test_build_memory_context_routes_external_target_to_provider_add_tool():
+    mod = load_plugin_module()
+
+    context = mod.build_memory_mutation_context(
+        provider="hindsight",
+        operation={"operation": "memory_add", "target": "external_memory", "content": "Long implementation background."},
+    )
+
+    assert context["execution_enabled"] is True
+    assert context["normalized_target"] == "external_memory"
+    assert context["target_layer"] == "external"
+    assert context["tool_name"] == "hindsight_retain"
+    assert context["tool_args"]["content"] == "Long implementation background."
+
+
+def test_build_memory_context_blocks_missing_target_even_with_external_provider():
+    mod = load_plugin_module()
+
+    context = mod.build_memory_mutation_context(
+        provider="hindsight",
+        operation={"operation": "memory_add", "content": "Ambiguous memory."},
+    )
+
+    assert context["execution_enabled"] is False
+    assert context["normalized_target"] is None
+    assert context["reasons"] == ["memory_target_missing"]
+
+
+def test_external_memory_delete_blocks_when_external_provider_missing():
+    mod = load_plugin_module()
+
+    context = mod.build_memory_mutation_context(
+        provider=None,
+        operation={"operation": "memory_delete", "target_kind": "external_memory", "reason": "stale", "target": "old", "current_claim": "new"},
+    )
+
+    assert context["execution_enabled"] is False
+    assert context["normalized_target"] == "external_memory"
+    assert context["reasons"] == ["external_memory_provider_missing"]
+    assert context["tool_name"] is None
+
+
+def test_ambiguous_memory_target_kind_and_layer_fail_closed():
+    mod = load_plugin_module()
+
+    assert mod.normalize_memory_target({"target_kind": "memory"}) is None
+    assert mod.normalize_memory_target({"target_layer": "builtin"}) is None
+
+    context = mod.build_memory_mutation_context(
+        provider="hindsight",
+        operation={"operation": "memory_add", "target_kind": "memory", "content": "Ambiguous memory."},
+    )
+    assert context["execution_enabled"] is False
+    assert context["reasons"] == ["memory_target_missing"]
+
+
+def test_ambiguous_target_kind_memory_is_not_overridden_by_tool_hint():
+    mod = load_plugin_module()
+
+    context = mod.build_memory_mutation_context(
+        provider="hindsight",
+        operation={"operation": "memory_add", "target_kind": "memory", "tool_name": "memory", "content": "Ambiguous memory."},
+    )
+
+    assert context["execution_enabled"] is False
+    assert context["reasons"] == ["memory_target_missing"]
+    assert context["tool_name"] is None
+
+
+def test_external_memory_context_uses_operation_provider_hint():
+    mod = load_plugin_module()
+
+    context = mod.build_memory_mutation_context(
+        provider=None,
+        operation={"operation": "memory_add", "target": "external_memory", "provider": "hindsight", "content": "Long context."},
+    )
+
+    assert context["execution_enabled"] is True
+    assert context["external_provider"] == "hindsight"
+    assert context["tool_name"] == "hindsight_retain"
