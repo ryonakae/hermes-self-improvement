@@ -22,8 +22,6 @@ except Exception:  # pragma: no cover - standalone tests
 DEFAULT_PREVIEW_CHARS = 1000
 DEFAULT_RETENTION_DAYS = 30
 ENV_CONFIG_PATH = "HERMES_SELF_IMPROVE_CONFIG"
-RISK_ORDER = {"low": 1, "medium": 2, "high": 3, "critical": 4}
-NON_MUTABLE_TARGET_KINDS = {"docs", "doc", "documentation", "config", "configuration", "evaluator"}
 HARD_STATIC_INVARIANTS = {
     "plugin_owned_targets_forbidden": True,
     "arbitrary_docs_config_targets_forbidden": True,
@@ -33,13 +31,6 @@ HARD_STATIC_INVARIANTS = {
     "rollback_agent_forbidden": True,
     "target_identity_drift_blocks_mutation": True,
     "content_hash_drift_requires_classification": True,
-}
-DEFAULT_AUTOMATION_POLICY = {
-    "max_risk": "low",
-    "allow_destructive": False,
-    "allowed_target_kinds": ["skill", "memory"],
-    "allowed_change_types": [],
-    "denied_change_types": [],
 }
 DEFAULT_CALIBRATION = {
     "enabled": True,
@@ -60,7 +51,6 @@ def _default_config() -> dict[str, Any]:
         "enabled": True,
         "preview_chars": DEFAULT_PREVIEW_CHARS,
         "retention_days": DEFAULT_RETENTION_DAYS,
-        "automation_policy": copy.deepcopy(DEFAULT_AUTOMATION_POLICY),
         "calibration": copy.deepcopy(DEFAULT_CALIBRATION),
         "model": {
             "llm": {
@@ -251,76 +241,6 @@ def _runtime_memory_overlay() -> dict[str, Any]:
     return overlay
 
 
-def normalize_automation_policy(config: dict[str, Any] | None) -> dict[str, Any]:
-    """Return the normalized unattended mutation policy with fail-closed defaults."""
-    raw_policy = config.get("automation_policy") if isinstance(config, dict) else config
-    if not isinstance(raw_policy, dict):
-        raw_policy = {}
-    policy = _deep_merge(copy.deepcopy(DEFAULT_AUTOMATION_POLICY), raw_policy)
-
-    max_risk = str(policy.get("max_risk") or DEFAULT_AUTOMATION_POLICY["max_risk"]).lower()
-    if max_risk not in RISK_ORDER:
-        max_risk = "low"
-    policy["max_risk"] = max_risk
-    policy["allow_destructive"] = bool(policy.get("allow_destructive", False))
-    for key in ("allowed_target_kinds", "allowed_change_types", "denied_change_types"):
-        values = policy.get(key)
-        if values is None:
-            values = []
-        if isinstance(values, (str, bytes)):
-            values = [values]
-        if not isinstance(values, list):
-            values = []
-        policy[key] = [str(value) for value in values if value not in (None, "")]
-    return policy
-
-
-def _item_field(item: dict[str, Any], *names: str, default: Any = None) -> Any:
-    for name in names:
-        if name in item:
-            return item.get(name)
-    return default
-
-
-def automation_policy_allows_item(item: dict[str, Any], policy: dict[str, Any] | None) -> tuple[bool, list[str]]:
-    """Evaluate whether a planned item is allowed by normal automation_policy.
-
-    This is deliberately independent from legacy execution modes. Missing or
-    unknown risk/target/change data fails closed so the runner can surface a
-    clear skip reason instead of mutating ambiguous targets.
-    """
-    item = item if isinstance(item, dict) else {}
-    normalized_policy = normalize_automation_policy({"automation_policy": policy or {}})
-    reasons: list[str] = []
-
-    risk = str(_item_field(item, "risk", "risk_level", default="") or "").lower()
-    max_risk = normalized_policy["max_risk"]
-    if risk not in RISK_ORDER:
-        reasons.append("unknown_risk")
-    elif RISK_ORDER[risk] > RISK_ORDER[max_risk]:
-        reasons.append("risk_exceeds_max")
-
-    if bool(_item_field(item, "destructive", "is_destructive", default=False)) and not normalized_policy["allow_destructive"]:
-        reasons.append("destructive_not_allowed")
-
-    target_kind = str(_item_field(item, "target_kind", "kind", default="") or "")
-    if target_kind in NON_MUTABLE_TARGET_KINDS:
-        reasons.append("target_kind_non_mutable")
-    allowed_target_kinds = set(normalized_policy.get("allowed_target_kinds") or [])
-    if allowed_target_kinds and target_kind not in allowed_target_kinds:
-        reasons.append("target_kind_not_allowed")
-
-    change_type = str(_item_field(item, "change_type", "type", default="") or "")
-    denied_change_types = set(normalized_policy.get("denied_change_types") or [])
-    allowed_change_types = set(normalized_policy.get("allowed_change_types") or [])
-    if change_type in denied_change_types:
-        reasons.append("change_type_denied")
-    elif allowed_change_types and change_type not in allowed_change_types:
-        reasons.append("change_type_not_allowed")
-
-    return not reasons, reasons
-
-
 def normalize_calibration_config(config: dict[str, Any] | None) -> dict[str, Any]:
     """Return calibration config normalized around evaluator/scorer tuning only."""
     raw = config.get("calibration") if isinstance(config, dict) else config
@@ -364,7 +284,7 @@ def _normalize_model_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = _normalize_model_config(config)
-    normalized["automation_policy"] = normalize_automation_policy(normalized)
+    normalized.pop("automation_policy", None)
     normalized["calibration"] = normalize_calibration_config(normalized)
     return normalized
 

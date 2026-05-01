@@ -17,31 +17,23 @@ if str(_PLUGIN_DIR) not in sys.path:
 try:  # pragma: no cover - package import path
     from .config import (
         DEFAULT_CALIBRATION,
-        DEFAULT_AUTOMATION_POLICY,
         DEFAULT_PREVIEW_CHARS,
         DEFAULT_RETENTION_DAYS,
         HARD_STATIC_INVARIANTS,
-        RISK_ORDER,
         _load_config,
-        automation_policy_allows_item,
         get_hermes_home,
         load_config,
-        normalize_automation_policy,
         normalize_calibration_config,
     )
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from config import (
         DEFAULT_CALIBRATION,
-        DEFAULT_AUTOMATION_POLICY,
         DEFAULT_PREVIEW_CHARS,
         DEFAULT_RETENTION_DAYS,
         HARD_STATIC_INVARIANTS,
-        RISK_ORDER,
         _load_config,
-        automation_policy_allows_item,
         get_hermes_home,
         load_config,
-        normalize_automation_policy,
         normalize_calibration_config,
     )
 

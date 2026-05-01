@@ -203,7 +203,26 @@ def test_code_defaults_are_used_when_repo_yaml_is_absent(tmp_path):
 
     assert config["retention_days"] == 30
     assert config["gepa_scorer"]["enabled"] is True
+    assert "automation_policy" not in config
     assert config["config_sources"] == []
+
+
+def test_legacy_automation_policy_override_is_ignored(tmp_path):
+    mod = load_plugin_module()
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+automation_policy:
+  max_risk: critical
+  allow_destructive: true
+  allowed_target_kinds: [skill, memory, config]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = mod.load_config(config_path)
+
+    assert "automation_policy" not in config
 
 
 def test_config_example_yaml_is_parseable():
