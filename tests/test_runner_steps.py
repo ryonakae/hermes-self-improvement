@@ -157,6 +157,45 @@ def test_memory_step_dry_run_records_executable_built_in_context():
     assert decision["reason"] == "dry_run_would_execute_memory_tool"
     assert decision["context"]["tool_name"] == "memory"
     assert decision["context"]["tool_args"]["action"] == "add"
+    assert decision["related_memory_lookup"]["status"] == "skipped"
+
+
+def test_memory_step_attaches_related_lookup_for_correction_evidence():
+    calls = []
+
+    def lookup(query):
+        calls.append(query)
+        return [{"content": "Old preference"}, {"content": "New preference"}]
+
+    pack = memory_evidence_pack({"operation": "memory_delete", "reason": "stale", "target": "old", "current_claim": "new"})
+    pack["evidence"][0]["kind"] = "correction_evidence"
+    result = run_memory_improvement_step(
+        evidence_pack=pack,
+        config={"memory": {"provider": "hindsight"}, "_memory_lookup_fn": lookup},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert calls
+    assert decision["related_memory_lookup"]["status"] == "completed"
+    assert decision["related_memory_lookup"]["result_count"] == 2
+
+
+def test_memory_step_lookup_failure_does_not_block_safe_memory_operation():
+    def lookup(query):
+        raise RuntimeError("lookup down")
+
+    pack = memory_evidence_pack({"operation": "memory_delete", "reason": "stale", "target": "old", "current_claim": "new"})
+    pack["evidence"][0]["kind"] = "correction_evidence"
+    result = run_memory_improvement_step(
+        evidence_pack=pack,
+        config={"memory": {"provider": "hindsight"}, "_memory_lookup_fn": lookup},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert decision["decision"] == "accepted"
+    assert decision["related_memory_lookup"]["status"] == "failed"
 
 
 def test_memory_step_executes_built_in_memory_tool_when_mutating():

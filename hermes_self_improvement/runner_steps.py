@@ -8,11 +8,13 @@ try:  # pragma: no cover - package import path
     from .mutation_backend import build_mutation_backend
     from .mutation_policy import build_memory_mutation_context, normalize_memory_provider
     from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
+    from .memory_context import build_related_memory_lookup_context
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
     from mutation_agent import run_skill_agent_task
     from mutation_backend import build_mutation_backend
     from mutation_policy import build_memory_mutation_context, normalize_memory_provider
     from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
+    from memory_context import build_related_memory_lookup_context
 
 
 def _parse_preview(value: Any) -> dict[str, Any]:
@@ -232,6 +234,13 @@ def run_memory_improvement_step(
             })
             continue
         context = build_memory_mutation_context(provider=provider, operation=operation)
+        related_lookup = build_related_memory_lookup_context(
+            provider=provider,
+            evidence=[item],
+            lookup_fn=(config or {}).get("_memory_lookup_fn"),
+        )
+        if isinstance(context, dict):
+            context = {**context, "related_memory_lookup": related_lookup}
         if not context.get("execution_enabled"):
             decisions.append({
                 "evidence_id": evidence_id,
@@ -240,6 +249,7 @@ def run_memory_improvement_step(
                 "changed": False,
                 "operation": operation,
                 "context": context,
+                "related_memory_lookup": related_lookup,
             })
             continue
         if not mutate:
@@ -250,6 +260,7 @@ def run_memory_improvement_step(
                 "changed": False,
                 "operation": operation,
                 "context": context,
+                "related_memory_lookup": related_lookup,
             })
             continue
         result = _execute_memory_context(context, config)
@@ -262,6 +273,7 @@ def run_memory_improvement_step(
             "changed": did_change,
             "operation": operation,
             "context": context,
+            "related_memory_lookup": related_lookup,
             "result": result,
         })
 
