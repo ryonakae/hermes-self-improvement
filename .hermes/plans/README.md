@@ -2,7 +2,11 @@
 
 ## Current source of truth
 
-As of 2026-05-01, there is **no active implementation plan** in this directory.
+As of 2026-05-01, the latest completed implementation plan is:
+
+- `2026-05-01_154324-rename-model-roles.md`
+  - **Status:** completed.
+  - Renamed model routing from implementation-oriented `llm / mutation / gepa` to role-based `judge / editor / evaluator`, with no compatibility aliases.
 
 The latest completed implementation records are:
 

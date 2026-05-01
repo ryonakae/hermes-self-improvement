@@ -22,11 +22,11 @@ class MutationBackendLimits:
     def from_config(cls, config: dict[str, Any] | None = None) -> "MutationBackendLimits":
         mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
         model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
-        model_mutation = model.get("mutation") if isinstance(model.get("mutation"), dict) else {}
+        model_editor = model.get("editor") if isinstance(model.get("editor"), dict) else {}
         return cls(
             max_tool_calls=max(0, _coerce_int(mutation.get("max_tool_calls"), cls.max_tool_calls)),
             max_iterations=max(0, _coerce_int(mutation.get("max_iterations"), cls.max_iterations)),
-            timeout_seconds=max(1, _coerce_int(model_mutation.get("timeout") or mutation.get("timeout_seconds"), cls.timeout_seconds)),
+            timeout_seconds=max(1, _coerce_int(model_editor.get("timeout") or mutation.get("timeout_seconds"), cls.timeout_seconds)),
         )
 
     def check(self) -> dict[str, Any]:
@@ -245,10 +245,10 @@ def resolve_skill_tool_executor(config: dict[str, Any] | None = None) -> SkillTo
         return SkillToolExecutor(source="unavailable", unavailable_reason=f"skill_tool_registry_unavailable:{exc}")
 
 
-def _model_mutation_config(config: dict[str, Any] | None) -> dict[str, Any]:
+def _model_editor_config(config: dict[str, Any] | None) -> dict[str, Any]:
     model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
-    mutation = model.get("mutation") if isinstance(model.get("mutation"), dict) else {}
-    return mutation
+    editor = model.get("editor") if isinstance(model.get("editor"), dict) else {}
+    return editor
 
 
 def _call_hermes_auxiliary(messages: list[dict[str, Any]], *, config: dict[str, Any] | None, task_name: str) -> str:
@@ -261,7 +261,7 @@ def _call_hermes_auxiliary(messages: list[dict[str, Any]], *, config: dict[str, 
         from agent.auxiliary_client import call_llm, extract_content_or_reasoning  # type: ignore
     except Exception as exc:
         raise RuntimeError(f"mutation_agent_unavailable:{exc}") from exc
-    cfg = _model_mutation_config(config)
+    cfg = _model_editor_config(config)
     response = call_llm(
         task=task_name,
         provider=cfg.get("provider") or "auto",
@@ -285,7 +285,7 @@ class HermesAuxiliaryMutationBackend:
 
     def _llm(self, messages: list[dict[str, Any]], *, config: dict[str, Any] | None) -> str:
         if self.llm_call is not None:
-            return self.llm_call(messages, config=config, timeout=self.limits.timeout_seconds, max_tokens=_coerce_int(_model_mutation_config(config).get("max_tokens"), 1000))
+            return self.llm_call(messages, config=config, timeout=self.limits.timeout_seconds, max_tokens=_coerce_int(_model_editor_config(config).get("max_tokens"), 1000))
         return _call_hermes_auxiliary(messages, config=config, task_name="self_improvement_mutation_agent")
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:

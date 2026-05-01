@@ -148,13 +148,13 @@ def test_optimize_gepa_calls_dspy_gepa_compile_and_writes_artifact(tmp_path):
     assert call["trainset"][0]["inputs"] == ("proposal", "findings", "rubric")
 
 
-def test_optimize_gepa_uses_model_gepa_for_student_and_reflection_lm(tmp_path):
+def test_optimize_gepa_uses_model_evaluator_for_student_and_reflection_lm(tmp_path):
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_optimize_model_config")
     FakeGEPA.calls.clear()
     config = {
         "_self_improvement_root": str(tmp_path / "self-improvement"),
         "model": {
-            "gepa": {
+            "evaluator": {
                 "provider": "codex",
                 "model": "gpt-gepa",
                 "timeout": 99,
@@ -169,7 +169,7 @@ def test_optimize_gepa_uses_model_gepa_for_student_and_reflection_lm(tmp_path):
     call = FakeGEPA.calls[0]
     assert call["kwargs"]["reflection_lm"].model == "gpt-gepa"
     assert call["student"].lm.model == "gpt-gepa"
-    assert payload["config_summary"]["model"]["gepa"]["model"] == "gpt-gepa"
+    assert payload["config_summary"]["model"]["evaluator"]["model"] == "gpt-gepa"
 
 
 def test_optimize_gepa_fails_closed_for_zero_budget(tmp_path):

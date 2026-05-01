@@ -52,7 +52,7 @@ def _default_config() -> dict[str, Any]:
         "retention_days": DEFAULT_RETENTION_DAYS,
         "calibration": copy.deepcopy(DEFAULT_CALIBRATION),
         "model": {
-            "llm": {
+            "judge": {
                 "provider": "auto",
                 "model": "",
                 "base_url": "",
@@ -61,22 +61,22 @@ def _default_config() -> dict[str, Any]:
                 "max_tokens": 1800,
                 "extra_body": {},
             },
-            "gepa": {
-                "provider": "auto",
-                "model": "",
-                "base_url": "",
-                "api_key": "",
-                "timeout": 120,
-                "max_tokens": 1800,
-                "extra_body": {},
-            },
-            "mutation": {
+            "editor": {
                 "provider": "auto",
                 "model": "",
                 "base_url": "",
                 "api_key": "",
                 "timeout": 45,
                 "max_tokens": 1000,
+                "extra_body": {},
+            },
+            "evaluator": {
+                "provider": "auto",
+                "model": "",
+                "base_url": "",
+                "api_key": "",
+                "timeout": 120,
+                "max_tokens": 1800,
                 "extra_body": {},
             },
         },
@@ -249,7 +249,7 @@ def _normalize_model_config(config: dict[str, Any]) -> dict[str, Any]:
     model = copy.deepcopy(normalized.get("model") if isinstance(normalized.get("model"), dict) else {})
     defaults = _default_config()["model"]
     model = _deep_merge(defaults, model)
-    normalized["model"] = model
+    normalized["model"] = {key: model[key] for key in defaults}
     gepa_defaults = _default_config()["gepa_scorer"]
     gepa_scorer = normalized.get("gepa_scorer") if isinstance(normalized.get("gepa_scorer"), dict) else {}
     normalized["gepa_scorer"] = {key: value for key, value in gepa_scorer.items() if key in gepa_defaults}

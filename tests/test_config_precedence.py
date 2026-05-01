@@ -67,10 +67,10 @@ def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
         tmp_path / "config.yaml",
         """
         model:
-          llm:
+          judge:
             provider: codex
             model: gpt-test
-          gepa:
+          evaluator:
             api_key: ${HERMES_SELF_IMPROVE_GEPA_API_KEY}
         """,
     )
@@ -78,7 +78,7 @@ def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
         tmp_path / "config.local.yaml",
         """
         model:
-          llm:
+          judge:
             timeout: 99
         """,
     )
@@ -86,10 +86,10 @@ def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
 
     config = mod.load_config(plugin_yaml)
 
-    assert config["model"]["llm"]["provider"] == "codex"
-    assert config["model"]["llm"]["model"] == "gpt-test"
-    assert config["model"]["llm"]["timeout"] == 99
-    assert config["model"]["gepa"]["api_key"] == "local-secret"
+    assert config["model"]["judge"]["provider"] == "codex"
+    assert config["model"]["judge"]["model"] == "gpt-test"
+    assert config["model"]["judge"]["timeout"] == 99
+    assert config["model"]["evaluator"]["api_key"] == "local-secret"
     assert config["config_sources"] == [str(plugin_yaml), str(local_yaml)]
 
 
@@ -99,7 +99,7 @@ def test_unresolved_env_reference_remains_literal(tmp_path, monkeypatch):
         tmp_path / "config.yaml",
         """
         model:
-          gepa:
+          evaluator:
             api_key: ${MISSING_HERMES_SELF_IMPROVE_SECRET}
         """,
     )
@@ -107,7 +107,7 @@ def test_unresolved_env_reference_remains_literal(tmp_path, monkeypatch):
 
     config = mod.load_config(repo_config)
 
-    assert config["model"]["gepa"]["api_key"] == "${MISSING_HERMES_SELF_IMPROVE_SECRET}"
+    assert config["model"]["evaluator"]["api_key"] == "${MISSING_HERMES_SELF_IMPROVE_SECRET}"
 
 
 def test_explicit_yaml_config_paths_are_required_and_valid(tmp_path, monkeypatch):
@@ -151,12 +151,12 @@ def test_model_config_uses_model_section_only(tmp_path):
         model_alias:
           provider: ignored
         model:
-          llm:
+          judge:
             provider: codex
             model: gpt-current
             timeout: 33
             max_tokens: 444
-          gepa:
+          evaluator:
             model: gepa-current
             timeout: 77
         """,
@@ -164,13 +164,37 @@ def test_model_config_uses_model_section_only(tmp_path):
 
     config = mod.load_config(repo_config)
 
-    assert config["model"]["llm"]["provider"] == "codex"
-    assert config["model"]["llm"]["model"] == "gpt-current"
-    assert config["model"]["llm"]["timeout"] == 33
-    assert config["model"]["llm"]["max_tokens"] == 444
-    assert config["model"]["gepa"]["model"] == "gepa-current"
-    assert config["model"]["gepa"]["timeout"] == 77
+    assert config["model"]["judge"]["provider"] == "codex"
+    assert config["model"]["judge"]["model"] == "gpt-current"
+    assert config["model"]["judge"]["timeout"] == 33
+    assert config["model"]["judge"]["max_tokens"] == 444
+    assert config["model"]["evaluator"]["model"] == "gepa-current"
+    assert config["model"]["evaluator"]["timeout"] == 77
     assert "model_alias" not in config
+
+
+def test_old_model_role_keys_are_dropped(tmp_path):
+    mod = load_plugin_module()
+    repo_config = write_yaml(
+        tmp_path / "config.yaml",
+        """
+        model:
+          llm:
+            provider: ignored
+          mutation:
+            provider: ignored
+          gepa:
+            provider: ignored
+          judge:
+            provider: codex
+        """,
+    )
+
+    config = mod.load_config(repo_config)
+
+    assert list(config["model"].keys()) == ["judge", "editor", "evaluator"]
+    assert {"llm", "mutation", "gepa"}.isdisjoint(config["model"])
+    assert config["model"]["judge"]["provider"] == "codex"
 
 
 def test_load_config_imports_runtime_memory_layers_from_hermes_config(tmp_path, monkeypatch):
@@ -215,21 +239,23 @@ def test_code_defaults_are_used_when_repo_yaml_is_absent(tmp_path):
 
     assert config["retention_days"] == 30
     assert config["gepa_scorer"]["enabled"] is True
+    assert list(config["model"].keys()) == ["judge", "editor", "evaluator"]
+    assert {"llm", "mutation", "gepa"}.isdisjoint(config["model"])
     assert "unsupported_policy" not in config
     assert config["config_sources"] == []
 
 
-def test_config_example_yaml_is_parseable():
+def test_config_example_yaml_is_parseable(tmp_path):
     mod = load_plugin_module()
     example = Path(__file__).resolve().parents[1] / "config.example.yaml"
 
-    config = mod.load_config(cli_config_path=example)
+    config = mod.load_config(tmp_path / "config.yaml", cli_config_path=example)
 
-    assert config["model"]["llm"]["provider"] == "auto"
-    assert config["model"]["gepa"]["timeout"] == 120
-    assert config["model"]["mutation"]["timeout"] == 45
-    assert config["model"]["mutation"]["max_tokens"] == 1000
-    assert config["mutation"]["backend"] == "hermes_auxiliary_tool_loop"
+    assert config["model"]["judge"]["provider"] == "auto"
+    assert config["model"]["evaluator"]["timeout"] == 120
+    assert config["model"]["editor"]["timeout"] == 45
+    assert config["model"]["editor"]["max_tokens"] == 1000
+    assert config.get("mutation", {}).get("backend") == "hermes_auxiliary_tool_loop"
     assert config["calibration"]["evidence"]["min_evidence_events"] == 20
 
 

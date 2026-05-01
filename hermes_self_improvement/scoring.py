@@ -376,11 +376,11 @@ def _call_llm_scorer(
     config: dict[str, Any],
 ) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    llm_config = model_config.get("llm") if isinstance(model_config.get("llm"), dict) else {}
-    provider = llm_config.get("provider") or "auto"
-    model = llm_config.get("model") or None
-    timeout = _coerce_int(llm_config.get("timeout"), default=60)
-    max_tokens = _coerce_int(llm_config.get("max_tokens"), default=1800)
+    judge_config = model_config.get("judge") if isinstance(model_config.get("judge"), dict) else {}
+    provider = judge_config.get("provider") or "auto"
+    model = judge_config.get("model") or None
+    timeout = _coerce_int(judge_config.get("timeout"), default=60)
+    max_tokens = _coerce_int(judge_config.get("max_tokens"), default=1800)
     prompt_payload = {
         "proposals": proposals,
         "findings": findings,

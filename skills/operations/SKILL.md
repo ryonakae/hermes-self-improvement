@@ -25,6 +25,7 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - Scorer/evaluator self-improvement は prompt / rubric / runtime-private eval cases が対象。Python implementation code は自己変更しない。
 - DSPy/GEPA は hook / plugin discovery path では lazy import を維持し、Hermes runtime 全体の必須依存にしない。
 - LLM / GEPA scoring は advisory。無人変更の許可として扱わない。
+- Model routing は current schema の `model.judge`（proposal/evidence judgment）、`model.editor`（mutation agent）、`model.evaluator`（DSPy/GEPA evaluator/scorer calibration）だけを使う。旧 role key は残さない。
 - 変更前に `git status --short` と対象 diff を確認し、無関係な変更を巻き戻さない。
 
 ## 主要パス

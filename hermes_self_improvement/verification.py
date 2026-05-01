@@ -12,5 +12,5 @@ def merge_judge_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
         _ensure_hermes_agent_on_path()
         import agent.auxiliary_client  # type: ignore  # noqa: F401
     except Exception as exc:
-        return {"available": False, "reason": "hermes_auxiliary_unavailable", "detail": str(exc), "model_source": "model.mutation"}
-    return {"available": True, "source": "hermes_auxiliary", "model_source": "model.mutation"}
+        return {"available": False, "reason": "hermes_auxiliary_unavailable", "detail": str(exc), "model_source": "model.editor"}
+    return {"available": True, "source": "hermes_auxiliary", "model_source": "model.editor"}

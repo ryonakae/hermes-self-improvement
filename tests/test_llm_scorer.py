@@ -37,7 +37,7 @@ def test_llm_scorer_applies_structured_scores(monkeypatch):
     def fake_llm_json(*, proposals, findings, config):
         assert proposals[0]["id"] == "proposal-1"
         assert findings == [{"kind": "tool_failure_cluster", "tool_name": "skill_view"}]
-        assert config["model"]["llm"]["provider"] == "auto"
+        assert config["model"]["judge"]["provider"] == "auto"
         return {
             "scores": [
                 {
@@ -57,7 +57,7 @@ def test_llm_scorer_applies_structured_scores(monkeypatch):
         sample_proposals(),
         findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view"}],
         scorer="llm",
-        config={"model": {"llm": {"provider": "auto"}}},
+        config={"model": {"judge": {"provider": "auto"}}},
     )
 
     assert scored[0]["score"] == 82
@@ -80,7 +80,7 @@ def test_llm_scorer_falls_back_to_heuristic_on_error(monkeypatch):
         sample_proposals(),
         findings=[],
         scorer="llm",
-        config={"model": {"llm": {"provider": "auto"}}},
+        config={"model": {"judge": {"provider": "auto"}}},
     )
 
     assert scored[0]["scorer"] == "heuristic-v0.1"

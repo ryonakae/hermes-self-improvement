@@ -51,6 +51,8 @@ code defaults
 
 `config.yaml` / `config.local.yaml` は local runtime 用で gitignore 済みです。
 
+Model routing は責務名で分けます。`model.judge` は proposal / evidence の採点・判断、`model.editor` は skill / memory mutation agent、`model.evaluator` は DSPy / GEPA evaluator・scorer calibration に使います。
+
 ## Curator operating mode
 
 この plugin は Hermes Curator を置き換えるというより、Curator の telemetry / lifecycle 情報を source of truth として使う上位 runner です。運用時は Hermes Curator を `disabled` にせず、必要なら `paused` にしてください。

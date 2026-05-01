@@ -100,7 +100,7 @@ def test_compare_scorer_marks_llm_gepa_disagreements(monkeypatch):
         sample_proposals(),
         findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}],
         scorer="compare",
-        config={"gepa_scorer": {"enabled": True}, "model": {"llm": {}}},
+        config={"gepa_scorer": {"enabled": True}, "model": {"judge": {}}},
     )
 
     first = scored[0]
