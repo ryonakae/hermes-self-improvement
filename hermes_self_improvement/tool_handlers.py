@@ -4,23 +4,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .calibration import run_calibration
-    from .cli import build_review_outcome_report_payload, run_improve, run_pipeline
-    from .config import DEFAULT_RETENTION_DAYS, load_config
-    from .mutation_backend import mutation_backend_status
-    from .observer import _event_path, _load_events
-    from .recovery_engine import memory_rollback_status
-    from .verification import merge_judge_status
-except Exception:  # pragma: no cover - direct file import used by tests/plugin wrapper
-    from calibration import run_calibration
-    from cli import build_review_outcome_report_payload, run_improve, run_pipeline
-    from config import DEFAULT_RETENTION_DAYS, load_config
-    from mutation_backend import mutation_backend_status
-    from observer import _event_path, _load_events
-    from recovery_engine import memory_rollback_status
-    from verification import merge_judge_status
-
+from .calibration import run_calibration
+from .cli import build_review_outcome_report_payload, run_improve, run_pipeline
+from .config import DEFAULT_RETENTION_DAYS, load_config
+from .mutation_backend import mutation_backend_status
+from .observer import _event_path, _load_events
+from .recovery_engine import memory_rollback_status
+from .verification import merge_judge_status
 try:  # pragma: no cover - available in Hermes runtime
     from tools.registry import tool_error, tool_result
 except Exception:  # pragma: no cover - standalone unit tests outside Hermes runtime

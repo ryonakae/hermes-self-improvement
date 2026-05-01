@@ -5,11 +5,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .observer import _reports_dir
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from observer import _reports_dir
-
+from .observer import _reports_dir
 OUTCOME_VALUES = {
     "rejected_by_human",
     "ignored_stale",

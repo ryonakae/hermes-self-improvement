@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import json
 import sys
@@ -12,6 +13,10 @@ CONFIG = PLUGIN_DIR / "hermes_self_improvement" / "config.py"
 
 
 def load_module(path: Path, name: str):
+    if path == GEPA_ADAPTER:
+        sys.path.insert(0, str(PLUGIN_DIR))
+        module = importlib.import_module("hermes_self_improvement.gepa_adapter")
+        return importlib.reload(module)
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None

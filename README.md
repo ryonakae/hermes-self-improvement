@@ -62,7 +62,7 @@ hermes curator status
 
 `paused` では Curator の background review agent は自動起動しませんが、skill usage / lifecycle / pinned / archive state は引き続き読めます。`improve` は Curator/Hermes telemetry を使い、mutating run では Curator と同じ automatic lifecycle transition を実行してから候補を読むことがあります。これはこの plugin の想定動作です。
 
-`curator.enabled: false` は通常使いません。telemetry source や lifecycle semantics を失い、plugin が Curator-compatible runner として判断する前提を弱めます。
+`curator.enabled: false` は通常使いません。telemetry source や lifecycle semantics を失い、plugin が Curator-aligned runner として判断する前提を弱めます。
 
 ## Runner model
 

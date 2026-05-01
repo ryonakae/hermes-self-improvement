@@ -4,13 +4,8 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .config import get_hermes_home
-    from .observer import _sha256_text, _stable_json
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from config import get_hermes_home
-    from observer import _sha256_text, _stable_json
-
+from .config import get_hermes_home
+from .observer import _sha256_text, _stable_json
 SNAPSHOT_SCHEMA_NAME = "self_improvement_skill_snapshot"
 SNAPSHOT_SCHEMA_VERSION = "1.0"
 ALLOWED_SUPPORTING_DIRS = {"references", "templates", "scripts", "assets"}

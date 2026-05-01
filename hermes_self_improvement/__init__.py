@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import re
 import sys
@@ -14,52 +13,26 @@ _PLUGIN_DIR = _PACKAGE_DIR.parent
 if str(_PLUGIN_DIR) not in sys.path:
     sys.path.append(str(_PLUGIN_DIR))
 
-try:  # pragma: no cover - package import path
-    from .config import (
-        DEFAULT_CALIBRATION,
-        DEFAULT_PREVIEW_CHARS,
-        DEFAULT_RETENTION_DAYS,
-        HARD_STATIC_INVARIANTS,
-        get_hermes_home,
-        load_config,
-        normalize_calibration_config,
-    )
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from config import (
-        DEFAULT_CALIBRATION,
-        DEFAULT_PREVIEW_CHARS,
-        DEFAULT_RETENTION_DAYS,
-        HARD_STATIC_INVARIANTS,
-        get_hermes_home,
-        load_config,
-        normalize_calibration_config,
-    )
-
+from .config import (
+    DEFAULT_CALIBRATION,
+    DEFAULT_PREVIEW_CHARS,
+    DEFAULT_RETENTION_DAYS,
+    HARD_STATIC_INVARIANTS,
+    get_hermes_home,
+    load_config,
+    normalize_calibration_config,
+)
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
 
-try:  # pragma: no cover - package import path
-    from .schemas import SELF_IMPROVEMENT_TOOL_SPECS
-    from .tool_handlers import (
-        _handle_self_improvement_calibrate_tool,
-        _handle_self_improvement_improve_tool,
-        _handle_self_improvement_report_tool,
-        _handle_self_improvement_status_tool,
-    )
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from hermes_self_improvement.schemas import SELF_IMPROVEMENT_TOOL_SPECS
-    _tools_spec = importlib.util.spec_from_file_location("hermes_self_improvement_local_tools", _PACKAGE_DIR / "tool_handlers.py")
-    if _tools_spec is None or _tools_spec.loader is None:
-        raise
-    _tools_mod = importlib.util.module_from_spec(_tools_spec)
-    sys.modules[_tools_spec.name] = _tools_mod
-    _tools_spec.loader.exec_module(_tools_mod)
-    _handle_self_improvement_calibrate_tool = _tools_mod._handle_self_improvement_calibrate_tool
-    _handle_self_improvement_improve_tool = _tools_mod._handle_self_improvement_improve_tool
-    _handle_self_improvement_report_tool = _tools_mod._handle_self_improvement_report_tool
-    _handle_self_improvement_status_tool = _tools_mod._handle_self_improvement_status_tool
-
+from .schemas import SELF_IMPROVEMENT_TOOL_SPECS
+from .tool_handlers import (
+    _handle_self_improvement_calibrate_tool,
+    _handle_self_improvement_improve_tool,
+    _handle_self_improvement_report_tool,
+    _handle_self_improvement_status_tool,
+)
 _SELF_IMPROVEMENT_TOOL_HANDLERS = {
     "self_improvement_status": _handle_self_improvement_status_tool,
     "self_improvement_report": _handle_self_improvement_report_tool,
@@ -81,95 +54,47 @@ def _register_tools(ctx) -> None:
             description=schema.get("description", ""),
             emoji="🛡️",
         )
-try:  # pragma: no cover - package import path
-    from .calibration import collect_calibration_evidence, restore_previous_calibration, run_calibration
-    from .mutation_policy import (
-        PROVIDER_POLICIES,
-        build_hindsight_tool_context,
-        build_memory_mutation_context,
-        build_memory_tool_context,
-        build_provider_correction_tool_context,
-        build_provider_native_delete_tool_context,
-        build_skill_manage_context,
-        build_skill_patch_context,
-        provider_policy,
-        render_hindsight_correction_content,
-        resolve_memory_strategy,
-    )
-    from .mutation_worker import execute_hindsight_retain_operation, execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from calibration import collect_calibration_evidence, restore_previous_calibration, run_calibration
-    from mutation_policy import (
-        PROVIDER_POLICIES,
-        build_hindsight_tool_context,
-        build_memory_mutation_context,
-        build_memory_tool_context,
-        build_provider_correction_tool_context,
-        build_provider_native_delete_tool_context,
-        build_skill_manage_context,
-        build_skill_patch_context,
-        provider_policy,
-        render_hindsight_correction_content,
-        resolve_memory_strategy,
-    )
-    from mutation_worker import execute_hindsight_retain_operation, execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
-
-try:  # pragma: no cover - package import path
-    from .observer import (
-        RuntimeObserver,
-        SENSITIVE_ARG_KEYS,
-        SENSITIVE_PATH_PATTERNS,
-        _analysis_events,
-        _append_jsonl,
-        _classify_error_text,
-        _event_path,
-        _is_partial_pre_tool_event,
-        _is_structured_success_result,
-        _load_events,
-        _looks_like_structured_success_preview,
-        _looks_sensitive_text,
-        _now,
-        _parse_dt,
-        _prune_events,
-        _redact_text,
-        _redact_value,
-        _reclassify_historical_tool_results,
-        _report_dir,
-        _reports_dir,
-        _safe_host,
-        _sha256_text,
-        _stable_json,
-        classify_tool_result,
-    )
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from observer import (
-        RuntimeObserver,
-        SENSITIVE_ARG_KEYS,
-        SENSITIVE_PATH_PATTERNS,
-        _analysis_events,
-        _append_jsonl,
-        _classify_error_text,
-        _event_path,
-        _is_partial_pre_tool_event,
-        _is_structured_success_result,
-        _load_events,
-        _looks_like_structured_success_preview,
-        _looks_sensitive_text,
-        _now,
-        _parse_dt,
-        _prune_events,
-        _redact_text,
-        _redact_value,
-        _reclassify_historical_tool_results,
-        _report_dir,
-        _reports_dir,
-        _safe_host,
-        _sha256_text,
-        _stable_json,
-        classify_tool_result,
-    )
-
-
+from .calibration import collect_calibration_evidence, restore_previous_calibration, run_calibration
+from .mutation_policy import (
+    PROVIDER_POLICIES,
+    build_hindsight_tool_context,
+    build_memory_mutation_context,
+    build_memory_tool_context,
+    build_provider_correction_tool_context,
+    build_provider_native_delete_tool_context,
+    build_skill_manage_context,
+    build_skill_patch_context,
+    provider_policy,
+    render_hindsight_correction_content,
+    resolve_memory_strategy,
+)
+from .mutation_worker import execute_hindsight_retain_operation, execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_manage_operation, execute_skill_manage_patch
+from .observer import (
+    RuntimeObserver,
+    SENSITIVE_ARG_KEYS,
+    SENSITIVE_PATH_PATTERNS,
+    _analysis_events,
+    _append_jsonl,
+    _classify_error_text,
+    _event_path,
+    _is_partial_pre_tool_event,
+    _is_structured_success_result,
+    _load_events,
+    _looks_like_structured_success_preview,
+    _looks_sensitive_text,
+    _now,
+    _parse_dt,
+    _prune_events,
+    _redact_text,
+    _redact_value,
+    _reclassify_historical_tool_results,
+    _report_dir,
+    _reports_dir,
+    _safe_host,
+    _sha256_text,
+    _stable_json,
+    classify_tool_result,
+)
 def _register_bundled_skills(ctx) -> None:
     skills_dir = _PLUGIN_DIR / "skills"
     if not skills_dir.exists():
@@ -206,71 +131,35 @@ def register(ctx):
     )
 
 
-try:  # pragma: no cover - package import path
-    from .analysis import (
-        AnalysisResult,
-        _compact_event,
-        _confidence_rank,
-        _merge_duplicate_proposals,
-        _proposal_template_for_finding,
-        _risk_rank,
-        analyze_events,
-        propose_from_findings,
-        scan_memory_compression_candidates,
-        scan_skill_lifecycle_candidates,
-    )
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from analysis import (
-        AnalysisResult,
-        _compact_event,
-        _confidence_rank,
-        _merge_duplicate_proposals,
-        _proposal_template_for_finding,
-        _risk_rank,
-        analyze_events,
-        propose_from_findings,
-        scan_memory_compression_candidates,
-        scan_skill_lifecycle_candidates,
-    )
-
-try:  # pragma: no cover - package import path
-    from . import scoring as _scoring
-    from .scoring import (
-        _call_gepa_scorer,
-        _call_llm_scorer,
-        _coerce_int,
-        _compare_scorer_results,
-        _ensure_hermes_agent_on_path,
-        _extract_json_object,
-        _fallback_with_scorer_error,
-        _max_risk,
-        _merge_external_scores,
-        _merge_gepa_scores,
-        _merge_llm_scores,
-        _min_confidence,
-        _sanitize_score_breakdown,
-        _score_proposals_heuristic,
-    )
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    import scoring as _scoring
-    from scoring import (
-        _call_gepa_scorer,
-        _call_llm_scorer,
-        _coerce_int,
-        _compare_scorer_results,
-        _ensure_hermes_agent_on_path,
-        _extract_json_object,
-        _fallback_with_scorer_error,
-        _max_risk,
-        _merge_external_scores,
-        _merge_gepa_scores,
-        _merge_llm_scores,
-        _min_confidence,
-        _sanitize_score_breakdown,
-        _score_proposals_heuristic,
-    )
-
-
+from .analysis import (
+    AnalysisResult,
+    _compact_event,
+    _confidence_rank,
+    _merge_duplicate_proposals,
+    _proposal_template_for_finding,
+    _risk_rank,
+    analyze_events,
+    propose_from_findings,
+    scan_memory_compression_candidates,
+    scan_skill_lifecycle_candidates,
+)
+from . import scoring as _scoring
+from .scoring import (
+    _call_gepa_scorer,
+    _call_llm_scorer,
+    _coerce_int,
+    _compare_scorer_results,
+    _ensure_hermes_agent_on_path,
+    _extract_json_object,
+    _fallback_with_scorer_error,
+    _max_risk,
+    _merge_external_scores,
+    _merge_gepa_scores,
+    _merge_llm_scores,
+    _min_confidence,
+    _sanitize_score_breakdown,
+    _score_proposals_heuristic,
+)
 def score_proposals(
     proposals: list[dict[str, Any]],
     findings: list[dict[str, Any]] | None = None,
@@ -287,45 +176,20 @@ def score_proposals(
         gepa_scorer_func=_call_gepa_scorer,
     )
 
-try:  # pragma: no cover - package import path
-    from .cli import (
-        _call_gepa_eval,
-        _format_score_breakdown,
-        _format_scorer_compare,
-        _handle_cli,
-        _handle_slash,
-        _render_gepa_eval,
-        _setup_cli,
-        build_review_outcome_report_payload,
-        main,
-        render_report,
-        run_improve,
-        run_pipeline,
-    )
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from cli import (
-        _call_gepa_eval,
-        _format_score_breakdown,
-        _format_scorer_compare,
-        _handle_cli,
-        _handle_slash,
-        _render_gepa_eval,
-        _setup_cli,
-        build_review_outcome_report_payload,
-        main,
-        render_report,
-        run_improve,
-        run_pipeline,
-    )
-
-
-
-
-try:  # pragma: no cover - package import path
-    from .outcome_store import load_review_outcomes, summarize_review_outcomes
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from outcome_store import load_review_outcomes, summarize_review_outcomes
-
-
+from .cli import (
+    _call_gepa_eval,
+    _format_score_breakdown,
+    _format_scorer_compare,
+    _handle_cli,
+    _handle_slash,
+    _render_gepa_eval,
+    _setup_cli,
+    build_review_outcome_report_payload,
+    main,
+    render_report,
+    run_improve,
+    run_pipeline,
+)
+from .outcome_store import load_review_outcomes, summarize_review_outcomes
 if __name__ == "__main__":
     main()

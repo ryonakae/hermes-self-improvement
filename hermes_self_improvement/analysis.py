@@ -6,11 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .observer import _analysis_events, _sha256_text
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from observer import _analysis_events, _sha256_text
-
+from .observer import _analysis_events, _sha256_text
 @dataclass
 class AnalysisResult:
     since: datetime

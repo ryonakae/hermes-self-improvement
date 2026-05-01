@@ -7,10 +7,8 @@ def merge_judge_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     if isinstance(config, dict) and callable(config.get("_merge_judge")):
         return {"available": True, "source": "injected", "model_source": "injected"}
     try:
-        try:
-            from .mutation_backend import _ensure_hermes_agent_on_path
-        except Exception:  # pragma: no cover
-            from mutation_backend import _ensure_hermes_agent_on_path
+        from .mutation_backend import _ensure_hermes_agent_on_path
+
         _ensure_hermes_agent_on_path()
         import agent.auxiliary_client  # type: ignore  # noqa: F401
     except Exception as exc:

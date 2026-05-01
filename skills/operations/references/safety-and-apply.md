@@ -42,4 +42,4 @@ DSPy/GEPA dependencies stay lazy. Hook and plugin discovery paths must not impor
 
 ## Removed primary surface
 
-Do not reintroduce primary `plan`, `apply`, `rollback`, `outcome`, `record_outcome`, `--execute`, item selection, or hash-confirmation commands/tools. Historical modules may remain temporarily as internal compatibility or evidence readers until a cleanup slice deletes them, but normal user-facing docs and output should describe only the four-command surface above.
+Do not reintroduce primary `plan`, `apply`, `rollback`, `outcome`, `record_outcome`, `--execute`, item selection, or hash-confirmation commands/tools. The current runtime and user-facing docs/output should describe only the four-command surface above.

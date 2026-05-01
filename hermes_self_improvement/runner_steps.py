@@ -3,20 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .mutation_agent import run_skill_agent_task
-    from .mutation_backend import build_mutation_backend
-    from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
-    from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
-    from .memory_context import build_related_memory_lookup_context
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from mutation_agent import run_skill_agent_task
-    from mutation_backend import build_mutation_backend
-    from mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
-    from mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
-    from memory_context import build_related_memory_lookup_context
-
-
+from .mutation_agent import run_skill_agent_task
+from .mutation_backend import build_mutation_backend
+from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
+from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
+from .memory_context import build_related_memory_lookup_context
 def _parse_preview(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value

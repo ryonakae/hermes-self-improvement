@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 STRING = {"type": "string"}
-CONFIG_PATH_PROPERTY = {"type": "string", "description": "Explicit config JSON/YAML path; same precedence as CLI --config."}
+CONFIG_PATH_PROPERTY = {"type": "string", "description": "Explicit config YAML path; same precedence as CLI --config."}
 SCORER_PROPERTY = {"type": "string", "enum": ["heuristic", "llm", "gepa", "compare"], "default": "compare"}
 
 SELF_IMPROVEMENT_STATUS_SCHEMA = {

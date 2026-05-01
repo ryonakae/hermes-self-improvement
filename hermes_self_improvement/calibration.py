@@ -5,15 +5,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .config import normalize_calibration_config
-    from .observer import _reports_dir, _sha256_text, _stable_json
-    from .outcome_store import load_review_outcomes, summarize_review_outcomes
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from config import normalize_calibration_config
-    from observer import _reports_dir, _sha256_text, _stable_json
-    from outcome_store import load_review_outcomes, summarize_review_outcomes
-
+from .config import normalize_calibration_config
+from .observer import _reports_dir, _sha256_text, _stable_json
+from .outcome_store import load_review_outcomes, summarize_review_outcomes
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc

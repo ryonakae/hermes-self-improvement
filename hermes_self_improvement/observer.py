@@ -7,11 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .config import DEFAULT_PREVIEW_CHARS, DEFAULT_RETENTION_DAYS, get_hermes_home, load_config
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from config import DEFAULT_PREVIEW_CHARS, DEFAULT_RETENTION_DAYS, get_hermes_home, load_config
-
+from .config import DEFAULT_PREVIEW_CHARS, DEFAULT_RETENTION_DAYS, get_hermes_home, load_config
 PLUGIN_NAME = "hermes-self-improvement"
 UTC = timezone.utc
 

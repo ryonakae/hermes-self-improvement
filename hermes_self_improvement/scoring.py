@@ -7,15 +7,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .config import get_hermes_home
-    from .observer import _redact_text
-    from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from config import get_hermes_home
-    from observer import _redact_text
-    from prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
-
+from .config import get_hermes_home
+from .observer import _redact_text
+from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
 def score_proposals_impl(
     proposals: list[dict[str, Any]],
     findings: list[dict[str, Any]] | None = None,

@@ -3,11 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .prompts import skill_memory_classification_context
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from prompts import skill_memory_classification_context
-
+from .prompts import skill_memory_classification_context
 SENSITIVE_DELETE_REASONS = {"pii", "secret", "harmful_instruction", "sensitive"}
 CORRECTABLE_DELETE_REASONS = {"stale", "incorrect", "duplicate"}
 

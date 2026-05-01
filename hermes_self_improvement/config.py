@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import json
 import os
 import re
 from pathlib import Path
@@ -172,8 +171,6 @@ def _parse_config_text(path: Path, text: str) -> dict[str, Any]:
         if yaml is None:
             raise ValueError("yaml_support_unavailable")
         parsed = yaml.safe_load(text) or {}
-    elif suffix == ".json" or not suffix:
-        parsed = json.loads(text)
     else:
         raise ValueError(f"unsupported_config_extension:{suffix}")
     if not isinstance(parsed, dict):
@@ -273,7 +270,7 @@ def load_config(default_path: Path | None = None, *, cli_config_path: str | Path
     Precedence, low to high: code defaults, plugin-local config.yaml,
     config.local.yaml, HERMES_SELF_IMPROVE_CONFIG, explicit CLI --config.
     Explicit CLI/env paths are required to exist and be
-    valid JSON/YAML so operator intent never silently falls back to a safer-looking
+    valid YAML so operator intent never silently falls back to a safer-looking
     but wrong config.
     """
     default_path = Path(default_path or Path(__file__).resolve().parents[1] / "config.yaml")

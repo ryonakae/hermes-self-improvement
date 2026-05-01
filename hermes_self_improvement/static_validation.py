@@ -64,15 +64,8 @@ def _mutable_local_skill_roots(config: dict[str, Any] | None) -> list[Path]:
     roots = cfg.get("_mutable_local_skill_roots")
     if roots is None:
         get_hermes_home = None
-        try:  # pragma: no cover - package import path
-            from .config import get_hermes_home as _get_hermes_home  # type: ignore
-            get_hermes_home = _get_hermes_home
-        except Exception:  # pragma: no cover - direct file import mode
-            try:
-                from config import get_hermes_home as _get_hermes_home  # type: ignore
-                get_hermes_home = _get_hermes_home
-            except Exception:
-                get_hermes_home = None
+        from .config import get_hermes_home as _get_hermes_home  # type: ignore
+        get_hermes_home = _get_hermes_home
         roots = [get_hermes_home() / "skills"] if get_hermes_home else []
     if isinstance(roots, (str, Path)):
         roots = [roots]

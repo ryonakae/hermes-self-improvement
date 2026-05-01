@@ -5,9 +5,9 @@ Use this reference when changing observation, analysis, scorer, or module layout
 ## Plugin shape
 
 - `plugin.yaml` declares the standalone user plugin.
-- `__init__.py` is the compatibility entrypoint. It registers hooks, CLI command, slash command, and bundled skills.
-- `bin/hermes-self-improve` runs `__init__.py` via `runpy` so the plugin can be operated even when top-level Hermes CLI exposure is incomplete.
-- Keep imports compatible with both package import and direct file execution.
+- root `__init__.py` is the Hermes plugin discovery shim. It imports the package implementation and exposes `register` / `main`.
+- `bin/hermes-self-improve` imports `hermes_self_improvement.main` through the package, so normal CLI smoke tests do not rely on direct file execution.
+- Keep implementation imports package-relative; do not add direct-file import fallbacks for unreleased compatibility.
 
 ## Observed hooks
 

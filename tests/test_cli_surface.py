@@ -208,13 +208,13 @@ def test_status_summary_is_human_readable_not_json():
         "last_run_artifact": "/tmp/run.json",
         "dspy_available": False,
         "mutation_backend": {"available": True},
-        "curator_compatibility": {"skill_telemetry_source": "Hermes Curator", "hook_mode": "observation_only"},
+        "curator_integration": {"skill_telemetry_source": "Hermes Curator", "hook_mode": "observation_only"},
         "curator_telemetry": {"available": True, "candidate_count": 7, "rejected_count": 3},
     })
 
     assert text.startswith("hermes-self-improvement status")
     assert "Readiness:" in text
-    assert "Curator compatibility:" in text
+    assert "Curator integration:" in text
     assert "skill candidates: 7" in text
     assert '"enabled"' not in text
 

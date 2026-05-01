@@ -14,12 +14,7 @@ _LOCAL_DIR = Path(__file__).resolve().parent
 if str(_LOCAL_DIR) not in sys.path:
     sys.path.insert(0, str(_LOCAL_DIR))
 
-try:  # pragma: no cover - package import path
-    from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
-
-
+from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
 ADAPTER_VERSION = "gepa-v0.1"
 PACKAGE_DIR = Path(__file__).resolve().parent
 PLUGIN_DIR = PACKAGE_DIR.parent

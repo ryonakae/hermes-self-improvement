@@ -2,12 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .memory_store_probe import memory_visibility_proof_status
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from memory_store_probe import memory_visibility_proof_status
-
-
+from .memory_store_probe import memory_visibility_proof_status
 def memory_rollback_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "supported": False,

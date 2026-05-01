@@ -8,41 +8,22 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-try:  # pragma: no cover - package import path
-    from .analysis import AnalysisResult, analyze_events
-    from .calibration import collect_calibration_evidence, run_calibration
-    from .config import (
-        DEFAULT_RETENTION_DAYS,
-        load_config,
-    )
-    from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
-    from .evidence import build_evidence_pack, write_evidence_pack
-    from .mutation_backend import mutation_backend_status
-    from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
-    from .next_actions import render_next_actions
-    from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
-    from .outcome_store import load_review_outcomes, summarize_review_outcomes
-    from .recovery_engine import memory_rollback_status
-    from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
-    from .verification import merge_judge_status
-except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from analysis import AnalysisResult, analyze_events
-    from calibration import collect_calibration_evidence, run_calibration
-    from config import (
-        DEFAULT_RETENTION_DAYS,
-        load_config,
-    )
-    from curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
-    from evidence import build_evidence_pack, write_evidence_pack
-    from mutation_backend import mutation_backend_status
-    from runner_steps import run_memory_improvement_step, run_skill_improvement_step
-    from next_actions import render_next_actions
-    from observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
-    from outcome_store import load_review_outcomes, summarize_review_outcomes
-    from recovery_engine import memory_rollback_status
-    from scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
-    from verification import merge_judge_status
-
+from .analysis import AnalysisResult, analyze_events
+from .calibration import collect_calibration_evidence, run_calibration
+from .config import (
+    DEFAULT_RETENTION_DAYS,
+    load_config,
+)
+from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
+from .evidence import build_evidence_pack, write_evidence_pack
+from .mutation_backend import mutation_backend_status
+from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
+from .next_actions import render_next_actions
+from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
+from .outcome_store import load_review_outcomes, summarize_review_outcomes
+from .recovery_engine import memory_rollback_status
+from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
+from .verification import merge_judge_status
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
@@ -432,7 +413,7 @@ def _add_config_argument(parser: argparse.ArgumentParser) -> None:
         "--config",
         dest="config_path",
         default=None,
-        help="Explicit config JSON/YAML path; overrides config.local.yaml and HERMES_SELF_IMPROVE_CONFIG",
+        help="Explicit config YAML path; overrides config.local.yaml and HERMES_SELF_IMPROVE_CONFIG",
     )
 
 
@@ -556,6 +537,7 @@ def _latest_run_artifact(config: dict[str, Any]) -> Path | None:
 
 def _render_status_summary(payload: dict[str, Any]) -> str:
     mutation = payload.get("mutation_backend") if isinstance(payload.get("mutation_backend"), dict) else {}
+    curator_integration = payload.get("curator_integration") if isinstance(payload.get("curator_integration"), dict) else {}
     lines = [
         f"{PLUGIN_NAME} status",
         "",
@@ -568,9 +550,9 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         f"- recent sample events: {int(payload.get('event_count_sample') or 0)}",
         f"- last event: {payload.get('last_event_ts') or 'none'}",
         f"- last run: {payload.get('last_run_artifact') or 'none'}",
-        "Curator compatibility:",
-        f"- skill telemetry source: {payload.get('curator_compatibility', {}).get('skill_telemetry_source') if isinstance(payload.get('curator_compatibility'), dict) else 'unknown'}",
-        f"- hook mode: {payload.get('curator_compatibility', {}).get('hook_mode') if isinstance(payload.get('curator_compatibility'), dict) else 'unknown'}",
+        "Curator integration:",
+        f"- skill telemetry source: {curator_integration.get('skill_telemetry_source') or 'unknown'}",
+        f"- hook mode: {curator_integration.get('hook_mode') or 'unknown'}",
     ]
     telemetry = payload.get("curator_telemetry") if isinstance(payload.get("curator_telemetry"), dict) else {}
     if telemetry:
@@ -696,7 +678,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "memory_rollback": memory_rollback_status(config),
             "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
             "last_run_artifact": str(_latest_run_artifact(config)) if _latest_run_artifact(config) else None,
-            "curator_compatibility": {
+            "curator_integration": {
                 "skill_telemetry_source": "Hermes Curator",
                 "hook_mode": "observation_only",
                 "mutation_targets": ["skill", "memory", "scorer", "evaluator"],

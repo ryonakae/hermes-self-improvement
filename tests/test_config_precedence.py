@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import json
 import sys
 import textwrap
 
@@ -26,11 +25,6 @@ def load_plugin_module():
     return module
 
 
-def write_json(path: Path, payload: dict) -> Path:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return path
-
-
 def write_yaml(path: Path, text: str) -> Path:
     path.write_text(textwrap.dedent(text).strip() + "\n", encoding="utf-8")
     return path
@@ -40,8 +34,8 @@ def test_load_config_precedence_cli_over_env_over_local_over_code_defaults(tmp_p
     mod = load_plugin_module()
     repo_config = tmp_path / "config.yaml"
     write_yaml(tmp_path / "config.local.yaml", "retention_days: 20")
-    env = write_json(tmp_path / "env-override.json", {"retention_days": 30})
-    cli = write_json(tmp_path / "cli-override.json", {"retention_days": 40})
+    env = write_yaml(tmp_path / "env-override.yaml", "retention_days: 30")
+    cli = write_yaml(tmp_path / "cli-override.yaml", "retention_days: 40")
     monkeypatch.setenv("HERMES_SELF_IMPROVE_CONFIG", str(env))
 
     assert mod.load_config(repo_config)["retention_days"] == 30
@@ -135,6 +129,20 @@ def test_explicit_yaml_config_paths_are_required_and_valid(tmp_path, monkeypatch
         raise AssertionError("invalid explicit YAML config should fail closed")
 
 
+def test_explicit_json_config_paths_are_rejected(tmp_path):
+    mod = load_plugin_module()
+    repo_config = tmp_path / "config.yaml"
+    json_config = tmp_path / "override.json"
+    json_config.write_text('{"retention_days": 40}\n', encoding="utf-8")
+
+    try:
+        mod.load_config(repo_config, cli_config_path=json_config)
+    except ValueError as exc:
+        assert "unsupported_config_extension:.json" in str(exc)
+    else:
+        raise AssertionError("explicit JSON config should be rejected")
+
+
 def test_model_config_uses_model_section_only(tmp_path):
     mod = load_plugin_module()
     repo_config = write_yaml(
@@ -207,7 +215,7 @@ def test_code_defaults_are_used_when_repo_yaml_is_absent(tmp_path):
 
     assert config["retention_days"] == 30
     assert config["gepa_scorer"]["enabled"] is True
-    assert "automation_policy" not in config
+    assert "unsupported_policy" not in config
     assert config["config_sources"] == []
 
 

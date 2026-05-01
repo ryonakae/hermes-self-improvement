@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -32,12 +33,9 @@ def load_config_module():
     return module
 
 def load_adapter():
-    spec = importlib.util.spec_from_file_location("hermes_self_improvement_gepa_adapter_offline", GEPA_ADAPTER)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    sys.path.insert(0, str(PLUGIN_DIR))
+    module = importlib.import_module("hermes_self_improvement.gepa_adapter")
+    return importlib.reload(module)
 
 
 def test_gepa_adapter_runtime_scorer_requires_real_dspy_path_when_not_installed(monkeypatch):

@@ -6,6 +6,10 @@ As of 2026-05-01, there is **no active implementation plan** in this directory.
 
 The latest completed implementation records are:
 
+- `archive/2026-05-01_135922-remove-remaining-legacy-compatibility.md`
+  - **Status:** completed.
+  - Removed remaining unreleased compatibility surfaces: JSON config input, package-internal direct-file import fallback shims, and legacy/compatibility wording that implied old behavior was supported.
+
 - `archive/2026-05-01_112925-target-based-memory-mutation.md`
   - **Status:** completed.
   - Reworked memory mutation routing so tool selection follows the normalized edit target (`builtin_user`, `builtin_memory`, `external_memory`) instead of a provider-first memory setting. Built-in targets use the `memory` tool, external targets use provider tools, and ambiguous targets fail closed.
