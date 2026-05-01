@@ -180,7 +180,6 @@ def test_improve_tool_uses_core_loop_with_dry_run(monkeypatch, tmp_path):
     raw = mod._handle_self_improvement_improve_tool({
         "since_hours": 2,
         "dry_run": True,
-        "scorer": "compare",
         "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
     })
 
@@ -191,7 +190,7 @@ def test_improve_tool_uses_core_loop_with_dry_run(monkeypatch, tmp_path):
     assert payload["dry_run"] is True
     assert calls[0]["since_hours"] == 2
     assert calls[0]["dry_run"] is True
-    assert calls[0]["scorer"] == "compare"
+    assert calls[0]["scorer"] == "llm"
 
 
 def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
@@ -248,3 +247,18 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert "proposals_considered" not in payload
     assert large_instruction not in raw
     assert len(raw) < 6000
+
+
+def test_report_and_improve_tool_schemas_only_expose_current_scorers():
+    mod = load_plugin_module()
+    ctx = RecordingContext()
+
+    mod.register(ctx)
+    schemas = {name: kwargs["schema"] for name, kwargs in ctx.tools}
+
+    for name in ("self_improvement_report", "self_improvement_improve"):
+        scorer = schemas[name]["parameters"]["properties"]["scorer"]
+        assert scorer["enum"] == ["heuristic", "llm"]
+        assert scorer["default"] == "llm"
+        assert "gepa" not in scorer["enum"]
+        assert "compare" not in scorer["enum"]

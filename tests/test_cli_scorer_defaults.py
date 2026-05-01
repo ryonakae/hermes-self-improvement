@@ -22,9 +22,9 @@ def parse_args(argv: list[str]):
     return parser.parse_args(argv)
 
 
-def test_decision_commands_default_to_compare_scorer():
-    assert parse_args(["improve"]).scorer == "compare"
-    assert parse_args(["report"]).scorer == "compare"
+def test_decision_commands_default_to_llm_scorer():
+    assert parse_args(["improve"]).scorer == "llm"
+    assert parse_args(["report"]).scorer == "llm"
 
 
 def test_removed_commands_do_not_parse():

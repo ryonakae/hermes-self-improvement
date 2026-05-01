@@ -2,7 +2,11 @@
 
 ## Current source of truth
 
-As of 2026-05-01, the latest completed implementation plan is:
+As of 2026-05-02, the latest completed implementation plan is:
+
+- `2026-05-02_001205-remove-gepa-compare-scorers.md`
+  - **Status:** completed.
+  - Removed `gepa` / `compare` from primary proposal scorer surfaces, made `llm` the `improve` / `report` default, and kept GEPA/DSPy scoped to `calibrate` / evaluator optimization.
 
 - `2026-05-01_154324-rename-model-roles.md`
   - **Status:** completed.
@@ -44,6 +48,8 @@ The current implemented baseline is:
 - Legacy primary `plan / apply / rollback / outcome`, `--execute`, `--items`, and `self_improvement_record_outcome` are removed from the user-facing surface.
 - Skill mutation runs through bounded official skill tools only; no terminal/file/git/direct filesystem fallback.
 - Memory mutation is target-routed: `builtin_user` / `builtin_memory` use the built-in `memory` tool; `external_memory` uses the active external provider tool; missing targets fail closed. No direct memory store edits.
+- `improve` and `report` proposal scoring default to `llm`; the only primary scorer choices are `llm` and `heuristic`.
+- GEPA/DSPy are not live proposal scorers; they are used by `calibrate` for evaluator / prompt / rubric optimization.
 - Runtime-private calibration eval cases are stored under runtime state, not repo-tracked eval assets.
 - Historical apply artifact readers are removed from report/calibration paths; reports now summarize current runner artifacts, calibration ledgers, and explicit review outcomes only.
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 STRING = {"type": "string"}
 CONFIG_PATH_PROPERTY = {"type": "string", "description": "Explicit config YAML path; same precedence as CLI --config."}
-SCORER_PROPERTY = {"type": "string", "enum": ["heuristic", "llm", "gepa", "compare"], "default": "compare"}
+SCORER_PROPERTY = {"type": "string", "enum": ["heuristic", "llm"], "default": "llm"}
 
 SELF_IMPROVEMENT_STATUS_SCHEMA = {
     "name": "self_improvement_status",
@@ -42,7 +42,7 @@ SELF_IMPROVEMENT_IMPROVE_SCHEMA = {
 
 SELF_IMPROVEMENT_CALIBRATE_SCHEMA = {
     "name": "self_improvement_calibrate",
-    "description": "Calibrate evaluator/scorer. Mutates active evaluator state by default when gates pass; dry_run=true previews.",
+    "description": "Calibrate evaluator prompts/rubrics. Mutates active evaluator state by default when gates pass; dry_run=true previews.",
     "parameters": {
         "type": "object",
         "properties": {

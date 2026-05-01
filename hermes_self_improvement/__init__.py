@@ -145,18 +145,13 @@ from .analysis import (
 )
 from . import scoring as _scoring
 from .scoring import (
-    _call_gepa_scorer,
     _call_llm_scorer,
     _coerce_int,
-    _compare_scorer_results,
     _ensure_hermes_agent_on_path,
     _extract_json_object,
     _fallback_with_scorer_error,
-    _max_risk,
     _merge_external_scores,
-    _merge_gepa_scores,
     _merge_llm_scores,
-    _min_confidence,
     _sanitize_score_breakdown,
     _score_proposals_heuristic,
 )
@@ -173,13 +168,11 @@ def score_proposals(
         scorer=scorer,
         config=config,
         llm_scorer_func=_call_llm_scorer,
-        gepa_scorer_func=_call_gepa_scorer,
     )
 
 from .cli import (
     _call_gepa_eval,
     _format_score_breakdown,
-    _format_scorer_compare,
     _handle_cli,
     _handle_slash,
     _render_gepa_eval,

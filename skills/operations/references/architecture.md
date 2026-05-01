@@ -49,22 +49,20 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 
 ## Scorer paths
 
-`hermes_self_improvement/scoring.py` supports:
+`hermes_self_improvement/scoring.py` supports only the primary proposal scorers:
 
+- `llm`: default Hermes auxiliary LLM judge scoring. Broken JSON, provider failure, or timeout records `llm_scorer_error` and preserves a safe heuristic score.
 - `heuristic`: dependency-free deterministic scorer for lightweight observation/debugging.
-- `llm`: Hermes auxiliary LLM scoring. Broken JSON, provider failure, or timeout records `llm_scorer_error` and preserves a safe heuristic score.
-- `gepa`: `hermes_self_improvement/gepa_adapter.py` path. Runtime GEPA scoring requires DSPy and uses live/compiled DSPy program evaluation; it does not silently fall back to the dependency-free regression fixture.
-- `compare`: runs LLM and GEPA scoring, records score deltas and disagreement reasons, and pushes disagreement cases to `human_review`.
 
-`improve` and `report` default to `compare`. Runner steps remain gated by target scope, provider capability, and evidence strength; scorer output is advisory and does not grant mutation permission.
+`improve` and `report` default to `llm`. Runner steps remain gated by target scope, provider capability, and evidence strength; scorer output is advisory and does not grant mutation permission.
 
-All scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does not grant mutation permission.
+GEPA / DSPy are not live proposal scorers. They belong to `calibrate`, where they improve evaluator, prompt, and rubric artifacts for later judge/editor runs. All proposal scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does not grant mutation permission.
 
 ## GEPA / DSPy assets
 
 - `evals/proposal/cases.jsonl`: repo-tracked public golden regression cases for proposal scoring (for example repeated tool failure, one-off low evidence, dangerous auto-apply denial, and stale memory review). Plugin users do not mutate this file; runtime/private cases belong under `~/.hermes/self-improvement/evals/proposal/` in later phases.
 - `evals/proposal/rubric.json`: `proposal-eval-v0.1` rubric. Hard constraint: `auto_apply: false`.
 - `hermes_self_improvement/dspy_program.py`: real DSPy scoring contract / module boundary. Deterministic baseline is retained only for regression fixtures/tests.
-- `hermes_self_improvement/gepa_adapter.py`: payload builder, offline fixture evaluation, real DSPy/GEPA scorer/optimizer boundary, compiled evaluator artifact resolution, and fail-closed error reporting.
+- `hermes_self_improvement/gepa_adapter.py`: payload builder, offline fixture evaluation, real DSPy/GEPA evaluator/optimizer boundary, compiled evaluator artifact resolution, and fail-closed error reporting.
 
 Calibration internals call DSPy/GEPA through this adapter. Active evaluator promotion is exposed through `calibrate` and requires regression pass; `calibrate --dry-run` previews without promotion.

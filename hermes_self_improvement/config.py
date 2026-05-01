@@ -230,7 +230,7 @@ def _runtime_memory_overlay() -> dict[str, Any]:
 
 
 def normalize_calibration_config(config: dict[str, Any] | None) -> dict[str, Any]:
-    """Return calibration config normalized around evaluator/scorer tuning only."""
+    """Return calibration config normalized around evaluator tuning only."""
     raw = config.get("calibration") if isinstance(config, dict) else config
     if not isinstance(raw, dict):
         raw = {}

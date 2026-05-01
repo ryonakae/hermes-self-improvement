@@ -39,15 +39,34 @@ def test_primary_cli_surface_parses_dry_run_boundaries():
     assert calibrate.dry_run is True
 
 
-def test_primary_cli_surface_defaults_to_compare_scorer():
+def test_primary_cli_surface_defaults_to_llm_scorer():
     parser = build_parser()
 
     improve = parser.parse_args(["improve"])
     report = parser.parse_args(["report"])
 
-    assert improve.scorer == "compare"
+    assert improve.scorer == "llm"
     assert improve.dry_run is False
-    assert report.scorer == "compare"
+    assert report.scorer == "llm"
+
+
+def test_primary_cli_surface_rejects_gepa_and_compare_scorers():
+    parser = build_parser()
+
+    rejected = [
+        ["improve", "--scorer", "gepa"],
+        ["improve", "--scorer", "compare"],
+        ["report", "--scorer", "gepa"],
+        ["report", "--scorer", "compare"],
+    ]
+
+    for argv in rejected:
+        try:
+            parser.parse_args(argv)
+        except SystemExit as exc:
+            assert exc.code == 2
+        else:  # pragma: no cover
+            raise AssertionError(f"removed scorer should not parse: {argv}")
 
 
 def test_status_and_setup_accept_json_flags_as_full_status_output():

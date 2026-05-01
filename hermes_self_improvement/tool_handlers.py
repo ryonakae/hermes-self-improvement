@@ -185,7 +185,7 @@ def _handle_self_improvement_report_tool(args: dict[str, Any] | None = None, **_
         config,
         since_hours=_coerce_int(args.get("since_hours"), 24, 1),
         write_report=False,
-        scorer=str(args.get("scorer") or "compare"),
+        scorer=str(args.get("scorer") or "llm"),
     )
     out = {k: v for k, v in out.items() if k != "report"}
     out["schema_name"] = "self_improvement_report"
@@ -210,7 +210,7 @@ def _handle_self_improvement_improve_tool(args: dict[str, Any] | None = None, **
             config=_config_from_args(args),
             since_hours=_coerce_int(args.get("since_hours"), 24, 1),
             dry_run=bool(args.get("dry_run", False)),
-            scorer=str(args.get("scorer") or "compare"),
+            scorer=str(args.get("scorer") or "llm"),
         )
         return tool_result(_compact_improve_tool_result(result))
     except Exception as exc:

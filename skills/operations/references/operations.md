@@ -8,7 +8,7 @@ bin/hermes-self-improve setup --check
 bin/hermes-self-improve setup --reset
 bin/hermes-self-improve setup --reset --yes
 bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24 --scorer compare
+bin/hermes-self-improve report --since-hours 24
 bin/hermes-self-improve improve
 bin/hermes-self-improve improve --dry-run
 bin/hermes-self-improve calibrate

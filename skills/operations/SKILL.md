@@ -24,8 +24,8 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - Rollback は primary feature ではない。失敗や誤変更は future evidence として次の improvement run で correction する。Curator-style archive restore は別扱い。
 - Scorer/evaluator self-improvement は prompt / rubric / runtime-private eval cases が対象。Python implementation code は自己変更しない。
 - DSPy/GEPA は hook / plugin discovery path では lazy import を維持し、Hermes runtime 全体の必須依存にしない。
-- LLM / GEPA scoring は advisory。無人変更の許可として扱わない。
-- Model routing は current schema の `model.judge`（proposal/evidence judgment）、`model.editor`（mutation agent）、`model.evaluator`（DSPy/GEPA evaluator/scorer calibration）だけを使う。旧 role key は残さない。
+- Proposal scoring は `llm`（既定）または `heuristic` のみ。scoring は advisory で、無人変更の許可として扱わない。GEPA/DSPy は `calibrate` で evaluator / prompt / rubric 改善に使う。
+- Model routing は current schema の `model.judge`（proposal/evidence judgment）、`model.editor`（mutation agent）、`model.evaluator`（DSPy/GEPA evaluator calibration）だけを使う。旧 role key は残さない。
 - 変更前に `git status --short` と対象 diff を確認し、無関係な変更を巻き戻さない。
 
 ## 主要パス
@@ -37,13 +37,13 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - `hermes_self_improvement/cli.py`: CLI parser、report rendering、runner orchestration
 - `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry
 - `hermes_self_improvement/analysis.py`: event aggregation / evidence extraction
-- `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator/scorer promotion
+- `hermes_self_improvement/calibration.py`: calibration evidence、regression-gated active evaluator promotion
 - `hermes_self_improvement/mutation_policy.py`: provider-aware memory mutation policy / context builders
 - `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor
-- `evals/proposal/`: repo-tracked public scorer regression seed。user-specific runtime eval cases はここに混ぜない
+- `evals/proposal/`: repo-tracked public evaluator regression seed。user-specific runtime eval cases はここに混ぜない
 - `skills/operations/SKILL.md`: この bundled operational skill
 
-Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下。主な subdir は `state/`, `daily/`, `runs/`, `evaluator/`, `cache/`。`evaluator/` は scorer/evaluator の runtime state と default asset copy を置く場所で、GEPA はその中の optimizer 実装の一つとして扱う。
+Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下。主な subdir は `state/`, `daily/`, `runs/`, `evaluator/`, `cache/`。`evaluator/` は evaluator の runtime state と default asset copy を置く場所で、GEPA はその中の optimizer 実装の一つとして扱う。
 
 ## 日常コマンド
 
@@ -69,9 +69,9 @@ self_improvement_calibrate
 ## 変更時の進め方
 
 1. `README.md`, `AGENTS.md`, 関連 reference、該当 repo-tracked plan を読む。
-2. 新しい runner / scorer / mutation 挙動は TDD で fail-closed を先に固定してから実装する。
+2. 新しい runner / proposal scoring / mutation 挙動は TDD で fail-closed を先に固定してから実装する。
 3. Hook path を触る場合は、redaction・retention・partial event filtering が壊れないか確認する。
-4. Scorer/evaluator path を触る場合は、advisory-only と runtime-private eval cases を崩さない。
+4. Proposal scoring / evaluator path を触る場合は、advisory-only と runtime-private eval cases を崩さない。
 5. Tool handler / schema を触る場合は、`plugin.yaml`, `schemas.py`, `tool_handlers.py`, registration、`tests/test_plugin_tools.py` を同時に更新する。
 6. `__init__.py` / registration / bundled skill discovery を触ったら、unit test だけでなく plugin manager loading も確認する。
 7. 実 mutation step を追加するときは、skill は official skill tools、memory は memory/provider tools だけに閉じる。
@@ -111,4 +111,4 @@ Expected: enabled true, error null, tools 4。
 - Plugin-bundled skills は repo file として編集する。`skill_manage` で plugin-bundled skill を編集しない。
 - `importlib.util.module_from_spec` で unit test する場合は、`exec_module` 前に `sys.modules[spec.name] = module` を入れる。
 - Runtime code で relative import を含む plugin module を読む場合は、file-location spec の単体名で `exec_module` しない。`importlib.import_module("hermes_self_improvement.<module>")` など package context 付きで読む。単体名だと `from .prompts ...` が `attempted relative import with no known parent package` で落ちる。
-- DSPy/GEPA scorer tests は基本 fake dependency で書く。runtime hook / normal import が `dspy` を eager import しないことを守る。
+- DSPy/GEPA evaluator tests は基本 fake dependency で書く。runtime hook / normal import が `dspy` を eager import しないことを守る。

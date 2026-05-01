@@ -58,7 +58,7 @@ code defaults
 
 `config.yaml` / `config.local.yaml` は local runtime 用で gitignore 済みです。
 
-Model routing は責務名で分けます。`model.judge` は proposal / evidence の採点・判断、`model.editor` は skill / memory mutation agent、`model.evaluator` は DSPy / GEPA evaluator・scorer calibration に使います。
+Model routing は責務名で分けます。`model.judge` は proposal / evidence の採点・判断、`model.editor` は skill / memory mutation agent、`model.evaluator` は DSPy / GEPA による evaluator / prompt / rubric calibration に使います。
 
 ## Curator operating mode
 

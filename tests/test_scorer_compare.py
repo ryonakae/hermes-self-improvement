@@ -9,7 +9,7 @@ PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
 
 
 def load_plugin_module():
-    spec = importlib.util.spec_from_file_location("hermes_self_improvement_compare_under_test", PLUGIN_INIT)
+    spec = importlib.util.spec_from_file_location("hermes_self_improvement_current_scorer_under_test", PLUGIN_INIT)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     sys.modules[spec.name] = module
@@ -42,19 +42,22 @@ def sample_proposals():
     ]
 
 
-def test_compare_scorer_marks_llm_gepa_disagreements(monkeypatch):
+def test_llm_scorer_is_primary_external_proposal_scorer(monkeypatch):
     mod = load_plugin_module()
 
     def fake_llm(*, proposals, findings, config):
+        assert [item["id"] for item in proposals] == ["proposal-1", "proposal-2"]
+        assert findings == [{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}]
+        assert config == {"model": {"judge": {}}}
         return {
             "scores": [
                 {
                     "id": "proposal-1",
                     "score": 92,
-                    "recommendation": "review_low_risk_candidate",
-                    "risk": "low",
+                    "recommendation": "human_review",
+                    "risk": "medium",
                     "confidence": "high",
-                    "rationale": "LLM thinks this is ready to apply after quick review.",
+                    "rationale": "Judge sees repeated evidence but requires review.",
                 },
                 {
                     "id": "proposal-2",
@@ -62,145 +65,48 @@ def test_compare_scorer_marks_llm_gepa_disagreements(monkeypatch):
                     "recommendation": "report_only",
                     "risk": "low",
                     "confidence": "low",
-                    "rationale": "LLM sees weak evidence.",
-                },
-            ]
-        }
-
-    def fake_gepa(*, proposals, findings, config):
-        return {
-            "scores": [
-                {
-                    "id": "proposal-1",
-                    "score": 64,
-                    "recommendation": "human_review",
-                    "risk": "medium",
-                    "confidence": "medium",
-                    "rationale": "Rubric requires stronger verification evidence.",
-                    "score_breakdown": {
-                        "evidence_strength": {"level": "high", "points": 30, "weight": 30, "reason": "repeated evidence"},
-                        "verification_plan": {"level": "low", "points": 2, "weight": 10, "reason": "no test plan"},
-                    },
-                },
-                {
-                    "id": "proposal-2",
-                    "score": 52,
-                    "recommendation": "report_only",
-                    "risk": "low",
-                    "confidence": "low",
-                    "rationale": "Rubric agrees evidence is weak.",
+                    "rationale": "Weak evidence.",
                 },
             ]
         }
 
     monkeypatch.setattr(mod._impl, "_call_llm_scorer", fake_llm)
-    monkeypatch.setattr(mod._impl, "_call_gepa_scorer", fake_gepa)
 
     scored = mod.score_proposals(
         sample_proposals(),
         findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}],
-        scorer="compare",
-        config={"gepa_scorer": {"enabled": True}, "model": {"judge": {}}},
+        scorer="llm",
+        config={"model": {"judge": {}}},
     )
 
     first = scored[0]
     assert first["id"] == "proposal-1"
-    assert first["scorer"] == "compare-v0.1"
-    assert first["llm_score"] == 92
-    assert first["gepa_score"] == 64
-    assert first["score_delta"] == 28
-    assert "score_gap" in first["scorer_disagreements"]
-    assert "recommendation_mismatch" in first["scorer_disagreements"]
-    assert "risk_mismatch" in first["scorer_disagreements"]
+    assert first["scorer"] == "llm-v0.1"
+    assert first["score"] == 92
     assert first["recommendation"] == "human_review"
     assert first["auto_apply"] is False
-    assert first["score_breakdown"]["verification_plan"]["level"] == "low"
+    assert "Judge sees repeated evidence" in first["llm_rationale"]
+    assert "gepa_score" not in first
+    assert "score_delta" not in first
+    assert "scorer_disagreements" not in first
 
 
-def test_compare_scorer_uses_change_type_aware_thresholds(monkeypatch):
+def test_removed_gepa_and_compare_scorers_fall_back_to_heuristic_without_external_calls(monkeypatch):
     mod = load_plugin_module()
-    proposals = [
-        {
-            "id": "low-risk-prose",
-            "change_type": "pitfall_addition_existing_section",
-            "risk": "low",
-            "confidence": "medium",
-            "title": "Add pitfall note",
-            "auto_apply": False,
-        },
-        {
-            "id": "strict-memory",
-            "change_type": "memory_compress",
-            "risk": "medium",
-            "confidence": "medium",
-            "title": "Compress memory",
-            "auto_apply": False,
-        },
-    ]
 
-    def fake_llm(*, proposals, findings, config):
-        return {
-            "scores": [
-                {"id": "low-risk-prose", "score": 88, "recommendation": "review_low_risk_candidate", "risk": "low", "confidence": "high", "rationale": "ok"},
-                {"id": "strict-memory", "score": 80, "recommendation": "human_review", "risk": "medium", "confidence": "medium", "rationale": "ok"},
-            ]
-        }
+    def fail_llm(**kwargs):  # pragma: no cover
+        raise AssertionError("removed scorer names must not call LLM")
 
-    def fake_gepa(*, proposals, findings, config):
-        return {
-            "scores": [
-                {"id": "low-risk-prose", "score": 70, "recommendation": "review_low_risk_candidate", "risk": "low", "confidence": "low", "rationale": "ok"},
-                {"id": "strict-memory", "score": 74, "recommendation": "human_review", "risk": "medium", "confidence": "medium", "rationale": "ok"},
-            ]
-        }
+    monkeypatch.setattr(mod._impl, "_call_llm_scorer", fail_llm)
 
-    monkeypatch.setattr(mod._impl, "_call_llm_scorer", fake_llm)
-    monkeypatch.setattr(mod._impl, "_call_gepa_scorer", fake_gepa)
-    policy = {
-        "default": {"block_on_risk_disagreement": True, "block_on_recommendation_disagreement": True, "score_delta_block_threshold": 15, "confidence_rank_delta_block_threshold": 1},
-        "strict_change_types": ["memory_compress", "unknown_or_unclassified"],
-        "strict": {"score_delta_block_threshold": 5, "confidence_rank_delta_block_threshold": 1},
-        "low_risk_prose": {"change_types": ["pitfall_addition_existing_section"], "score_delta_block_threshold": 20, "confidence_rank_delta_block_threshold": 2},
-    }
-
-    scored = mod.score_proposals(proposals, scorer="compare", config={"scorer_comparison_policy": policy})
-    by_id = {item["id"]: item for item in scored}
-
-    assert by_id["low-risk-prose"]["scorer_disagreements"] == ["confidence_gap"]
-    assert by_id["low-risk-prose"]["scorer_comparison_policy"]["policy_name"] == "low_risk_prose"
-    assert by_id["low-risk-prose"]["recommendation"] == "human_review"
-    assert by_id["strict-memory"]["scorer_disagreements"] == ["score_gap"]
-    assert by_id["strict-memory"]["scorer_comparison_policy"]["policy_name"] == "strict"
+    for scorer in ("gepa", "compare"):
+        scored = mod.score_proposals(sample_proposals(), scorer=scorer, config={})
+        assert scored[0]["scorer"] == "heuristic-v0.1"
+        assert "gepa_scorer_error" not in scored[0]
+        assert "scorer_disagreements" not in scored[0]
 
 
-def test_compare_scorer_always_blocks_risk_and_recommendation_mismatch(monkeypatch):
-    mod = load_plugin_module()
-    proposals = [{"id": "typo", "change_type": "typo_fix", "risk": "low", "confidence": "high", "title": "Typo fix"}]
-
-    def fake_llm(*, proposals, findings, config):
-        return {"scores": [{"id": "typo", "score": 90, "recommendation": "review_low_risk_candidate", "risk": "low", "confidence": "high", "rationale": "ok"}]}
-
-    def fake_gepa(*, proposals, findings, config):
-        return {"scores": [{"id": "typo", "score": 89, "recommendation": "human_review", "risk": "medium", "confidence": "high", "rationale": "ok"}]}
-
-    monkeypatch.setattr(mod._impl, "_call_llm_scorer", fake_llm)
-    monkeypatch.setattr(mod._impl, "_call_gepa_scorer", fake_gepa)
-    scored = mod.score_proposals(
-        proposals,
-        scorer="compare",
-        config={
-            "scorer_comparison_policy": {
-                "low_risk_prose": {"change_types": ["typo_fix"], "score_delta_block_threshold": 100, "confidence_rank_delta_block_threshold": 3}
-            }
-        },
-    )
-
-    assert "recommendation_mismatch" in scored[0]["scorer_disagreements"]
-    assert "risk_mismatch" in scored[0]["scorer_disagreements"]
-    assert scored[0]["recommendation"] == "human_review"
-
-
-def test_render_report_includes_compare_summary():
+def test_render_report_does_not_include_compare_summary_for_current_scorer():
     mod = load_plugin_module()
     result = mod.AnalysisResult(
         since=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -229,16 +135,14 @@ def test_render_report_includes_compare_summary():
                 "score": 64,
                 "recommendation": "human_review",
                 "reason": "Repeated tool failure.",
-                "scorer": "compare-v0.1",
-                "llm_score": 92,
-                "gepa_score": 64,
-                "score_delta": 28,
-                "scorer_disagreements": ["score_gap", "recommendation_mismatch", "risk_mismatch"],
+                "scorer": "llm-v0.1",
                 "auto_apply": False,
             }
         ],
     )
 
-    assert "- scorer: `compare-v0.1`" in report
-    assert "- scorer_compare: llm=92 gepa=64 delta=28" in report
-    assert "score_gap, recommendation_mismatch, risk_mismatch" in report
+    assert "- scorer: `llm-v0.1`" in report
+    assert "scorer_compare" not in report
+    assert "--scorer gepa" not in report
+    assert "--scorer compare" not in report
+    assert "gepa_scorer_error" not in report

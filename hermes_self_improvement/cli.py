@@ -22,7 +22,7 @@ from .next_actions import render_next_actions
 from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .recovery_engine import memory_rollback_status
-from .scoring import _call_gepa_scorer, _call_llm_scorer, score_proposals_impl
+from .scoring import _call_llm_scorer, score_proposals_impl
 from .setup_runtime import check_runtime_setup, run_setup, runtime_layout
 from .verification import merge_judge_status
 PLUGIN_NAME = "hermes-self-improvement"
@@ -131,19 +131,6 @@ def build_calibration_report_payload(*, config: dict[str, Any], limit: int = 5) 
     }
 
 
-
-def _format_scorer_compare(p: dict[str, Any]) -> str:
-    if p.get("scorer") != "compare-v0.1":
-        return ""
-    parts = [
-        f"llm={p.get('llm_score')}",
-        f"gepa={p.get('gepa_score')}",
-        f"delta={p.get('score_delta')}",
-    ]
-    disagreements = p.get("scorer_disagreements")
-    if isinstance(disagreements, list) and disagreements:
-        parts.append("disagreements=" + ", ".join(str(item) for item in disagreements))
-    return " ".join(parts)
 
 
 def _format_score_breakdown(raw: Any) -> str:
@@ -321,9 +308,6 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operatio
         ])
         if proposal.get("scorer"):
             lines.append(f"- scorer: `{proposal.get('scorer')}`")
-        compare = _format_scorer_compare(proposal)
-        if compare:
-            lines.append(f"- scorer_compare: {compare}")
         breakdown = _format_score_breakdown(proposal.get("score_breakdown"))
         if breakdown:
             lines.append(f"- score_breakdown: {breakdown}")
@@ -334,8 +318,8 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operatio
     lines.extend(_render_operational_report_sections(operational_reports))
     lines.extend([
         "## 注意",
-        "- 採点は `--scorer heuristic`、`--scorer llm`、`--scorer gepa`、`--scorer compare` で切り替えます。`report` / `improve` は既定で `compare` です。",
-        "- LLM / GEPA / compare / heuristic scorer は proposal の優先順位づけだけを行い、skill / memory の変更許可にはなりません。GEPA が失敗した場合は `gepa_scorer_error` として明示し、unattended mutation は許可しません。",
+        "- 採点は `--scorer llm`（既定）または `--scorer heuristic` で切り替えます。",
+        "- DSPy / GEPA は proposal scorer ではなく、`calibrate` で evaluator / prompt / rubric 改善に使います。",
         "- plugin hook は観測専用で、skill / memory の変更は行いません。",
     ])
     return "\n".join(lines).rstrip() + "\n"
@@ -357,7 +341,6 @@ def run_pipeline(
         scorer=scorer,
         config=config,
         llm_scorer_func=_call_llm_scorer,
-        gepa_scorer_func=_call_gepa_scorer,
     )
     operational_reports = _build_operational_report_payloads(config)
     report = render_report(result, scored, operational_reports=operational_reports)
@@ -444,7 +427,7 @@ def run_improve(
     config: dict[str, Any],
     since_hours: int = 24,
     dry_run: bool = False,
-    scorer: str = "compare",
+    scorer: str = "llm",
 ) -> dict[str, Any]:
     """Run the self-improvement loop.
 
@@ -673,7 +656,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 
     p_improve = sub.add_parser("improve", help="Run the full self-improvement loop; mutates by default")
     p_improve.add_argument("--since-hours", type=int, default=24)
-    p_improve.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
+    p_improve.add_argument("--scorer", choices=["heuristic", "llm"], default="llm")
     p_improve.add_argument("--dry-run", action="store_true", help="Preview without mutation")
     p_improve.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_improve)
@@ -694,13 +677,13 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 
     p_report = sub.add_parser("report", help="Analyze and write Markdown report")
     p_report.add_argument("--since-hours", type=int, default=24)
-    p_report.add_argument("--scorer", choices=["heuristic", "llm", "gepa", "compare"], default="compare")
+    p_report.add_argument("--scorer", choices=["heuristic", "llm"], default="llm")
     p_report.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_report)
     p_report.set_defaults(func=_handle_cli)
 
-    p_calibrate = sub.add_parser("calibrate", help="Calibrate evaluator/scorer; mutates by default when gates pass")
-    p_calibrate.add_argument("--dry-run", action="store_true", help="Preview without promoting active evaluator/scorer")
+    p_calibrate = sub.add_parser("calibrate", help="Calibrate evaluator prompts/rubrics; mutates by default when gates pass")
+    p_calibrate.add_argument("--dry-run", action="store_true", help="Preview without promoting active evaluator state")
     p_calibrate.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_calibrate)
     p_calibrate.set_defaults(func=_handle_cli)
@@ -729,7 +712,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             config=config,
             since_hours=int(getattr(args, "since_hours", 24)),
             dry_run=bool(getattr(args, "dry_run", False)),
-            scorer=str(getattr(args, "scorer", "compare")),
+            scorer=str(getattr(args, "scorer", "llm")),
         )
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
@@ -789,7 +772,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             config,
             since_hours=int(getattr(args, "since_hours", 24)),
             write_report=True,
-            scorer=getattr(args, "scorer", "compare"),
+            scorer=getattr(args, "scorer", "llm"),
         )
         if getattr(args, "as_json", False):
             print(json.dumps({k: v for k, v in out.items() if k != "report"}, ensure_ascii=False, indent=2, default=str))
@@ -807,14 +790,12 @@ def _handle_slash(raw_args: str = "") -> str:
     config = load_config()
     text = (raw_args or "").strip().lower()
     if text.startswith("analyze") or text.startswith("report") or text.startswith("run"):
-        use_llm = "--scorer llm" in text or "llm" in text.split()
-        use_gepa = "--scorer gepa" in text or "gepa" in text.split()
-        use_compare = "--scorer compare" in text or "compare" in text.split()
+        use_heuristic = "--scorer heuristic" in text or "heuristic" in text.split()
         out = run_pipeline(
             config,
             since_hours=24,
             write_report=text.startswith(("report", "run")),
-            scorer="compare" if use_compare else "gepa" if use_gepa else "llm" if use_llm else "heuristic",
+            scorer="heuristic" if use_heuristic else "llm",
         )
         return out["report"][:3500]
     path = _event_path(config)

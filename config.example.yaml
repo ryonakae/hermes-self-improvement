@@ -11,7 +11,7 @@
 
 # Optional: customize models only when auto routing is not enough.
 # judge scores/evaluates proposals, editor powers mutation agents, and evaluator
-# powers DSPy/GEPA scorer calibration.
+# powers DSPy/GEPA evaluator calibration.
 # model:
 #   judge:
 #     provider: openrouter

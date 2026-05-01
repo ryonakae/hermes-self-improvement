@@ -50,7 +50,7 @@ def test_render_report_includes_score_breakdown_summary():
                 "score": 73,
                 "recommendation": "human_review",
                 "reason": "Observed repeated failures.",
-                "scorer": "gepa-v0.1",
+                "scorer": "llm-v0.1",
                 "score_breakdown": {
                     "evidence_strength": {"level": "high", "points": 30, "weight": 30},
                     "operational_safety": {"level": "medium", "points": 16, "weight": 25},
