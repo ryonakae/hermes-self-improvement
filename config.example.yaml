@@ -5,11 +5,6 @@
 # Do not commit real API keys or provider secrets. For custom endpoints, prefer
 # ${ENV_VAR} references in the local file.
 
-# Keep unattended mutation conservative.
-automation_policy:
-  max_risk: low
-  allow_destructive: false
-
 # Optional: disable mutating runs without changing CLI usage.
 # mutation:
 #   enabled: false

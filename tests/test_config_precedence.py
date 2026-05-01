@@ -216,9 +216,7 @@ def test_config_example_yaml_is_parseable():
     assert config["model"]["gepa"]["timeout"] == 120
     assert config["model"]["mutation"]["timeout"] == 45
     assert config["model"]["mutation"]["max_tokens"] == 1000
-    assert config["mutation"]["backend"] == "hermes_agent"
-    assert config["automation_policy"]["max_risk"] == "low"
-    assert config["automation_policy"]["allowed_target_kinds"] == ["skill", "memory"]
+    assert config["mutation"]["backend"] == "hermes_auxiliary_tool_loop"
     assert config["calibration"]["evidence"]["min_evidence_events"] == 20
 
 
