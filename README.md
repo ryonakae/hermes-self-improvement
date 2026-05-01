@@ -17,7 +17,7 @@ bin/hermes-self-improve calibrate
 bin/hermes-self-improve calibrate --dry-run
 ```
 
-- `improve`: 統合 runner。calibration、分析、runner step、run artifact 作成を行う。default は mutation-capable。
+- `improve`: 統合 runner。Curator 自動 lifecycle transition の実行/preview、Curator telemetry 読み取り、hook evidence pack、skill / memory runner step、run artifact 作成を行う。default は mutation-capable。
 - `improve --dry-run`: mutation せず preview / artifact だけ作る。
 - `calibrate`: scorer/evaluator calibration。regression gate を通った場合だけ active state を更新する。default は mutation-capable。
 - `calibrate --dry-run`: calibration の preview。
@@ -31,14 +31,19 @@ bin/hermes-self-improve calibrate --dry-run
 現在の設計方向です。
 
 ```text
+Curator/Hermes skill telemetry + lifecycle
+  -> active/stale agent-created local mutable skill candidates
 Hermes runtime hooks
-  -> redacted event JSONL
-  -> analysis / evidence pack
+  -> redacted high-resolution event JSONL
+  -> candidate-aware evidence pack
   -> improve runner steps
-     - skill step
-     - memory step
-     - scorer/evaluator calibration
+     - skill step (Curator candidates + attached hook context)
+     - memory step (provider-compatible related-memory lookup when triggered)
   -> run artifact
+
+calibrate
+  -> accumulated correction/outcome/disagreement/regression evidence
+  -> classifier / editor / evaluator judgment-loop improvement
 ```
 
 Run artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` に保存します。詳細な evidence、step decisions、summary は artifact に残し、通常出力は Curator 風に短くします。
@@ -60,7 +65,9 @@ Run artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` に保存し
 - arbitrary docs/config targets
 - direct filesystem / provider DB / provider internal mutation fallback
 
-Skill mutation は公式 Hermes skill tools（特に `skill_manage`）だけを使います。Memory mutation は memory tool / provider-native memory tool だけを使います。直接ファイル編集や provider DB 直書きに fallback しません。
+Skill mutation は公式 Hermes skill tools（特に `skill_manage`）だけを使います。候補は Curator/Hermes telemetry を source of truth とし、active / stale の agent-created local mutable skills だけを扱います。Pinned / archived / bundled / hub-installed / plugin-bundled / external / ambiguous provenance は planning 時点で除外し、mutation 直前にも revalidate します。Archived skills は duplicate-prevention や restore candidate としても通常候補に戻しません。
+
+Memory mutation は memory tool / provider-native memory tool だけを使います。correction / contradiction / memory failure など evidence があるときだけ provider recall/search context を添えます。full memory lifecycle、full sweep、直接ファイル編集、provider DB 直書きには fallback しません。
 
 Rollback は primary feature ではありません。失敗や誤変更は後続 evidence として扱い、次の改善 run で correction します。skill archive restore のような Curator-style lifecycle restore は別扱いです。
 

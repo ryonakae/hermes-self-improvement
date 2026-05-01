@@ -2,13 +2,13 @@
 
 ## Current source of truth
 
-As of 2026-05-01, there is **one active implementation plan** in this directory:
-
-- `2026-05-01_094555-curator-telemetry-source-of-truth.md`
-  - **Status:** active.
-  - Implements the remaining Curator-compatible source-of-truth work: run/preview Curator automatic lifecycle transitions while Curator is disabled or paused, read real Curator/Hermes skill telemetry and lifecycle state, use it as the skill candidate source-of-truth, keep plugin hooks as high-resolution supplemental evidence only, add related-memory recall/search context to the memory runner, preserve `calibrate` as the classifier/editor/evaluator judgment-loop improvement path, and surface Curator-vs-hook provenance in report/status.
+As of 2026-05-01, there is **no active implementation plan** in this directory.
 
 The latest completed implementation records are:
+
+- `archive/2026-05-01_094555-curator-telemetry-source-of-truth.md`
+  - **Status:** completed.
+  - Implemented Curator/Hermes telemetry as the skill candidate source-of-truth, automatic Curator lifecycle transition preview/run before telemetry loading, candidate-aware evidence packs, candidate-driven skill runner, evidence-triggered related-memory lookup context, calibrate-only scorer/evaluator judgment-loop responsibility, and Curator-vs-hook visibility in report/status.
 
 - `archive/2026-05-01_015758-obsolete-terminology-cleanup.md`
   - **Status:** completed.
@@ -27,6 +27,8 @@ The current implemented baseline is:
 - Primary CLI surface: `improve / calibrate / report / status`.
 - Primary tool surface: `self_improvement_improve / self_improvement_calibrate / self_improvement_report / self_improvement_status`.
 - `improve` and `calibrate` are mutation-capable by default; `--dry-run` is the preview boundary.
+- `improve` uses Curator/Hermes telemetry as the skill candidate source-of-truth after running or previewing Curator automatic lifecycle transitions.
+- `calibrate` owns classifier/editor/evaluator judgment-loop improvement; `improve` does not run DSPy/GEPA calibration.
 - Legacy primary `plan / apply / rollback / outcome`, `--execute`, `--items`, and `self_improvement_record_outcome` are removed from the user-facing surface.
 - Skill mutation runs through bounded official skill tools only; no terminal/file/git/direct filesystem fallback.
 - Memory mutation runs through provider-compatible memory/provider tools only; no direct memory store edits.

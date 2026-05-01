@@ -1,5 +1,7 @@
 # Curator Telemetry Source-of-Truth Implementation Plan
 
+> **Status:** completed 2026-05-01. Archived after implementation; `.hermes/plans/README.md` is the current index.
+
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
 **Goal:** Make `hermes-self-improvement` actually use Curator/Hermes skill telemetry and lifecycle state as the skill candidate source-of-truth, while using plugin hook evidence only for high-resolution context Curator cannot collect; also strengthen memory runner input with provider recall/search related-memory context.

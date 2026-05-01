@@ -17,8 +17,10 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - 改善対象は `skill`, `memory`, `scorer`, `evaluator` だけ。runtime config、prompt policy、tool policy、任意 docs/config、Hermes core へ広げない。
 - Curator telemetry（skill usage / lifecycle / pinned / archive state）は Curator を source of truth にし、plugin hooks で重複収集しない。
 - Plugin hooks は Curator が持たない情報だけを集める: tool failure context、memory operation/failure、user correction/session outcome、subagent outcome、LLM/API failure metadata。
-- Skill mutation は local mutable skills のみを対象にし、`skill_manage` など公式 skill tools だけで実行する。direct filesystem fallback は使わない。
-- Memory mutation は memory tool / provider-native memory tool だけで実行する。built-in memory files、provider DB、provider internals を直接編集しない。
+- `improve` は Curator/Hermes telemetry を skill candidate source-of-truth として使う。built-in Curator が disabled/paused の前提で、Curator と同じ automatic lifecycle transition を最初に実行/preview してから telemetry を読む。
+- Skill mutation は local mutable active/stale agent-created skills のみを対象にし、`skill_manage` など公式 skill tools だけで実行する。pinned / archived / bundled / hub-installed / plugin-bundled / external / ambiguous provenance は除外し、direct filesystem fallback は使わない。
+- Archived skills は通常の candidate / duplicate-prevention / restore candidate として使わない。Curator behavior に合わせる。
+- Memory mutation は memory tool / provider-native memory tool だけで実行する。evidence-triggered related-memory recall/search context は使うが、built-in memory files、provider DB、provider internals を直接編集しない。full memory lifecycle / sweep はしない。
 - Rollback は primary feature ではない。失敗や誤変更は future evidence として次の improvement run で correction する。Curator-style archive restore は別扱い。
 - Scorer/evaluator self-improvement は prompt / rubric / runtime-private eval cases が対象。Python implementation code は自己変更しない。
 - DSPy/GEPA は hook / plugin discovery path では lazy import を維持し、Hermes runtime 全体の必須依存にしない。
