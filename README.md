@@ -11,7 +11,7 @@ CLI surface は5つ、plugin tool surface は4つです。`setup` は初回イ�
 ```bash
 bin/hermes-self-improve setup
 bin/hermes-self-improve setup --check
-bin/hermes-self-improve setup --reset-runtime
+bin/hermes-self-improve setup --reset
 bin/hermes-self-improve status
 bin/hermes-self-improve report --since-hours 24 --json
 bin/hermes-self-improve improve
@@ -27,7 +27,7 @@ bin/hermes-self-improve calibrate --dry-run
 - `report`: 直近 event / artifact の読み取りレポート。mutation しない。
 - `setup`: `${HERMES_HOME:-~/.hermes}/self-improvement` の runtime directory、event log、default evaluator assets、active evaluator pointer を初期化する。LLM/GEPA/mutation は実行しない。
 - `setup --check`: runtime setup の read-only readiness check。
-- `setup --reset-runtime`: runtime directory を削除して作り直す破壊的 bootstrap。repo files は触らない。
+- `setup --reset`: runtime directory を削除して作り直す破壊的 bootstrap。repo files は触らない。
 - `status`: plugin readiness と runtime path の読み取り表示。
 
 削除済みの primary surface: `plan`, `apply`, `rollback`, `outcome` / `record_outcome`。`--execute`, item 指定、hash 確認 flag は primary CLI/tool schema に出しません。

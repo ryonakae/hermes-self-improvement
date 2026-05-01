@@ -54,13 +54,13 @@ def test_status_and_setup_accept_json_flags_as_full_status_output():
     parser = build_parser()
 
     status = parser.parse_args(["status", "--json"])
-    setup = parser.parse_args(["setup", "--check", "--reset-runtime", "--json"])
+    setup = parser.parse_args(["setup", "--check", "--reset", "--json"])
 
     assert status.self_improvement_cmd == "status"
     assert status.as_json is True
     assert setup.self_improvement_cmd == "setup"
     assert setup.check is True
-    assert setup.reset_runtime is True
+    assert setup.reset is True
     assert setup.as_json is True
 
 
@@ -234,7 +234,7 @@ def test_setup_summary_is_human_readable_not_json():
         "operation": "setup",
         "runtime_root": "/tmp/self-improvement",
         "initialized": True,
-        "reset_runtime": False,
+        "reset": False,
         "writable": True,
         "active_evaluator": {"path": "/tmp/self-improvement/evaluator/active.json", "status": "ready"},
         "default_assets": {"status": "ready"},

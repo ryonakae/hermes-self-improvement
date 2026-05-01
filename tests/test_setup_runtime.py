@@ -84,7 +84,7 @@ def test_setup_is_idempotent_and_preserves_existing_active_evaluator(tmp_path):
     assert json.loads(active.read_text(encoding="utf-8"))["custom"] is True
 
 
-def test_setup_reset_runtime_removes_stale_files_and_reseeds(tmp_path):
+def test_setup_reset_removes_stale_files_and_reseeds(tmp_path):
     setup = load_setup_module()
     root = tmp_path / "self-improvement"
     config = {"_self_improvement_root": str(root)}
@@ -92,10 +92,10 @@ def test_setup_reset_runtime_removes_stale_files_and_reseeds(tmp_path):
     stale.parent.mkdir(parents=True)
     stale.write_text("stale", encoding="utf-8")
 
-    result = setup.run_setup(config, reset_runtime=True)
+    result = setup.run_setup(config, reset=True)
 
     assert result["initialized"] is True
-    assert result["reset_runtime"] is True
+    assert result["reset"] is True
     assert stale.exists() is False
     assert (root / "evaluator" / "active.json").exists()
     assert (root / "gepa").exists() is False

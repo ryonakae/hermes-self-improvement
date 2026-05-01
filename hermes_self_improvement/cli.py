@@ -639,7 +639,7 @@ def _render_setup_summary(payload: dict[str, Any]) -> str:
         "Runtime:",
         f"- root: {payload.get('runtime_root')}",
         f"- initialized: {'yes' if payload.get('initialized') else 'no'}",
-        f"- reset: {'yes' if payload.get('reset_runtime') else 'no'}",
+        f"- reset: {'yes' if payload.get('reset') else 'no'}",
         "Evaluator:",
         f"- active pointer: {active.get('path') or 'unknown'}",
         f"- active evaluator: {active.get('status') or 'unknown'}",
@@ -675,7 +675,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 
     p_setup = sub.add_parser("setup", help="Initialize self-improvement runtime files")
     p_setup.add_argument("--check", action="store_true", help="Check runtime setup without writing files")
-    p_setup.add_argument("--reset-runtime", action="store_true", help="Delete and recreate the self-improvement runtime directory")
+    p_setup.add_argument("--reset", action="store_true", help="Delete and recreate the self-improvement runtime directory")
     p_setup.add_argument("--json", action="store_true", dest="as_json", help="Print JSON setup status")
     _add_config_argument(p_setup)
     p_setup.set_defaults(func=_handle_cli)
@@ -702,7 +702,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
         payload = run_setup(
             config,
             check=bool(getattr(args, "check", False)),
-            reset_runtime=bool(getattr(args, "reset_runtime", False)),
+            reset=bool(getattr(args, "reset", False)),
         )
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))

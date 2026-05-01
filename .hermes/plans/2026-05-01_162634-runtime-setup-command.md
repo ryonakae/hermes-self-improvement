@@ -87,7 +87,7 @@ Add:
 ```bash
 bin/hermes-self-improve setup
 bin/hermes-self-improve setup --check
-bin/hermes-self-improve setup --reset-runtime
+bin/hermes-self-improve setup --reset
 bin/hermes-self-improve setup --json
 ```
 
@@ -95,7 +95,7 @@ Semantics:
 
 - `setup`: create missing dirs/files and seed defaults if absent. Idempotent. Does not overwrite existing active evaluator/default copies unless a file is missing or invalid enough to fail readiness.
 - `setup --check`: read-only readiness check. Must not create or modify files.
-- `setup --reset-runtime`: delete/recreate `${HERMES_HOME}/self-improvement` contents, then seed from repo defaults. This is the explicit destructive mode. Use it during this implementation because the current local runtime content may be discarded.
+- `setup --reset`: delete/recreate `${HERMES_HOME}/self-improvement` contents, then seed from repo defaults. This is the explicit destructive mode. Use it during this implementation because the current local runtime content may be discarded.
 - `setup --json`: print full payload for tests/automation.
 
 Default human output should be short:
@@ -171,7 +171,7 @@ Important: current `gepa_adapter._resolve_compiled_program_path()` expects `comp
 1. `setup --check` equivalent reports missing runtime as not initialized and writes nothing.
 2. normal setup creates all target directories and files under isolated `_self_improvement_root`.
 3. normal setup is idempotent and preserves existing `evaluator/active.json`.
-4. `reset_runtime=True` removes stale files under the isolated runtime root and recreates only the target layout/defaults.
+4. `reset=True` removes stale files under the isolated runtime root and recreates only the target layout/defaults.
 5. seeded runtime defaults have hashes recorded in both `state/install.json` and `evaluator/active.json`.
 6. setup never imports DSPy and never calls mutation/scoring backends.
 
@@ -180,7 +180,7 @@ Important: current `gepa_adapter._resolve_compiled_program_path()` expects `comp
 ```python
 def runtime_layout(config: dict[str, Any]) -> dict[str, Path]: ...
 def check_runtime_setup(config: dict[str, Any]) -> dict[str, Any]: ...
-def run_setup(config: dict[str, Any], *, check: bool = False, reset_runtime: bool = False) -> dict[str, Any]: ...
+def run_setup(config: dict[str, Any], *, check: bool = False, reset: bool = False) -> dict[str, Any]: ...
 ```
 
 Use existing `observer._self_improvement_root(config)` / `_event_path(config)` / `_reports_dir(config)` semantics rather than inventing a second root resolver.
@@ -220,7 +220,7 @@ Use existing `observer._self_improvement_root(config)` / `_event_path(config)` /
    ```python
    p_setup = sub.add_parser("setup", help="Initialize self-improvement runtime files")
    p_setup.add_argument("--check", action="store_true")
-   p_setup.add_argument("--reset-runtime", action="store_true")
+   p_setup.add_argument("--reset", action="store_true")
    p_setup.add_argument("--json", action="store_true", dest="as_json")
    _add_config_argument(p_setup)
    p_setup.set_defaults(func=_handle_cli)
@@ -312,7 +312,7 @@ Use `rm -rf` only for `/Users/ryo.nakae/.hermes/self-improvement` after verifyin
 **Content:**
 - Add setup to quick-start/install section.
 - Document runtime layout.
-- State that `setup` is safe bootstrap and `--reset-runtime` is destructive.
+- State that `setup` is safe bootstrap and `--reset` is destructive.
 - Keep primary tool surface described as exactly four tools.
 - Mention default evaluator assets live in repo `defaults/evaluator/` and runtime copies live in `${HERMES_HOME}/self-improvement/evaluator/defaults/`.
 
@@ -357,6 +357,6 @@ Recommended defaults for this implementation:
 
 1. **Command name:** `setup`, not `init`, because it matches Hermes user-facing vocabulary.
 2. **Tool exposure:** CLI-only. Do not add `self_improvement_setup` tool unless later explicitly requested.
-3. **Reset flag:** `--reset-runtime`, not `--force`, because the danger is specific and obvious.
-4. **Runtime default copies:** overwrite only in `--reset-runtime`; otherwise preserve local active pointer and report drift.
+3. **Reset flag:** `--reset`, not `--force`, because the danger is specific and obvious.
+4. **Runtime default copies:** overwrite only in `--reset`; otherwise preserve local active pointer and report drift.
 5. **Compiled evaluator:** do not fabricate compiled defaults. The default active pointer is metadata for `dspy_program_eval`; compiled mode still requires a real compiled program artifact.

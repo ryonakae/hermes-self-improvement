@@ -136,7 +136,7 @@ def _build_active_pointer(layout: dict[str, Path], *, created_at: str | None = N
     }
 
 
-def _write_install_metadata(layout: dict[str, Path], *, reset_runtime: bool, copied_defaults: list[str]) -> dict[str, Any]:
+def _write_install_metadata(layout: dict[str, Path], *, reset: bool, copied_defaults: list[str]) -> dict[str, Any]:
     payload = {
         "schema_name": "self_improvement_runtime_install",
         "schema_version": "1.0",
@@ -144,7 +144,7 @@ def _write_install_metadata(layout: dict[str, Path], *, reset_runtime: bool, cop
         "created_at": _now(),
         "runtime_root": str(layout["root"]),
         "layout_version": "evaluator-v1",
-        "reset_runtime": bool(reset_runtime),
+        "reset": bool(reset),
         "copied_defaults": copied_defaults,
         "default_asset_hashes": _default_hashes(layout),
         "active_evaluator_path": str(layout["active_evaluator"]),
@@ -229,15 +229,15 @@ def _is_writable(path: Path) -> bool:
     return os.access(probe_dir, os.W_OK) if probe_dir.exists() else False
 
 
-def run_setup(config: dict[str, Any], *, check: bool = False, reset_runtime: bool = False) -> dict[str, Any]:
+def run_setup(config: dict[str, Any], *, check: bool = False, reset: bool = False) -> dict[str, Any]:
     if check:
         status = check_runtime_setup(config)
         status["operation"] = "check"
-        status["reset_runtime"] = False
+        status["reset"] = False
         return status
 
     layout = runtime_layout(config)
-    if reset_runtime and layout["root"].exists():
+    if reset and layout["root"].exists():
         shutil.rmtree(layout["root"])
 
     for path in _required_dirs(layout):
@@ -245,19 +245,19 @@ def run_setup(config: dict[str, Any], *, check: bool = False, reset_runtime: boo
     if not layout["events"].exists():
         layout["events"].write_text("", encoding="utf-8")
 
-    copied_defaults = _copy_default_assets(layout, overwrite=bool(reset_runtime))
+    copied_defaults = _copy_default_assets(layout, overwrite=bool(reset))
     active_written = False
-    if reset_runtime or not layout["active_evaluator"].exists():
+    if reset or not layout["active_evaluator"].exists():
         layout["active_evaluator"].parent.mkdir(parents=True, exist_ok=True)
         layout["active_evaluator"].write_text(_json_dumps(_build_active_pointer(layout)), encoding="utf-8")
         active_written = True
 
-    install = _write_install_metadata(layout, reset_runtime=reset_runtime, copied_defaults=copied_defaults)
+    install = _write_install_metadata(layout, reset=reset, copied_defaults=copied_defaults)
     status = check_runtime_setup(config)
     return {
         **status,
         "operation": "setup",
-        "reset_runtime": bool(reset_runtime),
+        "reset": bool(reset),
         "created_or_updated": {
             "default_assets": copied_defaults,
             "active_evaluator": active_written,
