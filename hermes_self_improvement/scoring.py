@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
 import re
 import sys
@@ -432,12 +432,6 @@ def _call_gepa_scorer(
     findings: list[dict[str, Any]],
     config: dict[str, Any],
 ) -> dict[str, Any]:
-    adapter_path = Path(__file__).with_name("gepa_adapter.py")
-    spec = importlib.util.spec_from_file_location("hermes_self_improvement_gepa_adapter", adapter_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Unable to load GEPA adapter: {adapter_path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
+    module = importlib.import_module("hermes_self_improvement.gepa_adapter")
     return module.score_with_gepa(proposals=proposals, findings=findings, config=config)
 

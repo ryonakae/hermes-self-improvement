@@ -102,6 +102,32 @@ def test_gepa_scorer_preserves_score_breakdown(monkeypatch):
     assert scored[0]["score_breakdown"]["operational_safety"]["points"] == 16
 
 
+def test_call_gepa_scorer_loads_adapter_with_package_context(monkeypatch):
+    mod = load_plugin_module()
+
+    class FakeAdapter:
+        @staticmethod
+        def score_with_gepa(*, proposals, findings, config):
+            assert proposals[0]["id"] == "proposal-1"
+            assert findings == [{"kind": "tool_failure_cluster", "count": 4}]
+            assert config["gepa_scorer"]["enabled"] is True
+            return {"scores": [{"id": "proposal-1", "score": 80}]}
+
+    def fake_import_module(name):
+        assert name == "hermes_self_improvement.gepa_adapter"
+        return FakeAdapter
+
+    monkeypatch.setattr(mod._impl._scoring.importlib, "import_module", fake_import_module)
+
+    payload = mod._impl._scoring._call_gepa_scorer(
+        proposals=sample_proposals(),
+        findings=[{"kind": "tool_failure_cluster", "count": 4}],
+        config={"gepa_scorer": {"enabled": True}},
+    )
+
+    assert payload["scores"][0]["score"] == 80
+
+
 def test_gepa_scorer_falls_back_to_heuristic_when_required_dependency_missing(monkeypatch):
     mod = load_plugin_module()
 

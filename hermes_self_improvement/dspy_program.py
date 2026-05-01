@@ -280,9 +280,8 @@ def sanitize_score_output(raw: Any, *, proposal_id: str = "") -> dict[str, Any]:
     if isinstance(raw, dict):
         parsed = raw
     else:
-        text = str(raw or "").strip()
         try:
-            parsed = json.loads(text)
+            parsed = _parse_score_json_object(str(raw or ""))
         except Exception as exc:
             raise ValueError(f"Invalid DSPy score_json: {exc}") from exc
     if not isinstance(parsed, dict):
@@ -301,6 +300,24 @@ def sanitize_score_output(raw: Any, *, proposal_id: str = "") -> dict[str, Any]:
     if isinstance(parsed.get("score_breakdown"), dict):
         result["score_breakdown"] = _sanitize_score_breakdown(parsed["score_breakdown"])
     return result
+
+
+def _parse_score_json_object(text: str) -> dict[str, Any]:
+    raw = text.strip()
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        if lines:
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        raw = "\n".join(lines).strip()
+    start = raw.find("{")
+    if start < 0:
+        raise ValueError("missing JSON object")
+    parsed, _end = json.JSONDecoder().raw_decode(raw[start:])
+    if not isinstance(parsed, dict):
+        raise ValueError("expected JSON object")
+    return parsed
 
 
 def _prediction_value(prediction: Any, field: str) -> Any:

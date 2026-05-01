@@ -205,6 +205,23 @@ def test_build_dspy_program_uses_hermes_lm_context_when_real_dspy_shape_availabl
     assert result["auto_apply"] is False
 
 
+def test_dspy_program_accepts_first_json_object_and_ignores_trailing_model_text():
+    mod = load_program_module()
+
+    raw = (
+        '{"id":"proposal-1","score":77,"recommendation":"human_review",'
+        '"risk":"medium","confidence":"medium","rationale":"ok","auto_apply":false}'
+        '\n\nAdditional explanation that should not be parsed as JSON.'
+    )
+
+    result = mod.sanitize_score_output(raw, proposal_id="proposal-1")
+
+    assert result["id"] == "proposal-1"
+    assert result["score"] == 77
+    assert result["recommendation"] == "human_review"
+    assert result["auto_apply"] is False
+
+
 def test_dspy_program_invalid_json_fails_closed():
     mod = load_program_module()
 
