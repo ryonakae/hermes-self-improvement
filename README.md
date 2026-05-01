@@ -26,6 +26,19 @@ bin/hermes-self-improve calibrate --dry-run
 
 削除済みの primary surface: `plan`, `apply`, `rollback`, `outcome` / `record_outcome`。`--execute`, item 指定、hash 確認 flag は primary CLI/tool schema に出しません。
 
+## Curator operating mode
+
+この plugin は Hermes Curator を置き換えるというより、Curator の telemetry / lifecycle 情報を source of truth として使う上位 runner です。運用時は Hermes Curator を `disabled` にせず、必要なら `paused` にしてください。
+
+```bash
+hermes curator pause
+hermes curator status
+```
+
+`paused` では Curator の background review agent は自動起動しませんが、skill usage / lifecycle / pinned / archive state は引き続き読めます。`improve` は Curator/Hermes telemetry を使い、mutating run では Curator と同じ automatic lifecycle transition を実行してから候補を読むことがあります。これはこの plugin の想定動作です。
+
+`curator.enabled: false` は通常使いません。telemetry source や lifecycle semantics を失い、plugin が Curator-compatible runner として判断する前提を弱めます。
+
 ## Runner model
 
 現在の設計方向です。
