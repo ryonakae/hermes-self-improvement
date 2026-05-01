@@ -2,7 +2,11 @@
 
 ## Current source of truth
 
-As of 2026-05-01, there are **no active cleanup plans** in this directory.
+As of 2026-05-01, there is **one active implementation plan** in this directory:
+
+- `2026-05-01_094555-curator-telemetry-source-of-truth.md`
+  - **Status:** active.
+  - Implements the remaining Curator-compatible source-of-truth work: run/preview Curator automatic lifecycle transitions while Curator is disabled or paused, read real Curator/Hermes skill telemetry and lifecycle state, use it as the skill candidate source-of-truth, keep plugin hooks as high-resolution supplemental evidence only, add related-memory recall/search context to the memory runner, preserve `calibrate` as the classifier/editor/evaluator judgment-loop improvement path, and surface Curator-vs-hook provenance in report/status.
 
 The latest completed implementation records are:
 
