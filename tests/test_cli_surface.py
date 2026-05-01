@@ -155,6 +155,23 @@ def test_run_improve_wires_curator_lifecycle_and_telemetry(monkeypatch, tmp_path
 
 
 
+def test_run_improve_does_not_run_calibration_optimizer(monkeypatch, tmp_path):
+    cli = load_cli_module()
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    monkeypatch.setattr(cli, "run_calibration", lambda **kwargs: (_ for _ in ()).throw(AssertionError("improve must not calibrate")))
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run", "transitions_checked": True})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+
+    result = cli.run_improve(config=config, dry_run=True)
+
+    assert result["calibration"]["current_status"] == "calibrate_only"
+    assert result["step_decisions"]["scorer"]["status"] == "calibration_only"
+    assert result["step_decisions"]["evaluator"]["status"] == "calibration_only"
+
+
+
 def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     cli = load_cli_module()
     text = cli._render_improve_summary({
