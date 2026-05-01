@@ -95,6 +95,8 @@ calibrate
 
 Run artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` に保存します。詳細な evidence、step decisions、summary は artifact に残し、通常出力は Curator 風に短くします。
 
+Agent tool results も意図的に短くします。`self_improvement_improve` と `self_improvement_calibrate` は LLM-facing summary と artifact path だけを返し、full payload は runtime JSON artifact に残します。CLI `--json` は operator/debug 用の full payload escape hatch として維持します。
+
 Runtime layout は `setup` が作ります。
 
 ```text

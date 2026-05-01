@@ -182,6 +182,27 @@ def test_improve_dry_run_summary_prints_next_actions(monkeypatch, tmp_path, caps
     assert "Next actions:" in out
     assert "apply" not in out
     assert "--execute" not in out
+    assert "proposals_considered" not in out
+    assert "step_decisions" not in out
+
+
+def test_improve_cli_json_keeps_full_payload_for_operator_debug(monkeypatch, tmp_path, capsys):
+    cli = load_cli_module()
+    large_details = "x" * 12000
+    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"_self_improvement_root": str(tmp_path / "self-improvement")})
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run", "details": large_details})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda config: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [{"id": "p1", "details": large_details}], "summary": {}})
+    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "skipped", "changed": 0, "changed_skills": [], "decisions": [{"task": {"instructions": large_details}}]})
+    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "skipped", "changed": 0, "changed_memories": [], "decisions": []})
+
+    args = build_parser().parse_args(["improve", "--dry-run", "--json"])
+    cli._handle_cli(args)
+
+    out = capsys.readouterr().out
+    assert '"schema_name": "self_improvement_run_result"' in out
+    assert large_details in out
 
 
 def test_run_improve_wires_curator_lifecycle_and_telemetry(monkeypatch, tmp_path):

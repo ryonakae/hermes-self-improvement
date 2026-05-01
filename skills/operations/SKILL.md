@@ -105,6 +105,7 @@ Expected: enabled true, error null, tools 4。
 
 ## Pitfalls
 
+- Agent tool handlers must not return full run/calibration payloads. Return compact summaries with artifact paths; keep full payloads in runtime artifacts or CLI `--json` only.
 - root 直下に `tools.py` や `tools/` package を置かない。Hermes core `tools.registry` を shadow する。
 - Plugin-bundled skills は repo file として編集する。`skill_manage` で plugin-bundled skill を編集しない。
 - `importlib.util.module_from_spec` で unit test する場合は、`exec_module` 前に `sys.modules[spec.name] = module` を入れる。
