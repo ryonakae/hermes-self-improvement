@@ -127,9 +127,6 @@ def test_default_config_uses_real_dspy_gepa_mode():
     gepa_config = config["gepa_scorer"]
     assert gepa_config["enabled"] is True
     assert gepa_config["mode"] == "dspy_program_eval"
-    assert gepa_config["llm_source"] == "hermes_auxiliary"
-    assert gepa_config["reflection_model"] is None
-    assert gepa_config["task_model"] is None
     assert gepa_config["max_iterations"] == 0
     assert "compiled_program_path" in gepa_config
     assert "active_evaluator_pointer_path" not in gepa_config

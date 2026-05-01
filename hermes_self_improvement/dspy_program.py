@@ -182,10 +182,7 @@ def build_dspy_program(*, lm_config: dict[str, Any] | None = None, dspy_module: 
 
 def _gepa_model_config(config: dict[str, Any]) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    gepa_model = model_config.get("gepa") if isinstance(model_config.get("gepa"), dict) else {}
-    if gepa_model:
-        return gepa_model
-    return config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    return model_config.get("gepa") if isinstance(model_config.get("gepa"), dict) else {}
 
 
 def score_with_dspy_program(

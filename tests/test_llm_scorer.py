@@ -37,7 +37,7 @@ def test_llm_scorer_applies_structured_scores(monkeypatch):
     def fake_llm_json(*, proposals, findings, config):
         assert proposals[0]["id"] == "proposal-1"
         assert findings == [{"kind": "tool_failure_cluster", "tool_name": "skill_view"}]
-        assert config["llm_scorer"]["provider"] == "auto"
+        assert config["model"]["llm"]["provider"] == "auto"
         return {
             "scores": [
                 {
@@ -51,13 +51,13 @@ def test_llm_scorer_applies_structured_scores(monkeypatch):
             ]
         }
 
-    monkeypatch.setattr(mod, "_call_llm_scorer", fake_llm_json)
+    monkeypatch.setattr(mod._impl, "_call_llm_scorer", fake_llm_json)
 
     scored = mod.score_proposals(
         sample_proposals(),
         findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view"}],
         scorer="llm",
-        config={"llm_scorer": {"provider": "auto"}},
+        config={"model": {"llm": {"provider": "auto"}}},
     )
 
     assert scored[0]["score"] == 82
@@ -74,13 +74,13 @@ def test_llm_scorer_falls_back_to_heuristic_on_error(monkeypatch):
     def broken_llm_json(*, proposals, findings, config):
         raise RuntimeError("provider unavailable")
 
-    monkeypatch.setattr(mod, "_call_llm_scorer", broken_llm_json)
+    monkeypatch.setattr(mod._impl, "_call_llm_scorer", broken_llm_json)
 
     scored = mod.score_proposals(
         sample_proposals(),
         findings=[],
         scorer="llm",
-        config={"llm_scorer": {"provider": "auto"}},
+        config={"model": {"llm": {"provider": "auto"}}},
     )
 
     assert scored[0]["scorer"] == "heuristic-v0.1"

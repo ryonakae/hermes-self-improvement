@@ -87,21 +87,12 @@ def _default_config() -> dict[str, Any]:
             "max_tool_calls": 8,
             "max_iterations": 6,
         },
-        "llm_scorer": {
-            "provider": "auto",
-            "model": None,
-            "timeout": 60,
-            "max_tokens": 1800,
-        },
         "gepa_scorer": {
             "enabled": True,
             "mode": "dspy_program_eval",
             "timeout": 120,
             "max_iterations": 0,
             "compiled_program_path": None,
-            "llm_source": "hermes_auxiliary",
-            "reflection_model": None,
-            "task_model": None,
             "max_full_evals": 2,
             "num_threads": 4,
             "track_stats": True,
@@ -261,43 +252,19 @@ def _normalize_model_config(config: dict[str, Any]) -> dict[str, Any]:
     model = copy.deepcopy(normalized.get("model") if isinstance(normalized.get("model"), dict) else {})
     defaults = _default_config()["model"]
     model = _deep_merge(defaults, model)
-
-    llm_legacy = normalized.get("llm_scorer") if isinstance(normalized.get("llm_scorer"), dict) else {}
-    llm_model = model.setdefault("llm", {})
-    for legacy_key, model_key in [("provider", "provider"), ("model", "model"), ("timeout", "timeout"), ("max_tokens", "max_tokens")]:
-        legacy_value = llm_legacy.get(legacy_key)
-        current_value = llm_model.get(model_key)
-        if legacy_value not in (None, "") and current_value in (None, "", defaults["llm"].get(model_key)):
-            llm_model[model_key] = legacy_value
-
-    gepa_legacy = normalized.get("gepa_scorer") if isinstance(normalized.get("gepa_scorer"), dict) else {}
-    gepa_model = model.setdefault("gepa", {})
-    for legacy_key, model_key in [("task_model", "model"), ("reflection_model", "model"), ("timeout", "timeout")]:
-        legacy_value = gepa_legacy.get(legacy_key)
-        current_value = gepa_model.get(model_key)
-        if legacy_value not in (None, "") and current_value in (None, "", defaults["gepa"].get(model_key)):
-            gepa_model[model_key] = legacy_value
-
     normalized["model"] = model
+    gepa_defaults = _default_config()["gepa_scorer"]
+    gepa_scorer = normalized.get("gepa_scorer") if isinstance(normalized.get("gepa_scorer"), dict) else {}
+    normalized["gepa_scorer"] = {key: value for key, value in gepa_scorer.items() if key in gepa_defaults}
     return normalized
 
 
 def _normalize_config(config: dict[str, Any]) -> dict[str, Any]:
     normalized = _normalize_model_config(config)
-    normalized.pop("automation_policy", None)
+    supported_top_level = set(_default_config()) | {"memory", "memory_runtime", "config_sources"}
+    normalized = {key: value for key, value in normalized.items() if key in supported_top_level}
     normalized["calibration"] = normalize_calibration_config(normalized)
     return normalized
-
-
-def _load_config(path: Path) -> dict[str, Any]:
-    """Load one config file plus defaults.
-
-    This legacy helper intentionally does not follow env/local precedence; use
-    load_config() for runtime CLI/tool config resolution.
-    """
-    defaults = _default_config()
-    data = _read_config_file(path, required=False)
-    return _normalize_config(_deep_merge(defaults, data))
 
 
 def load_config(default_path: Path | None = None, *, cli_config_path: str | Path | None = None) -> dict[str, Any]:

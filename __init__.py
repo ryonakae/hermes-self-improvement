@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
 
 _PLUGIN_DIR = Path(__file__).resolve().parent
 if str(_PLUGIN_DIR) not in sys.path:
@@ -18,19 +17,6 @@ import hermes_self_improvement as _impl
 for _name, _value in vars(_impl).items():
     if not _name.startswith("__"):
         globals()[_name] = _value
-
-
-def score_proposals(
-    proposals: list[dict[str, Any]],
-    findings: list[dict[str, Any]] | None = None,
-    *,
-    scorer: str = "heuristic",
-    config: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """Compatibility wrapper for tests that monkeypatch root scorer helpers."""
-    _impl._call_llm_scorer = globals().get("_call_llm_scorer", _impl._call_llm_scorer)
-    _impl._call_gepa_scorer = globals().get("_call_gepa_scorer", _impl._call_gepa_scorer)
-    return _impl.score_proposals(proposals, findings, scorer=scorer, config=config)
 
 
 main = _impl.main

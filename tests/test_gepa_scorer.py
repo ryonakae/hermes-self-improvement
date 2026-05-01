@@ -51,7 +51,7 @@ def test_gepa_scorer_applies_candidate_comparison_scores(monkeypatch):
             ]
         }
 
-    monkeypatch.setattr(mod, "_call_gepa_scorer", fake_gepa_json)
+    monkeypatch.setattr(mod._impl, "_call_gepa_scorer", fake_gepa_json)
 
     scored = mod.score_proposals(
         sample_proposals(),
@@ -89,7 +89,7 @@ def test_gepa_scorer_preserves_score_breakdown(monkeypatch):
             ]
         }
 
-    monkeypatch.setattr(mod, "_call_gepa_scorer", fake_gepa_json)
+    monkeypatch.setattr(mod._impl, "_call_gepa_scorer", fake_gepa_json)
 
     scored = mod.score_proposals(
         sample_proposals(),
@@ -108,7 +108,7 @@ def test_gepa_scorer_falls_back_to_heuristic_when_required_dependency_missing(mo
     def missing_gepa(*, proposals, findings, config):
         raise ModuleNotFoundError("No module named 'dspy'")
 
-    monkeypatch.setattr(mod, "_call_gepa_scorer", missing_gepa)
+    monkeypatch.setattr(mod._impl, "_call_gepa_scorer", missing_gepa)
 
     scored = mod.score_proposals(
         sample_proposals(),

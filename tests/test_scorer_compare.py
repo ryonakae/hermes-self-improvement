@@ -93,14 +93,14 @@ def test_compare_scorer_marks_llm_gepa_disagreements(monkeypatch):
             ]
         }
 
-    monkeypatch.setattr(mod, "_call_llm_scorer", fake_llm)
-    monkeypatch.setattr(mod, "_call_gepa_scorer", fake_gepa)
+    monkeypatch.setattr(mod._impl, "_call_llm_scorer", fake_llm)
+    monkeypatch.setattr(mod._impl, "_call_gepa_scorer", fake_gepa)
 
     scored = mod.score_proposals(
         sample_proposals(),
         findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}],
         scorer="compare",
-        config={"gepa_scorer": {"enabled": True}, "llm_scorer": {}},
+        config={"gepa_scorer": {"enabled": True}, "model": {"llm": {}}},
     )
 
     first = scored[0]
@@ -154,8 +154,8 @@ def test_compare_scorer_uses_change_type_aware_thresholds(monkeypatch):
             ]
         }
 
-    monkeypatch.setattr(mod, "_call_llm_scorer", fake_llm)
-    monkeypatch.setattr(mod, "_call_gepa_scorer", fake_gepa)
+    monkeypatch.setattr(mod._impl, "_call_llm_scorer", fake_llm)
+    monkeypatch.setattr(mod._impl, "_call_gepa_scorer", fake_gepa)
     policy = {
         "default": {"block_on_risk_disagreement": True, "block_on_recommendation_disagreement": True, "score_delta_block_threshold": 15, "confidence_rank_delta_block_threshold": 1},
         "strict_change_types": ["memory_compress", "unknown_or_unclassified"],
@@ -183,8 +183,8 @@ def test_compare_scorer_always_blocks_risk_and_recommendation_mismatch(monkeypat
     def fake_gepa(*, proposals, findings, config):
         return {"scores": [{"id": "typo", "score": 89, "recommendation": "human_review", "risk": "medium", "confidence": "high", "rationale": "ok"}]}
 
-    monkeypatch.setattr(mod, "_call_llm_scorer", fake_llm)
-    monkeypatch.setattr(mod, "_call_gepa_scorer", fake_gepa)
+    monkeypatch.setattr(mod._impl, "_call_llm_scorer", fake_llm)
+    monkeypatch.setattr(mod._impl, "_call_gepa_scorer", fake_gepa)
     scored = mod.score_proposals(
         proposals,
         scorer="compare",

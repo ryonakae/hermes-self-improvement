@@ -374,8 +374,6 @@ def build_mutation_backend(config: dict[str, Any] | None = None) -> MutationBack
     backend_name = str(mutation.get("backend") or "hermes_auxiliary_tool_loop")
     if not enabled or backend_name == "disabled":
         return UnavailableMutationBackend("mutation_agent_backend_disabled")
-    if backend_name == "hermes_agent":
-        backend_name = "hermes_auxiliary_tool_loop"
     if backend_name != "hermes_auxiliary_tool_loop":
         return UnavailableMutationBackend("mutation_agent_backend_unknown")
     executor = resolve_skill_tool_executor(config)
@@ -385,13 +383,12 @@ def build_mutation_backend(config: dict[str, Any] | None = None) -> MutationBack
 def mutation_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
     configured = str(mutation.get("backend") or "hermes_auxiliary_tool_loop")
-    normalized = "hermes_auxiliary_tool_loop" if configured == "hermes_agent" else configured
     if bool(mutation.get("enabled", True)) is False or configured == "disabled":
         return {"configured": configured, "available": False, "reason": "mutation_agent_backend_disabled"}
-    if normalized != "hermes_auxiliary_tool_loop":
+    if configured != "hermes_auxiliary_tool_loop":
         return {"configured": configured, "available": False, "reason": "mutation_agent_backend_unknown"}
     executor = resolve_skill_tool_executor(config)
     readiness = check_skill_tool_executor_readiness(executor)
     if not readiness.get("available"):
-        return {"configured": normalized, **readiness}
-    return {"configured": normalized, **readiness}
+        return {"configured": configured, **readiness}
+    return {"configured": configured, **readiness}

@@ -80,10 +80,7 @@ def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
     allowed_keys = {
         "enabled",
         "mode",
-        "llm_source",
         "compiled_program_path",
-        "reflection_model",
-        "task_model",
         "max_full_evals",
         "num_threads",
         "track_stats",

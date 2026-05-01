@@ -135,30 +135,34 @@ def test_explicit_yaml_config_paths_are_required_and_valid(tmp_path, monkeypatch
         raise AssertionError("invalid explicit YAML config should fail closed")
 
 
-def test_legacy_scorer_config_normalizes_into_model_config(tmp_path):
+def test_model_config_uses_model_section_only(tmp_path):
     mod = load_plugin_module()
     repo_config = write_yaml(
         tmp_path / "config.yaml",
         """
-        llm_scorer:
-          provider: codex
-          model: gpt-legacy
-          timeout: 33
-          max_tokens: 444
-        gepa_scorer:
-          task_model: gepa-task
-          timeout: 77
+        model_alias:
+          provider: ignored
+        model:
+          llm:
+            provider: codex
+            model: gpt-current
+            timeout: 33
+            max_tokens: 444
+          gepa:
+            model: gepa-current
+            timeout: 77
         """,
     )
 
     config = mod.load_config(repo_config)
 
     assert config["model"]["llm"]["provider"] == "codex"
-    assert config["model"]["llm"]["model"] == "gpt-legacy"
+    assert config["model"]["llm"]["model"] == "gpt-current"
     assert config["model"]["llm"]["timeout"] == 33
     assert config["model"]["llm"]["max_tokens"] == 444
-    assert config["model"]["gepa"]["model"] == "gepa-task"
+    assert config["model"]["gepa"]["model"] == "gepa-current"
     assert config["model"]["gepa"]["timeout"] == 77
+    assert "model_alias" not in config
 
 
 def test_load_config_imports_runtime_memory_layers_from_hermes_config(tmp_path, monkeypatch):
@@ -205,24 +209,6 @@ def test_code_defaults_are_used_when_repo_yaml_is_absent(tmp_path):
     assert config["gepa_scorer"]["enabled"] is True
     assert "automation_policy" not in config
     assert config["config_sources"] == []
-
-
-def test_legacy_automation_policy_override_is_ignored(tmp_path):
-    mod = load_plugin_module()
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text(
-        """
-automation_policy:
-  max_risk: critical
-  allow_destructive: true
-  allowed_target_kinds: [skill, memory, config]
-""".strip(),
-        encoding="utf-8",
-    )
-
-    config = mod.load_config(config_path)
-
-    assert "automation_policy" not in config
 
 
 def test_config_example_yaml_is_parseable():

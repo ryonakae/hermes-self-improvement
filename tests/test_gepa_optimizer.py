@@ -119,7 +119,6 @@ def test_optimize_gepa_calls_dspy_gepa_compile_and_writes_artifact(tmp_path):
         "gepa_scorer": {
             "enabled": True,
             "mode": "dspy_program_eval",
-            "llm_source": "hermes_auxiliary",
             "max_full_evals": 2,
             "num_threads": 3,
             "track_stats": True,
