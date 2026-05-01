@@ -219,7 +219,18 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
             "step_decisions": {
                 "summary": {"total": 4, "skill": 2, "memory": 1, "scorer": 1, "evaluator": 0, "out_of_scope": 0},
                 "proposals_considered": [{"id": "p1", "details": large_instruction}],
-                "skill": {"status": "completed", "changed": 0, "changed_skills": [], "decisions": [{"task": {"instructions": large_instruction}}]},
+                "skill": {
+                    "status": "completed",
+                    "changed": 0,
+                    "changed_skills": [],
+                    "planner": {
+                        "status": "completed",
+                        "planner_source": "deterministic_fallback",
+                        "summary": {"candidate_count": 2, "selected_for_editor": 1, "skipped": 1, "human_review": 0, "memory_candidates": 0, "evaluator_candidates": 0},
+                        "decisions": [{"skill": "a", "decision": "run_editor", "editor_instructions": large_instruction}],
+                    },
+                    "decisions": [{"task": {"instructions": large_instruction}}],
+                },
                 "memory": {"status": "completed", "changed": 0, "changed_memories": [], "decisions": [{"related_memory_lookup": {"status": "completed"}}]},
                 "scorer": {"status": "calibration_only", "changed": 0},
                 "evaluator": {"status": "calibration_only", "changed": 0},
@@ -243,6 +254,8 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["evidence"]["views"] == {"skill": 2, "memory": 1, "scorer": 0, "evaluator": 0}
     assert payload["steps"]["proposals_considered"] == 4
     assert payload["steps"]["skill"]["decision_count"] == 1
+    assert payload["steps"]["skill_planner"]["selected_for_editor"] == 1
+    assert payload["steps"]["skill_planner"]["source"] == "deterministic_fallback"
     assert payload["steps"]["memory"]["related_lookups"]["completed"] == 1
     assert "proposals_considered" not in payload
     assert large_instruction not in raw

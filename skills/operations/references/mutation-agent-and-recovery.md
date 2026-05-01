@@ -21,7 +21,7 @@ If the runtime cannot provide a bounded skills-only agent surface, the item fail
 - `skill_write_file` / `skill_remove_file`: modify only allowed supporting files through `skill_manage`.
 - `skill_delete`: destructive; operate only on eligible mutable-local skills and keep review-gated.
 - `skill_rename`: create/copy the new skill first, verify it while the old skill still exists, then delete the old skill in the commit phase.
-- `skill_merge`: integrate source into destination first, verify with checklist and LLM judge while source still exists, then delete source in the commit phase.
+- `skill_merge`: integrate source into destination first, verify with checklist and LLM verifier while source still exists, then delete source in the commit phase.
 
 ## Rollback recovery
 

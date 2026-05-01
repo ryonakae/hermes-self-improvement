@@ -51,12 +51,18 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 
 `hermes_self_improvement/scoring.py` supports only the primary proposal scorers:
 
-- `llm`: default Hermes auxiliary LLM judge scoring. Broken JSON, provider failure, or timeout records `llm_scorer_error` and preserves a safe heuristic score.
+- `llm`: default Hermes auxiliary LLM planner scoring. Broken JSON, provider failure, or timeout records `llm_scorer_error` and preserves a safe heuristic score.
 - `heuristic`: dependency-free deterministic scorer for lightweight observation/debugging.
 
 `improve` and `report` default to `llm`. Runner steps remain gated by target scope, provider capability, and evidence strength; scorer output is advisory and does not grant mutation permission.
 
-GEPA / DSPy are not live proposal scorers. They belong to `calibrate`, where they improve evaluator, prompt, and rubric artifacts for later judge/editor runs. All proposal scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does not grant mutation permission.
+GEPA / DSPy are not live proposal scorers. They belong to `calibrate`, where they improve evaluator, prompt, and rubric artifacts for later planner/editor runs. All proposal scorer paths must keep `auto_apply: false`. Scoring ranks proposals; it does not grant mutation permission.
+
+## Global skill planner
+
+`improve` runs skill changes as `analyzer/evidence builder -> global planner -> per-skill editor`. The planner receives a compact redacted digest: mutable Curator skill candidates, attached evidence ids/previews, target-resolution metadata, and unmatched evidence counts. It returns `run_editor`, `skip`, `human_review`, `memory_candidate`, or `evaluator_candidate` decisions.
+
+Dry-run executes the planner and writes the planner payload plus digest into the run artifact, but does not execute editor mutation. Mutating runs send only `run_editor` decisions to the bounded skill editor, together with the planner's `change_intent`, `editor_instructions`, and selected `evidence_ids`. If planner LLM routing fails, the runner falls back to a deterministic evidence-attached plan rather than dropping all low-risk local skill improvements.
 
 ## GEPA / DSPy assets
 

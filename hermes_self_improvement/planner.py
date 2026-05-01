@@ -1,0 +1,354 @@
+from __future__ import annotations
+
+import json
+import re
+from typing import Any
+
+from .observer import _redact_text
+from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
+
+SCHEMA_NAME = "self_improvement_skill_planner_result"
+ALLOWED_DECISIONS = {"run_editor", "skip", "human_review", "memory_candidate", "evaluator_candidate"}
+ALLOWED_PRIORITIES = {"low", "medium", "high"}
+ALLOWED_RISKS = {"low", "medium", "high"}
+
+
+def _parse_preview(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    try:
+        parsed = json.loads(value.strip())
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _skill_name_from_evidence(item: dict[str, Any]) -> str | None:
+    for key in ("skill_name", "target_skill", "skill"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    event = item.get("event") if isinstance(item.get("event"), dict) else {}
+    for key in ("skill_name", "target_skill", "skill", "name"):
+        value = event.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for preview_key in ("args_preview", "result_preview"):
+        preview = _parse_preview(event.get(preview_key))
+        for key in ("name", "skill_name", "target_skill", "skill"):
+            value = preview.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
+def _bare_skill_name(name: str) -> str:
+    text = str(name or "").strip()
+    if ":" not in text:
+        return text
+    return text.rsplit(":", 1)[1].strip()
+
+
+def _candidate_names_by_bare_name(candidate_names: list[str]) -> dict[str, list[str]]:
+    by_bare: dict[str, list[str]] = {}
+    for name in candidate_names:
+        bare = _bare_skill_name(name)
+        if bare:
+            by_bare.setdefault(bare, []).append(name)
+    return by_bare
+
+
+def _resolve_candidate_skill_names(raw_skill_name: str, candidate_by_name: dict[str, dict[str, Any]]) -> tuple[list[str], str, str]:
+    raw = str(raw_skill_name or "").strip()
+    bare = _bare_skill_name(raw)
+    if not raw or not bare:
+        return [], bare, "missing"
+    if ":" in raw and raw in candidate_by_name:
+        return [raw], bare, "exact"
+    by_bare = _candidate_names_by_bare_name(list(candidate_by_name))
+    matches = by_bare.get(bare) or []
+    if matches:
+        return matches, bare, "bare_name"
+    return [], bare, "not_found"
+
+
+def _evidence_by_ids(pack: dict[str, Any], evidence_ids: list[str]) -> list[dict[str, Any]]:
+    evidence = pack.get("evidence") if isinstance(pack.get("evidence"), list) else []
+    wanted = {str(item) for item in evidence_ids}
+    return [item for item in evidence if str(item.get("id") or "") in wanted]
+
+
+def _redacted_preview(value: Any, *, max_chars: int = 220) -> str:
+    return _redact_text(str(value or ""), max_chars=max_chars)
+
+
+def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
+    event = item.get("event") if isinstance(item.get("event"), dict) else {}
+    return {
+        "id": str(item.get("id") or ""),
+        "kind": str(item.get("kind") or ""),
+        "tool_name": event.get("tool_name") or item.get("tool_name"),
+        "status": event.get("status") or item.get("status"),
+        "error_kind": event.get("error_kind") or item.get("error_kind"),
+        "args_preview": _redacted_preview(event.get("args_preview"), max_chars=180),
+        "result_preview": _redacted_preview(event.get("result_preview") or event.get("message"), max_chars=220),
+    }
+
+
+def _summary_counts(decisions: list[dict[str, Any]], candidate_count: int) -> dict[str, int]:
+    return {
+        "candidate_count": candidate_count,
+        "selected_for_editor": sum(1 for item in decisions if item.get("decision") == "run_editor"),
+        "skipped": sum(1 for item in decisions if item.get("decision") == "skip"),
+        "human_review": sum(1 for item in decisions if item.get("decision") == "human_review"),
+        "memory_candidates": sum(1 for item in decisions if item.get("decision") == "memory_candidate"),
+        "evaluator_candidates": sum(1 for item in decisions if item.get("decision") == "evaluator_candidate"),
+    }
+
+
+def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
+    skill_ids = [str(item) for item in views.get("skill", [])]
+    skill_evidence = _evidence_by_ids(evidence_pack, skill_ids)
+    candidates = evidence_pack.get("skill_candidates") if isinstance(evidence_pack.get("skill_candidates"), list) else []
+    candidate_by_name = {
+        str(item.get("name") or ""): item
+        for item in candidates
+        if isinstance(item, dict) and str(item.get("name") or "")
+    }
+    attached: dict[str, list[dict[str, Any]]] = {name: [] for name in candidate_by_name}
+    match_meta: dict[str, dict[str, str]] = {}
+    unmatched: list[dict[str, Any]] = []
+    by_reason: dict[str, int] = {}
+
+    for item in skill_evidence:
+        evidence_id = str(item.get("id") or "")
+        skill_name = _skill_name_from_evidence(item)
+        if not skill_name:
+            reason = "skill_target_missing"
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+            unmatched.append({"evidence_id": evidence_id, "reason": reason, "example": _representative_evidence(item)})
+            continue
+        matched_names, normalized_skill, match_kind = _resolve_candidate_skill_names(skill_name, candidate_by_name)
+        if not matched_names:
+            reason = "skill_not_in_curator_candidates"
+            by_reason[reason] = by_reason.get(reason, 0) + 1
+            unmatched.append({
+                "evidence_id": evidence_id,
+                "skill": skill_name,
+                "normalized_skill": normalized_skill,
+                "reason": reason,
+                "example": _representative_evidence(item),
+            })
+            continue
+        for matched_name in matched_names:
+            attached[matched_name].append(item)
+            match_meta[matched_name] = {
+                "raw_evidence_skill": skill_name,
+                "normalized_skill": normalized_skill,
+                "evidence_match": match_kind,
+            }
+
+    candidate_rows: list[dict[str, Any]] = []
+    for name, candidate in candidate_by_name.items():
+        evidence = attached.get(name) or []
+        row = {
+            "name": name,
+            "state": candidate.get("state"),
+            "source": candidate.get("source") or "curator",
+            "usage": candidate.get("usage") if isinstance(candidate.get("usage"), dict) else {},
+            "attached_evidence_count": len(evidence),
+            "evidence_ids": [str(item.get("id") or "") for item in evidence if item.get("id")],
+            "representative_evidence": [_representative_evidence(item) for item in evidence[:3]],
+        }
+        row.update(match_meta.get(name, {}))
+        candidate_rows.append(row)
+
+    summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
+    return {
+        "schema_name": "self_improvement_skill_planner_digest",
+        "schema_version": "1.0",
+        "window": {
+            "event_count": int(summary.get("event_count") or 0),
+            "evidence_count": int(summary.get("evidence_count") or 0),
+            "ignored_count": int(summary.get("ignored_count") or 0),
+        },
+        "skill_candidates": candidate_rows,
+        "unmatched_evidence": {"count": len(unmatched), "by_reason": by_reason, "examples": unmatched[:10]},
+        "constraints": {
+            "mutable_targets_only": True,
+            "editor_tools_only": ["skills_list", "skill_view", "skill_manage"],
+            "human_review_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge", "archive"],
+        },
+    }
+
+
+def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
+    decisions = []
+    for row in digest.get("skill_candidates") or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "")
+        evidence_ids = [str(item) for item in row.get("evidence_ids") or []]
+        if evidence_ids:
+            decisions.append({
+                "skill": name,
+                "decision": "run_editor",
+                "priority": "medium",
+                "risk": "low",
+                "change_intent": "address attached self-improvement evidence",
+                "editor_instructions": "Inspect the skill and apply a small, reusable procedural improvement only if the attached evidence still fits this skill.",
+                "evidence_ids": evidence_ids,
+                "rationale": f"{len(evidence_ids)} attached evidence item(s) matched this mutable Curator candidate.",
+            })
+        else:
+            decisions.append({"skill": name, "decision": "skip", "reason": "no_attached_evidence", "evidence_ids": []})
+    return _planner_result(decisions, digest=digest, status="completed", model_role="planner", planner_source="deterministic_fallback")
+
+
+def _planner_result(
+    decisions: list[dict[str, Any]],
+    *,
+    digest: dict[str, Any],
+    status: str,
+    model_role: str = "planner",
+    planner_source: str = "llm",
+    error: str | None = None,
+) -> dict[str, Any]:
+    candidate_count = len(digest.get("skill_candidates") or [])
+    result = {
+        "schema_name": SCHEMA_NAME,
+        "schema_version": "1.0",
+        "status": status,
+        "model_role": model_role,
+        "planner_source": planner_source,
+        "summary": _summary_counts(decisions, candidate_count),
+        "decisions": decisions,
+    }
+    if error:
+        result["error"] = _redacted_preview(error, max_chars=240)
+    return result
+
+
+def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evidence_by_candidate: dict[str, set[str]]) -> dict[str, Any] | None:
+    skill = str(raw.get("skill") or "").strip()
+    if skill not in candidate_names:
+        return None
+    decision = str(raw.get("decision") or "skip").strip()
+    if decision not in ALLOWED_DECISIONS:
+        decision = "skip"
+    evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item)]
+    allowed_evidence = evidence_by_candidate.get(skill) or set()
+    evidence_ids = [item for item in evidence_ids if item in allowed_evidence]
+    if decision == "run_editor" and not evidence_ids:
+        decision = "skip"
+    normalized = {
+        "skill": skill,
+        "decision": decision,
+        "evidence_ids": evidence_ids,
+        "priority": str(raw.get("priority") or "medium") if str(raw.get("priority") or "medium") in ALLOWED_PRIORITIES else "medium",
+        "risk": str(raw.get("risk") or "medium") if str(raw.get("risk") or "medium") in ALLOWED_RISKS else "medium",
+    }
+    for key, max_chars in (("reason", 240), ("change_intent", 280), ("editor_instructions", 900), ("rationale", 600)):
+        if raw.get(key) is not None:
+            normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
+    if decision == "skip" and not normalized.get("reason"):
+        normalized["reason"] = "planner_skip"
+    return normalized
+
+
+def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("planner_response_not_object")
+    raw_decisions = payload.get("decisions")
+    if not isinstance(raw_decisions, list):
+        raise ValueError("planner_response_missing_decisions")
+    candidate_rows = [item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)]
+    candidate_names = {str(item.get("name") or "") for item in candidate_rows if item.get("name")}
+    evidence_by_candidate = {
+        str(item.get("name") or ""): {str(eid) for eid in (item.get("evidence_ids") or [])}
+        for item in candidate_rows
+        if item.get("name")
+    }
+    decisions: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in raw_decisions:
+        if not isinstance(raw, dict):
+            continue
+        item = _normalize_decision(raw, candidate_names=candidate_names, evidence_by_candidate=evidence_by_candidate)
+        if not item:
+            continue
+        decisions.append(item)
+        seen.add(item["skill"])
+    for row in candidate_rows:
+        name = str(row.get("name") or "")
+        if name and name not in seen:
+            decisions.append({"skill": name, "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []})
+    return _planner_result(decisions, digest=digest, status="completed")
+
+
+def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
+    planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
+    provider = planner_config.get("provider") or "auto"
+    model = planner_config.get("model") or None
+    timeout = _coerce_int(planner_config.get("timeout"), default=60)
+    max_tokens = _coerce_int(planner_config.get("max_tokens"), default=2200)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are the Hermes self-improvement planner. Choose which mutable local skills should be sent to the tool-mediated editor. "
+                "Do not maximize human review. Prefer run_editor for low-risk small local skill improvements with attached evidence. "
+                "Use human_review only for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
+                "Return JSON only."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "Plan skill improvements from this digest. Output schema: "
+                "{\"decisions\":[{\"skill\":str,\"decision\":\"run_editor|skip|human_review|memory_candidate|evaluator_candidate\","
+                "\"priority\":\"low|medium|high\",\"risk\":\"low|medium|high\",\"change_intent\":str,"
+                "\"editor_instructions\":str,\"evidence_ids\":[str],\"rationale\":str,\"reason\":str}]}\n\n"
+                + json.dumps(digest, ensure_ascii=False, sort_keys=True, default=str)
+            ),
+        },
+    ]
+    _ensure_hermes_agent_on_path()
+    from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+
+    response = call_llm(
+        task="skills_hub",
+        provider=provider,
+        model=model,
+        messages=messages,
+        temperature=None,
+        max_tokens=max_tokens,
+        timeout=timeout,
+    )
+    return _extract_json_object(extract_content_or_reasoning(response))
+
+
+def run_skill_planner(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    cfg = config or {}
+    planner_func = cfg.get("_skill_planner_func") if isinstance(cfg, dict) else None
+    used_llm = False
+    try:
+        if callable(planner_func):
+            payload = planner_func(digest=digest, config=cfg)
+        elif isinstance(cfg.get("model"), dict):
+            used_llm = True
+            payload = _call_planner_llm(digest=digest, config=cfg)
+        else:
+            return _fallback_plan_from_digest(digest)
+        return _normalize_planner_payload(payload, digest)
+    except Exception as exc:
+        if used_llm:
+            fallback = _fallback_plan_from_digest(digest)
+            fallback["planner_source"] = "deterministic_fallback_after_error"
+            fallback["error"] = _redacted_preview(str(exc), max_chars=240)
+            return fallback
+        return _planner_result([], digest=digest, status="planner_error", planner_source="error", error=str(exc))

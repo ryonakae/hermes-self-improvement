@@ -11,7 +11,7 @@ from .mutation_backend import mutation_backend_status
 from .observer import _event_path, _load_events
 from .recovery_engine import memory_rollback_status
 from .setup_runtime import check_runtime_setup
-from .verification import merge_judge_status
+from .verification import merge_verifier_status
 try:  # pragma: no cover - available in Hermes runtime
     from tools.registry import tool_error, tool_result
 except Exception:  # pragma: no cover - standalone unit tests outside Hermes runtime
@@ -85,6 +85,9 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     evidence_summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
     step_decisions = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
     decision_summary = step_decisions.get("summary") if isinstance(step_decisions.get("summary"), dict) else {}
+    skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
+    planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
+    planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
     artifact_path = result.get("artifact_path")
     return {
@@ -112,6 +115,16 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "steps": {
             "proposals_considered": int(decision_summary.get("total") or 0),
             "skill": _compact_step("skill", step_decisions.get("skill")),
+            "skill_planner": {
+                "status": planner.get("status"),
+                "source": planner.get("planner_source"),
+                "candidate_count": int(planner_summary.get("candidate_count") or 0),
+                "selected_for_editor": int(planner_summary.get("selected_for_editor") or 0),
+                "skipped": int(planner_summary.get("skipped") or 0),
+                "human_review": int(planner_summary.get("human_review") or 0),
+                "memory_candidates": int(planner_summary.get("memory_candidates") or 0),
+                "evaluator_candidates": int(planner_summary.get("evaluator_candidates") or 0),
+            },
             "memory": _compact_step("memory", step_decisions.get("memory")),
             "scorer": _compact_step("scorer", step_decisions.get("scorer")),
             "evaluator": _compact_step("evaluator", step_decisions.get("evaluator")),
@@ -170,7 +183,7 @@ def _handle_self_improvement_status_tool(args: dict[str, Any] | None = None, **_
         "event_count_sample": len(events),
         "last_event_ts": events[-1].get("ts") if events else None,
         "mutation_backend": mutation_backend_status(config),
-        "merge_judge": merge_judge_status(config),
+        "merge_verifier": merge_verifier_status(config),
         "memory_rollback": memory_rollback_status(config),
         "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
         "runtime_setup": check_runtime_setup(config),

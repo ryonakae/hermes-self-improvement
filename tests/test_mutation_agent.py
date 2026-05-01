@@ -29,7 +29,7 @@ def task(kind="skill_improve", targets=None):
             "Operate only on mutable local skills resolved by the plugin.",
         ],
         "expected_outcome": {"target_exists": True},
-        "verification_contract": {"checklist_required": True, "llm_judge_required": False},
+        "verification_contract": {"checklist_required": True, "llm_verifier_required": False},
     }
 
 

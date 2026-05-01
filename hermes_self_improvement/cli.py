@@ -24,7 +24,7 @@ from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .recovery_engine import memory_rollback_status
 from .scoring import _call_llm_scorer, score_proposals_impl
 from .setup_runtime import check_runtime_setup, run_setup, runtime_layout
-from .verification import merge_judge_status
+from .verification import merge_verifier_status
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
@@ -570,6 +570,12 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
     evidence_pack = result.get("evidence_pack") if isinstance(result.get("evidence_pack"), dict) else {}
     evidence_summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
+    skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
+    planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
+    planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
+    planner_decisions = planner.get("decisions") if isinstance(planner.get("decisions"), list) else []
+    selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "run_editor"][:5]
+    human_review_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "human_review"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
     lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
     for decision in memory_step.get("decisions") or []:
@@ -590,6 +596,9 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- rejected: {int(curator.get('rejected_count') or 0)}",
         "Hook evidence:",
         f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}",
+        "Skill planner:",
+        f"- source: {planner.get('planner_source') or 'unknown'}, status: {planner.get('status') or skill_step.get('status') or 'unknown'}",
+        f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for editor: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, human review: {int(planner_summary.get('human_review') or 0)}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Memory improvements:",
@@ -602,6 +611,14 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Evidence/proposals:",
         f"- considered {int(decision_summary.get('total') or 0)} proposal signals",
     ]
+    if selected_preview:
+        lines.append("Selected for editor:")
+        for item in selected_preview:
+            lines.append(f"- {item.get('skill')}: {item.get('change_intent') or item.get('rationale') or item.get('reason') or 'planned'}")
+    if human_review_preview:
+        lines.append("Human review:")
+        for item in human_review_preview:
+            lines.append(f"- {item.get('skill')}: {item.get('reason') or item.get('rationale') or 'review required'}")
     if result.get("artifact_path"):
         lines.append(f"Artifact: {result.get('artifact_path')}")
     rendered_actions = render_next_actions(result.get("next_actions") if isinstance(result.get("next_actions"), list) else [])
@@ -735,7 +752,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "gepa_scorer_mode": (config.get("gepa_scorer") or {}).get("mode") if isinstance(config.get("gepa_scorer"), dict) else None,
             "dspy_available": importlib.util.find_spec("dspy") is not None,
             "mutation_backend": mutation_backend_status(config),
-            "merge_judge": merge_judge_status(config),
+            "merge_verifier": merge_verifier_status(config),
             "memory_rollback": memory_rollback_status(config),
             "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
             "runtime_setup": check_runtime_setup(config),

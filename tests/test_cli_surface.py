@@ -416,8 +416,8 @@ def test_partial_legacy_modules_only_export_report_compatibility_helpers():
     ]:
         assert name not in recovery.__dict__, f"rollback feature helper should be removed: {name}"
 
-    assert callable(verification.merge_judge_status)
-    for name in ["verify_skill_rename_phase", "verify_skill_merge_phase", "build_merge_judge", "auxiliary_merge_judge"]:
+    assert callable(verification.merge_verifier_status)
+    for name in ["verify_skill_rename_phase", "verify_skill_merge_phase", "build_merge_verifier", "auxiliary_merge_verifier"]:
         assert name not in verification.__dict__, f"apply-phase verification helper should be removed: {name}"
 
     assert callable(outcome_store.load_review_outcomes)

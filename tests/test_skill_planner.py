@@ -1,0 +1,114 @@
+from __future__ import annotations
+
+import hermes_self_improvement.planner as planner
+from hermes_self_improvement.planner import build_skill_planner_digest, run_skill_planner
+
+
+def pack():
+    return {
+        "summary": {"event_count": 10, "evidence_count": 2, "ignored_count": 1},
+        "evidence": [
+            {
+                "id": "ev1",
+                "kind": "tool_failure_evidence",
+                "event": {
+                    "tool_name": "skill_view",
+                    "status": "error",
+                    "args_preview": '{"name":"dir:demo-skill"}',
+                    "result_preview": "not found secret=abc123",
+                },
+                "likely_targets": [{"target": "skill", "weight": 0.8}],
+            },
+            {
+                "id": "ev2",
+                "kind": "tool_failure_evidence",
+                "event": {"tool_name": "skill_view", "status": "error", "args_preview": '{}'},
+                "likely_targets": [{"target": "skill", "weight": 0.8}],
+            },
+        ],
+        "views": {"skill": ["ev1", "ev2"], "memory": [], "scorer": [], "evaluator": []},
+        "skill_candidates": [
+            {"name": "demo-skill", "state": "active", "source": "curator", "usage": {"use_count": 3}},
+            {"name": "unused-skill", "state": "active", "source": "curator", "usage": {}},
+        ],
+    }
+
+
+def test_build_skill_planner_digest_attaches_evidence_and_caps_previews():
+    digest = build_skill_planner_digest(pack())
+
+    by_name = {item["name"]: item for item in digest["skill_candidates"]}
+    assert by_name["demo-skill"]["attached_evidence_count"] == 1
+    assert by_name["demo-skill"]["evidence_ids"] == ["ev1"]
+    assert by_name["demo-skill"]["evidence_match"] == "bare_name"
+    assert by_name["demo-skill"]["raw_evidence_skill"] == "dir:demo-skill"
+    preview = by_name["demo-skill"]["representative_evidence"][0]["result_preview"]
+    assert "abc123" not in preview
+    assert by_name["unused-skill"]["attached_evidence_count"] == 0
+    assert digest["unmatched_evidence"]["by_reason"]["skill_target_missing"] == 1
+
+
+def test_run_skill_planner_uses_injected_planner_and_normalizes_decisions():
+    calls = []
+
+    def fake_planner(*, digest, config):
+        calls.append(digest)
+        return {
+            "decisions": [
+                {
+                    "skill": "demo-skill",
+                    "decision": "run_editor",
+                    "priority": "high",
+                    "risk": "low",
+                    "change_intent": "add lookup pitfall",
+                    "editor_instructions": "Document bare fallback.",
+                    "evidence_ids": ["ev1"],
+                    "rationale": "repeated lookup evidence",
+                },
+                {"skill": "not-a-candidate", "decision": "run_editor", "evidence_ids": ["ev1"]},
+            ]
+        }
+
+    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+
+    assert calls
+    assert result["status"] == "completed"
+    assert result["summary"]["selected_for_editor"] == 1
+    assert result["decisions"][0]["skill"] == "demo-skill"
+    assert result["decisions"][0]["decision"] == "run_editor"
+    assert all(item["skill"] != "not-a-candidate" for item in result["decisions"])
+
+
+def test_run_skill_planner_fails_closed_on_invalid_planner_output():
+    def bad_planner(*, digest, config):
+        return "not json"
+
+    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": bad_planner})
+
+    assert result["status"] == "planner_error"
+    assert result["decisions"] == []
+    assert result["summary"]["selected_for_editor"] == 0
+
+
+def test_run_skill_planner_deterministic_fallback_skips_no_evidence_candidates_without_model_config():
+    result = run_skill_planner(build_skill_planner_digest(pack()), config={})
+
+    by_skill = {item["skill"]: item for item in result["decisions"]}
+    assert by_skill["demo-skill"]["decision"] == "run_editor"
+    assert by_skill["unused-skill"]["decision"] == "skip"
+    assert by_skill["unused-skill"]["reason"] == "no_attached_evidence"
+
+
+def test_skill_planner_falls_back_when_llm_planner_fails(monkeypatch):
+    digest = build_skill_planner_digest(pack())
+
+    def boom(**_kwargs):
+        raise RuntimeError("planner down")
+
+    monkeypatch.setattr(planner, "_call_planner_llm", boom)
+    result = run_skill_planner(digest, config={"model": {"planner": {}}})
+
+    assert result["status"] == "completed"
+    assert result["planner_source"] == "deterministic_fallback_after_error"
+    assert result["summary"]["selected_for_editor"] == 1
+    assert "planner down" in result["error"]

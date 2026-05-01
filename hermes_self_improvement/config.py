@@ -52,7 +52,7 @@ def _default_config() -> dict[str, Any]:
         "retention_days": DEFAULT_RETENTION_DAYS,
         "calibration": copy.deepcopy(DEFAULT_CALIBRATION),
         "model": {
-            "judge": {
+            "planner": {
                 "provider": "auto",
                 "model": "",
                 "base_url": "",

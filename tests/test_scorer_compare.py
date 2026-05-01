@@ -48,7 +48,7 @@ def test_llm_scorer_is_primary_external_proposal_scorer(monkeypatch):
     def fake_llm(*, proposals, findings, config):
         assert [item["id"] for item in proposals] == ["proposal-1", "proposal-2"]
         assert findings == [{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}]
-        assert config == {"model": {"judge": {}}}
+        assert config == {"model": {"planner": {}}}
         return {
             "scores": [
                 {
@@ -57,7 +57,7 @@ def test_llm_scorer_is_primary_external_proposal_scorer(monkeypatch):
                     "recommendation": "human_review",
                     "risk": "medium",
                     "confidence": "high",
-                    "rationale": "Judge sees repeated evidence but requires review.",
+                    "rationale": "Planner sees repeated evidence but requires review.",
                 },
                 {
                     "id": "proposal-2",
@@ -76,7 +76,7 @@ def test_llm_scorer_is_primary_external_proposal_scorer(monkeypatch):
         sample_proposals(),
         findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}],
         scorer="llm",
-        config={"model": {"judge": {}}},
+        config={"model": {"planner": {}}},
     )
 
     first = scored[0]
@@ -85,7 +85,7 @@ def test_llm_scorer_is_primary_external_proposal_scorer(monkeypatch):
     assert first["score"] == 92
     assert first["recommendation"] == "human_review"
     assert first["auto_apply"] is False
-    assert "Judge sees repeated evidence" in first["llm_rationale"]
+    assert "Planner sees repeated evidence" in first["llm_rationale"]
     assert "gepa_score" not in first
     assert "score_delta" not in first
     assert "scorer_disagreements" not in first

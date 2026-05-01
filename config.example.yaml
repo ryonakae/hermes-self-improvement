@@ -10,10 +10,10 @@
 #   enabled: false
 
 # Optional: customize models only when auto routing is not enough.
-# judge scores/evaluates proposals, editor powers mutation agents, and evaluator
+# planner scores/evaluates and plans proposals, editor powers mutation agents, and evaluator
 # powers DSPy/GEPA evaluator calibration.
 # model:
-#   judge:
+#   planner:
 #     provider: openrouter
 #     model: anthropic/claude-sonnet-4
 #     api_key: ${OPENROUTER_API_KEY}

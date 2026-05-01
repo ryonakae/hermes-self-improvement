@@ -8,6 +8,9 @@ from .mutation_backend import build_mutation_backend
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
 from .memory_context import build_related_memory_lookup_context
+from .planner import build_skill_planner_digest, run_skill_planner
+
+
 def _parse_preview(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -133,8 +136,9 @@ def _execute_memory_context(context: dict[str, Any], config: dict[str, Any] | No
     return execute_memory_provider_tool_operation(context, provider_tool_fn=cfg.get("_memory_provider_tool_fn"))
 
 
-def build_skill_agent_task(*, skill_name: str, evidence: list[dict[str, Any]], candidate: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_skill_agent_task(*, skill_name: str, evidence: list[dict[str, Any]], candidate: dict[str, Any] | None = None, planner_decision: dict[str, Any] | None = None) -> dict[str, Any]:
     candidate_meta = candidate or {}
+    planner_meta = planner_decision or {}
     return {
         "type": "skill_agent_task",
         "task_kind": "skill_improve",
@@ -145,6 +149,9 @@ def build_skill_agent_task(*, skill_name: str, evidence: list[dict[str, Any]], c
             "Patch, edit, or update supporting files only when the evidence or Curator lifecycle/usage metadata clearly identifies a reusable procedural improvement. "
             "If the evidence is stale, ambiguous, memory-shaped, or outside this skill, return a non-mutating outcome with a reason.\n\n"
             f"Candidate: {json.dumps(candidate_meta, ensure_ascii=False, sort_keys=True, default=str)}\n"
+            f"Planner decision: {json.dumps(planner_meta, ensure_ascii=False, sort_keys=True, default=str)}\n"
+            "The global planner selected this task for editor execution when decision=run_editor. "
+            "Follow planner editor_instructions, but first read the current skill and stop if stale, conflicting, or unsafe.\n"
             f"Evidence: {json.dumps(evidence, ensure_ascii=False, sort_keys=True, default=str)}"
         ),
         "constraints": [
@@ -159,7 +166,7 @@ def build_skill_agent_task(*, skill_name: str, evidence: list[dict[str, Any]], c
             "artifact_decision_required": True,
             "changed_only_if_reusable_procedural_improvement": True,
         },
-        "verification_contract": {"checklist_required": True, "llm_judge_required": False},
+        "verification_contract": {"checklist_required": True, "llm_verifier_required": False},
     }
 
 
@@ -169,15 +176,8 @@ def run_skill_improvement_step(
     config: dict[str, Any] | None = None,
     mutate: bool = False,
 ) -> dict[str, Any]:
-    views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
-    skill_ids = [str(item) for item in views.get("skill", [])]
-    skill_evidence = _evidence_by_ids(evidence_pack, skill_ids)
     candidates = evidence_pack.get("skill_candidates") if isinstance(evidence_pack.get("skill_candidates"), list) else []
     candidate_by_name = {str(item.get("name") or ""): item for item in candidates if isinstance(item, dict) and str(item.get("name") or "")}
-    decisions: list[dict[str, Any]] = []
-    changed_skills: list[str] = []
-    backend = build_mutation_backend(config) if mutate else None
-
     if not candidate_by_name:
         return {
             "status": "no_skill_candidates",
@@ -186,54 +186,63 @@ def run_skill_improvement_step(
             "decisions": [],
         }
 
-    evidence_by_candidate: dict[str, list[dict[str, Any]]] = {name: [] for name in candidate_by_name}
-    evidence_match_by_candidate: dict[str, dict[str, str]] = {}
-    for item in skill_evidence:
-        evidence_id = str(item.get("id") or "")
-        skill_name = _skill_name_from_evidence(item)
-        if not skill_name:
-            decisions.append({
-                "evidence_id": evidence_id,
-                "decision": "rejected",
-                "reason": "skill_target_missing",
-                "changed": False,
-            })
-            continue
-        matched_names, normalized_skill, match_kind = _resolve_candidate_skill_names(skill_name, candidate_by_name)
-        if not matched_names:
-            decisions.append({
-                "evidence_id": evidence_id,
-                "skill": skill_name,
-                "normalized_skill": normalized_skill,
-                "decision": "rejected",
-                "reason": "skill_not_in_curator_candidates",
-                "changed": False,
-            })
-            continue
-        for matched_name in matched_names:
-            evidence_by_candidate[matched_name].append(item)
-            evidence_match_by_candidate[matched_name] = {
-                "raw_evidence_skill": skill_name,
-                "normalized_skill": normalized_skill,
-                "evidence_match": match_kind,
-            }
+    digest = build_skill_planner_digest(evidence_pack)
+    planner = run_skill_planner(digest, config=config)
+    all_evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
+    evidence_by_id = {str(item.get("id") or ""): item for item in all_evidence if isinstance(item, dict)}
+    digest_by_name = {str(item.get("name") or ""): item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)}
+    decisions: list[dict[str, Any]] = []
+    changed_skills: list[str] = []
+    backend = build_mutation_backend(config) if mutate else None
 
-    for skill_name, candidate in candidate_by_name.items():
-        attached_evidence = evidence_by_candidate.get(skill_name) or []
-        evidence_ids = [str(item.get("id") or "") for item in attached_evidence if item.get("id")]
-        task = build_skill_agent_task(skill_name=skill_name, evidence=attached_evidence, candidate=candidate)
+    if planner.get("status") != "completed":
+        return {
+            "status": "planner_error",
+            "changed": 0,
+            "changed_skills": [],
+            "planner": planner,
+            "planner_digest": digest,
+            "decisions": [],
+        }
+
+    for planner_decision in planner.get("decisions") or []:
+        if not isinstance(planner_decision, dict):
+            continue
+        skill_name = str(planner_decision.get("skill") or "")
+        candidate = candidate_by_name.get(skill_name)
+        if not candidate:
+            continue
+        evidence_ids = [str(item) for item in planner_decision.get("evidence_ids") or []]
+        attached_evidence = [evidence_by_id[item] for item in evidence_ids if item in evidence_by_id]
+        digest_row = digest_by_name.get(skill_name) or {}
         base_decision = {
             "skill": skill_name,
             "candidate_source": candidate.get("source") or "curator",
             "candidate_state": candidate.get("state"),
             "evidence_ids": evidence_ids,
-            **evidence_match_by_candidate.get(skill_name, {}),
+            "planner_decision": planner_decision,
+            "change_intent": planner_decision.get("change_intent"),
+            "editor_instructions": planner_decision.get("editor_instructions"),
+            "rationale": planner_decision.get("rationale"),
         }
+        for key in ("raw_evidence_skill", "normalized_skill", "evidence_match"):
+            if digest_row.get(key):
+                base_decision[key] = digest_row[key]
+        decision_kind = str(planner_decision.get("decision") or "skip")
+        if decision_kind != "run_editor":
+            decisions.append({
+                **base_decision,
+                "decision": decision_kind,
+                "reason": planner_decision.get("reason") or f"planner_{decision_kind}",
+                "changed": False,
+            })
+            continue
+        task = build_skill_agent_task(skill_name=skill_name, evidence=attached_evidence, candidate=candidate, planner_decision=planner_decision)
         if not mutate:
             decisions.append({
                 **base_decision,
-                "decision": "accepted",
-                "reason": "dry_run_would_run_skill_agent",
+                "decision": "run_editor_preview",
+                "reason": "planner_run_editor_preview",
                 "changed": False,
                 "task": task,
             })
@@ -251,12 +260,13 @@ def run_skill_improvement_step(
         })
 
     return {
-        "status": "completed" if decisions else "no_skill_candidates",
+        "status": "completed" if decisions else "no_planner_decisions",
         "changed": len(set(changed_skills)),
         "changed_skills": sorted(set(changed_skills)),
+        "planner": planner,
+        "planner_digest": digest,
         "decisions": decisions,
     }
-
 
 def run_memory_improvement_step(
     *,

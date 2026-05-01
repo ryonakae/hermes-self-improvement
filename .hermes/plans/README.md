@@ -4,13 +4,17 @@
 
 As of 2026-05-02, the latest completed implementation plan is:
 
+- `2026-05-02_013520-global-planner-before-editor.md`
+  - **Status:** completed.
+  - Renamed the decision role to `planner`, added a global skill planner before the per-skill editor, made dry-run execute planner preview without editor mutation, and routed mutating runs only through planner `run_editor` decisions.
+
 - `2026-05-02_001205-remove-gepa-compare-scorers.md`
   - **Status:** completed.
   - Removed `gepa` / `compare` from primary proposal scorer surfaces, made `llm` the `improve` / `report` default, and kept GEPA/DSPy scoped to `calibrate` / evaluator optimization.
 
 - `2026-05-01_154324-rename-model-roles.md`
-  - **Status:** completed.
-  - Renamed model routing from implementation-oriented `llm / mutation / gepa` to role-based `judge / editor / evaluator`, with no compatibility aliases.
+  - **Status:** superseded by planner terminology.
+  - Renamed model routing from implementation-oriented `llm / mutation / gepa` to role-based `judge / editor / evaluator`; the decision role is now `planner`.
 
 The latest completed implementation records are:
 
@@ -44,7 +48,8 @@ The current implemented baseline is:
 - Primary tool surface: `self_improvement_improve / self_improvement_calibrate / self_improvement_report / self_improvement_status`.
 - `improve` and `calibrate` are mutation-capable by default; `--dry-run` is the preview boundary.
 - `improve` uses Curator/Hermes telemetry as the skill candidate source-of-truth after running or previewing Curator automatic lifecycle transitions.
-- `calibrate` owns classifier/editor/evaluator judgment-loop improvement; `improve` does not run DSPy/GEPA calibration.
+- Skill improvement runs through a global planner first; dry-run previews planner decisions, while mutating runs execute only planner `run_editor` targets via the per-skill editor.
+- `calibrate` owns planner/editor/evaluator prompt and rubric improvement; `improve` does not run DSPy/GEPA calibration.
 - Legacy primary `plan / apply / rollback / outcome`, `--execute`, `--items`, and `self_improvement_record_outcome` are removed from the user-facing surface.
 - Skill mutation runs through bounded official skill tools only; no terminal/file/git/direct filesystem fallback.
 - Memory mutation is target-routed: `builtin_user` / `builtin_memory` use the built-in `memory` tool; `external_memory` uses the active external provider tool; missing targets fail closed. No direct memory store edits.

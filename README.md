@@ -21,8 +21,8 @@ bin/hermes-self-improve calibrate
 bin/hermes-self-improve calibrate --dry-run
 ```
 
-- `improve`: 統合 runner。Curator 自動 lifecycle transition の実行/preview、Curator telemetry 読み取り、hook evidence pack、skill / memory runner step、run artifact 作成を行う。default は mutation-capable。
-- `improve --dry-run`: mutation せず preview / artifact だけ作る。
+- `improve`: 統合 runner。Curator 自動 lifecycle transition の実行/preview、Curator telemetry 読み取り、hook evidence pack、global skill planner、skill editor / memory runner step、run artifact 作成を行う。default は mutation-capable。
+- `improve --dry-run`: mutation せず、global planner まで実行して「どの skill を editor に渡すか / なぜ選んだか / どう直す予定か」を summary と artifact に残す。editor mutation は走らない。
 - `calibrate`: scorer/evaluator calibration。regression gate を通った場合だけ active state を更新する。default は mutation-capable。
 - `calibrate --dry-run`: calibration の preview。
 - `report`: 直近 event / artifact の読み取りレポート。mutation しない。
@@ -58,7 +58,7 @@ code defaults
 
 `config.yaml` / `config.local.yaml` は local runtime 用で gitignore 済みです。
 
-Model routing は責務名で分けます。`model.judge` は proposal / evidence の採点・判断、`model.editor` は skill / memory mutation agent、`model.evaluator` は DSPy / GEPA による evaluator / prompt / rubric calibration に使います。
+Model routing は責務名で分けます。`model.planner` は proposal scoring と global skill planning、`model.editor` は選ばれた skill / memory mutation agent、`model.evaluator` は DSPy / GEPA による evaluator / prompt / rubric calibration に使います。
 
 ## Curator operating mode
 
@@ -90,7 +90,7 @@ Hermes runtime hooks
 
 calibrate
   -> accumulated correction/outcome/disagreement/regression evidence
-  -> classifier / editor / evaluator judgment-loop improvement
+  -> planner / editor / evaluator feedback-loop improvement
 ```
 
 Run artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` に保存します。詳細な evidence、step decisions、summary は artifact に残し、通常出力は Curator 風に短くします。

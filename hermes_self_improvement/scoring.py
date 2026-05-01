@@ -196,11 +196,11 @@ def _call_llm_scorer(
     config: dict[str, Any],
 ) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    judge_config = model_config.get("judge") if isinstance(model_config.get("judge"), dict) else {}
-    provider = judge_config.get("provider") or "auto"
-    model = judge_config.get("model") or None
-    timeout = _coerce_int(judge_config.get("timeout"), default=60)
-    max_tokens = _coerce_int(judge_config.get("max_tokens"), default=1800)
+    planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
+    provider = planner_config.get("provider") or "auto"
+    model = planner_config.get("model") or None
+    timeout = _coerce_int(planner_config.get("timeout"), default=60)
+    max_tokens = _coerce_int(planner_config.get("max_tokens"), default=1800)
     prompt_payload = {
         "proposals": proposals,
         "findings": findings,
@@ -216,15 +216,15 @@ def _call_llm_scorer(
         {
             "role": "system",
             "content": (
-                "あなたは Hermes の skill/memory 自己改善 proposal を採点するレビュアーです。"
+                "あなたは Hermes の skill/memory 自己改善 planner です。"
                 "出力は JSON オブジェクトのみ。secret/token/password は推測・復元しない。"
-                "自動適用ではなく、人間レビュー向けの採点を行います。"
+                "観測データから安全に実行できる改善計画を作るための採点を行います。"
             ),
         },
         {
             "role": "user",
             "content": (
-                "次の proposal を採点してください。返す JSON schema は "
+                "次の proposal を planning 用に採点してください。返す JSON schema は "
                 "{\"scores\":[{\"id\":str,\"score\":int,\"recommendation\":str,"
                 "\"risk\":str,\"confidence\":str,\"rationale\":str}]} です。\n\n"
                 + json.dumps(prompt_payload, ensure_ascii=False, sort_keys=True, default=str)

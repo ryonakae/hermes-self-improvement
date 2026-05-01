@@ -61,7 +61,7 @@ def test_scorer_and_gepa_rubrics_include_shared_classification_block(monkeypatch
     sys.modules["agent"] = agent_module
     sys.modules["agent.auxiliary_client"] = auxiliary_client
 
-    scoring._call_llm_scorer(proposals=[], findings=[], config={"model": {"judge": {}}})
+    scoring._call_llm_scorer(proposals=[], findings=[], config={"model": {"planner": {}}})
     joined = "\n".join(message["content"] for message in captured["messages"])
 
     assert '"skill_memory_classification"' in joined
