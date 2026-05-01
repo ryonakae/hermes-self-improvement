@@ -104,7 +104,7 @@ def _default_config() -> dict[str, Any]:
             "max_tokens": 1800,
         },
         "gepa_scorer": {
-            "enabled": False,
+            "enabled": True,
             "mode": "dspy_program_eval",
             "timeout": 120,
             "max_iterations": 0,
@@ -216,11 +216,7 @@ def _read_config_file(path: Path, *, required: bool = False) -> dict[str, Any]:
 
 
 def _local_config_paths(default_path: Path) -> list[Path]:
-    return [default_path.with_name("config.local.json"), default_path.with_name("config.local.yaml")]
-
-
-def _peer_yaml_config_path(default_path: Path) -> Path:
-    return default_path.with_suffix(".yaml")
+    return [default_path.with_name("config.local.yaml")]
 
 
 def _runtime_hermes_config_path() -> Path:
@@ -387,22 +383,19 @@ def _load_config(path: Path) -> dict[str, Any]:
 def load_config(default_path: Path | None = None, *, cli_config_path: str | Path | None = None) -> dict[str, Any]:
     """Load config with fail-closed precedence.
 
-    Precedence, low to high: defaults, repo default config.json, plugin-local
-    config.yaml, config.local.json, config.local.yaml, HERMES_SELF_IMPROVE_CONFIG,
-    explicit CLI --config. Explicit CLI/env paths are required to exist and be
+    Precedence, low to high: code defaults, plugin-local config.yaml,
+    config.local.yaml, HERMES_SELF_IMPROVE_CONFIG, explicit CLI --config.
+    Explicit CLI/env paths are required to exist and be
     valid JSON/YAML so operator intent never silently falls back to a safer-looking
     but wrong config.
     """
-    default_path = Path(default_path or Path(__file__).resolve().parents[1] / "config.json")
+    default_path = Path(default_path or Path(__file__).resolve().parents[1] / "config.yaml")
     config = _default_config()
     sources: list[str] = []
 
     candidate_paths: list[tuple[Path, bool]] = [(default_path, False)]
-    peer_yaml = _peer_yaml_config_path(default_path)
-    if peer_yaml != default_path:
-        candidate_paths.append((peer_yaml, False))
     for local_path in _local_config_paths(default_path):
-        if local_path != default_path and local_path != peer_yaml:
+        if local_path != default_path:
             candidate_paths.append((local_path, False))
 
     for path, required in candidate_paths:

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 GEPA_ADAPTER = PLUGIN_DIR / "hermes_self_improvement" / "gepa_adapter.py"
-CONFIG_PATH = PLUGIN_DIR / "config.json"
+CONFIG_MODULE = PLUGIN_DIR / "hermes_self_improvement" / "config.py"
 
 
 class FakeDspy:
@@ -22,6 +21,15 @@ class FakeDspy:
     class Predict:
         pass
 
+
+
+def load_config_module():
+    spec = importlib.util.spec_from_file_location("hermes_self_improvement_config_offline", CONFIG_MODULE)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 def load_adapter():
     spec = importlib.util.spec_from_file_location("hermes_self_improvement_gepa_adapter_offline", GEPA_ADAPTER)
@@ -114,7 +122,7 @@ def test_gepa_adapter_keeps_disabled_config_as_closed_fallback_signal():
 
 
 def test_default_config_uses_real_dspy_gepa_mode():
-    config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    config = load_config_module().load_config(PLUGIN_DIR / "config.yaml")
 
     gepa_config = config["gepa_scorer"]
     assert gepa_config["enabled"] is True

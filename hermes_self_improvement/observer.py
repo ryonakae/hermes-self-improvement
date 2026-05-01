@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any
 
 try:  # pragma: no cover - package import path
-    from .config import DEFAULT_PREVIEW_CHARS, DEFAULT_RETENTION_DAYS, get_hermes_home
+    from .config import DEFAULT_PREVIEW_CHARS, DEFAULT_RETENTION_DAYS, get_hermes_home, load_config
 except Exception:  # pragma: no cover - direct file import used by tests/wrapper CLI
-    from config import DEFAULT_PREVIEW_CHARS, DEFAULT_RETENTION_DAYS, get_hermes_home
+    from config import DEFAULT_PREVIEW_CHARS, DEFAULT_RETENTION_DAYS, get_hermes_home, load_config
 
 PLUGIN_NAME = "hermes-self-improvement"
 UTC = timezone.utc
@@ -29,7 +29,7 @@ SENSITIVE_PATH_PATTERNS = (
 
 
 def register(ctx):
-    config = load_config(Path(__file__).resolve().parents[1] / "config.json")
+    config = load_config()
     observer = RuntimeObserver(config)
 
     for hook_name, callback in observer.hooks().items():

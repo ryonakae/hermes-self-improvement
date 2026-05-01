@@ -8,4 +8,3 @@ __pycache__/
 *.log
 config.yaml
 config.local.yaml
-config.local.json

@@ -6,9 +6,7 @@ from typing import Any
 PLUGIN_OWNED_RELATIVE_PREFIXES = (
     "README.md",
     "AGENTS.md",
-    "config.json",
     "config.yaml",
-    "config.local.json",
     "config.local.yaml",
     "plugin.yaml",
     ".hermes/plans",

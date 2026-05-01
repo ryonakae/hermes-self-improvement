@@ -192,7 +192,7 @@ def _register_bundled_skills(ctx) -> None:
 
 
 def register(ctx):
-    config = load_config(_PLUGIN_DIR / "config.json")
+    config = load_config()
     observer = RuntimeObserver(config)
 
     _register_bundled_skills(ctx)

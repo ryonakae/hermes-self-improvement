@@ -661,7 +661,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 
 
 def _handle_cli(args: argparse.Namespace) -> None:
-    config = load_config(Path(__file__).resolve().parents[1] / "config.json", cli_config_path=getattr(args, "config_path", None))
+    config = load_config(cli_config_path=getattr(args, "config_path", None))
     cmd = getattr(args, "self_improvement_cmd", None) or "status"
 
     if cmd == "improve":
@@ -743,7 +743,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
     raise SystemExit(f"unknown self-improvement command: {cmd}")
 
 def _handle_slash(raw_args: str = "") -> str:
-    config = load_config(Path(__file__).resolve().parents[1] / "config.json")
+    config = load_config()
     text = (raw_args or "").strip().lower()
     if text.startswith("analyze") or text.startswith("report") or text.startswith("run"):
         use_llm = "--scorer llm" in text or "llm" in text.split()

@@ -26,6 +26,31 @@ bin/hermes-self-improve calibrate --dry-run
 
 削除済みの primary surface: `plan`, `apply`, `rollback`, `outcome` / `record_outcome`。`--execute`, item 指定、hash 確認 flag は primary CLI/tool schema に出しません。
 
+## Configuration
+
+デフォルト値は `hermes_self_improvement/config.py` の code defaults が持ちます。repo-tracked な JSON default config file は使いません。
+
+Operator override が必要な場合だけ、plugin root に local YAML を置きます。
+
+```bash
+cp config.example.yaml config.yaml
+# or local-only override
+$EDITOR config.local.yaml
+```
+
+読み込み順は低い順に以下です。
+
+```text
+code defaults
+-> config.yaml
+-> config.local.yaml
+-> HERMES_SELF_IMPROVE_CONFIG
+-> --config
+-> Hermes runtime memory overlay
+```
+
+`config.yaml` / `config.local.yaml` は local runtime 用で gitignore 済みです。
+
 ## Curator operating mode
 
 この plugin は Hermes Curator を置き換えるというより、Curator の telemetry / lifecycle 情報を source of truth として使う上位 runner です。運用時は Hermes Curator を `disabled` にせず、必要なら `paused` にしてください。

@@ -36,31 +36,31 @@ def write_yaml(path: Path, text: str) -> Path:
     return path
 
 
-def test_load_config_precedence_cli_over_env_over_local_over_default(tmp_path, monkeypatch):
+def test_load_config_precedence_cli_over_env_over_local_over_code_defaults(tmp_path, monkeypatch):
     mod = load_plugin_module()
-    repo_default = write_json(tmp_path / "config.json", {"retention_days": 10})
-    local = write_json(tmp_path / "config.local.json", {"retention_days": 20})
-    env = write_json(tmp_path / "env-config.json", {"retention_days": 30})
-    cli = write_json(tmp_path / "cli-config.json", {"retention_days": 40})
+    repo_config = tmp_path / "config.yaml"
+    write_yaml(tmp_path / "config.local.yaml", "retention_days: 20")
+    env = write_json(tmp_path / "env-override.json", {"retention_days": 30})
+    cli = write_json(tmp_path / "cli-override.json", {"retention_days": 40})
     monkeypatch.setenv("HERMES_SELF_IMPROVE_CONFIG", str(env))
 
-    assert mod.load_config(repo_default)["retention_days"] == 30
-    assert mod.load_config(repo_default, cli_config_path=cli)["retention_days"] == 40
+    assert mod.load_config(repo_config)["retention_days"] == 30
+    assert mod.load_config(repo_config, cli_config_path=cli)["retention_days"] == 40
     monkeypatch.delenv("HERMES_SELF_IMPROVE_CONFIG")
-    assert mod.load_config(repo_default)["retention_days"] == 20
+    assert mod.load_config(repo_config)["retention_days"] == 20
 
 
-def test_load_config_records_loaded_sources_and_missing_cli_rejects(tmp_path):
+def test_load_config_records_yaml_sources_and_missing_cli_rejects(tmp_path):
     mod = load_plugin_module()
-    repo_default = write_json(tmp_path / "config.json", {"retention_days": 10})
-    local = write_json(tmp_path / "config.local.json", {"retention_days": 20})
+    repo_config = write_yaml(tmp_path / "config.yaml", "retention_days: 10")
+    local = write_yaml(tmp_path / "config.local.yaml", "retention_days: 20")
 
-    config = mod.load_config(repo_default)
+    config = mod.load_config(repo_config)
 
     assert config["retention_days"] == 20
-    assert config["config_sources"] == [str(repo_default), str(local)]
+    assert config["config_sources"] == [str(repo_config), str(local)]
     try:
-        mod.load_config(repo_default, cli_config_path=tmp_path / "missing.json")
+        mod.load_config(repo_config, cli_config_path=tmp_path / "missing.yaml")
     except FileNotFoundError as exc:
         assert "config_not_found" in str(exc)
     else:
@@ -69,10 +69,6 @@ def test_load_config_records_loaded_sources_and_missing_cli_rejects(tmp_path):
 
 def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
     mod = load_plugin_module()
-    repo_default = write_json(
-        tmp_path / "config.json",
-        {"model": {"llm": {"provider": "auto", "timeout": 10}}},
-    )
     plugin_yaml = write_yaml(
         tmp_path / "config.yaml",
         """
@@ -94,19 +90,18 @@ def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("HERMES_SELF_IMPROVE_GEPA_API_KEY", "local-secret")
 
-    config = mod.load_config(repo_default)
+    config = mod.load_config(plugin_yaml)
 
     assert config["model"]["llm"]["provider"] == "codex"
     assert config["model"]["llm"]["model"] == "gpt-test"
     assert config["model"]["llm"]["timeout"] == 99
     assert config["model"]["gepa"]["api_key"] == "local-secret"
-    assert config["config_sources"] == [str(repo_default), str(plugin_yaml), str(local_yaml)]
+    assert config["config_sources"] == [str(plugin_yaml), str(local_yaml)]
 
 
 def test_unresolved_env_reference_remains_literal(tmp_path, monkeypatch):
     mod = load_plugin_module()
-    repo_default = write_json(tmp_path / "config.json", {})
-    write_yaml(
+    repo_config = write_yaml(
         tmp_path / "config.yaml",
         """
         model:
@@ -116,24 +111,24 @@ def test_unresolved_env_reference_remains_literal(tmp_path, monkeypatch):
     )
     monkeypatch.delenv("MISSING_HERMES_SELF_IMPROVE_SECRET", raising=False)
 
-    config = mod.load_config(repo_default)
+    config = mod.load_config(repo_config)
 
     assert config["model"]["gepa"]["api_key"] == "${MISSING_HERMES_SELF_IMPROVE_SECRET}"
 
 
 def test_explicit_yaml_config_paths_are_required_and_valid(tmp_path, monkeypatch):
     mod = load_plugin_module()
-    repo_default = write_json(tmp_path / "config.json", {"retention_days": 10})
+    repo_config = tmp_path / "config.yaml"
     env_yaml = write_yaml(tmp_path / "env-config.yaml", "retention_days: 30")
     cli_yaml = write_yaml(tmp_path / "cli-config.yaml", "retention_days: 40")
     monkeypatch.setenv("HERMES_SELF_IMPROVE_CONFIG", str(env_yaml))
 
-    assert mod.load_config(repo_default)["retention_days"] == 30
-    assert mod.load_config(repo_default, cli_config_path=cli_yaml)["retention_days"] == 40
+    assert mod.load_config(repo_config)["retention_days"] == 30
+    assert mod.load_config(repo_config, cli_config_path=cli_yaml)["retention_days"] == 40
 
     bad_yaml = write_yaml(tmp_path / "bad.yaml", "- not\n- an\n- object")
     try:
-        mod.load_config(repo_default, cli_config_path=bad_yaml)
+        mod.load_config(repo_config, cli_config_path=bad_yaml)
     except ValueError as exc:
         assert "config_invalid" in str(exc)
     else:
@@ -142,15 +137,21 @@ def test_explicit_yaml_config_paths_are_required_and_valid(tmp_path, monkeypatch
 
 def test_legacy_scorer_config_normalizes_into_model_config(tmp_path):
     mod = load_plugin_module()
-    repo_default = write_json(
-        tmp_path / "config.json",
-        {
-            "llm_scorer": {"provider": "codex", "model": "gpt-legacy", "timeout": 33, "max_tokens": 444},
-            "gepa_scorer": {"task_model": "gepa-task", "timeout": 77},
-        },
+    repo_config = write_yaml(
+        tmp_path / "config.yaml",
+        """
+        llm_scorer:
+          provider: codex
+          model: gpt-legacy
+          timeout: 33
+          max_tokens: 444
+        gepa_scorer:
+          task_model: gepa-task
+          timeout: 77
+        """,
     )
 
-    config = mod.load_config(repo_default)
+    config = mod.load_config(repo_config)
 
     assert config["model"]["llm"]["provider"] == "codex"
     assert config["model"]["llm"]["model"] == "gpt-legacy"
@@ -162,7 +163,7 @@ def test_legacy_scorer_config_normalizes_into_model_config(tmp_path):
 
 def test_load_config_imports_runtime_memory_layers_from_hermes_config(tmp_path, monkeypatch):
     mod = load_plugin_module()
-    repo_default = write_json(tmp_path / "config.json", {"memory": {"provider": "built-in"}})
+    repo_config = write_yaml(tmp_path / "config.yaml", "memory:\n  provider: built-in")
     hermes_home = tmp_path / "hermes-home"
     hermes_home.mkdir()
     write_yaml(
@@ -178,7 +179,7 @@ def test_load_config_imports_runtime_memory_layers_from_hermes_config(tmp_path, 
     )
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 
-    config = mod.load_config(repo_default)
+    config = mod.load_config(repo_config)
 
     assert config["memory"]["provider"] == "hindsight"
     assert config["memory_runtime"] == {
@@ -193,6 +194,16 @@ def test_load_config_imports_runtime_memory_layers_from_hermes_config(tmp_path, 
             "enabled": True,
         },
     }
+
+
+def test_code_defaults_are_used_when_repo_yaml_is_absent(tmp_path):
+    mod = load_plugin_module()
+
+    config = mod.load_config(tmp_path / "config.yaml")
+
+    assert config["retention_days"] == 30
+    assert config["gepa_scorer"]["enabled"] is True
+    assert config["config_sources"] == []
 
 
 def test_config_example_yaml_is_parseable():
@@ -230,8 +241,8 @@ def test_cli_accepts_config_flag_for_all_subcommands():
         ["report"],
         ["calibrate"],
     ]:
-        args = parser.parse_args(command + ["--config", "/tmp/self-improve.json"])
-        assert args.config_path == "/tmp/self-improve.json"
+        args = parser.parse_args(command + ["--config", "/tmp/self-improve.yaml"])
+        assert args.config_path == "/tmp/self-improve.yaml"
 
 
 def test_tool_schemas_expose_config_path():
