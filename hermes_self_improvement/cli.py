@@ -15,6 +15,7 @@ try:  # pragma: no cover - package import path
         DEFAULT_RETENTION_DAYS,
         load_config,
     )
+    from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
     from .evidence import build_evidence_pack, write_evidence_pack
     from .mutation_backend import mutation_backend_status
     from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
@@ -31,6 +32,7 @@ except Exception:  # pragma: no cover - direct file import used by tests/wrapper
         DEFAULT_RETENTION_DAYS,
         load_config,
     )
+    from curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
     from evidence import build_evidence_pack, write_evidence_pack
     from mutation_backend import mutation_backend_status
     from runner_steps import run_memory_improvement_step, run_skill_improvement_step
@@ -468,11 +470,18 @@ def run_improve(
     while policy and internal checks still decide what can actually change.
     """
     mutate = not bool(dry_run)
-    calibration = run_calibration(config=config, execute=mutate)
+    curator_lifecycle = preview_curator_lifecycle(config=config, mutate=mutate)
+    curator_telemetry = load_curator_telemetry(config)
+    calibration = {
+        "current_status": "calibrate_only",
+        "active_changed": False,
+        "runtime_eval_cases": {"count": 0, "status": "not_built"},
+        "reason": "improve_records_material; calibrate owns scorer/evaluator optimization",
+    }
     until = datetime.now(UTC)
     since = until - timedelta(hours=int(since_hours))
     events = _load_events(_event_path(config), since=since)
-    evidence_pack = build_evidence_pack(events, since, until)
+    evidence_pack = build_evidence_pack(events, since, until, curator_telemetry=curator_telemetry)
     evidence_path = write_evidence_pack(evidence_pack, _reports_dir(config))
     pipeline = run_pipeline(
         config,
@@ -493,10 +502,19 @@ def run_improve(
         "execute": mutate,
         "target_changed": bool(calibration.get("active_changed")),
         "calibration": calibration,
+        "curator_lifecycle": curator_lifecycle,
+        "curator_telemetry": {
+            "available": bool(curator_telemetry.get("available")) if isinstance(curator_telemetry, dict) else False,
+            "candidate_count": int(((curator_telemetry.get("summary") or {}).get("candidate_count") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("summary"), dict) else 0) or 0),
+            "rejected_count": int(((curator_telemetry.get("summary") or {}).get("rejected_count") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("summary"), dict) else 0) or 0),
+            "reasons": curator_telemetry.get("reasons") if isinstance(curator_telemetry, dict) else None,
+        },
         "evidence_pack": {
             "path": str(evidence_path),
             "summary": evidence_pack.get("summary"),
             "views": evidence_pack.get("views"),
+            "skill_candidates": evidence_pack.get("skill_candidates"),
+            "curator_telemetry_summary": evidence_pack.get("curator_telemetry_summary"),
         },
         "step_decisions": {
             "summary": decisions_summary,

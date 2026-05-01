@@ -113,7 +113,8 @@ def test_primary_cli_surface_does_not_accept_legacy_flags():
 def test_improve_dry_run_summary_prints_next_actions(monkeypatch, tmp_path, capsys):
     cli = load_cli_module()
     monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"_self_improvement_root": str(tmp_path / "self-improvement")})
-    monkeypatch.setattr(cli, "run_calibration", lambda **kwargs: {"current_status": "no_op", "active_changed": False})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda config: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run", "transitions_checked": True})
     monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
     monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "skipped", "changed": False, "changed_skills": 0})
     monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "skipped", "changed": False, "changed_memories": 0})
@@ -126,6 +127,32 @@ def test_improve_dry_run_summary_prints_next_actions(monkeypatch, tmp_path, caps
     assert "Next actions:" in out
     assert "apply" not in out
     assert "--execute" not in out
+
+
+def test_run_improve_wires_curator_lifecycle_and_telemetry(monkeypatch, tmp_path):
+    cli = load_cli_module()
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run", "transitions_checked": True})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {
+        "available": True,
+        "source": "curator",
+        "candidates": [{"name": "candidate-skill", "state": "active", "source": "curator"}],
+        "rejected": [{"name": "pinned-skill", "reason": "pinned"}],
+        "summary": {"candidate_count": 1, "rejected_count": 1, "rejected_by_reason": {"pinned": 1}},
+    })
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "completed", "changed": 0, "changed_skills": [], "decisions": []})
+    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "no_memory_evidence", "changed": 0, "changed_memories": [], "decisions": []})
+
+    result = cli.run_improve(config=config, dry_run=True)
+
+    assert result["curator_lifecycle"] == {"status": "dry_run", "transitions_checked": True}
+    assert result["curator_telemetry"]["candidate_count"] == 1
+    assert result["curator_telemetry"]["rejected_count"] == 1
+    assert result["evidence_pack"]["skill_candidates"][0]["name"] == "candidate-skill"
+    assert result["calibration"]["current_status"] == "calibrate_only"
+
 
 
 def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
