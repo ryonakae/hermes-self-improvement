@@ -1,96 +1,45 @@
 # Example operator config for hermes-self-improvement.
 # Copy to config.yaml or config.local.yaml for local overrides.
+# Defaults live in hermes_self_improvement/config.py; keep this file to only
+# the overrides an operator is likely to customize.
 # Do not commit real API keys or provider secrets. For custom endpoints, prefer
 # ${ENV_VAR} references in the local file.
 
+# Keep unattended mutation conservative.
 automation_policy:
   max_risk: low
   allow_destructive: false
-  allowed_target_kinds:
-    - skill
-    - memory
-  # Empty allowed_change_types means all non-denied normal change types.
-  allowed_change_types: []
-  denied_change_types: []
 
-calibration:
-  enabled: true
-  evidence:
-    window_days: 30
-    min_evidence_events: 20
-    min_disagreements: 5
-    min_bad_outcomes: 2
-  optimizer:
-    max_full_evals: 2
+# Optional: disable mutating runs without changing CLI usage.
+# mutation:
+#   enabled: false
 
-model:
-  llm:
-    provider: auto
-    model: ""
-    base_url: ""
-    api_key: ""
-    timeout: 60
-    max_tokens: 1800
-    extra_body: {}
+# Optional: customize models only when auto routing is not enough.
+# model:
+#   llm:
+#     provider: openrouter
+#     model: anthropic/claude-sonnet-4
+#     api_key: ${OPENROUTER_API_KEY}
+#   gepa:
+#     provider: openrouter
+#     model: anthropic/claude-sonnet-4
+#     api_key: ${OPENROUTER_API_KEY}
+#   mutation:
+#     provider: openrouter
+#     model: anthropic/claude-sonnet-4
+#     api_key: ${OPENROUTER_API_KEY}
 
-  gepa:
-    provider: auto
-    model: ""
-    base_url: ""
-    api_key: ""
-    timeout: 120
-    max_tokens: 1800
-    extra_body: {}
+# Optional: tune calibration evidence thresholds when supervised runs show that
+# the default evidence gate is too strict or too loose.
+# calibration:
+#   evidence:
+#     window_days: 30
+#     min_evidence_events: 20
+#     min_disagreements: 5
+#     min_bad_outcomes: 2
 
-  mutation:
-    provider: auto
-    model: ""
-    base_url: ""
-    api_key: ""
-    timeout: 45
-    max_tokens: 1000
-    extra_body: {}
-
-mutation:
-  backend: hermes_agent
-
-gepa_scorer:
-  enabled: true
-  mode: dspy_program_eval
-  compiled_program_path: null
-  max_full_evals: 2
-  num_threads: 4
-  track_stats: true
-
-scorer_comparison_policy:
-  default:
-    block_on_risk_disagreement: true
-    block_on_recommendation_disagreement: true
-    score_delta_block_threshold: 15
-    confidence_rank_delta_block_threshold: 1
-  strict_change_types:
-    - memory_compress
-    - memory_add
-    - memory_replace
-    - memory_delete
-    - skill_create
-    - skill_delete
-    - skill_rename
-    - skill_merge
-    - skill_trigger_change
-    - skill_write_file
-    - skill_remove_file
-    - skill_large_rewrite
-    - config_policy_expansion
-    - evaluator_promote
-    - unknown_or_unclassified
-  strict:
-    score_delta_block_threshold: 5
-    confidence_rank_delta_block_threshold: 1
-  low_risk_prose:
-    change_types:
-      - typo_fix
-      - pitfall_addition_existing_section
-      - validation_addition_existing_section
-    score_delta_block_threshold: 20
-    confidence_rank_delta_block_threshold: 2
+# Optional: override scorer comparison thresholds only when supervised runs show
+# repeated false blocks or false approvals.
+# scorer_comparison_policy:
+#   default:
+#     score_delta_block_threshold: 15
