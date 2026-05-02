@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hermes_self_improvement.planner as planner
 from hermes_self_improvement.planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
+from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
+from hermes_self_improvement.prompts import base_prompt_hash
 
 
 def pack():
@@ -88,6 +90,41 @@ def test_run_skill_planner_fails_closed_on_invalid_planner_output():
     assert result["status"] == "planner_error"
     assert result["decisions"] == []
     assert result["summary"]["selected_for_editor"] == 0
+
+
+def test_llm_planner_uses_active_prompt_overlay(monkeypatch, tmp_path):
+    cfg = {"_self_improvement_root": str(tmp_path / "self-improvement"), "model": {"planner": {"provider": "auto"}}}
+    candidate_path = write_prompt_candidate(
+        cfg,
+        role="planner",
+        candidate={
+            "role": "planner",
+            "base_prompt_hash": base_prompt_hash("planner"),
+            "candidate_prompt": {"system_addendum": "Runtime planner overlay guidance."},
+        },
+    )
+    promote_prompt_candidate(cfg, role="planner", candidate_path=candidate_path, regression={"status": "passed"})
+    seen = {}
+
+    def fake_call_llm(**kwargs):
+        seen["messages"] = kwargs["messages"]
+        return {"choices": [{"message": {"content": '{"decisions": []}'}}]}
+
+    monkeypatch.setattr(planner, "_ensure_hermes_agent_on_path", lambda: None)
+    import types
+    import sys
+
+    aux = types.ModuleType("agent.auxiliary_client")
+    aux.call_llm = fake_call_llm
+    aux.extract_content_or_reasoning = lambda response: response["choices"][0]["message"]["content"]
+    pkg = types.ModuleType("agent")
+    sys.modules["agent"] = pkg
+    sys.modules["agent.auxiliary_client"] = aux
+
+    result = run_skill_planner(build_skill_planner_digest(pack()), config=cfg)
+
+    assert "Runtime planner overlay guidance." in seen["messages"][0]["content"]
+    assert result["prompt_source"]["planner"]["overlay_active"] is True
 
 
 def test_run_skill_planner_deterministic_fallback_skips_no_evidence_candidates_without_model_config():

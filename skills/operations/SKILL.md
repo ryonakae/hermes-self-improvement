@@ -106,8 +106,8 @@ Expected: enabled true, error null, tools 4。
 ## Pitfalls
 
 - Evidence skill target names may be bare (`skill-name`) or qualified (`dir-name:skill-name`). Resolve exact qualified Curator candidate matches first; otherwise fall back to bare-name matching and attach evidence to every mutable candidate with that bare name so the mutation agent can decide. Do not hardcode a user-specific prefix such as `hermes-custom:`.
-- Planner quality should be judged from proof counts, not selected count alone. Watch `attached_candidate_count`, `unmatched_evidence_count`, `selected_with_evidence`, `action_like_skips`, target-hint attachment counts/match kinds, evidence-strength counts, `weak_only_selected_count`, cluster evidence counts, and editor prompt chars in dry-run output/artifacts. If target hints attach nearly everything, inspect match kinds and strength before trusting the planner selection.
-- Agent tool handlers must not return full run/calibration payloads. Return compact summaries with artifact paths; keep full payloads in runtime artifacts or CLI `--json` only.
+- Planner quality should be judged from proof counts, not selected count alone. Watch `attached_candidate_count`, `unmatched_evidence_count`, `selected_with_evidence`, `action_like_skips`, target-hint attachment counts/match kinds, evidence-strength counts, `weak_only_selected_count`, cluster evidence counts, editor prompt chars, and planner/editor prompt source/hash in dry-run output/artifacts. If target hints attach nearly everything, inspect match kinds and strength before trusting the planner selection.
+- Agent tool handlers must not return full run/calibration payloads. Return compact summaries with artifact paths; keep full payloads in runtime artifacts or CLI `--json` only. Never include full prompt text or prompt candidates in tool results; return prompt source/hash/path metadata only.
 - root 直下に `tools.py` や `tools/` package を置かない。Hermes core `tools.registry` を shadow する。
 - Plugin-bundled skills は repo file として編集する。`skill_manage` で plugin-bundled skill を編集しない。
 - `importlib.util.module_from_spec` で unit test する場合は、`exec_module` 前に `sys.modules[spec.name] = module` を入れる。

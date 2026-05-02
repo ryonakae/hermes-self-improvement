@@ -7,6 +7,8 @@ from typing import Any
 from .observer import _redact_text
 from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 from .target_hints import extract_target_hints
+from .prompt_overlays import load_active_prompt_overlay
+from .prompts import base_prompt_hash, render_planner_messages
 
 SCHEMA_NAME = "self_improvement_skill_planner_result"
 ALLOWED_DECISIONS = {"run_editor", "skip", "human_review", "memory_candidate", "evaluator_candidate"}
@@ -267,7 +269,7 @@ def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
             decisions.append({"skill": name, "decision": "skip", "reason": "weak_only_evidence", "evidence_ids": []})
         else:
             decisions.append({"skill": name, "decision": "skip", "reason": "no_attached_evidence", "evidence_ids": []})
-    return _planner_result(decisions, digest=digest, status="completed", model_role="planner", planner_source="deterministic_fallback")
+    return _planner_result(decisions, digest=digest, status="completed", model_role="planner", planner_source="deterministic_fallback", prompt_source={"role": "planner", "base_hash": base_prompt_hash("planner"), "overlay_active": False, "overlay_hash": None, "overlay_path": None})
 
 
 def _planner_result(
@@ -278,6 +280,7 @@ def _planner_result(
     model_role: str = "planner",
     planner_source: str = "llm",
     error: str | None = None,
+    prompt_source: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     candidate_count = len(digest.get("skill_candidates") or [])
     result = {
@@ -289,6 +292,8 @@ def _planner_result(
         "summary": _summary_counts(decisions, candidate_count),
         "decisions": decisions,
     }
+    if prompt_source:
+        result["prompt_source"] = {"planner": prompt_source}
     if error:
         result["error"] = _redacted_preview(error, max_chars=240)
     return result
@@ -340,6 +345,7 @@ def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evide
 def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("planner_response_not_object")
+    prompt_source = payload.get("_prompt_source") if isinstance(payload.get("_prompt_source"), dict) else None
     raw_decisions = payload.get("decisions")
     if not isinstance(raw_decisions, list):
         raise ValueError("planner_response_missing_decisions")
@@ -364,7 +370,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         name = str(row.get("name") or "")
         if name and name not in seen:
             decisions.append({"skill": name, "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []})
-    return _planner_result(decisions, digest=digest, status="completed")
+    return _planner_result(decisions, digest=digest, status="completed", prompt_source=prompt_source)
 
 
 def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
@@ -374,29 +380,9 @@ def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict
     model = planner_config.get("model") or None
     timeout = _coerce_int(planner_config.get("timeout"), default=60)
     max_tokens = _coerce_int(planner_config.get("max_tokens"), default=2200)
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are the Hermes self-improvement planner. Choose which mutable local skills should be sent to the tool-mediated editor. "
-                "Do not maximize human review. Prefer run_editor for low-risk small local skill improvements with attached evidence. "
-                "Evidence strength matters: exact/bare matches are strong; alias/path/cluster hints are medium; tool-class hints are weak. "
-                "Do not run_editor on weak-only evidence unless the edit is very small, procedural, and directly supported by representative evidence. "
-                "Use human_review only for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
-                "Return JSON only."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                "Plan skill improvements from this digest. Output schema: "
-                "{\"decisions\":[{\"skill\":str,\"decision\":\"run_editor|skip|human_review|memory_candidate|evaluator_candidate\","
-                "\"priority\":\"low|medium|high\",\"risk\":\"low|medium|high\",\"change_intent\":str,"
-                "\"editor_instructions\":str,\"evidence_ids\":[str],\"rationale\":str,\"reason\":str}]}\n\n"
-                + json.dumps(digest, ensure_ascii=False, sort_keys=True, default=str)
-            ),
-        },
-    ]
+    overlay = load_active_prompt_overlay(config, role="planner", base_hash=base_prompt_hash("planner"))
+    rendered_prompt = render_planner_messages(digest=digest, overlay=overlay)
+    messages = rendered_prompt["messages"]
     _ensure_hermes_agent_on_path()
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
 
@@ -409,7 +395,9 @@ def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict
         max_tokens=max_tokens,
         timeout=timeout,
     )
-    return _extract_json_object(extract_content_or_reasoning(response))
+    payload = _extract_json_object(extract_content_or_reasoning(response))
+    payload["_prompt_source"] = rendered_prompt["prompt_source"]
+    return payload
 
 
 def build_planner_quality_report(

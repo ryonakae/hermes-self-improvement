@@ -489,6 +489,7 @@ def run_improve(
             "scorer": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
             "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
         },
+        "prompt_sources": skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {},
         "skill_changes": skill_step.get("changed_skills") or [],
         "memory_changes": memory_step.get("changed_memories") or [],
         "summary": {
@@ -579,6 +580,13 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "run_editor"][:5]
     human_review_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "human_review"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
+    prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
+    planner_prompt = prompt_sources.get("planner") if isinstance(prompt_sources.get("planner"), dict) else {}
+    editor_prompt = prompt_sources.get("editor") if isinstance(prompt_sources.get("editor"), dict) else {}
+    evidence_strength_counts = planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {}
+    strong_count = int(evidence_strength_counts.get("strong") or 0)
+    medium_count = int(evidence_strength_counts.get("medium") or 0)
+    weak_count = int(evidence_strength_counts.get("weak") or 0)
     lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
     for decision in memory_step.get("decisions") or []:
         if isinstance(decision, dict):
@@ -603,8 +611,11 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for editor: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, human review: {int(planner_summary.get('human_review') or 0)}",
         f"- proof: attached candidates {int(planner_quality.get('attached_candidate_count') or 0)}, unmatched evidence {int(planner_quality.get('unmatched_evidence_count') or 0)}, selected with evidence {int(planner_quality.get('selected_with_evidence') or 0)}, action-like skips {int(planner_quality.get('action_like_skips') or 0)}",
         f"- target hints: hint-attached evidence {int(planner_quality.get('hint_attached_evidence_count') or 0)}, hint-attached candidates {int(planner_quality.get('hint_attached_candidate_count') or 0)}, cluster evidence {int(planner_quality.get('cluster_evidence_count') or 0)}",
-        f"- evidence strength: strong {int((planner_quality.get('evidence_strength_counts') or {}).get('strong') if isinstance(planner_quality.get('evidence_strength_counts'), dict) else 0)}, medium {int((planner_quality.get('evidence_strength_counts') or {}).get('medium') if isinstance(planner_quality.get('evidence_strength_counts'), dict) else 0)}, weak {int((planner_quality.get('evidence_strength_counts') or {}).get('weak') if isinstance(planner_quality.get('evidence_strength_counts'), dict) else 0)}, weak-only selected {int(planner_quality.get('weak_only_selected_count') or 0)}",
+        f"- evidence strength: strong {strong_count}, medium {medium_count}, weak {weak_count}, weak-only selected {int(planner_quality.get('weak_only_selected_count') or 0)}",
         f"- editor prompts: tasks {int(planner_quality.get('editor_task_count') or 0)}, max chars {int(editor_prompt_chars.get('max') or 0)}",
+        "Prompt sources:",
+        f"- planner: {'runtime overlay' if planner_prompt.get('overlay_active') else 'base'} hash {planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
+        f"- editor: {'runtime overlay' if editor_prompt.get('overlay_active') else 'base'} hash {editor_prompt.get('active_hash') or editor_prompt.get('base_hash') or 'unknown'}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Memory improvements:",

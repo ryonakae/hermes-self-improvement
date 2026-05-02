@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
+from hermes_self_improvement.prompts import base_prompt_hash
 from hermes_self_improvement.runner_steps import build_skill_agent_task, run_memory_improvement_step, run_skill_improvement_step
 
 
@@ -59,12 +61,33 @@ def test_build_skill_agent_task_caps_selected_evidence_for_prompt_budget():
     assert len(task["instructions"]) < 10000
 
 
+def test_build_skill_agent_task_uses_active_editor_prompt_overlay(tmp_path):
+    cfg = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    candidate_path = write_prompt_candidate(
+        cfg,
+        role="editor",
+        candidate={
+            "role": "editor",
+            "base_prompt_hash": base_prompt_hash("editor"),
+            "candidate_prompt": {"system_addendum": "Runtime editor overlay guidance."},
+        },
+    )
+    promote_prompt_candidate(cfg, role="editor", candidate_path=candidate_path, regression={"status": "passed"})
+
+    task = build_skill_agent_task(skill_name="demo-skill", evidence=[], config=cfg)
+
+    assert "Runtime editor overlay guidance." in task["instructions"]
+    assert task["prompt_source"]["editor"]["overlay_active"] is True
+
+
 def test_skill_step_dry_run_records_planner_editor_preview_without_mutating():
     result = run_skill_improvement_step(evidence_pack=evidence_pack_for("demo-skill"), config={}, mutate=False)
 
     assert result["status"] == "completed"
     assert result["changed"] == 0
     assert result["planner"]["summary"]["selected_for_editor"] == 1
+    assert result["prompt_sources"]["planner"]["overlay_active"] is False
+    assert result["prompt_sources"]["editor"]["overlay_active"] is False
     assert result["planner_quality"]["selected_with_evidence"] == 1
     assert result["planner_quality"]["action_like_skips"] == 0
     assert result["planner_quality"]["editor_prompt_chars"]["max"] > 0

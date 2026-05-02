@@ -223,6 +223,10 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                     "status": "completed",
                     "changed": 0,
                     "changed_skills": [],
+                    "prompt_sources": {
+                        "planner": {"role": "planner", "source": "base", "overlay_active": False, "base_hash": "sha256:planner"},
+                        "editor": {"role": "editor", "source": "runtime", "overlay_active": True, "base_hash": "sha256:editor", "active_hash": "sha256:active", "path": str(tmp_path / "active-prompts.json")},
+                    },
                     "planner": {
                         "status": "completed",
                         "planner_source": "deterministic_fallback",
@@ -255,6 +259,9 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["evidence"]["views"] == {"skill": 2, "memory": 1, "scorer": 0, "evaluator": 0}
     assert payload["steps"]["proposals_considered"] == 4
     assert payload["steps"]["skill"]["decision_count"] == 1
+    assert payload["steps"]["prompt_sources"]["planner"]["overlay_active"] is False
+    assert payload["steps"]["prompt_sources"]["editor"]["overlay_active"] is True
+    assert payload["steps"]["prompt_sources"]["editor"]["active_hash"] == "sha256:active"
     assert payload["steps"]["skill_planner"]["selected_for_editor"] == 1
     assert payload["steps"]["skill_planner"]["source"] == "deterministic_fallback"
     assert payload["steps"]["skill_planner"]["quality"]["selected_with_evidence"] == 1

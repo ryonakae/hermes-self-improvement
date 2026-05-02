@@ -10,6 +10,8 @@ from .mutation_worker import execute_memory_provider_tool_operation, execute_mem
 from .memory_context import build_related_memory_lookup_context
 from .observer import _redact_text
 from .planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
+from .prompt_overlays import load_active_prompt_overlay
+from .prompts import base_prompt_hash, render_editor_instructions
 
 
 def _parse_preview(value: Any) -> dict[str, Any]:
@@ -171,50 +173,33 @@ def _format_json_section(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str, indent=2)
 
 
-def build_skill_agent_task(*, skill_name: str, evidence: list[dict[str, Any]], candidate: dict[str, Any] | None = None, planner_decision: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_skill_agent_task(
+    *,
+    skill_name: str,
+    evidence: list[dict[str, Any]],
+    candidate: dict[str, Any] | None = None,
+    planner_decision: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     candidate_meta = candidate or {}
     planner_meta = planner_decision or {}
     compact_evidence = _compact_editor_evidence(evidence)
-    instructions = "\n".join([
-        "You are the Hermes self-improvement skill editor.",
-        "",
-        "Role:",
-        "- Apply a small, reusable procedural improvement only when the planner decision and selected evidence still fit the current skill.",
-        "- Prefer a non-mutating skipped outcome over a speculative or stale edit.",
-        "",
-        "Target skill:",
-        f"- {skill_name}",
-        "",
-        "Candidate metadata:",
-        _format_json_section(candidate_meta),
-        "",
-        "Planner decision:",
-        _format_json_section(planner_meta),
-        "",
-        "Selected evidence:",
-        _format_json_section(compact_evidence),
-        "",
-        "Allowed tools:",
-        "- skills_list",
-        "- skill_view",
-        "- skill_manage",
-        "",
-        "Hard stops:",
-        "- Call skill_view for the target skill before proposing any mutation.",
-        "- Stop without mutation if the skill is missing, stale, conflicting with the planner intent, ambiguous, memory-shaped, or outside this skill.",
-        "- Do not mutate plugin-bundled, hub-installed, external-dir, built-in, pinned, archived, or Hermes core files.",
-        "- Do not edit README, AGENTS, config, repo docs, or arbitrary files outside skill lifecycle tools.",
-        "- Do not rename, delete, archive, merge, or create skills unless the planner explicitly selected that action; this task is for small local edits only.",
-        "",
-        "Expected output:",
-        "- Return changed/skipped status, reason, skill name, used tool calls, and a short verification checklist.",
-    ])
+    overlay = load_active_prompt_overlay(config or {}, role="editor", base_hash=base_prompt_hash("editor")) if config is not None else None
+    rendered = render_editor_instructions(
+        skill_name=skill_name,
+        candidate=candidate_meta,
+        planner_decision=planner_meta,
+        evidence=compact_evidence,
+        overlay=overlay,
+    )
+    instructions = rendered["instructions"]
     return {
         "type": "skill_agent_task",
         "task_kind": "skill_improve",
         "targets": {"primary_skill": skill_name},
         "candidate": candidate_meta,
         "instructions": instructions,
+        "prompt_source": {"editor": rendered["prompt_source"]},
         "constraints": [
             "Use only skills_list, skill_view, skill_manage.",
             "Do not use terminal/file/git/direct filesystem tools.",
@@ -254,6 +239,9 @@ def run_skill_improvement_step(
     digest_by_name = {str(item.get("name") or ""): item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)}
     decisions: list[dict[str, Any]] = []
     changed_skills: list[str] = []
+    prompt_sources: dict[str, Any] = {}
+    if isinstance(planner.get("prompt_source"), dict) and isinstance(planner["prompt_source"].get("planner"), dict):
+        prompt_sources["planner"] = planner["prompt_source"]["planner"]
     backend = build_mutation_backend(config) if mutate else None
 
     if planner.get("status") != "completed":
@@ -263,6 +251,7 @@ def run_skill_improvement_step(
             "changed_skills": [],
             "planner": planner,
             "planner_digest": digest,
+            "prompt_sources": prompt_sources,
             "decisions": [],
         }
 
@@ -298,7 +287,10 @@ def run_skill_improvement_step(
                 "changed": False,
             })
             continue
-        task = build_skill_agent_task(skill_name=skill_name, evidence=attached_evidence, candidate=candidate, planner_decision=planner_decision)
+        task = build_skill_agent_task(skill_name=skill_name, evidence=attached_evidence, candidate=candidate, planner_decision=planner_decision, config=config)
+        task_prompt_sources = task.get("prompt_source") if isinstance(task.get("prompt_source"), dict) else {}
+        if isinstance(task_prompt_sources.get("editor"), dict):
+            prompt_sources.setdefault("editor", task_prompt_sources["editor"])
         if not mutate:
             decisions.append({
                 **base_decision,
@@ -328,6 +320,7 @@ def run_skill_improvement_step(
         "planner": planner,
         "planner_digest": digest,
         "planner_quality": quality,
+        "prompt_sources": prompt_sources,
         "decisions": decisions,
     }
 

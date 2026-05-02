@@ -90,6 +90,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
     planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
+    prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     artifact_path = result.get("artifact_path")
     return {
         "schema_name": "self_improvement_tool_result_summary",
@@ -116,6 +117,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "steps": {
             "proposals_considered": int(decision_summary.get("total") or 0),
             "skill": _compact_step("skill", step_decisions.get("skill")),
+            "prompt_sources": prompt_sources,
             "skill_planner": {
                 "status": planner.get("status"),
                 "source": planner.get("planner_source"),
