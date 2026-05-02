@@ -8,6 +8,7 @@ from .mutation_backend import build_mutation_backend
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
 from .memory_context import build_related_memory_lookup_context
+from .observer import _redact_text
 from .planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
 
 
@@ -136,20 +137,32 @@ def _execute_memory_context(context: dict[str, Any], config: dict[str, Any] | No
     return execute_memory_provider_tool_operation(context, provider_tool_fn=cfg.get("_memory_provider_tool_fn"))
 
 
+MAX_EDITOR_EVIDENCE_ITEMS = 8
+
+
 def _compact_editor_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     compact: list[dict[str, Any]] = []
-    for item in evidence:
+    for item in evidence[:MAX_EDITOR_EVIDENCE_ITEMS]:
         if not isinstance(item, dict):
             continue
         event = item.get("event") if isinstance(item.get("event"), dict) else {}
         compact.append({
             "id": str(item.get("id") or ""),
             "kind": item.get("kind"),
+            "source": item.get("source"),
             "tool_name": event.get("tool_name") or item.get("tool_name"),
             "status": event.get("status") or item.get("status"),
             "error_kind": event.get("error_kind") or item.get("error_kind"),
-            "args_preview": event.get("args_preview"),
-            "result_preview": event.get("result_preview") or event.get("message"),
+            "count": item.get("count"),
+            "severity": item.get("severity"),
+            "args_preview": _redact_text(str(event.get("args_preview") or ""), max_chars=180),
+            "result_preview": _redact_text(str(event.get("result_preview") or event.get("message") or item.get("summary") or ""), max_chars=220),
+        })
+    if len(evidence) > MAX_EDITOR_EVIDENCE_ITEMS:
+        compact.append({
+            "kind": "omitted_evidence_summary",
+            "omitted_evidence_count": len(evidence) - MAX_EDITOR_EVIDENCE_ITEMS,
+            "reason": "editor prompt evidence cap; full evidence remains in run artifact",
         })
     return compact
 

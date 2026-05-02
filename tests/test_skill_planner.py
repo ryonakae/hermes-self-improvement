@@ -99,6 +99,28 @@ def test_run_skill_planner_deterministic_fallback_skips_no_evidence_candidates_w
     assert by_skill["unused-skill"]["reason"] == "no_attached_evidence"
 
 
+def test_run_skill_planner_deterministic_fallback_skips_weak_only_candidates():
+    pack_data = {
+        "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},
+        "evidence": [
+            {
+                "id": "ev_patch",
+                "kind": "tool_failure_evidence",
+                "event": {"tool_name": "patch", "status": "error", "error_kind": "unknown_error", "result_preview": "validation failed"},
+                "likely_targets": [{"target": "skill", "weight": 0.5}],
+            }
+        ],
+        "views": {"skill": ["ev_patch"], "memory": [], "scorer": [], "evaluator": []},
+        "skill_candidates": [{"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}}],
+    }
+
+    result = run_skill_planner(build_skill_planner_digest(pack_data), config={})
+    decision = result["decisions"][0]
+
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "weak_only_evidence"
+
+
 def test_skill_planner_falls_back_when_llm_planner_fails(monkeypatch):
     digest = build_skill_planner_digest(pack())
 
@@ -199,7 +221,56 @@ def test_planner_digest_attaches_tool_class_hints_to_existing_candidate():
     assert row["evidence_ids"] == ["ev_patch"]
     assert row["evidence_match"] == "hint_tool_class"
     assert row["target_hint_source"] == "tool_class"
+    assert row["evidence_strength_counts"] == {"weak": 1}
+    assert row["weak_evidence_count"] == 1
     assert digest["unmatched_evidence"]["count"] == 0
+
+
+def test_planner_digest_marks_explicit_path_and_cluster_strengths():
+    pack_data = {
+        "summary": {"event_count": 3, "evidence_count": 3, "ignored_count": 0},
+        "evidence": [
+            {
+                "id": "ev_explicit",
+                "kind": "tool_failure_evidence",
+                "event": {"tool_name": "skill_manage", "status": "error", "args_preview": '{"name":"demo-skill"}'},
+                "likely_targets": [{"target": "skill", "weight": 0.8}],
+            },
+            {
+                "id": "ev_path",
+                "kind": "tool_failure_evidence",
+                "event": {"tool_name": "terminal", "status": "error", "args_preview": "python ~/.hermes/automations/gmail-newsletter-observer/run.py"},
+                "likely_targets": [{"target": "skill", "weight": 0.5}],
+            },
+            {
+                "id": "cluster_patch",
+                "kind": "tool_error_cluster_evidence",
+                "source": "analysis_cluster",
+                "tool_name": "patch",
+                "error_kind": "schema_or_validation",
+                "count": 3,
+                "severity": "medium",
+                "likely_targets": [{"target": "skill", "weight": 0.7}],
+                "target_hints": [
+                    {"target_skill": "hermes-development-maintenance", "source": "proposal_cluster", "confidence": "medium", "reason": "recurring patch failures", "match_kind": "hint_proposal_cluster"}
+                ],
+            },
+        ],
+        "views": {"skill": ["ev_explicit", "ev_path", "cluster_patch"], "memory": [], "scorer": [], "evaluator": []},
+        "skill_candidates": [
+            {"name": "demo-skill", "state": "active", "source": "curator", "usage": {}},
+            {"name": "gmail-newsletter-observer", "state": "active", "source": "curator", "usage": {}},
+            {"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}},
+        ],
+    }
+
+    digest = build_skill_planner_digest(pack_data)
+    by_name = {row["name"]: row for row in digest["skill_candidates"]}
+
+    assert by_name["demo-skill"]["evidence_strength_counts"] == {"strong": 1}
+    assert by_name["gmail-newsletter-observer"]["evidence_strength_counts"] == {"medium": 1}
+    assert by_name["hermes-development-maintenance"]["evidence_strength_counts"] == {"medium": 1}
+    assert by_name["hermes-development-maintenance"]["evidence_match"] == "hint_proposal_cluster"
 
 
 def test_planner_quality_report_counts_hint_attachment_match_kinds():
@@ -226,3 +297,6 @@ def test_planner_quality_report_counts_hint_attachment_match_kinds():
     assert report["hint_attached_evidence_count"] == 1
     assert report["hint_attached_candidate_count"] == 1
     assert report["attachments_by_match_kind"] == {"hint_tool_class": 1}
+    assert report["evidence_strength_counts"] == {"weak": 1}
+    assert report["weak_only_candidate_count"] == 1
+    assert report["weak_only_selected_count"] == 1

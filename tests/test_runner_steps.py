@@ -44,6 +44,21 @@ def test_build_skill_agent_task_uses_skills_only_constraints():
     assert "direct filesystem" in joined
 
 
+def test_build_skill_agent_task_caps_selected_evidence_for_prompt_budget():
+    evidence = [
+        {"id": f"ev{i}", "kind": "tool_failure_evidence", "event": {"tool_name": "patch", "status": "error", "result_preview": "x" * 400}}
+        for i in range(20)
+    ]
+
+    task = build_skill_agent_task(skill_name="demo-skill", evidence=evidence)
+    payload = json.dumps(task, ensure_ascii=False)
+
+    assert "omitted_evidence_count" in payload
+    assert "ev0" in payload
+    assert "ev12" not in payload
+    assert len(task["instructions"]) < 10000
+
+
 def test_skill_step_dry_run_records_planner_editor_preview_without_mutating():
     result = run_skill_improvement_step(evidence_pack=evidence_pack_for("demo-skill"), config={}, mutate=False)
 

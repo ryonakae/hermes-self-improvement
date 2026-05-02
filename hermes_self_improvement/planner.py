@@ -90,12 +90,31 @@ def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(item.get("id") or ""),
         "kind": str(item.get("kind") or ""),
+        "source": item.get("source"),
         "tool_name": event.get("tool_name") or item.get("tool_name"),
         "status": event.get("status") or item.get("status"),
         "error_kind": event.get("error_kind") or item.get("error_kind"),
+        "count": item.get("count"),
+        "severity": item.get("severity"),
         "args_preview": _redacted_preview(event.get("args_preview"), max_chars=180),
-        "result_preview": _redacted_preview(event.get("result_preview") or event.get("message"), max_chars=220),
+        "result_preview": _redacted_preview(event.get("result_preview") or event.get("message") or item.get("summary"), max_chars=220),
     }
+
+
+def _hint_strength(match_kind: str) -> str:
+    if match_kind in {"exact", "bare_name"}:
+        return "strong"
+    if match_kind in {"hint_alias", "hint_path", "hint_proposal_cluster"}:
+        return "medium"
+    return "weak"
+
+
+def _strength_counts(resolutions: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for resolution in resolutions:
+        strength = str(resolution.get("hint_strength") or _hint_strength(str(resolution.get("evidence_match") or "")))
+        counts[strength] = counts.get(strength, 0) + 1
+    return counts
 
 
 def _summary_counts(decisions: list[dict[str, Any]], candidate_count: int) -> dict[str, int]:
@@ -132,6 +151,9 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
             attached[matched_name].append(item)
         clean_meta = {key: str(value) for key, value in meta.items() if value is not None}
         clean_meta["evidence_id"] = str(item.get("id") or "")
+        match_kind = str(clean_meta.get("evidence_match") or "")
+        clean_meta["hint_strength"] = _hint_strength(match_kind)
+        clean_meta["hint_weight"] = str({"strong": 3, "medium": 2, "weak": 1}.get(clean_meta["hint_strength"], 1))
         evidence_resolution[matched_name].append(clean_meta)
         match_meta[matched_name] = {key: value for key, value in clean_meta.items() if key != "evidence_id"}
 
@@ -148,7 +170,7 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
                         "evidence_match": match_kind,
                     })
                 continue
-        hints = extract_target_hints(item, candidate_names=list(candidate_by_name))
+        hints = item.get("target_hints") if isinstance(item.get("target_hints"), list) else extract_target_hints(item, candidate_names=list(candidate_by_name))
         if hints:
             for hint in hints:
                 attach(str(hint.get("target_skill") or ""), item, {
@@ -179,6 +201,8 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     candidate_rows: list[dict[str, Any]] = []
     for name, candidate in candidate_by_name.items():
         evidence = attached.get(name) or []
+        resolutions = evidence_resolution.get(name) or []
+        strength_counts = _strength_counts(resolutions)
         row = {
             "name": name,
             "description": _redacted_preview(candidate.get("description") or candidate.get("summary") or "", max_chars=180),
@@ -190,7 +214,11 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
             "attached_evidence_count": len(evidence),
             "evidence_ids": [str(item.get("id") or "") for item in evidence if item.get("id")],
             "representative_evidence": [_representative_evidence(item) for item in evidence[:3]],
-            "evidence_resolution": evidence_resolution.get(name) or [],
+            "evidence_resolution": resolutions,
+            "evidence_strength_counts": strength_counts,
+            "strong_evidence_count": int(strength_counts.get("strong") or 0),
+            "medium_evidence_count": int(strength_counts.get("medium") or 0),
+            "weak_evidence_count": int(strength_counts.get("weak") or 0),
         }
         row.update(match_meta.get(name, {}))
         candidate_rows.append(row)
@@ -221,7 +249,10 @@ def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
             continue
         name = str(row.get("name") or "")
         evidence_ids = [str(item) for item in row.get("evidence_ids") or []]
-        if evidence_ids:
+        strong_count = int(row.get("strong_evidence_count") or 0)
+        medium_count = int(row.get("medium_evidence_count") or 0)
+        weak_count = int(row.get("weak_evidence_count") or 0)
+        if evidence_ids and (strong_count or medium_count):
             decisions.append({
                 "skill": name,
                 "decision": "run_editor",
@@ -230,8 +261,10 @@ def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
                 "change_intent": "address attached self-improvement evidence",
                 "editor_instructions": "Inspect the skill and apply a small, reusable procedural improvement only if the attached evidence still fits this skill.",
                 "evidence_ids": evidence_ids,
-                "rationale": f"{len(evidence_ids)} attached evidence item(s) matched this mutable Curator candidate.",
+                "rationale": f"{len(evidence_ids)} attached evidence item(s) matched this mutable Curator candidate, including strong/medium evidence.",
             })
+        elif evidence_ids and weak_count:
+            decisions.append({"skill": name, "decision": "skip", "reason": "weak_only_evidence", "evidence_ids": []})
         else:
             decisions.append({"skill": name, "decision": "skip", "reason": "no_attached_evidence", "evidence_ids": []})
     return _planner_result(decisions, digest=digest, status="completed", model_role="planner", planner_source="deterministic_fallback")
@@ -347,6 +380,8 @@ def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict
             "content": (
                 "You are the Hermes self-improvement planner. Choose which mutable local skills should be sent to the tool-mediated editor. "
                 "Do not maximize human review. Prefer run_editor for low-risk small local skill improvements with attached evidence. "
+                "Evidence strength matters: exact/bare matches are strong; alias/path/cluster hints are medium; tool-class hints are weak. "
+                "Do not run_editor on weak-only evidence unless the edit is very small, procedural, and directly supported by representative evidence. "
                 "Use human_review only for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
                 "Return JSON only."
             ),
@@ -396,19 +431,38 @@ def build_planner_quality_report(
             prompt_lengths.append(len(instructions))
     unmatched = digest.get("unmatched_evidence") if isinstance(digest.get("unmatched_evidence"), dict) else {}
     attachments_by_match_kind: dict[str, int] = {}
+    evidence_strength_counts: dict[str, int] = {}
     hint_attached_evidence_ids: set[str] = set()
     hint_attached_candidates: set[str] = set()
+    cluster_attached_candidates: set[str] = set()
+    weak_only_candidates: set[str] = set()
+    candidate_strengths: dict[str, set[str]] = {}
+    cluster_evidence_ids: set[str] = set()
     for row in candidates:
         name = str(row.get("name") or "")
+        strengths_for_candidate: set[str] = set()
         for resolution in row.get("evidence_resolution") or []:
             if not isinstance(resolution, dict):
                 continue
             match_kind = str(resolution.get("evidence_match") or "unknown")
+            strength = str(resolution.get("hint_strength") or _hint_strength(match_kind))
+            strengths_for_candidate.add(strength)
+            evidence_strength_counts[strength] = evidence_strength_counts.get(strength, 0) + 1
             attachments_by_match_kind[match_kind] = attachments_by_match_kind.get(match_kind, 0) + 1
             if match_kind.startswith("hint_"):
                 hint_attached_candidates.add(name)
                 if resolution.get("evidence_id"):
                     hint_attached_evidence_ids.add(str(resolution.get("evidence_id")))
+            if match_kind == "hint_proposal_cluster":
+                cluster_attached_candidates.add(name)
+                if resolution.get("evidence_id"):
+                    cluster_evidence_ids.add(str(resolution.get("evidence_id")))
+        candidate_strengths[name] = strengths_for_candidate
+        if strengths_for_candidate == {"weak"}:
+            weak_only_candidates.add(name)
+    selected_skills = {str(item.get("skill") or "") for item in selected}
+    cluster_selected_count = sum(1 for skill in selected_skills if skill in cluster_attached_candidates)
+    weak_only_selected_count = sum(1 for skill in selected_skills if skill in weak_only_candidates)
     return {
         "candidate_count": len(candidates),
         "attached_candidate_count": sum(1 for item in candidates if int(item.get("attached_evidence_count") or 0) > 0),
@@ -422,7 +476,16 @@ def build_planner_quality_report(
         "hint_attached_evidence_count": len(hint_attached_evidence_ids),
         "hint_attached_candidate_count": len(hint_attached_candidates),
         "attachments_by_match_kind": attachments_by_match_kind,
-        "cluster_evidence_count": sum(1 for row in candidates for item in (row.get("representative_evidence") or []) if isinstance(item, dict) and item.get("kind") == "tool_error_cluster_evidence"),
+        "evidence_strength_counts": evidence_strength_counts,
+        "selected_by_strength": {
+            strength: sum(1 for skill in selected_skills if strength in candidate_strengths.get(skill, set()))
+            for strength in ("strong", "medium", "weak")
+        },
+        "weak_only_candidate_count": len(weak_only_candidates),
+        "weak_only_selected_count": weak_only_selected_count,
+        "cluster_evidence_count": len(cluster_evidence_ids),
+        "cluster_attached_candidate_count": len(cluster_attached_candidates),
+        "cluster_selected_count": cluster_selected_count,
         "editor_task_count": len(prompt_lengths),
         "editor_prompt_chars": {
             "min": min(prompt_lengths) if prompt_lengths else 0,

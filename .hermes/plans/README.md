@@ -4,6 +4,10 @@
 
 As of 2026-05-02, the latest completed implementation plan is:
 
+- `2026-05-02_151616-planner-hint-weighting-and-cluster-evidence.md`
+  - **Status:** completed.
+  - Added evidence strength metadata, conservative weak-only fallback behavior, compact recurring tool-error cluster evidence, and planner quality metrics for weak-only / cluster-selected decisions.
+
 - `2026-05-02_074457-evidence-target-extraction-quality.md`
   - **Status:** completed.
   - Added deterministic evidence target hints and planner quality metrics so explicit, alias, tool-class, and path evidence can attach to existing mutable Curator candidates before planner selection.
@@ -57,7 +61,7 @@ The current implemented baseline is:
 - Primary tool surface: `self_improvement_improve / self_improvement_calibrate / self_improvement_report / self_improvement_status`.
 - `improve` and `calibrate` are mutation-capable by default; `--dry-run` is the preview boundary.
 - `improve` uses Curator/Hermes telemetry as the skill candidate source-of-truth after running or previewing Curator automatic lifecycle transitions.
-- Skill improvement runs through a global planner first; dry-run previews planner decisions, while mutating runs execute only planner `run_editor` targets via the per-skill editor.
+- Skill improvement runs through a global planner first; dry-run previews planner decisions, while mutating runs execute only planner `run_editor` targets via the per-skill editor. Evidence attachment records strength (`strong` explicit, `medium` alias/path/cluster, `weak` generic tool-class), and deterministic fallback skips weak-only candidates.
 - `calibrate` owns planner/editor/evaluator prompt and rubric improvement; `improve` does not run DSPy/GEPA calibration.
 - Legacy primary `plan / apply / rollback / outcome`, `--execute`, `--items`, and `self_improvement_record_outcome` are removed from the user-facing surface.
 - Skill mutation runs through bounded official skill tools only; no terminal/file/git/direct filesystem fallback.

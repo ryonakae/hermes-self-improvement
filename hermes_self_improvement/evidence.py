@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .observer import _analysis_events, _sha256_text
+from .observer import _analysis_events, _redact_text, _sha256_text
+from .target_hints import extract_target_hints
 SCHEMA_NAME = "self_improvement_evidence_pack"
 SCHEMA_VERSION = "1.0"
 LIKELY_TARGETS = {"skill", "memory", "scorer", "evaluator"}
@@ -61,7 +62,11 @@ def _compact_event(ev: dict[str, Any]) -> dict[str, Any]:
         "model",
         "finish_reason",
     )
-    return {key: ev.get(key) for key in keys if ev.get(key) is not None}
+    out = {key: ev.get(key) for key in keys if ev.get(key) is not None}
+    for key in ("result_preview", "args_preview"):
+        if isinstance(out.get(key), str):
+            out[key] = _redact_text(out[key], max_chars=300)
+    return out
 
 
 def _targets(*targets: tuple[str, float]) -> list[dict[str, Any]]:
@@ -146,6 +151,91 @@ def _curator_summary(curator_telemetry: dict[str, Any] | None) -> dict[str, Any]
     }
 
 
+def _cluster_id(tool_name: str, error_kind: str) -> str:
+    safe_tool = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in tool_name).strip("-") or "tool"
+    safe_kind = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in error_kind).strip("-") or "error"
+    return f"cluster_{safe_tool}_{safe_kind}_{_sha256_text(safe_tool + ':' + safe_kind)[:8]}"
+
+
+def _cluster_findings_from_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    tool_errors = [
+        ev for ev in events
+        if ev.get("event") == "post_tool_call" and str(ev.get("status") or "").lower() in {"error", "warning", "failed", "failure"}
+    ]
+    by_tool = Counter(ev.get("tool_name") or "unknown" for ev in events if ev.get("event") == "post_tool_call")
+    by_cluster: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for ev in tool_errors:
+        key = (str(ev.get("tool_name") or "unknown"), str(ev.get("error_kind") or "unknown"))
+        by_cluster.setdefault(key, []).append(ev)
+    findings: list[dict[str, Any]] = []
+    for (tool_name, error_kind), clustered in sorted(by_cluster.items(), key=lambda item: len(item[1]), reverse=True)[:20]:
+        count = len(clustered)
+        total = int(by_tool.get(tool_name) or count)
+        severity = "high" if count >= 5 and total and count / total >= 0.3 else "medium" if count >= 2 else "low"
+        findings.append({
+            "kind": "tool_error_cluster",
+            "severity": severity,
+            "tool_name": tool_name,
+            "error_kind": error_kind,
+            "count": count,
+            "total": total,
+            "rate": round(count / total, 3) if total else None,
+            "examples": [_compact_event(ev) for ev in clustered[:3]],
+        })
+    return findings
+
+
+def build_cluster_evidence(findings: list[dict[str, Any]], *, candidate_names: list[str], limit: int = 10) -> list[dict[str, Any]]:
+    clusters: list[dict[str, Any]] = []
+    for finding in findings:
+        if not isinstance(finding, dict) or finding.get("kind") != "tool_error_cluster":
+            continue
+        count = int(finding.get("count") or 0)
+        severity = str(finding.get("severity") or "low")
+        if count < 2 and severity not in {"medium", "high"}:
+            continue
+        tool_name = str(finding.get("tool_name") or "unknown")
+        error_kind = str(finding.get("error_kind") or "unknown")
+        probe = {
+            "kind": "tool_error_cluster_evidence",
+            "source": "analysis_cluster",
+            "tool_name": tool_name,
+            "error_kind": error_kind,
+            "event": {"tool_name": tool_name, "error_kind": error_kind, "status": "warning", "result_preview": f"recurring {tool_name} {error_kind} cluster"},
+        }
+        hints = extract_target_hints(probe, candidate_names=candidate_names)
+        cluster_hints = []
+        for hint in hints:
+            cluster_hints.append({
+                "target_skill": hint.get("target_skill"),
+                "source": "proposal_cluster",
+                "confidence": "medium",
+                "reason": f"recurring {tool_name} {error_kind} cluster with {count} event(s)",
+                "match_kind": "hint_proposal_cluster",
+            })
+        if not cluster_hints:
+            continue
+        item = {
+            "id": _cluster_id(tool_name, error_kind),
+            "kind": "tool_error_cluster_evidence",
+            "source": "analysis_cluster",
+            "tool_name": tool_name,
+            "error_kind": error_kind,
+            "count": count,
+            "total": finding.get("total"),
+            "rate": finding.get("rate"),
+            "severity": severity,
+            "summary": _redact_text(f"Observed {count} recurring {tool_name} {error_kind} warning/error events.", max_chars=220),
+            "examples": finding.get("examples", [])[:3],
+            "target_hints": cluster_hints,
+            "likely_targets": _targets(("skill", 0.7), ("scorer", 0.1)),
+        }
+        clusters.append(item)
+        if len(clusters) >= limit:
+            break
+    return clusters
+
+
 def build_evidence_pack(
     events: list[dict[str, Any]],
     since: datetime,
@@ -177,6 +267,12 @@ def build_evidence_pack(
     views = _views_for_evidence(evidence)
     skill_candidates = curator_telemetry.get("candidates") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("candidates"), list) else []
     rejected_skill_candidates = curator_telemetry.get("rejected") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("rejected"), list) else []
+    candidate_names = [str(item.get("name") or "") for item in skill_candidates if isinstance(item, dict) and item.get("name")]
+    cluster_evidence = build_cluster_evidence(_cluster_findings_from_events(events), candidate_names=candidate_names)
+    if cluster_evidence:
+        evidence.extend(cluster_evidence)
+        kind_counts["tool_error_cluster_evidence"] += len(cluster_evidence)
+        views = _views_for_evidence(evidence)
     return {
         "schema_name": SCHEMA_NAME,
         "schema_version": SCHEMA_VERSION,
@@ -186,6 +282,7 @@ def build_evidence_pack(
             "evidence_count": len(evidence),
             "ignored_count": len(ignored),
             "evidence_by_kind": dict(kind_counts),
+            "cluster_evidence_count": len(cluster_evidence),
             "filtered_partial_event_count": filtered_partial_count,
             "reclassified_tool_result_count": reclassified_count,
         },

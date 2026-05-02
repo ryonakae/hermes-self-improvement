@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from hermes_self_improvement.evidence import build_evidence_pack, write_evidence_pack
+from hermes_self_improvement.evidence import build_cluster_evidence, build_evidence_pack, write_evidence_pack
 
 
 def test_evidence_pack_ignores_successful_skill_usage_as_curator_redundant():
@@ -95,6 +95,41 @@ def test_evidence_pack_carries_curator_skill_candidates_separately():
     assert any(item["ignored_reason"] == "curator_redundant" for item in pack["ignored"])
     assert pack["summary"]["evidence_count"] == 1
 
+
+
+def test_evidence_pack_adds_compact_cluster_evidence_for_repeated_tool_failures():
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    events = [
+        {"ts": since.isoformat(), "event": "post_tool_call", "tool_name": "patch", "status": "error", "error_kind": "schema_or_validation", "result_preview": "path required secret=abc123"},
+        {"ts": since.isoformat(), "event": "post_tool_call", "tool_name": "patch", "status": "error", "error_kind": "schema_or_validation", "result_preview": "path required secret=abc123"},
+    ]
+    telemetry = {"candidates": [{"name": "hermes-development-maintenance", "state": "active", "source": "curator"}]}
+
+    pack = build_evidence_pack(events, since, until, curator_telemetry=telemetry)
+    cluster = next(item for item in pack["evidence"] if item["kind"] == "tool_error_cluster_evidence")
+
+    assert pack["summary"]["cluster_evidence_count"] == 1
+    assert cluster["count"] == 2
+    assert cluster["tool_name"] == "patch"
+    assert cluster["target_hints"][0]["target_skill"] == "hermes-development-maintenance"
+    assert cluster["target_hints"][0]["source"] == "proposal_cluster"
+    assert cluster["id"] in pack["views"]["skill"]
+    assert "abc123" not in json.dumps(cluster, ensure_ascii=False)
+
+
+def test_build_cluster_evidence_requires_existing_candidate_and_repeated_cluster():
+    findings = [
+        {"kind": "tool_error_cluster", "tool_name": "patch", "error_kind": "schema_or_validation", "count": 1, "severity": "low", "examples": []},
+        {"kind": "tool_error_cluster", "tool_name": "skill_view", "error_kind": "not_found", "count": 3, "severity": "medium", "examples": []},
+    ]
+
+    assert build_cluster_evidence(findings, candidate_names=[]) == []
+    clusters = build_cluster_evidence(findings, candidate_names=["hermes-skill-management"])
+
+    assert len(clusters) == 1
+    assert clusters[0]["tool_name"] == "skill_view"
+    assert clusters[0]["target_hints"][0]["target_skill"] == "hermes-skill-management"
 
 
 def test_write_evidence_pack_writes_runtime_artifact(tmp_path):
