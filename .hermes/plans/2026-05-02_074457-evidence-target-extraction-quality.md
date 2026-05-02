@@ -1,6 +1,6 @@
 # Evidence Target Extraction Quality Plan
 
-**Status:** planned
+**Status:** completed
 
 ## Goal
 
@@ -391,3 +391,28 @@ fix: surface target hint quality metrics
 ```
 
 If this becomes larger than expected, implement only Task 1 + Task 2 first, then run dry-run and inspect proof counts before adding cluster evidence.
+
+
+## Implementation result
+
+**Status:** completed for Task 1 + Task 2 + quality metrics. Cluster evidence remains a future refinement.
+
+Implemented:
+
+- Added `hermes_self_improvement/target_hints.py` with deterministic explicit, alias, tool-class, and path hints.
+- Integrated target hints into `build_skill_planner_digest()`, preserving exact/bare explicit matching as the strongest path.
+- Added per-candidate `evidence_resolution` metadata with match kind, target hint source/confidence/reason, and raw/normalized skill fields.
+- Extended `planner_quality` with `hint_attached_evidence_count`, `hint_attached_candidate_count`, `attachments_by_match_kind`, and `cluster_evidence_count`.
+- Updated CLI dry-run summary and compact tool result to expose target hint proof counts.
+- Added regression tests for explicit fallback, plugin-bundled alias handling, tool-class hints, path hints, planner digest attachment, and quality metrics.
+
+Latest verification snapshot after implementation:
+
+```text
+pytest: 289 passed, 2 skipped
+dry-run proof: attached candidates 4, unmatched evidence 0, selected with evidence 3, action-like skips 0
+target hints: hint-attached evidence 62, hint-attached candidates 4, cluster evidence 0
+attachments_by_match_kind: bare_name 3, hint_alias 5, hint_path 8, hint_tool_class 49
+```
+
+Note: `hint_tool_class` is intentionally limited to one best matching mutable candidate per evidence item, and path hints suppress generic tool-class hints. The next refinement, if needed, is not more attachment but better precision/weighting in planner prompt and cluster evidence.

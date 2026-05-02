@@ -229,7 +229,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                         "summary": {"candidate_count": 2, "selected_for_editor": 1, "skipped": 1, "human_review": 0, "memory_candidates": 0, "evaluator_candidates": 0},
                         "decisions": [{"skill": "a", "decision": "run_editor", "editor_instructions": large_instruction}],
                     },
-                    "planner_quality": {"attached_candidate_count": 1, "unmatched_evidence_count": 2, "selected_with_evidence": 1, "action_like_skips": 0, "editor_task_count": 1, "editor_prompt_chars": {"max": 500, "min": 500, "total": 500}},
+                    "planner_quality": {"attached_candidate_count": 1, "unmatched_evidence_count": 2, "selected_with_evidence": 1, "action_like_skips": 0, "hint_attached_evidence_count": 1, "hint_attached_candidate_count": 1, "cluster_evidence_count": 0, "attachments_by_match_kind": {"hint_tool_class": 1}, "editor_task_count": 1, "editor_prompt_chars": {"max": 500, "min": 500, "total": 500}},
                     "decisions": [{"task": {"instructions": large_instruction}}],
                 },
                 "memory": {"status": "completed", "changed": 0, "changed_memories": [], "decisions": [{"related_memory_lookup": {"status": "completed"}}]},
@@ -258,6 +258,8 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["steps"]["skill_planner"]["selected_for_editor"] == 1
     assert payload["steps"]["skill_planner"]["source"] == "deterministic_fallback"
     assert payload["steps"]["skill_planner"]["quality"]["selected_with_evidence"] == 1
+    assert payload["steps"]["skill_planner"]["quality"]["hint_attached_evidence_count"] == 1
+    assert payload["steps"]["skill_planner"]["quality"]["attachments_by_match_kind"] == {"hint_tool_class": 1}
     assert payload["steps"]["skill_planner"]["quality"]["editor_prompt_chars"]["max"] == 500
     assert payload["steps"]["memory"]["related_lookups"]["completed"] == 1
     assert "proposals_considered" not in payload

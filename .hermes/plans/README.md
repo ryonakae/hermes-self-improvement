@@ -2,13 +2,12 @@
 
 ## Current source of truth
 
-Active planned follow-up:
+As of 2026-05-02, the latest completed implementation plan is:
 
 - `2026-05-02_074457-evidence-target-extraction-quality.md`
-  - **Status:** planned.
-  - Improve evidence target extraction so planner receives more correctly attached evidence via explicit targets, alias hints, tool-class hints, path hints, and cluster evidence.
+  - **Status:** completed.
+  - Added deterministic evidence target hints and planner quality metrics so explicit, alias, tool-class, and path evidence can attach to existing mutable Curator candidates before planner selection.
 
-As of 2026-05-02, the latest completed implementation plan is:
 
 - `2026-05-02_020641-planner-editor-quality-proof.md`
   - **Status:** completed.

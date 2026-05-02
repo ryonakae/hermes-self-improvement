@@ -172,3 +172,57 @@ def test_planner_quality_report_counts_evidence_and_action_like_skips():
     assert report["action_like_skips"] == 0
     assert report["memory_candidates"] == 1
     assert report["editor_prompt_chars"]["max"] == 5
+
+
+def test_planner_digest_attaches_tool_class_hints_to_existing_candidate():
+    pack_data = {
+        "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},
+        "evidence": [
+            {
+                "id": "ev_patch",
+                "kind": "tool_failure_evidence",
+                "event": {"tool_name": "patch", "status": "error", "error_kind": "unknown_error", "result_preview": "old_string and new_string are identical"},
+                "likely_targets": [{"target": "skill", "weight": 0.5}],
+            }
+        ],
+        "views": {"skill": ["ev_patch"], "memory": [], "scorer": [], "evaluator": []},
+        "skill_candidates": [
+            {"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}},
+        ],
+    }
+
+    digest = build_skill_planner_digest(pack_data)
+    row = digest["skill_candidates"][0]
+
+    assert row["name"] == "hermes-development-maintenance"
+    assert row["attached_evidence_count"] == 1
+    assert row["evidence_ids"] == ["ev_patch"]
+    assert row["evidence_match"] == "hint_tool_class"
+    assert row["target_hint_source"] == "tool_class"
+    assert digest["unmatched_evidence"]["count"] == 0
+
+
+def test_planner_quality_report_counts_hint_attachment_match_kinds():
+    pack_data = {
+        "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},
+        "evidence": [
+            {
+                "id": "ev_patch",
+                "kind": "tool_failure_evidence",
+                "event": {"tool_name": "patch", "status": "error", "error_kind": "unknown_error", "result_preview": "validation failed"},
+                "likely_targets": [{"target": "skill", "weight": 0.5}],
+            }
+        ],
+        "views": {"skill": ["ev_patch"], "memory": [], "scorer": [], "evaluator": []},
+        "skill_candidates": [{"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}}],
+    }
+    digest = build_skill_planner_digest(pack_data)
+    report = build_planner_quality_report(
+        digest=digest,
+        planner={"decisions": [{"skill": "hermes-development-maintenance", "decision": "run_editor", "evidence_ids": ["ev_patch"]}]},
+        runner_decisions=[],
+    )
+
+    assert report["hint_attached_evidence_count"] == 1
+    assert report["hint_attached_candidate_count"] == 1
+    assert report["attachments_by_match_kind"] == {"hint_tool_class": 1}

@@ -6,6 +6,7 @@ from typing import Any
 
 from .observer import _redact_text
 from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
+from .target_hints import extract_target_hints
 
 SCHEMA_NAME = "self_improvement_skill_planner_result"
 ALLOWED_DECISIONS = {"run_editor", "skip", "human_review", "memory_candidate", "evaluator_candidate"}
@@ -120,36 +121,60 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     }
     attached: dict[str, list[dict[str, Any]]] = {name: [] for name in candidate_by_name}
     match_meta: dict[str, dict[str, str]] = {}
+    evidence_resolution: dict[str, list[dict[str, Any]]] = {name: [] for name in candidate_by_name}
     unmatched: list[dict[str, Any]] = []
     by_reason: dict[str, int] = {}
+
+    def attach(matched_name: str, item: dict[str, Any], meta: dict[str, Any]) -> None:
+        if matched_name not in candidate_by_name:
+            return
+        if item not in attached[matched_name]:
+            attached[matched_name].append(item)
+        clean_meta = {key: str(value) for key, value in meta.items() if value is not None}
+        clean_meta["evidence_id"] = str(item.get("id") or "")
+        evidence_resolution[matched_name].append(clean_meta)
+        match_meta[matched_name] = {key: value for key, value in clean_meta.items() if key != "evidence_id"}
 
     for item in skill_evidence:
         evidence_id = str(item.get("id") or "")
         skill_name = _skill_name_from_evidence(item)
+        if skill_name:
+            matched_names, normalized_skill, match_kind = _resolve_candidate_skill_names(skill_name, candidate_by_name)
+            if matched_names:
+                for matched_name in matched_names:
+                    attach(matched_name, item, {
+                        "raw_evidence_skill": skill_name,
+                        "normalized_skill": normalized_skill,
+                        "evidence_match": match_kind,
+                    })
+                continue
+        hints = extract_target_hints(item, candidate_names=list(candidate_by_name))
+        if hints:
+            for hint in hints:
+                attach(str(hint.get("target_skill") or ""), item, {
+                    "raw_evidence_skill": skill_name,
+                    "normalized_skill": _bare_skill_name(skill_name or str(hint.get("target_skill") or "")),
+                    "evidence_match": hint.get("match_kind") or f"hint_{hint.get('source') or 'unknown'}",
+                    "target_hint_source": hint.get("source"),
+                    "target_hint_confidence": hint.get("confidence"),
+                    "target_hint_reason": hint.get("reason"),
+                })
+            continue
         if not skill_name:
             reason = "skill_target_missing"
             by_reason[reason] = by_reason.get(reason, 0) + 1
             unmatched.append({"evidence_id": evidence_id, "reason": reason, "example": _representative_evidence(item)})
             continue
-        matched_names, normalized_skill, match_kind = _resolve_candidate_skill_names(skill_name, candidate_by_name)
-        if not matched_names:
-            reason = "skill_not_in_curator_candidates"
-            by_reason[reason] = by_reason.get(reason, 0) + 1
-            unmatched.append({
-                "evidence_id": evidence_id,
-                "skill": skill_name,
-                "normalized_skill": normalized_skill,
-                "reason": reason,
-                "example": _representative_evidence(item),
-            })
-            continue
-        for matched_name in matched_names:
-            attached[matched_name].append(item)
-            match_meta[matched_name] = {
-                "raw_evidence_skill": skill_name,
-                "normalized_skill": normalized_skill,
-                "evidence_match": match_kind,
-            }
+        _matched_names, normalized_skill, _match_kind = _resolve_candidate_skill_names(skill_name, candidate_by_name)
+        reason = "skill_not_in_curator_candidates"
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+        unmatched.append({
+            "evidence_id": evidence_id,
+            "skill": skill_name,
+            "normalized_skill": normalized_skill,
+            "reason": reason,
+            "example": _representative_evidence(item),
+        })
 
     candidate_rows: list[dict[str, Any]] = []
     for name, candidate in candidate_by_name.items():
@@ -165,6 +190,7 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
             "attached_evidence_count": len(evidence),
             "evidence_ids": [str(item.get("id") or "") for item in evidence if item.get("id")],
             "representative_evidence": [_representative_evidence(item) for item in evidence[:3]],
+            "evidence_resolution": evidence_resolution.get(name) or [],
         }
         row.update(match_meta.get(name, {}))
         candidate_rows.append(row)
@@ -369,6 +395,20 @@ def build_planner_quality_report(
         if isinstance(instructions, str):
             prompt_lengths.append(len(instructions))
     unmatched = digest.get("unmatched_evidence") if isinstance(digest.get("unmatched_evidence"), dict) else {}
+    attachments_by_match_kind: dict[str, int] = {}
+    hint_attached_evidence_ids: set[str] = set()
+    hint_attached_candidates: set[str] = set()
+    for row in candidates:
+        name = str(row.get("name") or "")
+        for resolution in row.get("evidence_resolution") or []:
+            if not isinstance(resolution, dict):
+                continue
+            match_kind = str(resolution.get("evidence_match") or "unknown")
+            attachments_by_match_kind[match_kind] = attachments_by_match_kind.get(match_kind, 0) + 1
+            if match_kind.startswith("hint_"):
+                hint_attached_candidates.add(name)
+                if resolution.get("evidence_id"):
+                    hint_attached_evidence_ids.add(str(resolution.get("evidence_id")))
     return {
         "candidate_count": len(candidates),
         "attached_candidate_count": sum(1 for item in candidates if int(item.get("attached_evidence_count") or 0) > 0),
@@ -379,6 +419,10 @@ def build_planner_quality_report(
         "action_like_skips": sum(1 for item in skipped if item.get("change_intent") or item.get("editor_instructions")),
         "memory_candidates": sum(1 for item in planner_decisions if item.get("decision") == "memory_candidate"),
         "evaluator_candidates": sum(1 for item in planner_decisions if item.get("decision") == "evaluator_candidate"),
+        "hint_attached_evidence_count": len(hint_attached_evidence_ids),
+        "hint_attached_candidate_count": len(hint_attached_candidates),
+        "attachments_by_match_kind": attachments_by_match_kind,
+        "cluster_evidence_count": sum(1 for row in candidates for item in (row.get("representative_evidence") or []) if isinstance(item, dict) and item.get("kind") == "tool_error_cluster_evidence"),
         "editor_task_count": len(prompt_lengths),
         "editor_prompt_chars": {
             "min": min(prompt_lengths) if prompt_lengths else 0,
