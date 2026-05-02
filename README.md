@@ -23,8 +23,8 @@ bin/hermes-self-improve calibrate --dry-run
 
 - `improve`: 統合 runner。Curator 自動 lifecycle transition の実行/preview、Curator telemetry 読み取り、hook evidence pack、global skill planner、skill editor / memory runner step、run artifact 作成を行う。default は mutation-capable。
 - `improve --dry-run`: mutation せず、global planner まで実行して「どの skill を editor に渡すか / なぜ選んだか / どう直す予定か」を summary と artifact に残す。editor mutation は走らない。planner proof counts（attached candidates、unmatched evidence、selected-with-evidence、action-like skips、target hint attachments、cluster evidence、evidence strength、weak-only selected、editor prompt chars）も表示する。active prompt source（base/runtime overlay）と hash も compact に表示する。
-- `calibrate`: scorer/evaluator calibration。regression gate を通った場合だけ active state を更新する。default は mutation-capable。
-- `calibrate --dry-run`: calibration の preview。
+- `calibrate`: scorer/evaluator calibration。regression gate を通った場合だけ active state を更新する。default は mutation-capable。planner/editor prompt overlay 候補も runtime evidence から作り、prompt regression を通ったものだけ runtime-private active overlay に promote する。
+- `calibrate --dry-run`: calibration の preview。prompt overlay 候補は candidate yes/no と reason だけ表示し、active pointer は書かない。
 - `report`: 直近 event / artifact の読み取りレポート。mutation しない。
 - `setup`: `${HERMES_HOME:-~/.hermes}/self-improvement` の runtime directory、event log、default evaluator assets、active evaluator pointer を初期化する。LLM/GEPA/mutation は実行しない。
 - `setup --check`: runtime setup の read-only readiness check。

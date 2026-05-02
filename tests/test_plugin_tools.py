@@ -145,6 +145,10 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
             "active_evaluator_path": str(tmp_path / "active.json"),
             "ledger_path": str(tmp_path / "ledger.json"),
             "candidate": {"prompt": large_details},
+            "prompt_overlays": {
+                "planner": {"candidate": True, "promoted": False, "candidate_hash": "hash-planner", "candidate_path": str(tmp_path / "candidate.json"), "regression": {"status": "passed", "details": large_details}},
+                "editor": {"candidate": False, "promoted": False, "candidate_hash": None, "candidate_path": None, "regression": None},
+            },
         }
 
     mod._handle_self_improvement_calibrate_tool.__globals__["run_calibration"] = fake_run_calibration
@@ -164,6 +168,8 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
     assert payload["evidence_summary"]["total_events"] == 5
     assert payload["regression"] == {"status": "passed"}
     assert payload["full_payload"]["path"] == str(tmp_path / "ledger.json")
+    assert payload["prompt_overlays"]["planner"] == {"candidate": True, "promoted": False, "candidate_hash": "hash-planner", "candidate_path": str(tmp_path / "candidate.json"), "regression": {"status": "passed"}}
+    assert payload["prompt_overlays"]["editor"]["candidate"] is False
     assert large_details not in raw
     assert len(raw) < 4000
 

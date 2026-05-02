@@ -419,6 +419,18 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
         lines.append(f"Regression: {regression.get('status')}")
     if result.get("active_evaluator_path"):
         lines.append(f"Active evaluator: {result.get('active_evaluator_path')}")
+    prompt_overlays = result.get("prompt_overlays") if isinstance(result.get("prompt_overlays"), dict) else {}
+    if prompt_overlays:
+        lines.append("Prompt overlays:")
+        for role in ("planner", "editor", "scorer"):
+            item = prompt_overlays.get(role) if isinstance(prompt_overlays.get(role), dict) else None
+            if not item:
+                continue
+            lines.append(
+                f"- {role}: candidate {'yes' if item.get('candidate') else 'no'}, "
+                f"promoted {'yes' if item.get('promoted') else 'no'}, "
+                f"reason {item.get('reason') or 'none'}"
+            )
     return "\n".join(lines)
 
 

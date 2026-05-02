@@ -530,12 +530,23 @@ Implemented the first slice: repo prompt registry + runtime overlay loading + im
 - `improve` artifacts, CLI summary, and compact agent tool result expose prompt source/hash/path metadata only; full prompt text is not returned to LLM-facing tool results.
 - Added tests for prompt registry, overlay validation/promotion, planner/editor overlay usage, artifact metadata, and compact tool result metadata.
 
-Still pending for Slice 2:
+### 2026-05-02 Slice 2 partial completed
 
-- `calibrate` prompt candidate generation for planner/editor.
-- GEPA/DSPy candidate optimization path.
-- Regression-gated promotion workflow beyond the low-level `promote_prompt_candidate()` primitive.
-- `calibrate --dry-run` prompt candidate preview.
+Implemented the calibration-side prompt overlay candidate lane.
+
+- `calibrate` now builds planner/editor prompt overlay candidates from runtime evidence:
+  - planner: planner quality signals such as action-like skips or weak-only selections.
+  - editor: failed/rejected skill-editor outcomes from review outcome records.
+- `calibrate --dry-run` previews prompt overlay candidates with compact candidate/promoted/reason metadata and does not write active prompt pointers.
+- Mutating `calibrate` writes runtime-private prompt candidate files and promotes them to `active-prompts.json` only when `_run_prompt_overlay_regression()` passes.
+- Default prompt-overlay regression is fail-closed until a real GEPA/DSPy-backed regression runner is wired.
+- `self_improvement_calibrate` tool result returns compact prompt overlay status/path/hash only, never full prompt text or candidate details.
+
+Still pending for the rest of Slice 2:
+
+- Real GEPA/DSPy optimizer integration for planner/editor prompt candidate generation.
+- Real prompt-overlay regression runner beyond the current fail-closed hook.
+- Broader regression invariants for planner/editor behavior.
 
 ## Suggested commit split
 

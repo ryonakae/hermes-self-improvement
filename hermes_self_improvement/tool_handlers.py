@@ -159,6 +159,22 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _compact_prompt_overlays(value: Any) -> dict[str, Any]:
+    overlays = value if isinstance(value, dict) else {}
+    out: dict[str, Any] = {}
+    for role in ("planner", "editor", "scorer"):
+        item = overlays.get(role) if isinstance(overlays.get(role), dict) else {}
+        regression = item.get("regression") if isinstance(item.get("regression"), dict) else None
+        out[role] = {
+            "candidate": bool(item.get("candidate")),
+            "promoted": bool(item.get("promoted")),
+            "candidate_hash": item.get("candidate_hash"),
+            "candidate_path": item.get("candidate_path"),
+            "regression": {"status": regression.get("status")} if regression else None,
+        }
+    return out
+
+
 def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
     evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
     regression = result.get("regression") if isinstance(result.get("regression"), dict) else {}
@@ -185,6 +201,7 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
             "scorer_errors": int(evidence.get("scorer_errors") or 0),
         },
         "regression": {"status": regression.get("status")} if regression else {},
+        "prompt_overlays": _compact_prompt_overlays(result.get("prompt_overlays")),
         "active_evaluator_path": result.get("active_evaluator_path"),
         "ledger_path": ledger_path,
         "full_payload": full_payload,

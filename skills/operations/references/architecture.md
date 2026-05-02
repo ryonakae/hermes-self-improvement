@@ -78,3 +78,5 @@ Evidence target attachment uses deterministic hints before planner reasoning: ex
 - `hermes_self_improvement/gepa_adapter.py`: payload builder, offline fixture evaluation, real DSPy/GEPA evaluator/optimizer boundary, compiled evaluator artifact resolution, and fail-closed error reporting.
 
 Calibration internals call DSPy/GEPA through this adapter. Active evaluator promotion is exposed through `calibrate` and requires regression pass; `calibrate --dry-run` previews without promotion.
+
+Planner/editor prompt overlay calibration is a separate runtime-private lane. `calibrate` can derive small additive prompt candidates from planner quality signals and bad skill-editor outcomes. Dry-run reports candidate yes/no and reason without writing active prompt pointers. Mutating `calibrate` writes prompt candidate files and promotes them to `active-prompts.json` only after prompt-overlay regression passes. If prompt regression is unavailable or fails, promotion fails closed.

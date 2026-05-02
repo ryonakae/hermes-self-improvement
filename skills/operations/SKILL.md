@@ -22,7 +22,7 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - Archived skills は通常の candidate / duplicate-prevention / restore candidate として使わない。Curator behavior に合わせる。
 - Memory mutation は memory tool / provider-native memory tool だけで実行する。evidence-triggered related-memory recall/search context は使うが、built-in memory files、provider DB、provider internals を直接編集しない。full memory lifecycle / sweep はしない。
 - Rollback は primary feature ではない。失敗や誤変更は future evidence として次の improvement run で correction する。Curator-style archive restore は別扱い。
-- Scorer/evaluator self-improvement は prompt / rubric / runtime-private eval cases が対象。Python implementation code は自己変更しない。
+- Scorer/evaluator self-improvement は prompt / rubric / runtime-private eval cases が対象。Python implementation code は自己変更しない。Planner/editor prompt overlays は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/` の runtime-private state として扱い、repo base prompt は `hermes_self_improvement/prompts.py` で version/hash/test する。
 - DSPy/GEPA は hook / plugin discovery path では lazy import を維持し、Hermes runtime 全体の必須依存にしない。
 - Proposal scoring は `llm`（既定）または `heuristic` のみ。scoring は advisory で、無人変更の許可として扱わない。GEPA/DSPy は `calibrate` で evaluator / prompt / rubric 改善に使う。
 - Model routing は current schema の `model.planner`（proposal/evidence planning）、`model.editor`（mutation agent）、`model.evaluator`（DSPy/GEPA evaluator calibration）だけを使う。旧 role key は残さない。

@@ -160,6 +160,10 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
             "candidate": None,
             "regression": None,
             "active_changed": False,
+            "prompt_overlays": {
+                "planner": {"candidate": True, "promoted": False, "reason": "planner_quality_signals"},
+                "editor": {"candidate": False, "promoted": False, "reason": "no_signal"},
+            },
         }
 
     monkeypatch.setattr(cli, "run_calibration", fake_run_calibration)
@@ -172,6 +176,8 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
     assert "Calibration: no_op" in out
     assert "Evidence: 8 events, 2 disagreements, 0 bad outcomes" in out
     assert "Reason: insufficient_evidence" in out
+    assert "Prompt overlays:" in out
+    assert "planner: candidate yes, promoted no, reason planner_quality_signals" in out
 
 
 def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
@@ -207,6 +213,68 @@ def test_build_runtime_eval_cases_uses_review_outcomes_only(tmp_path):
     assert evidence["review_outcome_summary"]["by_outcome"]["failed"] == 1
     assert {case["source"]["kind"] for case in cases} == {"review_outcome"}
     assert all("proposal" in case and "findings" in case and "expected" in case for case in cases)
+
+
+def write_planner_quality_run(config: dict, payload: dict, name: str = "run.json") -> Path:
+    path = Path(config["_self_improvement_root"]) / "runs" / name
+    write_json(path, {"schema_name": "self_improvement_run_result", "created_at": "2026-04-30T00:00:00+00:00", **payload})
+    return path
+
+
+def test_calibration_dry_run_previews_prompt_overlay_candidates_without_active_pointer(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
+    write_review_outcome(cfg, {"outcome": "failed", "target_kind": "skill", "change_type": "skill_edit", "source": "runner"}, "skill-failed.json")
+    write_planner_quality_run(cfg, {"step_decisions": {"skill": {"planner_quality": {"action_like_skips": 1, "weak_only_selected_count": 1}}}}, "planner-quality.json")
+
+    result = calibration.run_calibration(config=cfg, execute=False)
+
+    assert result["current_status"] == "would_update"
+    assert result["candidate"] is None
+    assert result["prompt_overlays"]["planner"]["candidate"] is True
+    assert result["prompt_overlays"]["planner"]["promoted"] is False
+    assert result["prompt_overlays"]["planner"]["candidate_path"] is None
+    assert result["prompt_overlays"]["editor"]["candidate"] is True
+    assert result["prompt_overlays"]["editor"]["promoted"] is False
+    assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists() is False
+
+
+def test_calibration_execute_promotes_prompt_overlay_after_regression_pass(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
+    write_review_outcome(cfg, {"outcome": "failed", "target_kind": "skill", "change_type": "skill_edit", "source": "runner"}, "skill-failed.json")
+    write_planner_quality_run(cfg, {"step_decisions": {"skill": {"planner_quality": {"action_like_skips": 1}}}}, "planner-quality.json")
+    monkeypatch.setattr(calibration, "_run_prompt_overlay_regression", lambda *, role, candidate, config: {"status": "passed", "cases": 2})
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert result["current_status"] == "updated"
+    assert result["active_changed"] is True
+    pointer_path = tmp_path / "self-improvement" / "evaluator" / "active-prompts.json"
+    assert pointer_path.exists()
+    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    assert pointer["roles"]["planner"]["active"] is True
+    assert pointer["roles"]["editor"]["active"] is True
+    assert result["prompt_overlays"]["planner"]["promoted"] is True
+    assert Path(result["prompt_overlays"]["planner"]["candidate_path"]).exists()
+    assert result["prompt_overlays"]["editor"]["promoted"] is True
+    assert Path(result["prompt_overlays"]["editor"]["candidate_path"]).exists()
+
+
+def test_calibration_execute_does_not_promote_prompt_overlay_on_regression_failure(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
+    write_review_outcome(cfg, {"outcome": "failed", "target_kind": "skill", "change_type": "skill_edit", "source": "runner"}, "skill-failed.json")
+    monkeypatch.setattr(calibration, "_run_prompt_overlay_regression", lambda *, role, candidate, config: {"status": "failed", "reason": "prompt_regression_failed"})
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert result["current_status"] == "failed"
+    assert result["active_changed"] is False
+    assert result["prompt_overlays"]["editor"]["candidate"] is True
+    assert result["prompt_overlays"]["editor"]["promoted"] is False
+    assert result["prompt_overlays"]["editor"]["regression"]["status"] == "failed"
+    assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists() is False
 
 
 def test_calibration_execute_promotes_active_pointer_after_regression_pass(monkeypatch, tmp_path):

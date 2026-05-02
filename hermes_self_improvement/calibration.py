@@ -8,6 +8,8 @@ from typing import Any
 from .config import normalize_calibration_config
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
+from .prompt_overlays import promote_prompt_candidate, write_prompt_candidate
+from .prompts import base_prompt_hash
 from .setup_runtime import check_runtime_setup
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -68,6 +70,22 @@ def _iter_recent_json(root: Path, *, window_days: int, now: datetime):
         yield path, payload
 
 
+def _planner_quality_from_run(payload: dict[str, Any]) -> dict[str, Any]:
+    steps = payload.get("step_decisions") if isinstance(payload.get("step_decisions"), dict) else {}
+    skill = steps.get("skill") if isinstance(steps.get("skill"), dict) else {}
+    quality = skill.get("planner_quality") if isinstance(skill.get("planner_quality"), dict) else {}
+    return quality
+
+
+def _planner_prompt_signal_count(quality: dict[str, Any]) -> int:
+    signals = int(quality.get("action_like_skips") or 0) + int(quality.get("weak_only_selected_count") or 0)
+    selected = int(quality.get("selected_for_editor") or 0)
+    selected_with_evidence = int(quality.get("selected_with_evidence") or 0)
+    if selected and selected_with_evidence < selected:
+        signals += selected - selected_with_evidence
+    return signals
+
+
 def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
     calibration = normalize_calibration_config(config)
     evidence_cfg = calibration.get("evidence") if isinstance(calibration.get("evidence"), dict) else {}
@@ -107,7 +125,73 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
         if source_recorded:
             summary["sources"].append(str(path))
 
+        if schema == "self_improvement_run_result":
+            planner_signals = _planner_prompt_signal_count(_planner_quality_from_run(payload))
+            if planner_signals:
+                summary["planner_prompt_signals"] = int(summary.get("planner_prompt_signals") or 0) + planner_signals
+                summary["total_events"] += 1
+                if str(path) not in summary["sources"]:
+                    summary["sources"].append(str(path))
+
     return summary
+
+
+def _prompt_overlay_summary(role: str, *, candidate: dict[str, Any] | None = None, reason: str = "no_signal") -> dict[str, Any]:
+    return {
+        "role": role,
+        "candidate": candidate is not None,
+        "reason": candidate.get("reason") if isinstance(candidate, dict) else reason,
+        "candidate_hash": candidate.get("candidate_hash") if isinstance(candidate, dict) else None,
+        "candidate_path": None,
+        "regression": None,
+        "promoted": False,
+    }
+
+
+def _empty_prompt_overlay_summary() -> dict[str, Any]:
+    return {role: _prompt_overlay_summary(role) for role in ("planner", "editor")}
+
+
+def _prompt_candidate(role: str, *, reason: str, signal_count: int, evidence: dict[str, Any]) -> dict[str, Any]:
+    if role == "planner":
+        addendum = (
+            "Runtime calibration evidence shows planner selection quality issues. "
+            "Be more conservative when evidence is weak-only, preserve skip for action-like unsupported edits, "
+            "and require selected evidence ids before run_editor."
+        )
+    else:
+        addendum = (
+            "Runtime calibration evidence shows skill editor outcomes needing tighter edits. "
+            "Keep edits smaller, verify the target skill still matches the selected evidence, and skip rather than broaden scope."
+        )
+    candidate = {
+        "role": role,
+        "base_prompt_hash": base_prompt_hash(role),
+        "candidate_prompt": {"system_addendum": addendum, "replacement": None},
+        "reason": reason,
+        "signal_count": int(signal_count),
+        "evidence_hash": _sha256_text(_stable_json(evidence)),
+        "recommended_action": "promote_runtime_prompt_overlay_after_regression",
+    }
+    candidate["candidate_hash"] = _sha256_text(_stable_json(candidate))
+    return candidate
+
+
+def build_prompt_overlay_candidates(config: dict[str, Any], evidence: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    candidates: dict[str, dict[str, Any]] = {}
+    planner_signals = int(evidence.get("planner_prompt_signals") or 0)
+    if planner_signals:
+        candidates["planner"] = _prompt_candidate("planner", reason="planner_quality_signals", signal_count=planner_signals, evidence=evidence)
+
+    outcomes = load_review_outcomes(config=config, limit=1000)
+    editor_signals = sum(1 for row in outcomes if str(row.get("outcome") or "") in {"failed", "rejected_by_human"} and str(row.get("target_kind") or "") == "skill")
+    if editor_signals:
+        candidates["editor"] = _prompt_candidate("editor", reason="skill_editor_bad_outcomes", signal_count=editor_signals, evidence=evidence)
+    return candidates
+
+
+def _run_prompt_overlay_regression(*, role: str, candidate: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    return {"status": "failed", "reason": "prompt_overlay_regression_runner_not_configured"}
 
 
 def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, Any]) -> dict[str, Any] | None:
@@ -318,6 +402,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         "active_evaluator_path": None,
         "ledger_path": None,
         "runtime_eval_cases": {"status": "not_built", "count": 0, "path": None},
+        "prompt_overlays": _empty_prompt_overlay_summary(),
         "runtime_setup": check_runtime_setup(config),
     }
     if not calibration.get("enabled", True):
@@ -325,12 +410,15 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         return result
 
     candidate = _candidate_from_evidence(evidence, calibration)
-    if candidate is None:
+    prompt_candidates = build_prompt_overlay_candidates(config, evidence)
+    for role in ("planner", "editor"):
+        result["prompt_overlays"][role] = _prompt_overlay_summary(role, candidate=prompt_candidates.get(role))
+    if candidate is None and not prompt_candidates:
         result["reasons"].append("insufficient_evidence")
         return result
 
     result["candidate"] = candidate
-    runtime_cases = build_runtime_eval_cases(config)
+    runtime_cases = build_runtime_eval_cases(config) if candidate is not None else []
     result["runtime_eval_cases"] = {
         "status": "would_write" if runtime_cases and not execute else "empty" if not runtime_cases else "pending_write",
         "count": len(runtime_cases),
@@ -338,38 +426,59 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         "storage": "runtime_private",
     }
     if execute:
-        regression = _run_calibration_regression(candidate=candidate, config=config)
-        result["regression"] = regression
-        if regression.get("status") != "passed":
-            result["current_status"] = "failed"
-            result["runtime_eval_cases"]["status"] = "not_written_regression_failed" if runtime_cases else "empty"
-            result["reasons"].append(str(regression.get("reason") or "regression_failed"))
-            return result
-        if runtime_cases:
-            runtime_cases_path = write_runtime_eval_cases(config, candidate=candidate, cases=runtime_cases)
-            result["runtime_eval_cases"].update({"status": "written", "path": str(runtime_cases_path) if runtime_cases_path else None})
-            candidate["runtime_eval_cases_path"] = str(runtime_cases_path) if runtime_cases_path else None
-            candidate["runtime_eval_cases_count"] = len(runtime_cases)
-        active_pointer_path = _active_evaluator_pointer_path(config, calibration)
-        active_before_content, active_before_hash = _current_pointer_content(active_pointer_path)
-        active_after_hash = _write_active_pointer(
-            pointer_path=active_pointer_path,
-            candidate=candidate,
-            regression=regression,
-            active_before_hash=active_before_hash,
-        )
+        prompt_promoted = False
+        for role, prompt_candidate in prompt_candidates.items():
+            regression = _run_prompt_overlay_regression(role=role, candidate=prompt_candidate, config=config)
+            result["prompt_overlays"][role]["regression"] = regression
+            if regression.get("status") != "passed":
+                result["current_status"] = "failed"
+                result["runtime_eval_cases"]["status"] = "not_written_regression_failed" if runtime_cases else "empty"
+                result["reasons"].append(str(regression.get("reason") or "prompt_overlay_regression_failed"))
+                return result
+            candidate_path = write_prompt_candidate(config, role=role, candidate=prompt_candidate)
+            promote_prompt_candidate(config, role=role, candidate_path=candidate_path, regression=regression)
+            result["prompt_overlays"][role].update({
+                "candidate_path": str(candidate_path),
+                "candidate_hash": prompt_candidate.get("candidate_hash"),
+                "promoted": True,
+            })
+            prompt_promoted = True
+
+        evaluator_updated = False
+        if candidate is not None:
+            regression = _run_calibration_regression(candidate=candidate, config=config)
+            result["regression"] = regression
+            if regression.get("status") != "passed":
+                result["current_status"] = "failed"
+                result["runtime_eval_cases"]["status"] = "not_written_regression_failed" if runtime_cases else "empty"
+                result["reasons"].append(str(regression.get("reason") or "regression_failed"))
+                return result
+            if runtime_cases:
+                runtime_cases_path = write_runtime_eval_cases(config, candidate=candidate, cases=runtime_cases)
+                result["runtime_eval_cases"].update({"status": "written", "path": str(runtime_cases_path) if runtime_cases_path else None})
+                candidate["runtime_eval_cases_path"] = str(runtime_cases_path) if runtime_cases_path else None
+                candidate["runtime_eval_cases_count"] = len(runtime_cases)
+            active_pointer_path = _active_evaluator_pointer_path(config, calibration)
+            active_before_content, active_before_hash = _current_pointer_content(active_pointer_path)
+            active_after_hash = _write_active_pointer(
+                pointer_path=active_pointer_path,
+                candidate=candidate,
+                regression=regression,
+                active_before_hash=active_before_hash,
+            )
+            evaluator_updated = True
+            result["active_evaluator_path"] = str(active_pointer_path)
+            result["ledger_path"] = str(_write_calibration_ledger(
+                config=config,
+                result=result,
+                active_pointer_path=active_pointer_path,
+                active_before_content=active_before_content,
+                active_before_hash=active_before_hash,
+                active_after_hash=active_after_hash,
+            ))
         result["current_status"] = "updated"
-        result["active_changed"] = True
-        result["active_evaluator_path"] = str(active_pointer_path)
-        result["ledger_path"] = str(_write_calibration_ledger(
-            config=config,
-            result=result,
-            active_pointer_path=active_pointer_path,
-            active_before_content=active_before_content,
-            active_before_hash=active_before_hash,
-            active_after_hash=active_after_hash,
-        ))
+        result["active_changed"] = bool(prompt_promoted or evaluator_updated)
     else:
         result["current_status"] = "would_update"
-        result["regression"] = {"status": "not_run", "reason": "preview"}
+        result["regression"] = {"status": "not_run", "reason": "preview"} if candidate is not None else None
     return result
