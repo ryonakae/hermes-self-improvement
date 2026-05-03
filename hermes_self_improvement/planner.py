@@ -4,6 +4,7 @@ import json
 import re
 from typing import Any
 
+from .autonomous_loop import normalize_autonomous_decision
 from .observer import _redact_text
 from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 from .target_hints import extract_target_hints
@@ -11,7 +12,7 @@ from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_planner_messages
 
 SCHEMA_NAME = "self_improvement_skill_planner_result"
-ALLOWED_DECISIONS = {"run_editor", "skip", "human_review", "memory_candidate", "evaluator_candidate"}
+ALLOWED_DECISIONS = {"run_editor", "skip", "defer", "human_review", "memory_candidate", "evaluator_candidate"}
 ALLOWED_PRIORITIES = {"low", "medium", "high"}
 ALLOWED_RISKS = {"low", "medium", "high"}
 
@@ -124,7 +125,8 @@ def _summary_counts(decisions: list[dict[str, Any]], candidate_count: int) -> di
         "candidate_count": candidate_count,
         "selected_for_editor": sum(1 for item in decisions if item.get("decision") == "run_editor"),
         "skipped": sum(1 for item in decisions if item.get("decision") == "skip"),
-        "human_review": sum(1 for item in decisions if item.get("decision") == "human_review"),
+        "deferred": sum(1 for item in decisions if item.get("decision") == "defer"),
+        "human_review": sum(1 for item in decisions if item.get("original_decision") == "human_review"),
         "memory_candidates": sum(1 for item in decisions if item.get("decision") == "memory_candidate"),
         "evaluator_candidates": sum(1 for item in decisions if item.get("decision") == "evaluator_candidate"),
     }
@@ -306,6 +308,8 @@ def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evide
     decision = str(raw.get("decision") or "skip").strip()
     if decision not in ALLOWED_DECISIONS:
         decision = "skip"
+    normalized_decision = normalize_autonomous_decision({"decision": decision})
+    decision = str(normalized_decision.get("decision") or "skip")
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item)]
     allowed_evidence = evidence_by_candidate.get(skill) or set()
     evidence_ids = [item for item in evidence_ids if item in allowed_evidence]
@@ -320,6 +324,10 @@ def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evide
         "priority": str(raw.get("priority") or "medium") if str(raw.get("priority") or "medium") in ALLOWED_PRIORITIES else "medium",
         "risk": str(raw.get("risk") or "medium") if str(raw.get("risk") or "medium") in ALLOWED_RISKS else "medium",
     }
+    if normalized_decision.get("original_decision"):
+        normalized["original_decision"] = normalized_decision["original_decision"]
+    if normalized_decision.get("defer_reason"):
+        normalized["defer_reason"] = normalized_decision["defer_reason"]
     if raw.get("reason") is not None:
         normalized["reason"] = _redacted_preview(raw.get("reason"), max_chars=240)
     if raw.get("rationale") is not None:
@@ -328,7 +336,7 @@ def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evide
         for key, max_chars in (("change_intent", 280), ("editor_instructions", 900)):
             if raw.get(key) is not None:
                 normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
-    elif decision in {"memory_candidate", "evaluator_candidate", "human_review"}:
+    elif decision in {"memory_candidate", "evaluator_candidate", "defer"}:
         if raw.get("change_intent") is not None:
             normalized["change_intent"] = _redacted_preview(raw.get("change_intent"), max_chars=280)
     else:
