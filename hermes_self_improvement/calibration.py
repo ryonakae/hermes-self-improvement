@@ -12,6 +12,7 @@ from .episodes import record_calibration_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import build_outcome_score_aggregate
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
+from .prompt_candidate_optimizer import generate_prompt_overlay_candidate
 from .prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from .prompts import base_prompt_hash
 from .runtime_eval_cases import build_planner_editor_runtime_eval_cases
@@ -199,12 +200,18 @@ def build_prompt_overlay_candidates(config: dict[str, Any], evidence: dict[str, 
     candidates: dict[str, dict[str, Any]] = {}
     planner_signals = int(evidence.get("planner_prompt_signals") or 0)
     if planner_signals:
-        candidates["planner"] = _prompt_candidate("planner", reason="planner_quality_signals", signal_count=planner_signals, evidence=evidence)
+        candidate = generate_prompt_overlay_candidate(config=config, role="planner", evidence=evidence, write_candidate=False)
+        candidate["reason"] = "planner_quality_signals"
+        candidate["signal_count"] = planner_signals
+        candidates["planner"] = candidate
 
     outcomes = load_review_outcomes(config=config, limit=1000)
     editor_signals = sum(1 for row in outcomes if str(row.get("outcome") or "") in {"failed", "rejected_by_human"} and str(row.get("target_kind") or "") == "skill")
     if editor_signals:
-        candidates["editor"] = _prompt_candidate("editor", reason="skill_editor_bad_outcomes", signal_count=editor_signals, evidence=evidence)
+        candidate = generate_prompt_overlay_candidate(config=config, role="editor", evidence=evidence, write_candidate=False)
+        candidate["reason"] = "skill_editor_bad_outcomes"
+        candidate["signal_count"] = editor_signals
+        candidates["editor"] = candidate
     return candidates
 
 

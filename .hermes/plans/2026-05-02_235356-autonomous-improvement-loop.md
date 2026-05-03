@@ -2,7 +2,7 @@
 
 **Status:** in_progress
 
-**Progress:** Phase 0 through Phase 5 implemented. Next phase is Phase 6 GEPA/DSPy candidate optimization.
+**Progress:** Phase 0 through Phase 6 implemented. Next phase is Phase 7 close the feedback loop in calibrate and improve.
 
 ## Goal
 
