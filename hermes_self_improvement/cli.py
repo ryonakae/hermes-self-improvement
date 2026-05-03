@@ -441,10 +441,23 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
             item = prompt_overlays.get(role) if isinstance(prompt_overlays.get(role), dict) else None
             if not item:
                 continue
+            evaluation = None
+            regression = item.get("regression") if isinstance(item.get("regression"), dict) else None
+            if regression and isinstance(regression.get("autonomous_evaluation"), dict):
+                evaluation = regression["autonomous_evaluation"]
+            suffix = ""
+            if evaluation:
+                suffix = (
+                    f", decision {evaluation.get('decision')}, "
+                    f"current {evaluation.get('current_score')}, "
+                    f"candidate {evaluation.get('candidate_score')}, "
+                    f"confidence {evaluation.get('confidence')}"
+                )
             lines.append(
                 f"- {role}: candidate {'yes' if item.get('candidate') else 'no'}, "
                 f"promoted {'yes' if item.get('promoted') else 'no'}, "
                 f"reason {item.get('reason') or 'none'}"
+                f"{suffix}"
             )
     return "\n".join(lines)
 

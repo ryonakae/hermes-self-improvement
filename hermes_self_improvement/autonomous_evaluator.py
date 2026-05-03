@@ -132,12 +132,13 @@ def _score_behavior(case: dict[str, Any], behavior: dict[str, Any]) -> tuple[flo
     return round(mean(score_parts), 4), failures
 
 
-def _score_cases(candidate: dict[str, Any], cases: list[dict[str, Any]]) -> tuple[float, float, list[dict[str, Any]]]:
+def _score_cases(candidate: dict[str, Any], cases: list[dict[str, Any]], *, current_candidate: dict[str, Any] | None = None) -> tuple[float, float, list[dict[str, Any]]]:
     results: list[dict[str, Any]] = []
     current_scores: list[float] = []
     candidate_scores: list[float] = []
     for case in cases:
-        current_score, current_failures = _score_behavior(case, _current_behavior(case))
+        current_behavior = _candidate_behavior(current_candidate, case) if isinstance(current_candidate, dict) else _current_behavior(case)
+        current_score, current_failures = _score_behavior(case, current_behavior)
         candidate_score, candidate_failures = _score_behavior(case, _candidate_behavior(candidate, case))
         current_scores.append(current_score)
         candidate_scores.append(candidate_score)
@@ -184,9 +185,10 @@ def evaluate_prompt_candidate(
     threshold: float = DEFAULT_THRESHOLD,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS,
+    current_candidate: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     hard_violations = _hard_violations(candidate, max_prompt_chars=max_prompt_chars)
-    current_score, candidate_score, case_results = _score_cases(candidate, cases)
+    current_score, candidate_score, case_results = _score_cases(candidate, cases, current_candidate=current_candidate)
     confidence = _confidence(cases, hard_violation_count=len(hard_violations))
     decision = _decision(
         current_score=current_score,

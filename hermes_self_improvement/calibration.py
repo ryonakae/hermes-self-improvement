@@ -13,7 +13,7 @@ from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import build_outcome_score_aggregate
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .prompt_candidate_optimizer import generate_prompt_overlay_candidate
-from .prompt_overlays import promote_prompt_candidate, write_prompt_candidate
+from .prompt_overlays import load_active_prompt_overlay, promote_prompt_candidate, write_prompt_candidate
 from .prompts import base_prompt_hash
 from .runtime_eval_cases import build_planner_editor_runtime_eval_cases
 from .setup_runtime import check_runtime_setup
@@ -222,6 +222,12 @@ def _run_prompt_overlay_regression(*, role: str, candidate: dict[str, Any], conf
         "editor_prompt_hash": base_prompt_hash("editor"),
         "evaluator_hash": "unavailable",
     }
+    current_candidate = load_active_prompt_overlay(config, role=role, base_hash=base_prompt_hash(role))
+    if isinstance(current_candidate, dict):
+        if role == "planner":
+            current_identity["planner_prompt_hash"] = str(current_candidate.get("candidate_hash") or current_identity["planner_prompt_hash"])
+        elif role == "editor":
+            current_identity["editor_prompt_hash"] = str(current_candidate.get("candidate_hash") or current_identity["editor_prompt_hash"])
     candidate_identity = dict(current_identity)
     candidate_hash = str(candidate.get("candidate_hash") or "unavailable")
     if role == "planner":
@@ -235,6 +241,7 @@ def _run_prompt_overlay_regression(*, role: str, candidate: dict[str, Any], conf
         candidate_identity=candidate_identity,
         cases=cases,
         outcome_aggregate=collect_calibration_evidence(config).get("credit_assignment") if cases else None,
+        current_candidate=current_candidate,
     )
     summary = compact_autonomous_evaluation_summary(evaluation)
     return {
@@ -469,12 +476,14 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
     prompt_candidates = build_prompt_overlay_candidates(config, evidence)
     for role in ("planner", "editor"):
         result["prompt_overlays"][role] = _prompt_overlay_summary(role, candidate=prompt_candidates.get(role))
+    runtime_cases = build_runtime_eval_cases(config) if (candidate is not None or prompt_candidates) else []
+    for role, prompt_candidate in prompt_candidates.items():
+        result["prompt_overlays"][role]["regression"] = _run_prompt_overlay_regression(role=role, candidate=prompt_candidate, config=config)
     if candidate is None and not prompt_candidates:
         result["reasons"].append("insufficient_evidence")
         return result
 
     result["candidate"] = candidate
-    runtime_cases = build_runtime_eval_cases(config) if candidate is not None else []
     result["runtime_eval_cases"] = {
         "status": "would_write" if runtime_cases and not execute else "empty" if not runtime_cases else "pending_write",
         "count": len(runtime_cases),

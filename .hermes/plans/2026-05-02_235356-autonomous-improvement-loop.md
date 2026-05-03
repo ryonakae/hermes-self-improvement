@@ -2,7 +2,7 @@
 
 **Status:** in_progress
 
-**Progress:** Phase 0 through Phase 6 implemented. Next phase is Phase 7 close the feedback loop in calibrate and improve.
+**Progress:** Phase 0 through Phase 7 implemented. Next phase is Phase 8 autonomous operation policy.
 
 ## Goal
 
