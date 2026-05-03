@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from .autonomous_evaluator import compact_autonomous_evaluation_summary, evaluate_prompt_candidate
 from .config import normalize_calibration_config
 from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
 from .episodes import record_calibration_episodes
@@ -208,7 +209,32 @@ def build_prompt_overlay_candidates(config: dict[str, Any], evidence: dict[str, 
 
 
 def _run_prompt_overlay_regression(*, role: str, candidate: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    return {"status": "failed", "reason": "prompt_overlay_regression_runner_not_configured"}
+    cases = [case for case in build_runtime_eval_cases(config) if case.get("role") == role]
+    current_identity = {
+        "planner_prompt_hash": base_prompt_hash("planner"),
+        "editor_prompt_hash": base_prompt_hash("editor"),
+        "evaluator_hash": "unavailable",
+    }
+    candidate_identity = dict(current_identity)
+    candidate_hash = str(candidate.get("candidate_hash") or "unavailable")
+    if role == "planner":
+        candidate_identity["planner_prompt_hash"] = candidate_hash
+    elif role == "editor":
+        candidate_identity["editor_prompt_hash"] = candidate_hash
+    evaluation = evaluate_prompt_candidate(
+        role=role,
+        candidate=candidate,
+        current_identity=current_identity,
+        candidate_identity=candidate_identity,
+        cases=cases,
+        outcome_aggregate=collect_calibration_evidence(config).get("credit_assignment") if cases else None,
+    )
+    summary = compact_autonomous_evaluation_summary(evaluation)
+    return {
+        "status": "passed" if evaluation.get("decision") == "promote" else "failed",
+        "reason": f"autonomous_evaluator_{evaluation.get('decision')}",
+        "autonomous_evaluation": summary,
+    }
 
 
 def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, Any]) -> dict[str, Any] | None:

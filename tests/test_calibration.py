@@ -270,6 +270,64 @@ def test_calibration_dry_run_previews_prompt_overlay_candidates_without_active_p
     assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists() is False
 
 
+def test_prompt_overlay_regression_uses_autonomous_evaluator(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
+    root = Path(cfg["_self_improvement_root"])
+    write_json(root / "episodes" / "2026-05-03" / "weak.json", {
+        "schema_name": "self_improvement_episode",
+        "schema_version": "1.0",
+        "episode_id": "episode-weak",
+        "episode_kind": "preview_decision",
+        "target_kind": "skill",
+        "target_id": "demo-skill",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
+        "evaluator_hash": "sha256:evaluator",
+        "decision": "run_editor",
+        "action": "no_op",
+        "executed": False,
+        "learnable": True,
+        "changed": False,
+        "created_at": "2026-05-03T00:00:00+00:00",
+        "evidence_ids": ["ev1"],
+        "evidence_strength": "weak",
+        "reason": "weak_only_selected",
+    })
+    write_json(root / "episodes" / "2026-05-03" / "exact.json", {
+        "schema_name": "self_improvement_episode",
+        "schema_version": "1.0",
+        "episode_id": "episode-exact",
+        "episode_kind": "executed_mutation",
+        "target_kind": "skill",
+        "target_id": "demo-skill",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
+        "evaluator_hash": "sha256:evaluator",
+        "decision": "run_editor",
+        "action": "skill_patch",
+        "executed": True,
+        "learnable": True,
+        "changed": True,
+        "created_at": "2026-05-03T00:00:00+00:00",
+        "evidence_ids": ["ev2"],
+        "evidence_strength": "strong",
+        "reason": "exact evidence",
+    })
+
+    regression = calibration._run_prompt_overlay_regression(
+        role="planner",
+        candidate={"candidate_hash": "sha256:candidate", "case_behaviors": {"planner_weak_only_skip": {"decision": "skip"}}},
+        config=cfg,
+    )
+
+    assert regression["status"] == "passed"
+    assert regression["reason"] == "autonomous_evaluator_promote"
+    assert regression["autonomous_evaluation"]["case_count"] == 2
+    assert "case_results" not in regression["autonomous_evaluation"]
+
+
+
 def test_calibration_execute_promotes_prompt_overlay_after_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
