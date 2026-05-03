@@ -323,6 +323,46 @@ def test_restore_previous_calibration_restores_active_before_state(monkeypatch, 
     assert active_pointer.read_text(encoding="utf-8") == before_content
 
 
+def test_collect_calibration_evidence_includes_windowed_outcome_scores(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 1}}}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "episodes" / "2026-05-03" / "episode.json", {
+        "schema_name": "self_improvement_episode",
+        "schema_version": "1.0",
+        "episode_id": "episode-1",
+        "episode_kind": "executed_mutation",
+        "target_kind": "skill",
+        "target_id": "demo-skill",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
+        "evaluator_hash": "sha256:evaluator",
+        "decision": "run_editor",
+        "action": "skill_patch",
+        "executed": True,
+        "learnable": True,
+        "changed": True,
+        "created_at": "2026-05-03T00:00:00+00:00",
+    })
+    write_json(root / "outcomes" / "2026-05-03" / "observation.json", {
+        "schema_name": "self_improvement_outcome_observation",
+        "schema_version": "1.0",
+        "episode_id": "episode-1",
+        "observed_at": "2026-05-03T00:10:00+00:00",
+        "window": "immediate",
+        "signals": {"validation_passed": True},
+        "outcome_score": 0.0,
+        "confidence": 0.8,
+    })
+
+    evidence = calibration.collect_calibration_evidence(config)
+
+    assert evidence["outcome_scores"]["episode_count"] == 1
+    assert evidence["outcome_scores"]["observation_count"] == 1
+    assert evidence["outcome_scores"]["scored_episode_count"] == 1
+    assert evidence["outcome_scores"]["overall"]["mean_score"] > 0
+
+
 def test_collect_calibration_evidence_distinguishes_explicit_human_outcomes(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 1}}}

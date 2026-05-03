@@ -2,7 +2,7 @@
 
 **Status:** in_progress
 
-**Progress:** Phase 0 and Phase 1 implemented. Next phase is Phase 2 outcome scoring with time windows.
+**Progress:** Phase 0, Phase 1, and Phase 2 implemented. Next phase is Phase 3 credit assignment aggregates.
 
 ## Goal
 

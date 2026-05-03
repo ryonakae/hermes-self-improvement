@@ -405,12 +405,19 @@ def _add_config_argument(parser: argparse.ArgumentParser) -> None:
 
 def _render_calibration_summary(result: dict[str, Any]) -> str:
     evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
+    outcome_scores = evidence.get("outcome_scores") if isinstance(evidence.get("outcome_scores"), dict) else {}
+    overall_outcome = outcome_scores.get("overall") if isinstance(outcome_scores.get("overall"), dict) else {}
     lines = [
         f"Calibration: {result.get('current_status')}",
         "Evidence: "
         f"{int(evidence.get('total_events') or 0)} events, "
         f"{int(evidence.get('disagreements') or 0)} disagreements, "
         f"{int(evidence.get('bad_outcomes') or 0)} bad outcomes",
+        "Outcome scores: "
+        f"episodes {int(outcome_scores.get('episode_count') or 0)}, "
+        f"observations {int(outcome_scores.get('observation_count') or 0)}, "
+        f"scored {int(outcome_scores.get('scored_episode_count') or 0)}, "
+        f"mean {overall_outcome.get('mean_score') if overall_outcome.get('mean_score') is not None else 'pending'}",
     ]
     reasons = result.get("reasons") if isinstance(result.get("reasons"), list) else []
     if reasons:
