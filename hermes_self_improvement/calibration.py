@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import normalize_calibration_config
+from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
 from .episodes import record_calibration_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import build_outcome_score_aggregate
@@ -113,6 +114,7 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
         summary["sources"].extend(str(row.get("path")) for row in outcomes if row.get("path"))
 
     outcome_scores = build_outcome_score_aggregate(config=config, limit=1000)
+    credit_assignment = build_credit_assignment_aggregate(config=config, limit=1000)
     summary["outcome_scores"] = {
         "episode_count": int(outcome_scores.get("episode_count") or 0),
         "observation_count": int(outcome_scores.get("observation_count") or 0),
@@ -122,6 +124,7 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
     }
     if int(outcome_scores.get("observation_count") or 0):
         summary["total_events"] += int(outcome_scores.get("observation_count") or 0)
+    summary["credit_assignment"] = compact_credit_assignment_summary(credit_assignment)
 
     for path, payload in _iter_recent_json(root, window_days=window_days, now=now) or []:
         if payload.get("schema_name") == "self_improvement_review_outcome":

@@ -2,7 +2,7 @@
 
 **Status:** in_progress
 
-**Progress:** Phase 0, Phase 1, and Phase 2 implemented. Next phase is Phase 3 credit assignment aggregates.
+**Progress:** Phase 0 through Phase 3 implemented. Next phase is Phase 4 planner/editor runtime eval case builder.
 
 ## Goal
 

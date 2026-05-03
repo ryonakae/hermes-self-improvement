@@ -406,6 +406,8 @@ def _add_config_argument(parser: argparse.ArgumentParser) -> None:
 def _render_calibration_summary(result: dict[str, Any]) -> str:
     evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
     outcome_scores = evidence.get("outcome_scores") if isinstance(evidence.get("outcome_scores"), dict) else {}
+    credit = evidence.get("credit_assignment") if isinstance(evidence.get("credit_assignment"), dict) else {}
+    credit_overall = credit.get("overall") if isinstance(credit.get("overall"), dict) else {}
     overall_outcome = outcome_scores.get("overall") if isinstance(outcome_scores.get("overall"), dict) else {}
     lines = [
         f"Calibration: {result.get('current_status')}",
@@ -418,6 +420,11 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
         f"observations {int(outcome_scores.get('observation_count') or 0)}, "
         f"scored {int(outcome_scores.get('scored_episode_count') or 0)}, "
         f"mean {overall_outcome.get('mean_score') if overall_outcome.get('mean_score') is not None else 'pending'}",
+        "Credit assignment: "
+        f"episodes {int(credit.get('episode_count') or 0)}, "
+        f"scored {int(credit.get('scored_episode_count') or 0)}, "
+        f"mean {credit_overall.get('mean_outcome_score') if credit_overall.get('mean_outcome_score') is not None else 'pending'}, "
+        f"confidence {credit_overall.get('confidence') if credit_overall else 0.0}",
     ]
     reasons = result.get("reasons") if isinstance(result.get("reasons"), list) else []
     if reasons:

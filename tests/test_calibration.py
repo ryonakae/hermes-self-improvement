@@ -361,6 +361,9 @@ def test_collect_calibration_evidence_includes_windowed_outcome_scores(tmp_path)
     assert evidence["outcome_scores"]["observation_count"] == 1
     assert evidence["outcome_scores"]["scored_episode_count"] == 1
     assert evidence["outcome_scores"]["overall"]["mean_score"] > 0
+    assert evidence["credit_assignment"]["episode_count"] == 1
+    assert evidence["credit_assignment"]["scored_episode_count"] == 1
+    assert evidence["credit_assignment"]["overall"]["mean_outcome_score"] > 0
 
 
 def test_collect_calibration_evidence_distinguishes_explicit_human_outcomes(tmp_path):

@@ -207,6 +207,7 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
             "bad_outcomes": int(evidence.get("bad_outcomes") or 0),
             "scorer_errors": int(evidence.get("scorer_errors") or 0),
             "outcome_scores": evidence.get("outcome_scores") if isinstance(evidence.get("outcome_scores"), dict) else {},
+            "credit_assignment": evidence.get("credit_assignment") if isinstance(evidence.get("credit_assignment"), dict) else {},
         },
         "regression": {"status": regression.get("status")} if regression else {},
         "prompt_overlays": _compact_prompt_overlays(result.get("prompt_overlays")),
