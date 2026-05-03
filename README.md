@@ -1,51 +1,210 @@
 # hermes-self-improvement
 
-`hermes-self-improvement` は、Hermes runtime の観測イベントから skill / memory / scorer / evaluator の改善材料を集め、Curator 互換の runner として扱う user plugin です。
+Hermes の実行履歴から改善材料を集め、skill / memory / scorer / evaluator を育てるための plugin です。
 
-hook は観測専用です。hook 内で LLM call、GEPA optimizer、skill patch、memory edit、重い集計は行いません。
+普通の会話や開発作業では、あとから効いてくる情報がたくさん残ります。ユーザーの訂正、tool の失敗、subagent の結果、うまくいった回避策、判断器が外したケース。`hermes-self-improvement` はそれらを runtime evidence として集め、`improve` と `calibrate` で次の改善に変えます。
 
-## Primary surface
+## この plugin の強み
 
-CLI surface は5つ、plugin tool surface は4つです。`setup` は初回インストール/runtime scaffold 用の CLI-only command で、agent tool には出しません。
+### 1. 実際の失敗から改善できる
+
+静的なルールや手書きメモだけでは、Hermes がどこで迷ったか、どの tool が失敗したか、どの判断があとから否定されたかを拾いきれません。
+
+この plugin は実行中の event と run artifact を使います。改善対象を「なんとなく古そうな skill」ではなく、実際の失敗や訂正に紐づく候補へ寄せられます。
+
+### 2. Curator の telemetry と runtime hook を組み合わせる
+
+Curator は skill の usage、lifecycle、pinned / archived state を知っています。一方で、会話中の tool failure や memory failure、ユーザーからの訂正、subagent の結果までは細かく持ちません。
+
+この plugin は両方を使います。
+
+- Curator: skill 候補の source of truth
+- runtime hook: その候補を直す理由になる具体的な evidence
+
+この分担があるので、skill を雑に総当たりで直すのではなく、「使われていて、直す理由があるもの」に絞れます。
+
+### 3. `improve` と `calibrate` を分けている
+
+`improve` は行動する自己改善です。skill と memory の改善案を作り、必要なら公式 tool 経由で反映します。
+
+`calibrate` は判断器を育てる自己改善です。scorer / evaluator の prompt、rubric、runtime-private eval cases を調整します。
+
+この2つを分けると、日常の小さな改善と、判断器そのものの調整を別々に確認できます。失敗したときの切り分けも簡単になります。
+
+### 4. dry-run と artifact を前提にしている
+
+`improve --dry-run` は、変更せずに planner まで実行します。どの候補を選んだか、なぜ選んだか、どう直す予定かを summary と artifact に残します。
+
+通常出力は短くし、詳細は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` に保存します。agent tool result に巨大な payload を返さないので、会話 context も壊しにくくなります。
+
+## hook はなぜ必要か
+
+Hermes の自己改善に必要な情報は、セッション終了後の要約だけでは足りません。
+
+たとえば、tool が失敗した直後には、失敗した tool 名、引数、エラーの種類、どの作業の途中だったかが分かります。ユーザーが訂正した瞬間には、どの memory や skill が古かったのかを推測しやすい文脈があります。subagent が期待と違う結果を返したときも、親タスクとのズレをその場で記録できます。
+
+hook はこの「その瞬間の文脈」を軽く記録するためにあります。
+
+ただし hook は観測だけを担当します。hook 内で LLM call、GEPA optimizer、skill patch、memory edit、重い集計は動かしません。実行中の Hermes を重くしないためです。集めた event は、あとで `report`、`improve`、`calibrate` が読みます。
+
+## まず使うコマンド
+
+初回または runtime directory を確認したいとき:
+
+```bash
+bin/hermes-self-improve setup --check
+bin/hermes-self-improve status
+```
+
+直近の状況を読むだけ:
+
+```bash
+bin/hermes-self-improve report --since-hours 24
+```
+
+変更せずに改善案を見る:
+
+```bash
+bin/hermes-self-improve improve --dry-run
+bin/hermes-self-improve calibrate --dry-run
+```
+
+実際に変更を許す:
+
+```bash
+bin/hermes-self-improve improve
+bin/hermes-self-improve calibrate
+```
+
+`improve` と `calibrate` は、既定では変更可能な runner です。確認だけしたいときは必ず `--dry-run` を付けてください。
+
+## この plugin が扱うもの
+
+| 対象 | 何をするか |
+|---|---|
+| `skill` | Hermes が再利用する手順書を、実際の失敗や訂正に合わせて直す |
+| `memory` | ユーザー設定や環境情報など、長く使う記憶を追加・修正・削除する |
+| `scorer` | 改善案の良し悪しを判定する採点基準を調整する |
+| `evaluator` | scorer / planner の評価プロンプトや rubric を改善する |
+
+変更経路は公式 tool に寄せます。skill は `skill_manage` などの Hermes skill tools、memory は memory tool / provider-native memory tool を使います。filesystem や provider DB を直接触る設計にはしません。
+
+開発や運用で迷ったら、まず `AGENTS.md` を読んでください。実装判断に踏み込むときだけ、`AGENTS.md` から参照されている plan や reference を確認します。
+
+## コマンドの役割
+
+### `status`
+
+plugin と runtime の状態を確認します。変更はしません。
+
+見るもの:
+
+- plugin が有効か
+- mutation backend が使えるか
+- DSPy / GEPA が使えるか
+- runtime directory が初期化済みか
+- Curator telemetry が読めるか
+- 直近の event / run artifact があるか
+
+```bash
+bin/hermes-self-improve status
+bin/hermes-self-improve status --json
+```
+
+### `report`
+
+直近の event や artifact を読み、今の状態を短くまとめます。変更はしません。
+
+```bash
+bin/hermes-self-improve report --since-hours 24
+bin/hermes-self-improve report --since-hours 24 --json
+```
+
+`--json` は operator/debug 用です。通常は Markdown 表示で十分です。
+
+### `improve`
+
+skill / memory の改善 runner です。
+
+主な流れ:
+
+1. Curator / Hermes telemetry から skill candidate を読む
+2. runtime hook の event から evidence を集める
+3. planner が直す候補を選ぶ
+4. mutation worker が公式 tool 経由で変更する
+5. run artifact を保存する
+
+```bash
+bin/hermes-self-improve improve --dry-run
+bin/hermes-self-improve improve
+```
+
+`--dry-run` では変更しません。planner まで実行し、どの候補を選んだか、なぜ選んだか、どう直す予定かを summary と artifact に残します。
+
+### `calibrate`
+
+scorer / evaluator の調整 runner です。
+
+DSPy / GEPA はここで使います。skill や memory を直接書き換えるためには使いません。
+
+```bash
+bin/hermes-self-improve calibrate --dry-run
+bin/hermes-self-improve calibrate
+```
+
+`calibrate` が active evaluator state を更新するのは、regression gate を通った場合だけです。runtime-private eval cases は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/runtime-eval-cases/` に置きます。
+
+### `setup`
+
+runtime directory を初期化します。LLM / GEPA / mutation は実行しません。
 
 ```bash
 bin/hermes-self-improve setup
 bin/hermes-self-improve setup --check
 bin/hermes-self-improve setup --reset
-bin/hermes-self-improve setup --reset --yes
-bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24 --json
-bin/hermes-self-improve improve
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate
-bin/hermes-self-improve calibrate --dry-run
 ```
 
-- `improve`: 統合 runner。Curator 自動 lifecycle transition の実行/preview、Curator telemetry 読み取り、hook evidence pack、global skill planner、skill editor / memory runner step、run artifact 作成を行う。default は mutation-capable。
-- `improve --dry-run`: mutation せず、global planner まで実行して「どの skill を editor に渡すか / なぜ選んだか / どう直す予定か」を summary と artifact に残す。editor mutation は走らない。planner proof counts（attached candidates、unmatched evidence、selected-with-evidence、action-like skips、target hint attachments、cluster evidence、evidence strength、weak-only selected、editor prompt chars）も表示する。active prompt source（base/runtime overlay）と hash も compact に表示する。
-- `calibrate`: scorer/evaluator calibration。regression gate を通った場合だけ active state を更新する。default は mutation-capable。planner/editor prompt overlay 候補も runtime evidence から作り、prompt regression を通ったものだけ runtime-private active overlay に promote する。
-- `calibrate --dry-run`: calibration の preview。prompt overlay 候補は candidate yes/no と reason だけ表示し、active pointer は書かない。
-- `report`: 直近 event / artifact の読み取りレポート。mutation しない。
-- `setup`: `${HERMES_HOME:-~/.hermes}/self-improvement` の runtime directory、event log、default evaluator assets、active evaluator pointer を初期化する。LLM/GEPA/mutation は実行しない。
-- `setup --check`: runtime setup の read-only readiness check。
-- `setup --reset`: runtime directory を削除して作り直す破壊的 bootstrap。対話環境では y/N 確認を挟み、非対話実行では `--yes` がない限り失敗する。repo files は触らない。
-- `status`: plugin readiness と runtime path の読み取り表示。
+`setup --reset` は `${HERMES_HOME:-~/.hermes}/self-improvement` を削除して作り直します。対話環境では確認を挟みます。非対話実行では `--yes` が必要です。
 
-削除済みの primary surface: `plan`, `apply`, `rollback`, `outcome` / `record_outcome`。`--execute`, item 指定、hash 確認 flag は primary CLI/tool schema に出しません。
+## Agent から使える tools
 
-## Configuration
+Hermes の agent tool surface は4つです。
 
-デフォルト値は `hermes_self_improvement/config.py` の code defaults が持ちます。repo-tracked な JSON default config file は使いません。
+```text
+self_improvement_status
+self_improvement_report
+self_improvement_improve
+self_improvement_calibrate
+```
 
-Operator override が必要な場合だけ、plugin root に local YAML を置きます。
+`setup` は CLI-only です。
+
+通常操作は `status`, `report`, `improve`, `calibrate` に絞ります。入口を増やすと、人間も agent もどれを実行すべきか判断しにくくなります。
+
+## Curator との関係
+
+この plugin は Curator が持つ skill telemetry / lifecycle / pinned / archive state を source of truth として使います。
+
+運用時は Curator を `disabled` にせず、必要なら `paused` にします。
+
+```bash
+hermes curator pause
+hermes curator status
+```
+
+`paused` でも skill usage / lifecycle / pinned / archive state は読めます。background review agent は自動起動しません。
+
+## 設定
+
+既定値は `hermes_self_improvement/config.py` の code defaults が持ちます。local override が必要なときだけ、plugin root に YAML を置きます。
 
 ```bash
 cp config.example.yaml config.yaml
-# or local-only override
+# または local-only override
 $EDITOR config.local.yaml
 ```
 
-読み込み順は低い順に以下です。
+読み込み順は下へ行くほど強くなります。
 
 ```text
 code defaults
@@ -56,48 +215,19 @@ code defaults
 -> Hermes runtime memory overlay
 ```
 
-`config.yaml` / `config.local.yaml` は local runtime 用で gitignore 済みです。
+`config.yaml` と `config.local.yaml` は local runtime 用で gitignore 済みです。API key や provider secret は commit しないでください。custom endpoint を使う場合も、local file では `${ENV_VAR}` 参照を優先します。
 
-Model routing は責務名で分けます。`model.planner` は proposal scoring と global skill planning、`model.editor` は選ばれた skill / memory mutation agent、`model.evaluator` は DSPy / GEPA による evaluator / prompt / rubric calibration に使います。
+Model routing は責務ごとに分けます。
 
-## Curator operating mode
+| key | 用途 |
+|---|---|
+| `model.planner` | proposal scoring と global skill planning |
+| `model.editor` | 選ばれた skill / memory の mutation agent |
+| `model.evaluator` | DSPy / GEPA による evaluator / prompt / rubric calibration |
 
-この plugin は Hermes Curator を置き換えるというより、Curator の telemetry / lifecycle 情報を source of truth として使う上位 runner です。運用時は Hermes Curator を `disabled` にせず、必要なら `paused` にしてください。
+## Runtime files
 
-```bash
-hermes curator pause
-hermes curator status
-```
-
-`paused` では Curator の background review agent は自動起動しませんが、skill usage / lifecycle / pinned / archive state は引き続き読めます。`improve` は Curator/Hermes telemetry を使い、mutating run では Curator と同じ automatic lifecycle transition を実行してから候補を読むことがあります。これはこの plugin の想定動作です。
-
-`curator.enabled: false` は通常使いません。telemetry source や lifecycle semantics を失い、plugin が Curator-aligned runner として判断する前提を弱めます。
-
-## Runner model
-
-現在の設計方向です。
-
-```text
-Curator/Hermes skill telemetry + lifecycle
-  -> active/stale agent-created local mutable skill candidates
-Hermes runtime hooks
-  -> redacted high-resolution event JSONL
-  -> candidate-aware evidence pack
-  -> improve runner steps
-     - skill step (Curator candidates + attached hook context)
-     - memory step (provider-compatible related-memory lookup when triggered)
-  -> run artifact
-
-calibrate
-  -> accumulated correction/outcome/disagreement/regression evidence
-  -> planner / editor / evaluator feedback-loop improvement
-```
-
-Run artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` に保存します。詳細な evidence、step decisions、summary は artifact に残し、通常出力は Curator 風に短くします。
-
-Agent tool results も意図的に短くします。`self_improvement_improve` と `self_improvement_calibrate` は LLM-facing summary と artifact path だけを返し、full payload は runtime JSON artifact に残します。CLI `--json` は operator/debug 用の full payload escape hatch として維持します。prompt text / prompt candidates は tool result に載せず、planner/editor の source・hash・runtime pointer path だけを返します。
-
-Runtime layout は `setup` が作ります。
+`setup` は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下を作ります。
 
 ```text
 ${HERMES_HOME}/self-improvement/
@@ -116,55 +246,24 @@ ${HERMES_HOME}/self-improvement/
   cache/dspy/
 ```
 
+主な置き場所:
+
+- `state/events.jsonl`: hook が記録した redacted event
+- `runs/`: `improve` / `calibrate` の run artifact
+- `evaluator/active.json`: active evaluator pointer
+- `evaluator/runtime-eval-cases/`: user-specific な runtime eval cases
+- `cache/dspy/`: DSPy / GEPA 周辺の cache
+
 Repo-tracked default evaluator assets は `defaults/evaluator/`、public regression seed は `evals/proposal/` に置きます。
 
-## Scope and safety
+## 開発するとき
 
-改善対象はこの4カテゴリだけです。
+まず現状を確認します。
 
-- `skill`
-- `memory`
-- `scorer`
-- `evaluator`
-
-対象外です。
-
-- Hermes core / upstream-managed code
-- plugin 自身の `README.md`, `AGENTS.md`, `config*`, `.hermes/plans/**`, bundled `skills/operations/**`
-- hub-installed / built-in / plugin-bundled / external read-only skills
-- arbitrary docs/config targets
-- direct filesystem / provider DB / provider internal mutation fallback
-
-Skill mutation は公式 Hermes skill tools（特に `skill_manage`）だけを使います。候補は Curator/Hermes telemetry を source of truth とし、active / stale の agent-created local mutable skills だけを扱います。Pinned / archived / bundled / hub-installed / plugin-bundled / external / ambiguous provenance は planning 時点で除外し、mutation 直前にも revalidate します。Archived skills は duplicate-prevention や restore candidate としても通常候補に戻しません。
-
-Memory mutation は memory tool / provider-native memory tool だけを使います。correction / contradiction / memory failure など evidence があるときだけ provider recall/search context を添えます。full memory lifecycle、full sweep、直接ファイル編集、provider DB 直書きには fallback しません。
-
-Rollback は primary feature ではありません。失敗や誤変更は後続 evidence として扱い、次の改善 run で correction します。skill archive restore のような Curator-style lifecycle restore は別扱いです。
-
-## Scorer / evaluator
-
-DSPy / GEPA は scorer/evaluator の改善に使います。skill や memory を直接変更するものではありません。
-
-- scorer/evaluator の自己改善は prompt / rubric / runtime-private eval cases が対象です。
-- Python implementation code は自己変更しません。
-- Runtime-private eval cases は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/runtime-eval-cases/` 配下に置き、repo-tracked `evals/` に勝手に混ぜません。
-- calibration の active promotion は regression gate を通った場合だけです。
-
-## 主要パス
-
-- `plugin.yaml`: plugin manifest / exposed tools
-- `hermes_self_improvement/schemas.py`: plugin tool schemas
-- `hermes_self_improvement/tool_handlers.py`: plugin tool handlers。wrapper CLI に shell out せず core function を呼ぶ
-- `hermes_self_improvement/cli.py`: CLI parser と runner orchestration
-- `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry
-- `hermes_self_improvement/analysis.py`: event aggregation / evidence extraction
-- `hermes_self_improvement/calibration.py`: scorer/evaluator calibration
-- `hermes_self_improvement/mutation_policy.py`: memory provider capability / strategy helpers
-- `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor
-- `skills/operations/`: bundled operational skill
-- `.hermes/plans/`: repo-tracked implementation plans
-
-## Verification
+```bash
+git status --short
+bin/hermes-self-improve status
+```
 
 通常変更後:
 
@@ -175,7 +274,7 @@ $PY -m pytest tests -q
 bin/hermes-self-improve status
 ```
 
-Plugin registration / tool surface 変更後:
+Plugin registration / tool surface を触った場合:
 
 ```bash
 PY=${PYTHON:-python3}
@@ -189,4 +288,33 @@ print(json.dumps(info, ensure_ascii=False, indent=2))
 PY
 ```
 
-期待値: plugin enabled、error null、tools は4つ。
+期待値は plugin enabled、error null、tools 4 です。
+
+## 主要ファイル
+
+| path | 役割 |
+|---|---|
+| `plugin.yaml` | plugin manifest / exposed tools |
+| `__init__.py` | root の thin plugin entrypoint |
+| `hermes_self_improvement/cli.py` | CLI parser と runner orchestration |
+| `hermes_self_improvement/schemas.py` | plugin tool schema |
+| `hermes_self_improvement/tool_handlers.py` | plugin tool handlers |
+| `hermes_self_improvement/observer.py` | hook observer、redaction、JSONL telemetry |
+| `hermes_self_improvement/analysis.py` | event aggregation / evidence extraction |
+| `hermes_self_improvement/calibration.py` | scorer / evaluator calibration |
+| `hermes_self_improvement/mutation_policy.py` | memory provider capability / strategy helpers |
+| `hermes_self_improvement/mutation_worker.py` | tool-mediated mutation executor |
+| `AGENTS.md` | 開発時の約束事 |
+| `.hermes/plans/` | repo-tracked implementation plans |
+| `tests/` | pytest suite |
+
+## 読む順番
+
+初めて触るなら、この順で十分です。
+
+1. この README
+2. `AGENTS.md`
+3. 変更対象に関係する `.hermes/plans/` または reference
+4. 実装ファイルと tests
+
+README は入口です。開発時の約束事は `AGENTS.md`、設計の履歴は repo-tracked plan に置きます。
