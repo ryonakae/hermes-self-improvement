@@ -1,8 +1,8 @@
 # Autonomous Improvement Loop Plan
 
-**Status:** in_progress
+**Status:** completed
 
-**Progress:** Phase 0 through Phase 7 implemented. Next phase is Phase 8 autonomous operation policy.
+**Progress:** Phase 0 through Phase 8 implemented. Autonomous closed-loop implementation is complete for the scoped skill/memory/scorer-evaluator target set.
 
 ## Goal
 
@@ -698,6 +698,7 @@ feat: build planner editor runtime eval cases
 feat: add shadow autonomous evaluator for prompt candidates
 feat: optimize planner editor overlays with GEPA DSPy
 feat: close calibrate improve feedback loop
+feat: define autonomous operation policy
 ```
 
 ## Success criteria

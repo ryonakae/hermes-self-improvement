@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .analysis import AnalysisResult, analyze_events
+from .autonomous_policy import build_autonomous_operation_policy, summarize_autonomous_operation_policy
 from .calibration import collect_calibration_evidence, run_calibration
 from .config import (
     DEFAULT_RETENTION_DAYS,
@@ -475,6 +476,7 @@ def run_improve(
     while policy and internal checks still decide what can actually change.
     """
     mutate = not bool(dry_run)
+    policy = build_autonomous_operation_policy(config)
     curator_lifecycle = preview_curator_lifecycle(config=config, mutate=mutate)
     curator_telemetry = load_curator_telemetry(config)
     calibration = {
@@ -507,6 +509,7 @@ def run_improve(
         "execute": mutate,
         "target_changed": bool(calibration.get("active_changed")),
         "calibration": calibration,
+        "autonomous_policy": summarize_autonomous_operation_policy(policy),
         "curator_lifecycle": curator_lifecycle,
         "curator_telemetry": {
             "available": bool(curator_telemetry.get("available")) if isinstance(curator_telemetry, dict) else False,
@@ -566,6 +569,7 @@ def _latest_run_artifact(config: dict[str, Any]) -> Path | None:
 def _render_status_summary(payload: dict[str, Any]) -> str:
     mutation = payload.get("mutation_backend") if isinstance(payload.get("mutation_backend"), dict) else {}
     curator_integration = payload.get("curator_integration") if isinstance(payload.get("curator_integration"), dict) else {}
+    policy = payload.get("autonomous_policy") if isinstance(payload.get("autonomous_policy"), dict) else {}
     lines = [
         f"{PLUGIN_NAME} status",
         "",
@@ -573,6 +577,10 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         f"- plugin enabled: {bool(payload.get('enabled'))}",
         f"- mutation backend: {'available' if mutation.get('available') else 'unavailable'}",
         f"- DSPy available: {bool(payload.get('dspy_available'))}",
+        "Autonomous policy:",
+        f"- calibrate: {'mutation-capable' if policy.get('calibrate_mutation_capable') else 'read-only'}, requires {policy.get('calibrate_requires') or 'unknown'}",
+        f"- improve: {'mutation-capable' if policy.get('improve_mutation_capable') else 'read-only'}, skill targets {', '.join(policy.get('improve_skill_targets') or []) or 'none'}",
+        f"- defer requires human review: {bool(policy.get('defer_requires_human_review'))}",
     ]
     setup = payload.get("runtime_setup") if isinstance(payload.get("runtime_setup"), dict) else {}
     if setup:
@@ -805,6 +813,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
         events = _load_events(path, limit=1000)
         curator_telemetry = load_curator_telemetry(config)
         curator_summary = curator_telemetry.get("summary") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("summary"), dict) else {}
+        policy = build_autonomous_operation_policy(config)
         payload = {
             "plugin": PLUGIN_NAME,
             "enabled": bool(config.get("enabled", True)),
@@ -819,6 +828,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "memory_rollback": memory_rollback_status(config),
             "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
             "runtime_setup": check_runtime_setup(config),
+            "autonomous_policy": summarize_autonomous_operation_policy(policy),
+            "autonomous_policy_full": policy,
             "last_run_artifact": str(_latest_run_artifact(config)) if _latest_run_artifact(config) else None,
             "curator_integration": {
                 "skill_telemetry_source": "Hermes Curator",

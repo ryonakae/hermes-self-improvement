@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .autonomous_policy import build_autonomous_operation_policy, summarize_autonomous_operation_policy
 from .calibration import run_calibration
 from .cli import build_review_outcome_report_payload, run_improve, run_pipeline
 from .config import DEFAULT_RETENTION_DAYS, load_config
@@ -92,6 +93,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
+    autonomous_policy = result.get("autonomous_policy") if isinstance(result.get("autonomous_policy"), dict) else {}
     artifact_path = result.get("artifact_path")
     return {
         "schema_name": "self_improvement_tool_result_summary",
@@ -102,6 +104,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "target_changed": bool(result.get("target_changed")),
         "artifact_path": artifact_path,
         "summary": result.get("summary") if isinstance(result.get("summary"), dict) else {},
+        "autonomous_policy": autonomous_policy,
         "curator_telemetry": {
             "available": bool(curator.get("available")),
             "candidate_count": int(curator.get("candidate_count") or 0),
@@ -192,6 +195,7 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
     regression = result.get("regression") if isinstance(result.get("regression"), dict) else {}
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     ledger_path = result.get("ledger_path") or result.get("artifact_path")
+    autonomous_policy = result.get("autonomous_policy") if isinstance(result.get("autonomous_policy"), dict) else {}
     full_payload = {
         "available": bool(ledger_path),
         "read_with": "read_file" if ledger_path else None,
@@ -216,6 +220,7 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
             "credit_assignment": evidence.get("credit_assignment") if isinstance(evidence.get("credit_assignment"), dict) else {},
         },
         "regression": {"status": regression.get("status")} if regression else {},
+        "autonomous_policy": autonomous_policy,
         "prompt_overlays": _compact_prompt_overlays(result.get("prompt_overlays")),
         "episodes": {"count": int(episodes.get("count") or 0), "path": episodes.get("path")},
         "active_evaluator_path": result.get("active_evaluator_path"),
@@ -229,6 +234,7 @@ def _handle_self_improvement_status_tool(args: dict[str, Any] | None = None, **_
     config = _config_from_args(args)
     path = _event_path(config)
     events = _load_events(path, limit=1000)
+    policy = build_autonomous_operation_policy(config)
     return tool_result({
         "plugin": PLUGIN_NAME,
         "enabled": bool(config.get("enabled", True)),
@@ -241,6 +247,7 @@ def _handle_self_improvement_status_tool(args: dict[str, Any] | None = None, **_
         "memory_rollback": memory_rollback_status(config),
         "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
         "runtime_setup": check_runtime_setup(config),
+        "autonomous_policy": summarize_autonomous_operation_policy(policy),
         "target_changed": False,
     })
 

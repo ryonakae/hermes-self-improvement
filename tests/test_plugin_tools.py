@@ -93,6 +93,9 @@ def test_status_tool_reports_memory_rollback_readiness(tmp_path):
     assert "built_in_memory_tool_preview" in payload["memory_rollback"]["preview_modes"]
     assert "external_provider_compensating_correction_preview" in payload["memory_rollback"]["preview_modes"]
     assert "memory-rollback-store-validation" in payload["memory_rollback"]["proof_plan"]
+    assert payload["autonomous_policy"]["calibrate_requires"] == "autonomous_evaluator_promote"
+    assert payload["autonomous_policy"]["improve_skill_targets"] == ["local_mutable_active", "local_mutable_stale"]
+    assert payload["autonomous_policy"]["defer_requires_human_review"] is False
 
 
 def test_calibrate_tool_dry_run_does_not_promote(tmp_path):

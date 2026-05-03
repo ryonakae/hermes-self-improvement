@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .autonomous_evaluator import compact_autonomous_evaluation_summary, evaluate_prompt_candidate
+from .autonomous_policy import build_autonomous_operation_policy, summarize_autonomous_operation_policy
 from .config import normalize_calibration_config
 from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
 from .episodes import record_calibration_episodes
@@ -449,6 +450,7 @@ def _attach_episode_summary(config: dict[str, Any], result: dict[str, Any]) -> d
 
 def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[str, Any]:
     calibration = normalize_calibration_config(config)
+    policy = build_autonomous_operation_policy(config)
     evidence = collect_calibration_evidence(config)
     result: dict[str, Any] = {
         "schema_name": "self_improvement_calibration_result",
@@ -465,6 +467,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         "active_evaluator_path": None,
         "ledger_path": None,
         "runtime_eval_cases": {"status": "not_built", "count": 0, "path": None},
+        "autonomous_policy": summarize_autonomous_operation_policy(policy),
         "prompt_overlays": _empty_prompt_overlay_summary(),
         "runtime_setup": check_runtime_setup(config),
     }
