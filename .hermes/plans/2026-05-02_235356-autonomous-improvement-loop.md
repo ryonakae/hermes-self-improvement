@@ -2,7 +2,7 @@
 
 **Status:** in_progress
 
-**Progress:** Phase 0 through Phase 3 implemented. Next phase is Phase 4 planner/editor runtime eval case builder.
+**Progress:** Phase 0 through Phase 4 implemented. Next phase is Phase 5 shadow autonomous evaluator.
 
 ## Goal
 

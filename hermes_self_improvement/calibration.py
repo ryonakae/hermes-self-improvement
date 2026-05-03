@@ -13,6 +13,7 @@ from .outcome_scoring import build_outcome_score_aggregate
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from .prompts import base_prompt_hash
+from .runtime_eval_cases import build_planner_editor_runtime_eval_cases
 from .setup_runtime import check_runtime_setup
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -244,7 +245,7 @@ def _runtime_eval_cases_dir(config: dict[str, Any]) -> Path:
 def _runtime_eval_cases_path(config: dict[str, Any], candidate: dict[str, Any]) -> Path:
     candidate_hash = str(candidate.get("candidate_hash") or "candidate")[:12]
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    return _runtime_eval_cases_dir(config) / f"{stamp}-{candidate_hash}-cases.jsonl"
+    return _runtime_eval_cases_dir(config) / "planner-editor" / f"{stamp}-{candidate_hash}-cases.jsonl"
 
 
 
@@ -272,6 +273,7 @@ def build_runtime_eval_cases(config: dict[str, Any], *, now: datetime | None = N
         case = _review_outcome_case(row, index)
         if case is not None:
             cases.append(case)
+    cases.extend(build_planner_editor_runtime_eval_cases(config=config, limit=1000))
     deduped: dict[str, dict[str, Any]] = {}
     for case in cases:
         deduped[str(case.get("case_hash") or case.get("id"))] = case

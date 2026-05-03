@@ -58,6 +58,7 @@ def runtime_layout(config: dict[str, Any]) -> dict[str, Path]:
         "evaluator_programs": evaluator / "programs",
         "evaluator_candidates": evaluator / "candidates",
         "runtime_eval_cases": evaluator / "runtime-eval-cases",
+        "planner_editor_runtime_eval_cases": evaluator / "runtime-eval-cases" / "planner-editor",
         "cache": root / "cache",
         "dspy_cache": root / "cache" / "dspy",
     }

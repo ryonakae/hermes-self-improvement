@@ -199,7 +199,7 @@ def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     assert result["runtime_eval_cases"]["status"] == "not_written_regression_failed"
 
 
-def test_build_runtime_eval_cases_uses_review_outcomes_only(tmp_path):
+def test_build_runtime_eval_cases_uses_review_outcomes_when_no_episode_cases(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 2}}}
     write_review_outcome(config, {"outcome": "rejected_by_human", "item_id": "step-001", "source": "user"}, "rejected.json")
@@ -213,6 +213,37 @@ def test_build_runtime_eval_cases_uses_review_outcomes_only(tmp_path):
     assert evidence["review_outcome_summary"]["by_outcome"]["failed"] == 1
     assert {case["source"]["kind"] for case in cases} == {"review_outcome"}
     assert all("proposal" in case and "findings" in case and "expected" in case for case in cases)
+
+
+def test_build_runtime_eval_cases_includes_planner_editor_episode_cases(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 1}}}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "episodes" / "2026-05-03" / "weak.json", {
+        "schema_name": "self_improvement_episode",
+        "schema_version": "1.0",
+        "episode_id": "episode-weak",
+        "episode_kind": "preview_decision",
+        "target_kind": "skill",
+        "target_id": "demo-skill",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
+        "evaluator_hash": "sha256:evaluator",
+        "decision": "skip",
+        "action": "no_op",
+        "executed": False,
+        "learnable": True,
+        "changed": False,
+        "created_at": "2026-05-03T00:00:00+00:00",
+        "evidence_ids": ["ev1"],
+        "evidence_strength": "weak",
+        "reason": "weak_only_selected",
+    })
+
+    cases = calibration.build_runtime_eval_cases(config)
+
+    assert {case["case_type"] for case in cases} == {"planner_weak_only_skip"}
+    assert cases[0]["case_family"] == "planner_editor"
 
 
 def write_planner_quality_run(config: dict, payload: dict, name: str = "run.json") -> Path:
