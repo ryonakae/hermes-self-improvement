@@ -16,6 +16,7 @@ from .config import (
 )
 from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
 from .evidence import build_evidence_pack, write_evidence_pack
+from .episodes import record_run_episodes
 from .mutation_backend import mutation_backend_status
 from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
 from .next_actions import render_next_actions
@@ -513,6 +514,8 @@ def run_improve(
     }
     artifact_path = _write_run_artifact(result_payload, config)
     result_payload["artifact_path"] = str(artifact_path)
+    episode_summary = record_run_episodes(config=config, run_result=result_payload)
+    result_payload["episodes"] = episode_summary
     if dry_run:
         result_payload["next_actions"] = [
             {
@@ -521,6 +524,7 @@ def run_improve(
                 "description": "Run self-improvement with mutation enabled by default.",
             }
         ]
+    _write_run_artifact(result_payload, config)
     return result_payload
 
 
@@ -592,6 +596,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "run_editor"][:5]
     human_review_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "human_review"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
+    episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     planner_prompt = prompt_sources.get("planner") if isinstance(prompt_sources.get("planner"), dict) else {}
     editor_prompt = prompt_sources.get("editor") if isinstance(prompt_sources.get("editor"), dict) else {}
@@ -633,6 +638,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Memory improvements:",
         f"- changed {int(summary.get('memory_changes') or 0)} memories",
         f"- related lookups: completed {lookup_counts['completed']}, unavailable {lookup_counts['unavailable']}, failed {lookup_counts['failed']}, skipped {lookup_counts['skipped']}",
+        "Episodes:",
+        f"- recorded {int(episodes.get('count') or 0)} episodes at {episodes.get('path') or 'n/a'}",
         "Scorer/evaluator:",
         f"- calibration status: {calibration.get('current_status') or 'unknown'}",
         f"- private eval cases: {int(runtime_eval_cases.get('count') or 0)} {runtime_eval_cases.get('status') or 'not_built'}",

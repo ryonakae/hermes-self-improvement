@@ -2,7 +2,7 @@
 
 **Status:** in_progress
 
-**Progress:** Phase 0 implemented in `feat: define autonomous loop contracts`; next phase is Phase 1 episode ledger wiring.
+**Progress:** Phase 0 and Phase 1 implemented. Next phase is Phase 2 outcome scoring with time windows.
 
 ## Goal
 

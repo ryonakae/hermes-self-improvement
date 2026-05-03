@@ -90,6 +90,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
     planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
+    episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     artifact_path = result.get("artifact_path")
     return {
@@ -113,6 +114,10 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
             "ignored_count": int(evidence_summary.get("ignored_count") or 0),
             "views": _count_views(evidence_pack.get("views")),
             "skill_candidate_count": _list_count(evidence_pack.get("skill_candidates")),
+        },
+        "episodes": {
+            "count": int(episodes.get("count") or 0),
+            "path": episodes.get("path"),
         },
         "steps": {
             "proposals_considered": int(decision_summary.get("total") or 0),
@@ -179,6 +184,7 @@ def _compact_prompt_overlays(value: Any) -> dict[str, Any]:
 def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
     evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
     regression = result.get("regression") if isinstance(result.get("regression"), dict) else {}
+    episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     ledger_path = result.get("ledger_path") or result.get("artifact_path")
     full_payload = {
         "available": bool(ledger_path),
@@ -203,6 +209,7 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
         },
         "regression": {"status": regression.get("status")} if regression else {},
         "prompt_overlays": _compact_prompt_overlays(result.get("prompt_overlays")),
+        "episodes": {"count": int(episodes.get("count") or 0), "path": episodes.get("path")},
         "active_evaluator_path": result.get("active_evaluator_path"),
         "ledger_path": ledger_path,
         "full_payload": full_payload,

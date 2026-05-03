@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import normalize_calibration_config
+from .episodes import record_calibration_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .prompt_overlays import promote_prompt_candidate, write_prompt_candidate
@@ -384,6 +385,11 @@ def restore_previous_calibration(*, ledger_id: str, config: dict[str, Any]) -> d
     }
 
 
+def _attach_episode_summary(config: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    result["episodes"] = record_calibration_episodes(config=config, calibration_result=result)
+    return result
+
+
 def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[str, Any]:
     calibration = normalize_calibration_config(config)
     evidence = collect_calibration_evidence(config)
@@ -434,7 +440,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
                 result["current_status"] = "failed"
                 result["runtime_eval_cases"]["status"] = "not_written_regression_failed" if runtime_cases else "empty"
                 result["reasons"].append(str(regression.get("reason") or "prompt_overlay_regression_failed"))
-                return result
+                return _attach_episode_summary(config, result)
             candidate_path = write_prompt_candidate(config, role=role, candidate=prompt_candidate)
             promote_prompt_candidate(config, role=role, candidate_path=candidate_path, regression=regression)
             result["prompt_overlays"][role].update({
@@ -452,7 +458,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
                 result["current_status"] = "failed"
                 result["runtime_eval_cases"]["status"] = "not_written_regression_failed" if runtime_cases else "empty"
                 result["reasons"].append(str(regression.get("reason") or "regression_failed"))
-                return result
+                return _attach_episode_summary(config, result)
             if runtime_cases:
                 runtime_cases_path = write_runtime_eval_cases(config, candidate=candidate, cases=runtime_cases)
                 result["runtime_eval_cases"].update({"status": "written", "path": str(runtime_cases_path) if runtime_cases_path else None})
@@ -468,6 +474,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
             )
             evaluator_updated = True
             result["active_evaluator_path"] = str(active_pointer_path)
+            result["active_evaluator_hash"] = active_after_hash
             result["ledger_path"] = str(_write_calibration_ledger(
                 config=config,
                 result=result,
@@ -481,4 +488,4 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
     else:
         result["current_status"] = "would_update"
         result["regression"] = {"status": "not_run", "reason": "preview"} if candidate is not None else None
-    return result
+    return _attach_episode_summary(config, result)
