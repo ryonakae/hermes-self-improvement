@@ -12,7 +12,7 @@ from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_planner_messages
 
 SCHEMA_NAME = "self_improvement_skill_planner_result"
-ALLOWED_DECISIONS = {"run_editor", "skip", "defer", "human_review", "memory_candidate", "evaluator_candidate"}
+ALLOWED_DECISIONS = {"run_editor", "archive_skill", "skip", "defer", "human_review", "memory_candidate", "evaluator_candidate"}
 ALLOWED_PRIORITIES = {"low", "medium", "high"}
 ALLOWED_RISKS = {"low", "medium", "high"}
 
@@ -104,6 +104,19 @@ def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _archive_markers(evidence: list[dict[str, Any]]) -> list[str]:
+    markers: list[str] = []
+    for item in evidence:
+        action = str(item.get("action") or "")
+        kind = str(item.get("kind") or "")
+        reason = str(item.get("archive_reason") or "")
+        if action == "skill_archive" or kind == "skill_lifecycle_candidate":
+            marker = reason or "skill_lifecycle_candidate"
+            if marker not in markers:
+                markers.append(marker)
+    return markers
+
+
 def _hint_strength(match_kind: str) -> str:
     if match_kind in {"exact", "bare_name"}:
         return "strong"
@@ -124,6 +137,7 @@ def _summary_counts(decisions: list[dict[str, Any]], candidate_count: int) -> di
     return {
         "candidate_count": candidate_count,
         "selected_for_editor": sum(1 for item in decisions if item.get("decision") == "run_editor"),
+        "archive_candidates": sum(1 for item in decisions if item.get("decision") == "archive_skill"),
         "skipped": sum(1 for item in decisions if item.get("decision") == "skip"),
         "deferred": sum(1 for item in decisions if item.get("decision") == "defer"),
         "human_review": sum(1 for item in decisions if item.get("original_decision") == "human_review"),
@@ -223,6 +237,7 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
             "strong_evidence_count": int(strength_counts.get("strong") or 0),
             "medium_evidence_count": int(strength_counts.get("medium") or 0),
             "weak_evidence_count": int(strength_counts.get("weak") or 0),
+            "archive_markers": _archive_markers(evidence),
         }
         row.update(match_meta.get(name, {}))
         candidate_rows.append(row)
@@ -241,7 +256,7 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
         "constraints": {
             "mutable_targets_only": True,
             "editor_tools_only": ["skills_list", "skill_view", "skill_manage"],
-            "human_review_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge", "archive"],
+            "human_review_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge"],
         },
     }
 
@@ -301,7 +316,13 @@ def _planner_result(
     return result
 
 
-def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evidence_by_candidate: dict[str, set[str]]) -> dict[str, Any] | None:
+def _normalize_decision(
+    raw: dict[str, Any],
+    *,
+    candidate_names: set[str],
+    evidence_by_candidate: dict[str, set[str]],
+    archive_markers_by_candidate: dict[str, list[str]],
+) -> dict[str, Any] | None:
     skill = str(raw.get("skill") or "").strip()
     if skill not in candidate_names:
         return None
@@ -317,6 +338,9 @@ def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evide
     if decision == "run_editor" and not evidence_ids:
         decision = "skip"
         forced_skip_reason = "run_editor_without_attached_evidence"
+    if decision == "archive_skill" and not archive_markers_by_candidate.get(skill):
+        decision = "skip"
+        forced_skip_reason = "archive_without_lifecycle_evidence"
     normalized = {
         "skill": skill,
         "decision": decision,
@@ -336,6 +360,13 @@ def _normalize_decision(raw: dict[str, Any], *, candidate_names: set[str], evide
         for key, max_chars in (("change_intent", 280), ("editor_instructions", 900)):
             if raw.get(key) is not None:
                 normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
+    elif decision == "archive_skill":
+        archive_reason = str(raw.get("archive_reason") or "").strip()
+        allowed_reasons = set(archive_markers_by_candidate.get(skill) or [])
+        if archive_reason and archive_reason in allowed_reasons:
+            normalized["archive_reason"] = archive_reason
+        elif allowed_reasons:
+            normalized["archive_reason"] = sorted(allowed_reasons)[0]
     elif decision in {"memory_candidate", "evaluator_candidate", "defer"}:
         if raw.get("change_intent") is not None:
             normalized["change_intent"] = _redacted_preview(raw.get("change_intent"), max_chars=280)
@@ -364,12 +395,22 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         for item in candidate_rows
         if item.get("name")
     }
+    archive_markers_by_candidate = {
+        str(item.get("name") or ""): [str(marker) for marker in (item.get("archive_markers") or []) if str(marker)]
+        for item in candidate_rows
+        if item.get("name")
+    }
     decisions: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw in raw_decisions:
         if not isinstance(raw, dict):
             continue
-        item = _normalize_decision(raw, candidate_names=candidate_names, evidence_by_candidate=evidence_by_candidate)
+        item = _normalize_decision(
+            raw,
+            candidate_names=candidate_names,
+            evidence_by_candidate=evidence_by_candidate,
+            archive_markers_by_candidate=archive_markers_by_candidate,
+        )
         if not item:
             continue
         decisions.append(item)

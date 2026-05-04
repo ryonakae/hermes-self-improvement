@@ -6,7 +6,7 @@ from typing import Any
 from .mutation_agent import run_skill_agent_task
 from .mutation_backend import build_mutation_backend
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
-from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation
+from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_archive_operation
 from .memory_context import build_related_memory_lookup_context
 from .observer import _redact_text
 from .planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
@@ -279,6 +279,38 @@ def run_skill_improvement_step(
             if digest_row.get(key):
                 base_decision[key] = digest_row[key]
         decision_kind = str(planner_decision.get("decision") or "skip")
+        if decision_kind == "archive_skill":
+            archive_context = {
+                "action": "archive",
+                "name": skill_name,
+                "reason": planner_decision.get("archive_reason"),
+                "successor": planner_decision.get("successor"),
+                "before_state": candidate.get("state"),
+            }
+            if not mutate:
+                decisions.append({
+                    **base_decision,
+                    "decision": "archive_skill_preview",
+                    "reason": "planner_archive_skill_preview",
+                    "changed": False,
+                    "archive_reason": planner_decision.get("archive_reason"),
+                    "archive_context": archive_context,
+                })
+                continue
+            result = execute_skill_archive_operation(archive_context, archive_fn=(config or {}).get("_skill_archive_fn"))
+            changed = bool(result.get("success"))
+            if changed:
+                changed_skills.append(skill_name)
+            decisions.append({
+                **base_decision,
+                "decision": "accepted" if changed else "rejected",
+                "reason": "skill_archive_completed" if changed else result.get("error") or "skill_archive_failed",
+                "changed": changed,
+                "archive_reason": planner_decision.get("archive_reason"),
+                "archive_context": archive_context,
+                "result": result,
+            })
+            continue
         if decision_kind != "run_editor":
             decisions.append({
                 **base_decision,

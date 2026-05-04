@@ -25,6 +25,7 @@ TARGET_KINDS = {
 }
 DECISIONS = {
     "run_editor",
+    "archive_skill",
     "skip",
     "defer",
     "memory_candidate",
@@ -33,6 +34,7 @@ DECISIONS = {
 LEGACY_DECISIONS = {"human_review"}
 ACTIONS = {
     "skill_patch",
+    "skill_archive",
     "memory_add",
     "memory_replace",
     "prompt_overlay_promote",

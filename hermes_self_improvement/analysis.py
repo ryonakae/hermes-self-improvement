@@ -183,18 +183,33 @@ def scan_memory_compression_candidates(memory_paths: list[str | Path], *, create
 
 
 _DEPRECATED_SKILL_MARKERS = (
-    "deprecated: true",
-    "status: deprecated",
-    "status: obsolete",
-    "obsolete: true",
+    ("deprecated: true", "deprecated_marker"),
+    ("status: deprecated", "deprecated_marker"),
+    ("status: obsolete", "obsolete_marker"),
+    ("obsolete: true", "obsolete_marker"),
+    ("status: superseded", "superseded_by_marker"),
+    ("deprecated compatibility bridge", "compatibility_bridge_superseded"),
+    ("canonical name is now", "superseded_by_marker"),
+    ("absorbed into", "absorbed_into_marker"),
 )
 
 
-def _skill_delete_candidate_reason(content: str) -> str | None:
+def _skill_successor_hint(content: str) -> str | None:
+    for line in content.splitlines():
+        text = line.strip()
+        lowered = text.lower()
+        for prefix in ("superseded_by:", "absorbed_into:"):
+            if lowered.startswith(prefix):
+                value = text.split(":", 1)[1].strip().strip('"\'')
+                return value or None
+    return None
+
+
+def _skill_archive_candidate_reason(content: str) -> tuple[str, str] | None:
     lowered = content.lower()
-    for marker in _DEPRECATED_SKILL_MARKERS:
+    for marker, archive_reason in _DEPRECATED_SKILL_MARKERS:
         if marker in lowered:
-            return f"Skill file contains explicit lifecycle marker `{marker}`."
+            return f"Skill file contains explicit lifecycle marker `{marker}`.", archive_reason
     return None
 
 
@@ -207,20 +222,26 @@ def scan_skill_lifecycle_candidates(skill_paths: list[str | Path], *, created_at
         if not path.is_file():
             continue
         before = path.read_text(encoding="utf-8", errors="replace")
-        reason = _skill_delete_candidate_reason(before)
-        if reason is None:
+        reason_info = _skill_archive_candidate_reason(before)
+        if reason_info is None:
             continue
-        events.append({
+        reason, archive_reason = reason_info
+        successor_skill = _skill_successor_hint(before)
+        event = {
             "ts": ts.isoformat(),
             "event": "self_improvement_candidate",
             "candidate_kind": "skill_lifecycle_candidate",
-            "action": "skill_delete",
+            "action": "skill_archive",
             "target_path": str(path),
             "before_hash": _sha256_text(before),
             "reason": reason,
+            "archive_reason": archive_reason,
             "count": 1,
             "auto_apply": False,
-        })
+        }
+        if successor_skill:
+            event["successor_skill"] = successor_skill
+        events.append(event)
     return events
 
 
@@ -245,6 +266,7 @@ def propose_from_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]
 
 
 _APPROVAL_REQUIRED_SKILL_LIFECYCLE_ACTIONS = {"skill_create", "skill_delete", "skill_rename", "skill_merge"}
+_PLANNER_DECIDED_SKILL_LIFECYCLE_ACTIONS = {"skill_archive"}
 
 
 def _proposal_for_explicit_candidate(finding: dict[str, Any]) -> dict[str, Any] | None:
@@ -272,27 +294,28 @@ def _proposal_for_explicit_candidate(finding: dict[str, Any]) -> dict[str, Any] 
         }
     if kind == "skill_lifecycle_candidate":
         action = str(finding.get("action") or finding.get("change_type") or "")
-        if action not in _APPROVAL_REQUIRED_SKILL_LIFECYCLE_ACTIONS:
+        if action not in _APPROVAL_REQUIRED_SKILL_LIFECYCLE_ACTIONS and action not in _PLANNER_DECIDED_SKILL_LIFECYCLE_ACTIONS:
             return None
         target_path = finding.get("target_path") or finding.get("path") or finding.get("file_path") or finding.get("skill_path")
         if not target_path:
             return None
+        planner_decided = action in _PLANNER_DECIDED_SKILL_LIFECYCLE_ACTIONS
         proposal = {
             "target": "skill",
             "action": action,
             "change_type": action,
-            "risk": "high",
+            "risk": "medium" if planner_decided else "high",
             "confidence": finding.get("confidence") or "medium",
-            "title": finding.get("title") or f"Apply {action} after approval",
-            "reason": finding.get("reason") or f"Explicit {action} candidate requires human approval.",
+            "title": finding.get("title") or f"Evaluate {action} lifecycle candidate",
+            "reason": finding.get("reason") or f"Explicit {action} candidate should be judged by the planner.",
             "evidence_kind": kind,
             "target_path": str(target_path),
             "before_hash": finding.get("before_hash"),
-            "recommendation": "approval_required",
+            "recommendation": "llm_planner_decision" if planner_decided else "approval_required",
             "count": finding.get("count") or 0,
-            "auto_apply": False,
+            "auto_apply": planner_decided,
         }
-        for key in ("destination_path", "source_path", "after_text", "new_content", "replacement_content"):
+        for key in ("destination_path", "source_path", "after_text", "new_content", "replacement_content", "archive_reason", "successor_skill"):
             if finding.get(key) is not None:
                 proposal[key] = finding.get(key)
         return proposal

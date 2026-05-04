@@ -13,6 +13,16 @@ def test_default_autonomous_policy_matches_closed_loop_boundaries():
     assert policy["calibrate"]["requires_autonomous_evaluator_decision"] == "promote"
     assert policy["improve"]["mutation_capable"] is True
     assert policy["improve"]["allowed_skill_targets"] == ["local_mutable_active", "local_mutable_stale"]
+    assert policy["improve"]["allowed_skill_lifecycle_actions"] == ["archive"]
+    assert policy["improve"]["skill_archive_requires"] == [
+        "local_mutable_active_or_stale",
+        "not_pinned",
+        "not_archived",
+        "not_bundled_hub_external_builtin",
+        "archive_evidence_attached",
+        "no_blocking_active_references",
+        "tool_mediated_lifecycle_transition",
+    ]
     assert policy["improve"]["allowed_memory_operations"] == ["builtin_user", "builtin_memory", "external_memory"]
     assert policy["defer"]["requires_human_review"] is False
     assert policy["defer"]["records_episode"] is True
@@ -54,5 +64,6 @@ def test_policy_summary_is_compact_and_contains_no_prompt_text():
         "calibrate_requires": "autonomous_evaluator_promote",
         "improve_mutation_capable": True,
         "improve_skill_targets": ["local_mutable_active", "local_mutable_stale"],
+        "improve_skill_lifecycle_actions": ["archive"],
         "defer_requires_human_review": False,
     }

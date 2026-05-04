@@ -197,6 +197,54 @@ def test_skill_planner_normalizes_human_review_to_defer():
     assert result["summary"]["human_review"] == 1
 
 
+def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence():
+    pack_data = pack()
+    pack_data["evidence"].append({
+        "id": "ev_archive",
+        "kind": "skill_lifecycle_candidate",
+        "target_skill": "unused-skill",
+        "action": "skill_archive",
+        "archive_reason": "obsolete_marker",
+        "likely_targets": [{"target": "skill", "weight": 1.0}],
+    })
+    pack_data["views"]["skill"].append("ev_archive")
+
+    def fake_planner(*, digest, config):
+        by_name = {item["name"]: item for item in digest["skill_candidates"]}
+        assert by_name["unused-skill"]["attached_evidence_count"] == 1
+        assert by_name["unused-skill"]["archive_markers"] == ["obsolete_marker"]
+        return {
+            "decisions": [
+                {
+                    "skill": "unused-skill",
+                    "decision": "archive_skill",
+                    "evidence_ids": ["ev_archive"],
+                    "archive_reason": "obsolete_marker",
+                    "rationale": "obsolete lifecycle marker with no active evidence in digest",
+                }
+            ]
+        }
+
+    result = run_skill_planner(build_skill_planner_digest(pack_data), config={"_skill_planner_func": fake_planner})
+    decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
+
+    assert decision["decision"] == "archive_skill"
+    assert decision["archive_reason"] == "obsolete_marker"
+    assert decision["evidence_ids"] == ["ev_archive"]
+    assert result["summary"]["archive_candidates"] == 1
+
+
+def test_skill_planner_blocks_archive_without_attached_lifecycle_evidence():
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "demo-skill", "decision": "archive_skill", "evidence_ids": ["ev1"]}]}
+
+    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    decision = {item["skill"]: item for item in result["decisions"]}["demo-skill"]
+
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "archive_without_lifecycle_evidence"
+
+
 def test_planner_normalization_strips_action_fields_from_skips_and_requires_evidence_for_editor():
     def fake_planner(*, digest, config):
         return {

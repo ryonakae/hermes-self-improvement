@@ -28,6 +28,16 @@ def build_autonomous_operation_policy(config: dict[str, Any] | None = None) -> d
             "mutation_capable": True,
             "allowed_target_kinds": ["skill", "memory"],
             "allowed_skill_targets": ["local_mutable_active", "local_mutable_stale"],
+            "allowed_skill_lifecycle_actions": ["archive"],
+            "skill_archive_requires": [
+                "local_mutable_active_or_stale",
+                "not_pinned",
+                "not_archived",
+                "not_bundled_hub_external_builtin",
+                "archive_evidence_attached",
+                "no_blocking_active_references",
+                "tool_mediated_lifecycle_transition",
+            ],
             "allowed_memory_operations": ["builtin_user", "builtin_memory", "external_memory"],
             "destructive_changes_allowed": False,
             "requires_tool_mediated_execution": True,
@@ -59,5 +69,6 @@ def summarize_autonomous_operation_policy(policy: dict[str, Any]) -> dict[str, A
         "calibrate_requires": "autonomous_evaluator_promote" if calibrate.get("requires_autonomous_evaluator_decision") == "promote" else calibrate.get("requires_autonomous_evaluator_decision"),
         "improve_mutation_capable": bool(improve.get("mutation_capable")),
         "improve_skill_targets": improve.get("allowed_skill_targets") if isinstance(improve.get("allowed_skill_targets"), list) else [],
+        "improve_skill_lifecycle_actions": improve.get("allowed_skill_lifecycle_actions") if isinstance(improve.get("allowed_skill_lifecycle_actions"), list) else [],
         "defer_requires_human_review": bool(defer.get("requires_human_review")),
     }

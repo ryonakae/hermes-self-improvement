@@ -131,9 +131,15 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
     if not skill:
         return None
     raw_decision = str(decision.get("decision") or "skip")
+    planner_decision = decision.get("planner_decision") if isinstance(decision.get("planner_decision"), dict) else {}
+    planned_decision = str(planner_decision.get("decision") or "")
     changed = bool(decision.get("changed"))
     executed = bool(run_result.get("execute")) and raw_decision in {"accepted", "rejected"}
-    if raw_decision == "run_editor_preview":
+    if raw_decision == "archive_skill_preview" or (raw_decision in {"accepted", "rejected"} and planned_decision == "archive_skill"):
+        episode_kind = "executed_mutation" if executed else "preview_decision"
+        normalized_decision = "archive_skill"
+        action = "skill_archive" if executed else "no_op"
+    elif raw_decision == "run_editor_preview":
         episode_kind = "preview_decision"
         normalized_decision = "run_editor"
         action = "no_op"
@@ -174,6 +180,8 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
         episode["defer_reason"] = decision.get("defer_reason")
     if decision.get("reason"):
         episode["reason"] = str(decision.get("reason"))[:240]
+    if decision.get("archive_reason"):
+        episode["archive_reason"] = str(decision.get("archive_reason"))[:120]
     if decision.get("evidence_ids"):
         episode["evidence_ids"] = [str(item) for item in decision.get("evidence_ids") or []]
     return validate_episode(episode)

@@ -29,6 +29,24 @@ def evidence_pack_for(skill_name=None, *, candidates=None, rejected=None):
     }
 
 
+def archive_evidence_pack():
+    return {
+        "evidence": [
+            {
+                "id": "ev_archive",
+                "kind": "skill_lifecycle_candidate",
+                "target_skill": "old-skill",
+                "action": "skill_archive",
+                "archive_reason": "obsolete_marker",
+                "likely_targets": [{"target": "skill", "weight": 1.0}],
+            }
+        ],
+        "views": {"skill": ["ev_archive"], "memory": [], "scorer": [], "evaluator": []},
+        "skill_candidates": [{"name": "old-skill", "state": "stale", "source": "curator", "usage": {}}],
+        "rejected_skill_candidates": [],
+    }
+
+
 def test_build_skill_agent_task_uses_skills_only_constraints():
     task = build_skill_agent_task(skill_name="demo-skill", evidence=[])
 
@@ -97,6 +115,48 @@ def test_skill_step_dry_run_records_planner_editor_preview_without_mutating():
     assert result["decisions"][0]["candidate_state"] == "active"
     assert result["decisions"][0]["evidence_ids"] == ["ev1"]
     assert result["decisions"][0]["task"]["targets"]["primary_skill"] == "demo-skill"
+
+
+def test_skill_step_dry_run_records_archive_preview_without_mutating():
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
+
+    result = run_skill_improvement_step(
+        evidence_pack=archive_evidence_pack(),
+        config={"_skill_planner_func": fake_planner},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert result["changed"] == 0
+    assert decision["decision"] == "archive_skill_preview"
+    assert decision["reason"] == "planner_archive_skill_preview"
+    assert decision["archive_reason"] == "obsolete_marker"
+
+
+def test_skill_step_executes_archive_with_curator_primitive_when_mutating():
+    calls = []
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
+
+    def fake_archive(name):
+        calls.append(name)
+        return {"success": True, "message": "archived"}
+
+    result = run_skill_improvement_step(
+        evidence_pack=archive_evidence_pack(),
+        config={"_skill_planner_func": fake_planner, "_skill_archive_fn": fake_archive},
+        mutate=True,
+    )
+
+    decision = result["decisions"][0]
+    assert calls == ["old-skill"]
+    assert result["changed"] == 1
+    assert result["changed_skills"] == ["old-skill"]
+    assert decision["decision"] == "accepted"
+    assert decision["reason"] == "skill_archive_completed"
+    assert decision["result"]["tool_name"] == "skill_usage.archive_skill"
 
 
 def test_skill_step_skips_curator_candidate_without_hook_evidence():

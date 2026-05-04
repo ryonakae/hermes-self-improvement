@@ -161,3 +161,32 @@ def test_record_run_episodes_uses_mutation_metadata_for_executed_skill_change(tm
     assert episode["planner_prompt_hash"] == "sha256:planner"
     assert episode["editor_prompt_hash"] == "sha256:editor"
     assert episode["evaluator_hash"] == "sha256:evaluator"
+
+
+def test_record_run_episodes_preserves_archive_skill_decision(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = sample_run_result(tmp_path)
+    result["dry_run"] = False
+    result["execute"] = True
+    result["step_decisions"]["skill"]["decisions"] = [
+        {
+            "skill": "old-skill",
+            "decision": "accepted",
+            "reason": "skill_archive_completed",
+            "changed": True,
+            "evidence_ids": ["ev_archive"],
+            "archive_reason": "obsolete_marker",
+            "planner_decision": {"decision": "archive_skill", "archive_reason": "obsolete_marker"},
+            "result": {"success": True, "tool_name": "skill_usage.archive_skill", "after_state": "archived"},
+        }
+    ]
+
+    record_run_episodes(config=config, run_result=result)
+
+    episode = [item for item in load_recent_episodes(config=config, limit=10) if item["target_id"] == "old-skill"][0]
+    assert episode["episode_kind"] == "executed_mutation"
+    assert episode["decision"] == "archive_skill"
+    assert episode["action"] == "skill_archive"
+    assert episode["archive_reason"] == "obsolete_marker"
+    assert episode["executed"] is True
+    assert episode["changed"] is True

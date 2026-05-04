@@ -275,10 +275,10 @@ def test_memory_compression_scanner_events_flow_into_analysis_proposals(tmp_path
 
 
 
-def test_scan_skill_lifecycle_candidates_emits_delete_event_for_deprecated_skill(tmp_path):
+def test_scan_skill_lifecycle_candidates_emits_archive_event_for_deprecated_skill(tmp_path):
     mod = load_plugin_module()
     skill_file = tmp_path / "skills" / "old-skill" / "SKILL.md"
-    before = "---\nname: old-skill\ndescription: Old skill.\ndeprecated: true\n---\n\n# Old skill\n"
+    before = "---\nname: old-skill\ndescription: Old skill.\ndeprecated: true\nsuperseded_by: new-skill\n---\n\n# Old skill\n"
     skill_file.parent.mkdir(parents=True)
     skill_file.write_text(before, encoding="utf-8")
 
@@ -288,9 +288,11 @@ def test_scan_skill_lifecycle_candidates_emits_delete_event_for_deprecated_skill
     event = events[0]
     assert event["event"] == "self_improvement_candidate"
     assert event["candidate_kind"] == "skill_lifecycle_candidate"
-    assert event["action"] == "skill_delete"
+    assert event["action"] == "skill_archive"
     assert event["target_path"] == str(skill_file)
     assert event["before_hash"] == mod._sha256_text(before)
+    assert event["archive_reason"] == "deprecated_marker"
+    assert event["successor_skill"] == "new-skill"
     assert event["auto_apply"] is False
 
 
@@ -317,6 +319,7 @@ def test_skill_lifecycle_scanner_events_flow_into_analysis_proposals(tmp_path):
 
     assert result.summary["explicit_candidate_count"] == 1
     assert result.findings[0]["kind"] == "skill_lifecycle_candidate"
-    assert result.proposals[0]["change_type"] == "skill_delete"
+    assert result.proposals[0]["change_type"] == "skill_archive"
     assert result.proposals[0]["target_path"] == str(skill_file)
-    assert result.proposals[0]["auto_apply"] is False
+    assert result.proposals[0]["recommendation"] == "llm_planner_decision"
+    assert result.proposals[0]["auto_apply"] is True

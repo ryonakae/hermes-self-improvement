@@ -20,6 +20,12 @@ def _load_memory_tool() -> Callable[..., str]:
     return memory_tool
 
 
+def _load_skill_archive() -> Callable[[str], Any]:
+    from tools import skill_usage  # type: ignore
+
+    return skill_usage.archive_skill
+
+
 def _load_provider_tool(tool_name: str) -> Callable[..., str]:
     """Provider memory tools are exposed through Hermes runtime, not files.
 
@@ -103,6 +109,29 @@ def execute_skill_manage_operation(tool_args: dict[str, Any], *, skill_manage_fn
 
 def execute_skill_manage_patch(tool_args: dict[str, Any], *, skill_manage_fn: Callable[..., str] | None = None) -> dict[str, Any]:
     return execute_skill_manage_operation(tool_args, skill_manage_fn=skill_manage_fn)
+
+
+def execute_skill_archive_operation(context: dict[str, Any], *, archive_fn: Callable[[str], Any] | None = None) -> dict[str, Any]:
+    args = dict(context or {})
+    if args.get("action") != "archive":
+        return {"success": False, "error": "unsupported_skill_lifecycle_action"}
+    name = str(args.get("name") or "").strip()
+    if not name:
+        return {"success": False, "error": "skill_archive_args_missing:name"}
+    fn = archive_fn or _load_skill_archive()
+    raw = fn(name)
+    parsed = raw if isinstance(raw, dict) else {"success": True, "message": str(raw or "")}
+    parsed.setdefault("success", True)
+    parsed["tool_name"] = "skill_usage.archive_skill"
+    parsed["tool_args"] = {"name": name}
+    if args.get("before_state") is not None:
+        parsed["before_state"] = args.get("before_state")
+    parsed.setdefault("after_state", "archived" if parsed.get("success") else None)
+    if args.get("reason") is not None:
+        parsed["archive_reason"] = args.get("reason")
+    if args.get("successor") is not None:
+        parsed["successor"] = args.get("successor")
+    return parsed
 
 
 def execute_memory_tool_operation(tool_args: dict[str, Any], *, memory_fn: Callable[..., str] | None = None) -> dict[str, Any]:
