@@ -237,7 +237,9 @@ def test_run_improve_wires_curator_lifecycle_and_telemetry(monkeypatch, tmp_path
         "summary": {"candidate_count": 1, "rejected_count": 1, "rejected_by_reason": {"pinned": 1}},
     })
     monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
-    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "completed", "changed": 0, "changed_skills": [], "decisions": []})
+    monkeypatch.setattr(cli, "build_active_skill_references", lambda cfg, *, candidate_names: {"candidate-skill": {"active_reference_count": 1, "blocking_references": [{"kind": "active_cron_skill_attachment", "job": "daily"}], "non_blocking_references": []}})
+    captured = {}
+    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: captured.setdefault("evidence_pack", kwargs["evidence_pack"]) or {"status": "completed", "changed": 0, "changed_skills": [], "decisions": []})
     monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "no_memory_evidence", "changed": 0, "changed_memories": [], "decisions": []})
 
     result = cli.run_improve(config=config, dry_run=True)
@@ -246,6 +248,9 @@ def test_run_improve_wires_curator_lifecycle_and_telemetry(monkeypatch, tmp_path
     assert result["curator_telemetry"]["candidate_count"] == 1
     assert result["curator_telemetry"]["rejected_count"] == 1
     assert result["evidence_pack"]["skill_candidates"][0]["name"] == "candidate-skill"
+    assert result["evidence_pack"]["skill_candidates"][0]["active_reference_count"] == 1
+    assert result["evidence_pack"]["active_skill_references"]["candidate-skill"]["blocking_references"][0]["kind"] == "active_cron_skill_attachment"
+    assert captured["evidence_pack"]["skill_candidates"][0]["blocking_references"][0]["job"] == "daily"
     assert result["calibration"]["current_status"] == "calibrate_only"
 
 

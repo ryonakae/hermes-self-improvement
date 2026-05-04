@@ -250,6 +250,8 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
             "source": candidate.get("source") or "curator",
             "mutable": bool(candidate.get("mutable", True)),
             "active_reference_count": int(candidate.get("active_reference_count") or candidate.get("blocking_reference_count") or 0),
+            "blocking_references": candidate.get("blocking_references") if isinstance(candidate.get("blocking_references"), list) else [],
+            "non_blocking_references": candidate.get("non_blocking_references") if isinstance(candidate.get("non_blocking_references"), list) else [],
             "usage": candidate.get("usage") if isinstance(candidate.get("usage"), dict) else {},
             "attached_evidence_count": len(evidence),
             "evidence_ids": [str(item.get("id") or "") for item in evidence if item.get("id")],

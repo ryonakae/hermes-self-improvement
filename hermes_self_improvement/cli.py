@@ -19,8 +19,9 @@ from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
 from .evidence import build_evidence_pack, write_evidence_pack
 from .episodes import record_run_episodes
 from .mutation_backend import mutation_backend_status
-from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
 from .next_actions import render_next_actions
+from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
+from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
 from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .recovery_engine import memory_rollback_status
@@ -489,6 +490,9 @@ def run_improve(
     since = until - timedelta(hours=int(since_hours))
     events = _load_events(_event_path(config), since=since)
     evidence_pack = build_evidence_pack(events, since, until, curator_telemetry=curator_telemetry)
+    candidate_names = [str(item.get("name") or "") for item in evidence_pack.get("skill_candidates") or [] if isinstance(item, dict) and item.get("name")]
+    active_references = build_active_skill_references(config, candidate_names=candidate_names)
+    evidence_pack = attach_active_skill_references(evidence_pack, active_references)
     evidence_path = write_evidence_pack(evidence_pack, _reports_dir(config))
     pipeline = run_pipeline(
         config,
@@ -522,6 +526,7 @@ def run_improve(
             "summary": evidence_pack.get("summary"),
             "views": evidence_pack.get("views"),
             "skill_candidates": evidence_pack.get("skill_candidates"),
+            "active_skill_references": evidence_pack.get("active_skill_references"),
             "curator_telemetry_summary": evidence_pack.get("curator_telemetry_summary"),
         },
         "step_decisions": {

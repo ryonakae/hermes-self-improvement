@@ -279,6 +279,9 @@ def test_skill_planner_blocks_archive_on_hard_invariants_only():
     assert by_skill["pinned-skill"]["reason"] == "archive_blocked_by_pinned"
     assert by_skill["external-skill"]["reason"] == "archive_blocked_by_provenance"
     assert by_skill["referenced-skill"]["reason"] == "archive_blocked_by_active_reference"
+    digest_by_name = {item["name"]: item for item in build_skill_planner_digest(pack_data)["skill_candidates"]}
+    assert digest_by_name["referenced-skill"]["active_reference_count"] == 1
+    assert digest_by_name["referenced-skill"]["blocking_references"] == []
     assert all(item["decision"] == "skip" for item in by_skill.values())
 
 
