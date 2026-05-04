@@ -226,8 +226,7 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
     assert payload["regression"] == {"status": "passed"}
     assert payload["evaluator_update"] == {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False}
     assert payload["full_payload"]["path"] == str(tmp_path / "ledger.json")
-    assert payload["prompt_overlays"]["planner"] == {"candidate": True, "promoted": False, "candidate_hash": "hash-planner", "candidate_path": str(tmp_path / "candidate.json"), "regression": {"status": "passed"}}
-    assert payload["prompt_overlays"]["editor"]["candidate"] is False
+    assert "prompt_overlays" not in payload
     assert payload["overlay_candidate_set"] == {"status": "promoted", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0}
     assert payload["components"] == {
         "prompt_overlay_set": {"status": "promoted", "decision": "promote", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": 0},

@@ -462,7 +462,6 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False, candidate_
         "runtime_eval_cases": {"status": "not_built", "count": 0, "path": None},
         "autonomous_policy": summarize_autonomous_operation_policy(policy),
         "prompt_overlays": _empty_prompt_overlay_summary(),
-        "prompt_overlay_updates": {"status": "no_candidate", "promoted_roles": [], "failed_roles": []},
         "evaluator_update": {"status": "no_candidate", "reason": None, "active_changed": False},
         "overlay_candidate_set": {"status": "not_built", "decision": None, "candidate_set_id": None, "candidate_set_path": None, "changed_targets": []},
         "runtime_setup": check_runtime_setup(config),
@@ -506,9 +505,8 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False, candidate_
                 promotion = promote_overlay_candidate_set(config, candidate_set=overlay_candidate_set, evaluation=overlay_candidate_set_evaluation)
                 promoted_targets = _mark_promoted_overlay_targets(result, promotion=promotion)
                 prompt_promoted = bool(promoted_targets)
-                result["prompt_overlay_updates"] = {"status": "updated", "promoted_roles": promoted_targets, "failed_roles": []}
             else:
-                result["prompt_overlay_updates"] = {"status": "kept", "promoted_roles": [], "failed_roles": []}
+                pass
 
         evaluator_updated = False
         if candidate is not None:
@@ -564,8 +562,6 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False, candidate_
     else:
         result["current_status"] = "would_update"
         result["regression"] = {"status": "not_run", "reason": "preview"} if candidate is not None else None
-        if overlay_candidate_set is not None:
-            result["prompt_overlay_updates"]["status"] = "would_update"
         if candidate is not None:
             result["evaluator_update"] = {"status": "would_update", "reason": "preview", "active_changed": False}
     return _attach_episode_summary(config, result)

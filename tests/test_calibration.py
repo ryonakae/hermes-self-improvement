@@ -500,7 +500,7 @@ def test_calibration_execute_promotes_overlay_candidate_set_without_single_role_
     assert result["overlay_candidate_set"]["status"] == "promoted"
     assert result["overlay_candidate_set"]["overlay_generation_id"] == "overlay-set-001"
     assert result["overlay_candidate_set"]["promoted_targets"] == ["planner_overlay"]
-    assert result["prompt_overlay_updates"] == {"status": "updated", "promoted_roles": ["planner_overlay"], "failed_roles": []}
+    assert "prompt_overlay_updates" not in result
     assert result["prompt_overlays"]["planner"]["candidate"] is True
     assert result["prompt_overlays"]["planner"]["promoted"] is True
     assert result["prompt_overlays"]["planner"]["candidate_set_id"] == "overlay-set-001"
@@ -565,8 +565,9 @@ def test_calibration_reports_partial_update_when_overlay_set_promoted_but_evalua
 
     assert result["current_status"] == "partial_update"
     assert result["active_changed"] is True
-    assert result["prompt_overlay_updates"]["status"] == "updated"
-    assert result["prompt_overlay_updates"]["promoted_roles"] == ["planner_overlay"]
+    assert "prompt_overlay_updates" not in result
+    assert result["overlay_candidate_set"]["status"] == "promoted"
+    assert result["overlay_candidate_set"]["promoted_targets"] == ["planner_overlay"]
     assert result["prompt_overlays"]["planner"]["promoted"] is True
     assert result["evaluator_update"]["status"] == "failed"
     assert result["evaluator_update"]["reason"] == "regression_runner_not_configured"
@@ -588,7 +589,7 @@ def test_calibration_execute_keeps_non_promoted_overlay_candidate_set(monkeypatc
     assert result["active_changed"] is False
     assert result["overlay_candidate_set"]["status"] == "evaluated"
     assert result["overlay_candidate_set"]["decision"] == "keep_candidate"
-    assert result["prompt_overlay_updates"] == {"status": "kept", "promoted_roles": [], "failed_roles": []}
+    assert "prompt_overlay_updates" not in result
     assert "overlay_candidate_set_keep_candidate" in result["reasons"]
     assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists() is False
 

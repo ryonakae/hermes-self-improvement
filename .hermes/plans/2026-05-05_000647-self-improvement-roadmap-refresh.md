@@ -281,7 +281,7 @@ git commit -m "fix: improve overlay calibration case signal"
 
 ### Slice 8: Remove remaining legacy prompt-overlay summary duplication
 
-**Status:** pending cleanup; do after dogfood proof or scoring inspection.
+**Status:** completed on 2026-05-05 JST. `prompt_overlay_updates` was removed from calibration results, and agent-facing calibrate tool summaries no longer return role-level `prompt_overlays`; they use `components.prompt_overlay_set` plus `overlay_candidate_set` instead. CLI still keeps the short `Prompt overlays:` lines for operator debugging.
 
 **Objective:** Reduce duplicated calibration summary fields now that `components.prompt_overlay_set` and `overlay_candidate_set` are the primary compact result surfaces.
 
@@ -294,11 +294,29 @@ git commit -m "fix: improve overlay calibration case signal"
 
 **Target behavior:**
 
-- Keep `overlay_candidate_set` as the detailed compact candidate-set summary.
-- Keep `components.prompt_overlay_set` and `components.evaluator` as the operator-friendly component summary.
-- Deprecate or remove stale `prompt_overlay_updates` wording if it no longer carries unique information.
-- Keep `prompt_overlays` only if role-level candidate/promoted paths are still useful for debugging active overlays.
-- Do not remove runtime artifact fields needed for episode recording or active pointer validation.
+- Keep `overlay_candidate_set` as the detailed compact candidate-set summary. **Done.**
+- Keep `components.prompt_overlay_set` and `components.evaluator` as the operator-friendly component summary. **Done.**
+- Remove stale `prompt_overlay_updates` wording because it duplicated `overlay_candidate_set.status/promoted_targets`. **Done.**
+- Keep `prompt_overlays` in the internal calibration result and CLI display only for role-level candidate/promoted debugging. **Done.**
+- Do not return role-level `prompt_overlays` from the LLM-facing calibrate tool summary; use `components` / `overlay_candidate_set` instead. **Done.**
+- Do not remove runtime artifact fields needed for episode recording or active pointer validation. **Done.**
+
+**Observed 2026-05-05 JST cleanup:**
+
+```text
+Removed from calibration result:
+- prompt_overlay_updates
+
+Removed from agent-facing calibrate tool result:
+- prompt_overlays
+
+Kept:
+- overlay_candidate_set: detailed candidate-set status/path/decision/promoted targets
+- components.prompt_overlay_set: compact operator/LLM-facing component status
+- components.evaluator: evaluator sub-result
+- internal prompt_overlays: role-level debugging and calibration episode generation
+- CLI Prompt overlays block: short human-readable role status
+```
 
 **Verification:**
 
@@ -341,6 +359,7 @@ Supported plugin surfaces remain:
 - `.hermes/plans/README.md` names this roadmap as the latest source of truth and marks Hermes core top-level CLI integration out of scope. **Done.**
 - A real dogfood run proves overlay generation/hash data flows from promotion to later improvement episodes and back into eval cases, or records repeated no-promotion reasons without weakening gates. **Done.**
 - If dogfood repeatedly cannot promote, compact artifact inspection identifies whether the issue is no real improvement, weak scoring, or weak case selection. **Done for the observed no-promotion: weak case scoring was the cause.**
+- Legacy prompt-overlay summary duplication is removed from result/tool surfaces without losing operator/debug visibility. **Done.**
 
 
 ## Do not do

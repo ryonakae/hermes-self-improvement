@@ -169,28 +169,6 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _compact_prompt_overlays(value: Any) -> dict[str, Any]:
-    overlays = value if isinstance(value, dict) else {}
-    out: dict[str, Any] = {}
-    for role in ("planner", "editor", "scorer"):
-        item = overlays.get(role) if isinstance(overlays.get(role), dict) else {}
-        regression = item.get("regression") if isinstance(item.get("regression"), dict) else None
-        evaluation = regression.get("autonomous_evaluation") if regression else None
-        entry = {
-            "candidate": bool(item.get("candidate")),
-            "promoted": bool(item.get("promoted")),
-            "candidate_hash": item.get("candidate_hash"),
-            "candidate_path": item.get("candidate_path"),
-            "regression": {"status": regression.get("status")} if regression else None,
-        }
-        if regression and regression.get("reason") is not None:
-            entry["regression"]["reason"] = regression.get("reason")
-        if isinstance(evaluation, dict):
-            entry["autonomous_evaluation"] = evaluation
-        out[role] = entry
-    return out
-
-
 def _compact_overlay_candidate_set(value: Any) -> dict[str, Any]:
     item = value if isinstance(value, dict) else {}
     if not item:
@@ -265,7 +243,6 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
             "active_changed": bool(evaluator_update.get("active_changed")),
         } if evaluator_update else {},
         "autonomous_policy": autonomous_policy,
-        "prompt_overlays": _compact_prompt_overlays(result.get("prompt_overlays")),
         "overlay_candidate_set": overlay_candidate_set,
         "components": _compact_calibration_components(overlay_candidate_set=overlay_candidate_set, evaluator_update=evaluator_update),
         "episodes": {"count": int(episodes.get("count") or 0), "path": episodes.get("path")},
