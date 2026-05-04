@@ -117,6 +117,25 @@ def _archive_markers(evidence: list[dict[str, Any]]) -> list[str]:
     return markers
 
 
+def _archive_successor(evidence: list[dict[str, Any]]) -> str | None:
+    for item in evidence:
+        value = item.get("successor_skill") or item.get("successor")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _successor_validation(successor: str | None, candidate_by_name: dict[str, dict[str, Any]]) -> str | None:
+    if not successor:
+        return None
+    candidate = candidate_by_name.get(successor)
+    if not candidate:
+        return "invalid_successor"
+    if str(candidate.get("state") or "") == "archived":
+        return "invalid_successor"
+    return "valid_active_skill"
+
+
 def _hint_strength(match_kind: str) -> str:
     if match_kind in {"exact", "bare_name"}:
         return "strong"
@@ -221,6 +240,7 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
         evidence = attached.get(name) or []
         resolutions = evidence_resolution.get(name) or []
         strength_counts = _strength_counts(resolutions)
+        successor_skill = _archive_successor(evidence)
         row = {
             "name": name,
             "description": _redacted_preview(candidate.get("description") or candidate.get("summary") or "", max_chars=180),
@@ -240,6 +260,8 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
             "medium_evidence_count": int(strength_counts.get("medium") or 0),
             "weak_evidence_count": int(strength_counts.get("weak") or 0),
             "archive_markers": _archive_markers(evidence),
+            "successor_skill": successor_skill,
+            "successor_validation": _successor_validation(successor_skill, candidate_by_name),
         }
         row.update(match_meta.get(name, {}))
         candidate_rows.append(row)
@@ -363,6 +385,9 @@ def _normalize_decision(
         elif state and state not in {"active", "stale"}:
             decision = "skip"
             forced_skip_reason = "archive_blocked_by_lifecycle_state"
+        elif raw.get("successor") and candidate.get("successor_validation") != "valid_active_skill":
+            decision = "skip"
+            forced_skip_reason = "archive_blocked_by_invalid_successor"
     normalized = {
         "skill": skill,
         "decision": decision,
@@ -389,6 +414,9 @@ def _normalize_decision(
             normalized["archive_reason"] = archive_reason
         elif allowed_reasons:
             normalized["archive_reason"] = sorted(allowed_reasons)[0]
+        successor = str(raw.get("successor") or "").strip()
+        if successor:
+            normalized["successor"] = successor
     elif decision in {"memory_candidate", "evaluator_candidate", "defer"}:
         if raw.get("change_intent") is not None:
             normalized["change_intent"] = _redacted_preview(raw.get("change_intent"), max_chars=280)

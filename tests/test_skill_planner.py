@@ -205,6 +205,7 @@ def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence
         "target_skill": "unused-skill",
         "action": "skill_archive",
         "archive_reason": "obsolete_marker",
+        "successor_skill": "demo-skill",
         "likely_targets": [{"target": "skill", "weight": 1.0}],
     })
     pack_data["views"]["skill"].append("ev_archive")
@@ -213,6 +214,8 @@ def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence
         by_name = {item["name"]: item for item in digest["skill_candidates"]}
         assert by_name["unused-skill"]["attached_evidence_count"] == 1
         assert by_name["unused-skill"]["archive_markers"] == ["obsolete_marker"]
+        assert by_name["unused-skill"]["successor_skill"] == "demo-skill"
+        assert by_name["unused-skill"]["successor_validation"] == "valid_active_skill"
         return {
             "decisions": [
                 {
@@ -220,6 +223,7 @@ def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence
                     "decision": "archive_skill",
                     "evidence_ids": ["ev_archive"],
                     "archive_reason": "obsolete_marker",
+                    "successor": "demo-skill",
                     "rationale": "obsolete lifecycle marker with no active evidence in digest",
                 }
             ]
@@ -230,6 +234,7 @@ def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence
 
     assert decision["decision"] == "archive_skill"
     assert decision["archive_reason"] == "obsolete_marker"
+    assert decision["successor"] == "demo-skill"
     assert decision["evidence_ids"] == ["ev_archive"]
     assert result["summary"]["archive_candidates"] == 1
 
@@ -275,6 +280,30 @@ def test_skill_planner_blocks_archive_on_hard_invariants_only():
     assert by_skill["external-skill"]["reason"] == "archive_blocked_by_provenance"
     assert by_skill["referenced-skill"]["reason"] == "archive_blocked_by_active_reference"
     assert all(item["decision"] == "skip" for item in by_skill.values())
+
+
+def test_skill_planner_blocks_archive_with_invalid_successor():
+    pack_data = pack()
+    pack_data["evidence"].append({
+        "id": "ev_archive",
+        "kind": "skill_lifecycle_candidate",
+        "target_skill": "unused-skill",
+        "action": "skill_archive",
+        "archive_reason": "obsolete_marker",
+        "successor_skill": "missing-skill",
+    })
+    pack_data["views"]["skill"].append("ev_archive")
+
+    def fake_planner(*, digest, config):
+        by_name = {item["name"]: item for item in digest["skill_candidates"]}
+        assert by_name["unused-skill"]["successor_validation"] == "invalid_successor"
+        return {"decisions": [{"skill": "unused-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker", "successor": "missing-skill"}]}
+
+    result = run_skill_planner(build_skill_planner_digest(pack_data), config={"_skill_planner_func": fake_planner})
+    decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
+
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "archive_blocked_by_invalid_successor"
 
 
 def test_planner_normalization_strips_action_fields_from_skips_and_requires_evidence_for_editor():
