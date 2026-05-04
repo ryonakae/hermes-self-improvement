@@ -115,6 +115,8 @@ Keep these fixed unless a newer plan explicitly changes them:
 
 ### Slice 1: Make overlay-set the only prompt-overlay promotion path
 
+**Status:** completed in this follow-up slice. `calibration.py` no longer exposes or calls the old `build_prompt_overlay_candidates()` / `_run_prompt_overlay_regression()` single-role active flow. Prompt overlay promotion now flows through `generate_overlay_candidate_set()` + `evaluate_overlay_candidate_set()` + `promote_overlay_candidate_set()` only. Low-level `promote_prompt_candidate()` remains as the internal primitive used by overlay-set promotion and active-overlay loading tests.
+
 **Objective:** Remove the remaining ambiguity where `calibrate` still has both the new overlay-set path and an older planner/editor single-role prompt candidate path.
 
 **Files:**

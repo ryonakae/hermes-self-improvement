@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .autonomous_evaluator import compact_autonomous_evaluation_summary, evaluate_overlay_candidate_set, evaluate_prompt_candidate
+from .autonomous_evaluator import evaluate_overlay_candidate_set
 from .autonomous_policy import build_autonomous_operation_policy, summarize_autonomous_operation_policy
 from .config import normalize_calibration_config
 from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
@@ -13,10 +13,9 @@ from .episodes import record_calibration_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import build_outcome_score_aggregate
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
-from .prompt_candidate_optimizer import generate_overlay_candidate_set, generate_prompt_overlay_candidate
-from .prompt_overlays import load_active_prompt_overlay, promote_overlay_candidate_set, promote_prompt_candidate, write_prompt_candidate
-from .prompts import base_prompt_hash
-from .runtime_eval_cases import build_planner_editor_runtime_eval_cases
+from .prompt_candidate_optimizer import generate_overlay_candidate_set
+from .prompt_overlays import promote_overlay_candidate_set
+from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_planner_editor_runtime_eval_cases
 from .setup_runtime import check_runtime_setup
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -172,84 +171,64 @@ def _empty_prompt_overlay_summary() -> dict[str, Any]:
     return {role: _prompt_overlay_summary(role) for role in ("planner", "editor")}
 
 
-def _prompt_candidate(role: str, *, reason: str, signal_count: int, evidence: dict[str, Any]) -> dict[str, Any]:
-    if role == "planner":
-        addendum = (
-            "Runtime calibration evidence shows planner selection quality issues. "
-            "Be more conservative when evidence is weak-only, preserve skip for action-like unsupported edits, "
-            "and require selected evidence ids before run_editor."
-        )
-    else:
-        addendum = (
-            "Runtime calibration evidence shows skill editor outcomes needing tighter edits. "
-            "Keep edits smaller, verify the target skill still matches the selected evidence, and skip rather than broaden scope."
-        )
-    candidate = {
-        "role": role,
-        "base_prompt_hash": base_prompt_hash(role),
-        "candidate_prompt": {"system_addendum": addendum, "replacement": None},
-        "reason": reason,
-        "signal_count": int(signal_count),
-        "evidence_hash": _sha256_text(_stable_json(evidence)),
-        "recommended_action": "promote_runtime_prompt_overlay_after_regression",
+OVERLAY_TARGET_TO_ROLE = {"planner_overlay": "planner", "editor_overlay": "editor", "evaluator_overlay": "scorer"}
+
+
+def _overlay_candidate_signal(evidence: dict[str, Any], *, overlay_case_count: int) -> bool:
+    return any([
+        int(evidence.get("planner_prompt_signals") or 0) > 0,
+        int(evidence.get("bad_outcomes") or 0) > 0,
+        int(evidence.get("scorer_errors") or 0) > 0,
+        int(evidence.get("disagreements") or 0) > 0,
+        overlay_case_count > 0,
+    ])
+
+
+def _apply_overlay_candidate_set_summary(result: dict[str, Any], *, candidate_set: dict[str, Any], evaluation: dict[str, Any]) -> None:
+    result["overlay_candidate_set"] = {
+        "status": "evaluated",
+        "decision": evaluation.get("decision"),
+        "gepa_result": evaluation.get("gepa_result"),
+        "candidate_set_id": candidate_set.get("candidate_set_id"),
+        "candidate_set_path": candidate_set.get("candidate_set_path"),
+        "changed_targets": evaluation.get("changed_targets") or [],
+        "hard_violations": len(evaluation.get("hard_violations") or []),
+        "evaluation_hash": evaluation.get("evaluation_hash"),
     }
-    candidate["candidate_hash"] = _sha256_text(_stable_json(candidate))
-    return candidate
+    targets = candidate_set.get("targets") if isinstance(candidate_set.get("targets"), dict) else {}
+    for target_name, target in targets.items():
+        if not isinstance(target, dict):
+            continue
+        role = OVERLAY_TARGET_TO_ROLE.get(str(target_name))
+        if role not in result["prompt_overlays"]:
+            continue
+        changed = target.get("change_status") == "changed"
+        result["prompt_overlays"][role].update({
+            "candidate": changed,
+            "candidate_hash": target.get("candidate_hash") if changed else None,
+            "candidate_path": None,
+            "change_status": target.get("change_status"),
+            "candidate_set_id": candidate_set.get("candidate_set_id"),
+        })
 
 
-def build_prompt_overlay_candidates(config: dict[str, Any], evidence: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    candidates: dict[str, dict[str, Any]] = {}
-    planner_signals = int(evidence.get("planner_prompt_signals") or 0)
-    if planner_signals:
-        candidate = generate_prompt_overlay_candidate(config=config, role="planner", evidence=evidence, write_candidate=False)
-        candidate["reason"] = "planner_quality_signals"
-        candidate["signal_count"] = planner_signals
-        candidates["planner"] = candidate
-
-    outcomes = load_review_outcomes(config=config, limit=1000)
-    editor_signals = sum(1 for row in outcomes if str(row.get("outcome") or "") in {"failed", "rejected_by_human"} and str(row.get("target_kind") or "") == "skill")
-    if editor_signals:
-        candidate = generate_prompt_overlay_candidate(config=config, role="editor", evidence=evidence, write_candidate=False)
-        candidate["reason"] = "skill_editor_bad_outcomes"
-        candidate["signal_count"] = editor_signals
-        candidates["editor"] = candidate
-    return candidates
-
-
-def _run_prompt_overlay_regression(*, role: str, candidate: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    cases = [case for case in build_runtime_eval_cases(config) if case.get("role") == role]
-    current_identity = {
-        "planner_prompt_hash": base_prompt_hash("planner"),
-        "editor_prompt_hash": base_prompt_hash("editor"),
-        "evaluator_hash": "unavailable",
-    }
-    current_candidate = load_active_prompt_overlay(config, role=role, base_hash=base_prompt_hash(role))
-    if isinstance(current_candidate, dict):
-        if role == "planner":
-            current_identity["planner_prompt_hash"] = str(current_candidate.get("candidate_hash") or current_identity["planner_prompt_hash"])
-        elif role == "editor":
-            current_identity["editor_prompt_hash"] = str(current_candidate.get("candidate_hash") or current_identity["editor_prompt_hash"])
-    candidate_identity = dict(current_identity)
-    candidate_hash = str(candidate.get("candidate_hash") or "unavailable")
-    if role == "planner":
-        candidate_identity["planner_prompt_hash"] = candidate_hash
-    elif role == "editor":
-        candidate_identity["editor_prompt_hash"] = candidate_hash
-    evaluation = evaluate_prompt_candidate(
-        role=role,
-        candidate=candidate,
-        current_identity=current_identity,
-        candidate_identity=candidate_identity,
-        cases=cases,
-        outcome_aggregate=collect_calibration_evidence(config).get("credit_assignment") if cases else None,
-        current_candidate=current_candidate,
-    )
-    summary = compact_autonomous_evaluation_summary(evaluation)
-    return {
-        "status": "passed" if evaluation.get("decision") == "promote" else "failed",
-        "reason": f"autonomous_evaluator_{evaluation.get('decision')}",
-        "autonomous_evaluation": summary,
-    }
+def _mark_promoted_overlay_targets(result: dict[str, Any], *, promotion: dict[str, Any]) -> list[str]:
+    promoted_targets = [str(target) for target in promotion.get("promoted_targets") or []]
+    candidate_paths = promotion.get("candidate_paths") if isinstance(promotion.get("candidate_paths"), dict) else {}
+    result["overlay_candidate_set"].update({
+        "status": "promoted",
+        "overlay_generation_id": promotion.get("overlay_generation_id"),
+        "promoted_targets": promoted_targets,
+        "candidate_paths": candidate_paths,
+    })
+    for target in promoted_targets:
+        role = OVERLAY_TARGET_TO_ROLE.get(target)
+        if role in result["prompt_overlays"]:
+            result["prompt_overlays"][role].update({
+                "promoted": True,
+                "candidate_path": candidate_paths.get(target),
+            })
+    return promoted_targets
 
 
 def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, Any]) -> dict[str, Any] | None:
@@ -479,28 +458,17 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         return result
 
     candidate = _candidate_from_evidence(evidence, calibration)
-    prompt_candidates = build_prompt_overlay_candidates(config, evidence)
+    overlay_case_count = len(build_overlay_set_runtime_eval_cases(config=config, limit=1))
+    should_build_overlay_set = candidate is not None or _overlay_candidate_signal(evidence, overlay_case_count=overlay_case_count)
     overlay_candidate_set = None
     overlay_candidate_set_evaluation = None
-    if candidate is not None or prompt_candidates:
+    if should_build_overlay_set:
         overlay_candidate_set = generate_overlay_candidate_set(config=config, evidence=evidence)
         overlay_candidate_set_evaluation = evaluate_overlay_candidate_set(overlay_candidate_set)
-        result["overlay_candidate_set"] = {
-            "status": "evaluated",
-            "decision": overlay_candidate_set_evaluation.get("decision"),
-            "gepa_result": overlay_candidate_set_evaluation.get("gepa_result"),
-            "candidate_set_id": overlay_candidate_set.get("candidate_set_id"),
-            "candidate_set_path": overlay_candidate_set.get("candidate_set_path"),
-            "changed_targets": overlay_candidate_set_evaluation.get("changed_targets") or [],
-            "hard_violations": len(overlay_candidate_set_evaluation.get("hard_violations") or []),
-            "evaluation_hash": overlay_candidate_set_evaluation.get("evaluation_hash"),
-        }
-    for role in ("planner", "editor"):
-        result["prompt_overlays"][role] = _prompt_overlay_summary(role, candidate=prompt_candidates.get(role))
-    runtime_cases = build_runtime_eval_cases(config) if (candidate is not None or prompt_candidates) else []
-    for role, prompt_candidate in prompt_candidates.items():
-        result["prompt_overlays"][role]["regression"] = _run_prompt_overlay_regression(role=role, candidate=prompt_candidate, config=config)
-    if candidate is None and not prompt_candidates:
+        _apply_overlay_candidate_set_summary(result, candidate_set=overlay_candidate_set, evaluation=overlay_candidate_set_evaluation)
+
+    runtime_cases = build_runtime_eval_cases(config) if candidate is not None else []
+    if candidate is None and overlay_candidate_set is None:
         result["reasons"].append("insufficient_evidence")
         return result
 
@@ -513,46 +481,15 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
     }
     if execute:
         prompt_promoted = False
-        promoted_roles: list[str] = []
-        if overlay_candidate_set is not None and overlay_candidate_set_evaluation is not None and overlay_candidate_set_evaluation.get("decision") == "promote":
-            promotion = promote_overlay_candidate_set(config, candidate_set=overlay_candidate_set, evaluation=overlay_candidate_set_evaluation)
-            promoted_targets = [str(target) for target in promotion.get("promoted_targets") or []]
-            result["overlay_candidate_set"].update({
-                "status": "promoted",
-                "overlay_generation_id": promotion.get("overlay_generation_id"),
-                "promoted_targets": promoted_targets,
-                "candidate_paths": promotion.get("candidate_paths") if isinstance(promotion.get("candidate_paths"), dict) else {},
-            })
-            prompt_promoted = bool(promoted_targets)
-            promoted_roles.extend(promoted_targets)
-            for target in promoted_targets:
-                role = {"planner_overlay": "planner", "editor_overlay": "editor"}.get(target)
-                if role and role in result["prompt_overlays"]:
-                    result["prompt_overlays"][role].update({
-                        "promoted": True,
-                        "candidate_path": (promotion.get("candidate_paths") or {}).get(target) if isinstance(promotion.get("candidate_paths"), dict) else None,
-                    })
-            result["prompt_overlay_updates"] = {"status": "updated", "promoted_roles": promoted_roles, "failed_roles": []}
-        for role, prompt_candidate in ({} if prompt_promoted else prompt_candidates).items():
-            regression = _run_prompt_overlay_regression(role=role, candidate=prompt_candidate, config=config)
-            result["prompt_overlays"][role]["regression"] = regression
-            if regression.get("status") != "passed":
-                result["current_status"] = "failed"
-                result["runtime_eval_cases"]["status"] = "not_written_regression_failed" if runtime_cases else "empty"
-                result["reasons"].append(str(regression.get("reason") or "prompt_overlay_regression_failed"))
-                result["prompt_overlay_updates"] = {"status": "failed", "promoted_roles": promoted_roles, "failed_roles": [role]}
-                return _attach_episode_summary(config, result)
-            candidate_path = write_prompt_candidate(config, role=role, candidate=prompt_candidate)
-            promote_prompt_candidate(config, role=role, candidate_path=candidate_path, regression=regression)
-            result["prompt_overlays"][role].update({
-                "candidate_path": str(candidate_path),
-                "candidate_hash": prompt_candidate.get("candidate_hash"),
-                "promoted": True,
-            })
-            prompt_promoted = True
-            promoted_roles.append(role)
-        if promoted_roles:
-            result["prompt_overlay_updates"] = {"status": "updated", "promoted_roles": promoted_roles, "failed_roles": []}
+        promoted_targets: list[str] = []
+        if overlay_candidate_set is not None and overlay_candidate_set_evaluation is not None:
+            if overlay_candidate_set_evaluation.get("decision") == "promote":
+                promotion = promote_overlay_candidate_set(config, candidate_set=overlay_candidate_set, evaluation=overlay_candidate_set_evaluation)
+                promoted_targets = _mark_promoted_overlay_targets(result, promotion=promotion)
+                prompt_promoted = bool(promoted_targets)
+                result["prompt_overlay_updates"] = {"status": "updated", "promoted_roles": promoted_targets, "failed_roles": []}
+            else:
+                result["prompt_overlay_updates"] = {"status": "kept", "promoted_roles": [], "failed_roles": []}
 
         evaluator_updated = False
         if candidate is not None:
@@ -601,12 +538,14 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
                 active_before_hash=active_before_hash,
                 active_after_hash=active_after_hash,
             ))
-        result["current_status"] = "updated"
         result["active_changed"] = bool(prompt_promoted or evaluator_updated)
+        result["current_status"] = "updated" if result["active_changed"] else "no_op"
+        if not result["active_changed"] and overlay_candidate_set_evaluation is not None:
+            result["reasons"].append("overlay_candidate_set_" + str(overlay_candidate_set_evaluation.get("decision") or "not_promoted"))
     else:
         result["current_status"] = "would_update"
         result["regression"] = {"status": "not_run", "reason": "preview"} if candidate is not None else None
-        if prompt_candidates:
+        if overlay_candidate_set is not None:
             result["prompt_overlay_updates"]["status"] = "would_update"
         if candidate is not None:
             result["evaluator_update"] = {"status": "would_update", "reason": "preview", "active_changed": False}

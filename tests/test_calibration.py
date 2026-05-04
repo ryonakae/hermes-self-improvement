@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+from hermes_self_improvement.prompts import base_prompt_hash
+
 PLUGIN_INIT = Path(__file__).resolve().parents[1] / "__init__.py"
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
@@ -308,10 +310,9 @@ def test_calibration_dry_run_previews_prompt_overlay_candidates_without_active_p
 
     assert result["current_status"] == "would_update"
     assert result["candidate"] is None
-    assert result["prompt_overlays"]["planner"]["candidate"] is True
+    assert result["overlay_candidate_set"]["status"] == "evaluated"
+    assert result["overlay_candidate_set"]["candidate_set_id"]
     assert result["prompt_overlays"]["planner"]["promoted"] is False
-    assert result["prompt_overlays"]["planner"]["candidate_path"] is None
-    assert result["prompt_overlays"]["editor"]["candidate"] is True
     assert result["prompt_overlays"]["editor"]["promoted"] is False
     assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists() is False
 
@@ -351,101 +352,52 @@ def test_calibration_dry_run_evaluates_overlay_candidate_set(monkeypatch, tmp_pa
     }
 
 
-def test_prompt_overlay_regression_uses_autonomous_evaluator(tmp_path):
-    calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
-    root = Path(cfg["_self_improvement_root"])
-    write_json(root / "episodes" / "2026-05-03" / "weak.json", {
-        "schema_name": "self_improvement_episode",
-        "schema_version": "1.0",
-        "episode_id": "episode-weak",
-        "episode_kind": "preview_decision",
-        "target_kind": "skill",
-        "target_id": "demo-skill",
-        "planner_prompt_hash": "sha256:planner",
-        "editor_prompt_hash": "sha256:editor",
-        "evaluator_hash": "sha256:evaluator",
-        "decision": "run_editor",
-        "action": "no_op",
-        "executed": False,
-        "learnable": True,
-        "changed": False,
-        "created_at": "2026-05-03T00:00:00+00:00",
-        "evidence_ids": ["ev1"],
-        "evidence_strength": "weak",
-        "reason": "weak_only_selected",
-    })
-    write_json(root / "episodes" / "2026-05-03" / "exact.json", {
-        "schema_name": "self_improvement_episode",
-        "schema_version": "1.0",
-        "episode_id": "episode-exact",
-        "episode_kind": "executed_mutation",
-        "target_kind": "skill",
-        "target_id": "demo-skill",
-        "planner_prompt_hash": "sha256:planner",
-        "editor_prompt_hash": "sha256:editor",
-        "evaluator_hash": "sha256:evaluator",
-        "decision": "run_editor",
-        "action": "skill_patch",
-        "executed": True,
-        "learnable": True,
-        "changed": True,
-        "created_at": "2026-05-03T00:00:00+00:00",
-        "evidence_ids": ["ev2"],
-        "evidence_strength": "strong",
-        "reason": "exact evidence",
-    })
-
-    regression = calibration._run_prompt_overlay_regression(
-        role="planner",
-        candidate={"candidate_hash": "sha256:candidate", "case_behaviors": {"planner_weak_only_skip": {"decision": "skip"}}},
-        config=cfg,
-    )
-
-    assert regression["status"] == "passed"
-    assert regression["reason"] == "autonomous_evaluator_promote"
-    assert regression["autonomous_evaluation"]["case_count"] == 2
-    assert "case_results" not in regression["autonomous_evaluation"]
-
-
-
-def test_calibration_execute_promotes_prompt_overlay_after_regression_pass(monkeypatch, tmp_path):
-    calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
-    write_review_outcome(cfg, {"outcome": "failed", "target_kind": "skill", "change_type": "skill_edit", "source": "runner"}, "skill-failed.json")
-    write_planner_quality_run(cfg, {"step_decisions": {"skill": {"planner_quality": {"action_like_skips": 1}}}}, "planner-quality.json")
-    monkeypatch.setattr(calibration, "_run_prompt_overlay_regression", lambda *, role, candidate, config: {"status": "passed", "cases": 2})
-
-    result = calibration.run_calibration(config=cfg, execute=True)
-
-    assert result["current_status"] == "updated"
-    assert result["active_changed"] is True
-    pointer_path = tmp_path / "self-improvement" / "evaluator" / "active-prompts.json"
-    assert pointer_path.exists()
-    pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
-    assert pointer["roles"]["planner"]["active"] is True
-    assert pointer["roles"]["editor"]["active"] is True
-    assert result["prompt_overlays"]["planner"]["promoted"] is True
-    assert Path(result["prompt_overlays"]["planner"]["candidate_path"]).exists()
-    assert result["prompt_overlays"]["editor"]["promoted"] is True
-    assert Path(result["prompt_overlays"]["editor"]["candidate_path"]).exists()
-
-
-def test_calibration_execute_promotes_overlay_candidate_set(monkeypatch, tmp_path):
-    calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
-    write_planner_quality_run(cfg, {"step_decisions": {"skill": {"planner_quality": {"action_like_skips": 1}}}}, "planner-quality.json")
-    planner_candidate = {
-        "role": "planner",
-        "base_prompt_hash": calibration.base_prompt_hash("planner"),
-        "candidate_prompt": {"system_addendum": "Prefer exact evidence.", "replacement": None},
-        "candidate_hash": "sha256:planner-candidate",
+def overlay_candidate_set_payload(calibration, tmp_path: Path, *, candidate_set_id: str = "overlay-set-001") -> dict:
+    return {
+        "candidate_set_id": candidate_set_id,
+        "candidate_set_path": str(tmp_path / "candidate-set.json"),
+        "targets": {
+            "planner_overlay": {
+                "target": "planner_overlay",
+                "role": "planner",
+                "candidate_set_id": candidate_set_id,
+                "change_status": "changed",
+                "base_prompt_hash": base_prompt_hash("planner"),
+                "candidate_prompt": {"system_addendum": "Prefer exact evidence.", "replacement": None},
+                "candidate_hash": "sha256:planner-candidate",
+            },
+            "editor_overlay": {
+                "target": "editor_overlay",
+                "role": "editor",
+                "candidate_set_id": candidate_set_id,
+                "change_status": "unchanged",
+                "base_prompt_hash": base_prompt_hash("editor"),
+                "candidate_prompt": {"system_addendum": None, "replacement": None},
+                "candidate_hash": "sha256:editor-candidate",
+            },
+        },
     }
-    candidate_set = {"candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json")}
-    evaluation = {"decision": "promote", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": [], "evaluation_hash": "sha256:evaluation"}
+
+
+def overlay_evaluation(*, decision: str = "promote", gepa_result: str = "selected") -> dict:
+    return {
+        "decision": decision,
+        "gepa_result": gepa_result,
+        "changed_targets": ["planner_overlay"] if decision == "promote" else [],
+        "hard_violations": [],
+        "evaluation_hash": "sha256:evaluation",
+    }
+
+
+def test_calibration_execute_promotes_overlay_candidate_set_without_single_role_path(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
+    write_planner_quality_run(cfg, {"step_decisions": {"skill": {"planner_quality": {"action_like_skips": 1}}}}, "planner-quality.json")
+    candidate_set = overlay_candidate_set_payload(calibration, tmp_path)
+    evaluation = overlay_evaluation()
     promoted = []
 
-    monkeypatch.setattr(calibration, "build_prompt_overlay_candidates", lambda config, evidence: {"planner": planner_candidate})
+    assert not hasattr(calibration, "build_prompt_overlay_candidates")
     monkeypatch.setattr(calibration, "generate_overlay_candidate_set", lambda *, config, evidence: candidate_set)
     monkeypatch.setattr(calibration, "evaluate_overlay_candidate_set", lambda value: evaluation)
     monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: promoted.append((candidate_set, evaluation)) or {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["planner_overlay"], "candidate_paths": {"planner_overlay": str(tmp_path / "planner.json")}})
@@ -458,17 +410,16 @@ def test_calibration_execute_promotes_overlay_candidate_set(monkeypatch, tmp_pat
     assert result["overlay_candidate_set"]["status"] == "promoted"
     assert result["overlay_candidate_set"]["overlay_generation_id"] == "overlay-set-001"
     assert result["overlay_candidate_set"]["promoted_targets"] == ["planner_overlay"]
+    assert result["prompt_overlay_updates"] == {"status": "updated", "promoted_roles": ["planner_overlay"], "failed_roles": []}
+    assert result["prompt_overlays"]["planner"]["candidate"] is True
+    assert result["prompt_overlays"]["planner"]["promoted"] is True
+    assert result["prompt_overlays"]["planner"]["candidate_set_id"] == "overlay-set-001"
 
 
-def test_calibration_reports_partial_update_when_prompt_promoted_but_evaluator_regression_fails(monkeypatch, tmp_path):
+def test_calibration_reports_partial_update_when_overlay_set_promoted_but_evaluator_regression_fails(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path)
-    planner_candidate = {
-        "role": "planner",
-        "base_prompt_hash": calibration.base_prompt_hash("planner"),
-        "candidate_prompt": {"system_addendum": "Prefer skip for weak-only evidence.", "replacement": None},
-        "candidate_hash": "sha256:planner-candidate",
-    }
+    candidate_set = overlay_candidate_set_payload(calibration, tmp_path)
     monkeypatch.setattr(calibration, "collect_calibration_evidence", lambda config: {
         "total_events": 20,
         "disagreements": 5,
@@ -476,8 +427,9 @@ def test_calibration_reports_partial_update_when_prompt_promoted_but_evaluator_r
         "scorer_errors": 0,
         "planner_prompt_signals": 1,
     })
-    monkeypatch.setattr(calibration, "build_prompt_overlay_candidates", lambda config, evidence: {"planner": planner_candidate})
-    monkeypatch.setattr(calibration, "_run_prompt_overlay_regression", lambda *, role, candidate, config: {"status": "passed", "reason": "autonomous_evaluator_promote"})
+    monkeypatch.setattr(calibration, "generate_overlay_candidate_set", lambda *, config, evidence: candidate_set)
+    monkeypatch.setattr(calibration, "evaluate_overlay_candidate_set", lambda value: overlay_evaluation())
+    monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["planner_overlay"], "candidate_paths": {"planner_overlay": str(tmp_path / "planner.json")}})
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "failed", "reason": "regression_runner_not_configured"})
 
     result = calibration.run_calibration(config=cfg, execute=True)
@@ -485,27 +437,30 @@ def test_calibration_reports_partial_update_when_prompt_promoted_but_evaluator_r
     assert result["current_status"] == "partial_update"
     assert result["active_changed"] is True
     assert result["prompt_overlay_updates"]["status"] == "updated"
-    assert result["prompt_overlay_updates"]["promoted_roles"] == ["planner"]
+    assert result["prompt_overlay_updates"]["promoted_roles"] == ["planner_overlay"]
     assert result["prompt_overlays"]["planner"]["promoted"] is True
     assert result["evaluator_update"]["status"] == "failed"
     assert result["evaluator_update"]["reason"] == "regression_runner_not_configured"
     assert "evaluator_regression_runner_not_configured" in result["reasons"]
-    assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists()
 
 
-def test_calibration_execute_does_not_promote_prompt_overlay_on_regression_failure(monkeypatch, tmp_path):
+def test_calibration_execute_keeps_non_promoted_overlay_candidate_set(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
-    write_review_outcome(cfg, {"outcome": "failed", "target_kind": "skill", "change_type": "skill_edit", "source": "runner"}, "skill-failed.json")
-    monkeypatch.setattr(calibration, "_run_prompt_overlay_regression", lambda *, role, candidate, config: {"status": "failed", "reason": "prompt_regression_failed"})
+    write_planner_quality_run(cfg, {"step_decisions": {"skill": {"planner_quality": {"action_like_skips": 1}}}}, "planner-quality.json")
+    candidate_set = overlay_candidate_set_payload(calibration, tmp_path)
+
+    monkeypatch.setattr(calibration, "generate_overlay_candidate_set", lambda *, config, evidence: candidate_set)
+    monkeypatch.setattr(calibration, "evaluate_overlay_candidate_set", lambda value: overlay_evaluation(decision="keep_candidate", gepa_result="no_improvement"))
 
     result = calibration.run_calibration(config=cfg, execute=True)
 
-    assert result["current_status"] == "failed"
+    assert result["current_status"] == "no_op"
     assert result["active_changed"] is False
-    assert result["prompt_overlays"]["editor"]["candidate"] is True
-    assert result["prompt_overlays"]["editor"]["promoted"] is False
-    assert result["prompt_overlays"]["editor"]["regression"]["status"] == "failed"
+    assert result["overlay_candidate_set"]["status"] == "evaluated"
+    assert result["overlay_candidate_set"]["decision"] == "keep_candidate"
+    assert result["prompt_overlay_updates"] == {"status": "kept", "promoted_roles": [], "failed_roles": []}
+    assert "overlay_candidate_set_keep_candidate" in result["reasons"]
     assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists() is False
 
 
