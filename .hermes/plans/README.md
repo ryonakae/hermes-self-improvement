@@ -6,7 +6,7 @@ As of 2026-05-05, the current implementation and remaining-work source of truth 
 
 - `2026-05-05_000647-self-improvement-roadmap-refresh.md`
   - **Status:** active follow-up roadmap.
-  - Records the observed code state through `bb3f045 feat: connect GEPA overlay optimizer` and defines the remaining slices: make overlay-set the only prompt-overlay promotion path, dogfood one real generation loop, improve bounded GEPA case selection, clarify calibration sub-results, and keep top-level `hermes self-improvement ...` CLI integration separate from plugin quality work.
+  - Records the observed code state through `c40b03a fix: clarify calibration sub-results`. Completed slices include overlay-set-only calibration, bounded high-signal GEPA case selection, optional explicit candidate-set artifact reuse, and clearer calibration component summaries. Remaining plugin-side work is now narrowed to dogfooding one real overlay generation loop, conditional no-promotion case/scoring inspection, and minor legacy summary cleanup. Top-level `hermes self-improvement ...` CLI integration is explicitly out of scope because it requires Hermes core changes; use `bin/hermes-self-improve ...`.
 
 The latest completed implementation plan is:
 
