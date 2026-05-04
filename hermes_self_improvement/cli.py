@@ -628,6 +628,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
     editor_prompt_chars = planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {}
     planner_decisions = planner.get("decisions") if isinstance(planner.get("decisions"), list) else []
+    skill_decisions = skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "run_editor"][:5]
     human_review_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "human_review"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
@@ -639,6 +640,23 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     strong_count = int(evidence_strength_counts.get("strong") or 0)
     medium_count = int(evidence_strength_counts.get("medium") or 0)
     weak_count = int(evidence_strength_counts.get("weak") or 0)
+    archive_candidates = int(planner_summary.get("archive_candidates") or 0)
+    would_archive = sum(1 for item in skill_decisions if isinstance(item, dict) and item.get("decision") == "archive_skill_preview")
+    archived = sum(
+        1
+        for item in skill_decisions
+        if isinstance(item, dict)
+        and item.get("decision") == "accepted"
+        and isinstance(item.get("planner_decision"), dict)
+        and item["planner_decision"].get("decision") == "archive_skill"
+    )
+    blocked_archive = sum(
+        1
+        for item in skill_decisions
+        if isinstance(item, dict)
+        and item.get("decision") in {"rejected", "skip"}
+        and (item.get("archive_reason") or str(item.get("reason") or "").startswith("archive_blocked"))
+    )
     lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
     for decision in memory_step.get("decisions") or []:
         if isinstance(decision, dict):
@@ -670,6 +688,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- editor: {'runtime overlay' if editor_prompt.get('overlay_active') else 'base'} hash {editor_prompt.get('active_hash') or editor_prompt.get('base_hash') or 'unknown'}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
+        "Skill lifecycle:",
+        f"- archive candidates {archive_candidates}, would archive {would_archive}, archived {archived}, blocked {blocked_archive}",
         "Memory improvements:",
         f"- changed {int(summary.get('memory_changes') or 0)} memories",
         f"- related lookups: completed {lookup_counts['completed']}, unavailable {lookup_counts['unavailable']}, failed {lookup_counts['failed']}, skipped {lookup_counts['skipped']}",

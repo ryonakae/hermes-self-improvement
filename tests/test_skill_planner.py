@@ -245,6 +245,38 @@ def test_skill_planner_blocks_archive_without_attached_lifecycle_evidence():
     assert decision["reason"] == "archive_without_lifecycle_evidence"
 
 
+def test_skill_planner_blocks_archive_on_hard_invariants_only():
+    pack_data = pack()
+    pack_data["evidence"].extend([
+        {"id": "ev_pinned", "kind": "skill_lifecycle_candidate", "target_skill": "pinned-skill", "action": "skill_archive", "archive_reason": "obsolete_marker"},
+        {"id": "ev_external", "kind": "skill_lifecycle_candidate", "target_skill": "external-skill", "action": "skill_archive", "archive_reason": "obsolete_marker"},
+        {"id": "ev_ref", "kind": "skill_lifecycle_candidate", "target_skill": "referenced-skill", "action": "skill_archive", "archive_reason": "obsolete_marker"},
+    ])
+    pack_data["views"]["skill"].extend(["ev_pinned", "ev_external", "ev_ref"])
+    pack_data["skill_candidates"] = [
+        {"name": "pinned-skill", "state": "active", "source": "curator", "pinned": True},
+        {"name": "external-skill", "state": "active", "source": "external", "provenance": "external"},
+        {"name": "referenced-skill", "state": "active", "source": "curator", "active_reference_count": 1},
+    ]
+
+    def fake_planner(*, digest, config):
+        return {
+            "decisions": [
+                {"skill": "pinned-skill", "decision": "archive_skill", "evidence_ids": ["ev_pinned"], "archive_reason": "obsolete_marker"},
+                {"skill": "external-skill", "decision": "archive_skill", "evidence_ids": ["ev_external"], "archive_reason": "obsolete_marker"},
+                {"skill": "referenced-skill", "decision": "archive_skill", "evidence_ids": ["ev_ref"], "archive_reason": "obsolete_marker"},
+            ]
+        }
+
+    result = run_skill_planner(build_skill_planner_digest(pack_data), config={"_skill_planner_func": fake_planner})
+    by_skill = {item["skill"]: item for item in result["decisions"]}
+
+    assert by_skill["pinned-skill"]["reason"] == "archive_blocked_by_pinned"
+    assert by_skill["external-skill"]["reason"] == "archive_blocked_by_provenance"
+    assert by_skill["referenced-skill"]["reason"] == "archive_blocked_by_active_reference"
+    assert all(item["decision"] == "skip" for item in by_skill.values())
+
+
 def test_planner_normalization_strips_action_fields_from_skips_and_requires_evidence_for_editor():
     def fake_planner(*, digest, config):
         return {

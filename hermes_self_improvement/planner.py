@@ -225,9 +225,11 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
             "name": name,
             "description": _redacted_preview(candidate.get("description") or candidate.get("summary") or "", max_chars=180),
             "state": candidate.get("state"),
+            "pinned": bool(candidate.get("pinned")),
             "provenance": candidate.get("provenance"),
             "source": candidate.get("source") or "curator",
             "mutable": bool(candidate.get("mutable", True)),
+            "active_reference_count": int(candidate.get("active_reference_count") or candidate.get("blocking_reference_count") or 0),
             "usage": candidate.get("usage") if isinstance(candidate.get("usage"), dict) else {},
             "attached_evidence_count": len(evidence),
             "evidence_ids": [str(item.get("id") or "") for item in evidence if item.get("id")],
@@ -322,6 +324,7 @@ def _normalize_decision(
     candidate_names: set[str],
     evidence_by_candidate: dict[str, set[str]],
     archive_markers_by_candidate: dict[str, list[str]],
+    candidate_by_name: dict[str, dict[str, Any]],
 ) -> dict[str, Any] | None:
     skill = str(raw.get("skill") or "").strip()
     if skill not in candidate_names:
@@ -341,6 +344,25 @@ def _normalize_decision(
     if decision == "archive_skill" and not archive_markers_by_candidate.get(skill):
         decision = "skip"
         forced_skip_reason = "archive_without_lifecycle_evidence"
+    if decision == "archive_skill":
+        candidate = candidate_by_name.get(skill) or {}
+        provenance = str(candidate.get("provenance") or candidate.get("source") or "")
+        state = str(candidate.get("state") or "")
+        if candidate.get("pinned"):
+            decision = "skip"
+            forced_skip_reason = "archive_blocked_by_pinned"
+        elif int(candidate.get("active_reference_count") or 0) > 0:
+            decision = "skip"
+            forced_skip_reason = "archive_blocked_by_active_reference"
+        elif provenance in {"external", "hub", "builtin", "plugin", "plugin-bundled"}:
+            decision = "skip"
+            forced_skip_reason = "archive_blocked_by_provenance"
+        elif state == "archived":
+            decision = "skip"
+            forced_skip_reason = "archive_blocked_by_already_archived"
+        elif state and state not in {"active", "stale"}:
+            decision = "skip"
+            forced_skip_reason = "archive_blocked_by_lifecycle_state"
     normalized = {
         "skill": skill,
         "decision": decision,
@@ -390,6 +412,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         raise ValueError("planner_response_missing_decisions")
     candidate_rows = [item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)]
     candidate_names = {str(item.get("name") or "") for item in candidate_rows if item.get("name")}
+    candidate_by_name = {str(item.get("name") or ""): item for item in candidate_rows if item.get("name")}
     evidence_by_candidate = {
         str(item.get("name") or ""): {str(eid) for eid in (item.get("evidence_ids") or [])}
         for item in candidate_rows
@@ -410,6 +433,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
             candidate_names=candidate_names,
             evidence_by_candidate=evidence_by_candidate,
             archive_markers_by_candidate=archive_markers_by_candidate,
+            candidate_by_name=candidate_by_name,
         )
         if not item:
             continue

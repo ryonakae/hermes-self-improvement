@@ -273,7 +273,11 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
         "dry_run": False,
         "summary": {"skill_changes": 2, "memory_changes": 1, "scorer_evaluator_changed": False},
         "calibration": {"current_status": "updated", "runtime_eval_cases": {"count": 3, "status": "written"}},
-        "step_decisions": {"summary": {"total": 4}, "memory": {"decisions": [{"related_memory_lookup": {"status": "completed"}}]}},
+        "step_decisions": {
+            "summary": {"total": 4},
+            "skill": {"planner": {"summary": {"archive_candidates": 1}}, "decisions": [{"decision": "archive_skill_preview"}]},
+            "memory": {"decisions": [{"related_memory_lookup": {"status": "completed"}}]},
+        },
         "curator_telemetry": {"available": True, "candidate_count": 3, "rejected_count": 2},
         "evidence_pack": {"summary": {"evidence_count": 5, "ignored_count": 1}},
         "artifact_path": "/tmp/run.json",
@@ -282,6 +286,8 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "Self-improvement result" in text
     assert "Skill improvements:" in text
     assert "- changed 2 skills" in text
+    assert "Skill lifecycle:" in text
+    assert "- archive candidates 1, would archive 1, archived 0, blocked 0" in text
     assert "Memory improvements:" in text
     assert "- changed 1 memories" in text
     assert "Curator telemetry:" in text
