@@ -196,6 +196,28 @@ def test_analyze_events_passes_through_explicit_skill_lifecycle_candidate_event(
     assert result.proposals[0]["auto_apply"] is False
 
 
+def test_analyze_events_drops_archived_explicit_skill_lifecycle_candidate_event():
+    mod = load_plugin_module()
+    now = datetime(2026, 4, 28, 22, 30, tzinfo=timezone.utc)
+    event = {
+        "ts": now.isoformat(),
+        "event": "self_improvement_candidate",
+        "session_id": "s-archived",
+        "candidate_kind": "skill_lifecycle_candidate",
+        "action": "skill_archive",
+        "target_path": "/tmp/skills/.archive/old-skill/SKILL.md",
+        "lifecycle_state": "archived",
+        "reason": "Already archived skills must not become archive candidates again.",
+    }
+
+    result = mod.analyze_events([event], now, now)
+
+    assert result.summary["explicit_candidate_count"] == 0
+    assert result.summary["dropped_explicit_candidate_count"] == 1
+    assert result.findings == []
+    assert result.proposals == []
+
+
 def test_analyze_events_drops_malformed_explicit_candidate_event():
     mod = load_plugin_module()
     now = datetime(2026, 4, 28, 22, 0, tzinfo=timezone.utc)
@@ -301,6 +323,17 @@ def test_scan_skill_lifecycle_candidates_skips_active_skill(tmp_path):
     skill_file = tmp_path / "skills" / "active-skill" / "SKILL.md"
     skill_file.parent.mkdir(parents=True)
     skill_file.write_text("---\nname: active-skill\ndescription: Active.\n---\n\n# Active\n", encoding="utf-8")
+
+    events = mod.scan_skill_lifecycle_candidates([str(skill_file)])
+
+    assert events == []
+
+
+def test_scan_skill_lifecycle_candidates_skips_archived_skill_paths(tmp_path):
+    mod = load_plugin_module()
+    skill_file = tmp_path / "skills" / ".archive" / "old-skill" / "SKILL.md"
+    skill_file.parent.mkdir(parents=True)
+    skill_file.write_text("---\nname: old-skill\ndeprecated: true\n---\n\n# Old\n", encoding="utf-8")
 
     events = mod.scan_skill_lifecycle_candidates([str(skill_file)])
 

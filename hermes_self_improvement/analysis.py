@@ -102,6 +102,8 @@ _EXPLICIT_CANDIDATE_PASSTHROUGH_KEYS = (
     "source_path",
     "confidence",
     "title",
+    "lifecycle_state",
+    "state",
 )
 
 
@@ -109,9 +111,29 @@ def _candidate_kind_for_event(ev: dict[str, Any]) -> str:
     return str(ev.get("candidate_kind") or ev.get("kind") or ev.get("finding_kind") or "")
 
 
+def _is_archived_skill_reference(value: Any) -> bool:
+    try:
+        parts = Path(str(value)).parts
+    except Exception:
+        return False
+    return ".archive" in parts
+
+
+def _explicit_candidate_is_archived(ev: dict[str, Any]) -> bool:
+    state = str(ev.get("lifecycle_state") or ev.get("state") or "").strip().lower()
+    if state == "archived":
+        return True
+    for key in ("target_path", "path", "file_path", "skill_path", "source_path", "destination_path"):
+        if ev.get(key) and _is_archived_skill_reference(ev.get(key)):
+            return True
+    return False
+
+
 def _explicit_candidate_from_event(ev: dict[str, Any]) -> dict[str, Any] | None:
     kind = _candidate_kind_for_event(ev)
     if ev.get("event") != "self_improvement_candidate" or kind not in _EXPLICIT_CANDIDATE_KINDS:
+        return None
+    if kind == "skill_lifecycle_candidate" and _explicit_candidate_is_archived(ev):
         return None
     finding: dict[str, Any] = {
         "kind": kind,
@@ -219,7 +241,7 @@ def scan_skill_lifecycle_candidates(skill_paths: list[str | Path], *, created_at
     events: list[dict[str, Any]] = []
     for path_value in skill_paths:
         path = Path(path_value).expanduser()
-        if not path.is_file():
+        if not path.is_file() or _is_archived_skill_reference(path):
             continue
         before = path.read_text(encoding="utf-8", errors="replace")
         reason_info = _skill_archive_candidate_reason(before)
