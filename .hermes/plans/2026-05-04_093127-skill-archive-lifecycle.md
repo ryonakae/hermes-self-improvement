@@ -1,6 +1,6 @@
 # Skill archive lifecycle for hermes-self-improvement
 
-**Status:** planned
+**Status:** mostly implemented; remaining work is llm archive fixture/smoke and daily digest polish
 **Created:** 2026-05-04 09:31
 
 ## Goal
@@ -543,6 +543,25 @@ Expected dry-run should include lifecycle summary without huge tool result paylo
 - `skills/operations/SKILL.md`
 - `README.md`
 - tests covering the above
+
+## Implementation status
+
+Implemented commits through `0585745` and follow-up report work:
+
+- lifecycle candidates emit `skill_archive`, not `skill_delete`;
+- `archive_skill` is a planner decision and no longer routed to human review;
+- archive execution calls `tools.skill_usage.archive_skill(...)` only;
+- dry-run and agent tool summaries stay compact and point to artifacts;
+- active cron/config/preload references are attached as evidence and block execution only in preflight;
+- successor hints are validated when the planner selects one;
+- archived skills are excluded from scanner / explicit candidate / Curator candidate paths;
+- archive decisions are recorded as episodes with lifecycle metadata;
+- credit assignment now groups archive outcomes by archive reason, successor presence/validation, blocking reference count, and lifecycle state.
+
+Remaining work:
+
+- add a deterministic `--scorer llm` archive candidate fixture/smoke;
+- polish daily digest/report consumption if the concierge job needs more than the current report lifecycle summary.
 
 ## Non-goals
 

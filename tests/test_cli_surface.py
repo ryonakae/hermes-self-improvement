@@ -351,7 +351,17 @@ def test_setup_summary_is_human_readable_not_json():
 def test_operational_report_sections_include_runner_artifact_summary():
     cli = load_cli_module()
     lines = cli._render_operational_report_sections({
-        "recent_runs": [{"path": "/tmp/run.json", "summary": {"skill_changes": 1}}],
+        "recent_runs": [{
+            "path": "/tmp/run.json",
+            "summary": {"skill_changes": 1},
+            "skill_lifecycle": {
+                "archive_candidates": 2,
+                "would_archive": 1,
+                "archived": 0,
+                "blocked": 1,
+                "blocked_by_reason": {"archive_blocked_by_active_reference": 1},
+            },
+        }],
         "recent_evidence": [{"path": "/tmp/evidence.json", "summary": {"evidence_count": 2, "ignored_count": 3}}],
         "runtime_eval_cases": {"case_count": 4, "storage": "runtime_private"},
     })
@@ -361,6 +371,9 @@ def test_operational_report_sections_include_runner_artifact_summary():
     assert "runs: 1 recent artifacts" in text
     assert "latest evidence 2, ignored 3" in text
     assert "runtime-private eval cases: 4" in text
+    assert "Skill lifecycle" in text
+    assert "archive candidates 2, would archive 1, archived 0, blocked 1" in text
+    assert "archive_blocked_by_active_reference: 1" in text
 
 
 def test_package_init_does_not_reexport_removed_primary_surface_helpers():

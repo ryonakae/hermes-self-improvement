@@ -173,13 +173,50 @@ def _load_report_json(path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _summarize_run_skill_lifecycle(payload: dict[str, Any]) -> dict[str, Any]:
+    steps = payload.get("step_decisions") if isinstance(payload.get("step_decisions"), dict) else {}
+    skill_step = steps.get("skill") if isinstance(steps.get("skill"), dict) else {}
+    planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
+    planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
+    decisions = [item for item in (skill_step.get("decisions") or []) if isinstance(item, dict)]
+    blocked_by_reason: dict[str, int] = {}
+    for item in decisions:
+        reason = str(item.get("reason") or "")
+        if reason.startswith("archive_blocked") or reason == "archive_without_lifecycle_evidence":
+            blocked_by_reason[reason] = blocked_by_reason.get(reason, 0) + 1
+    archive_candidates = int(planner_summary.get("archive_candidates") or 0)
+    would_archive = sum(1 for item in decisions if item.get("decision") == "archive_skill_preview")
+    archived = sum(
+        1
+        for item in decisions
+        if item.get("decision") == "accepted"
+        and isinstance(item.get("planner_decision"), dict)
+        and item["planner_decision"].get("decision") == "archive_skill"
+        and item.get("changed")
+    )
+    blocked = sum(blocked_by_reason.values())
+    if not any((archive_candidates, would_archive, archived, blocked)):
+        return {}
+    return {
+        "archive_candidates": archive_candidates,
+        "would_archive": would_archive,
+        "archived": archived,
+        "blocked": blocked,
+        "blocked_by_reason": dict(sorted(blocked_by_reason.items())),
+    }
+
+
 def _recent_json_files(root: Path, pattern: str = "*.json", limit: int = 5) -> list[dict[str, Any]]:
     if not root.exists():
         return []
     rows = []
     for path in sorted((p for p in root.glob(pattern) if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
         payload = _load_report_json(path) or {}
-        rows.append({"path": str(path), "schema_name": payload.get("schema_name"), "created_at": payload.get("created_at"), "summary": payload.get("summary"), "run_id": payload.get("run_id")})
+        row = {"path": str(path), "schema_name": payload.get("schema_name"), "created_at": payload.get("created_at"), "summary": payload.get("summary"), "run_id": payload.get("run_id")}
+        lifecycle = _summarize_run_skill_lifecycle(payload)
+        if lifecycle:
+            row["skill_lifecycle"] = lifecycle
+        rows.append(row)
     return rows
 
 
@@ -217,6 +254,18 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
         lines.extend(["", "## Recent runner artifacts"])
         if recent_runs:
             lines.append(f"- runs: {len(recent_runs)} recent artifacts; latest `{recent_runs[0].get('path')}`")
+            lifecycle = recent_runs[0].get("skill_lifecycle") if isinstance(recent_runs[0].get("skill_lifecycle"), dict) else {}
+            if lifecycle:
+                lines.append(
+                    "- Skill lifecycle: "
+                    f"archive candidates {int(lifecycle.get('archive_candidates') or 0)}, "
+                    f"would archive {int(lifecycle.get('would_archive') or 0)}, "
+                    f"archived {int(lifecycle.get('archived') or 0)}, "
+                    f"blocked {int(lifecycle.get('blocked') or 0)}"
+                )
+                blocked_by_reason = lifecycle.get("blocked_by_reason") if isinstance(lifecycle.get("blocked_by_reason"), dict) else {}
+                for reason, count in sorted(blocked_by_reason.items()):
+                    lines.append(f"  - {reason}: {count}")
         if recent_evidence:
             summary = recent_evidence[0].get("summary") if isinstance(recent_evidence[0].get("summary"), dict) else {}
             lines.append(
