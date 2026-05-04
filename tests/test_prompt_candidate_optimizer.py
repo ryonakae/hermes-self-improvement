@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from hermes_self_improvement.prompt_candidate_optimizer import generate_prompt_overlay_candidate, validate_prompt_overlay_candidate
+from hermes_self_improvement.prompt_candidate_optimizer import (
+    generate_overlay_candidate_set,
+    generate_prompt_overlay_candidate,
+    validate_prompt_overlay_candidate,
+)
 
 
 def evidence_payload() -> dict:
@@ -106,3 +110,69 @@ def test_generated_candidate_is_not_promoted_without_autonomous_evaluator(tmp_pa
 
     assert candidate["promoted"] is False
     assert not (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists()
+
+
+def test_fake_optimizer_can_produce_overlay_candidate_set(tmp_path):
+    seen = {}
+
+    def fake_optimizer(*, evidence, cases, config):
+        seen["case_targets"] = sorted({case.get("target") for case in cases})
+        return {
+            "optimizer": "fake-gepa",
+            "gepa_result": "selected",
+            "baseline_score": 0.41,
+            "candidate_score": 0.72,
+            "targets": {
+                "planner_overlay": {
+                    "change_status": "changed",
+                    "candidate_prompt": {"system_addendum": "Require concrete evidence ids before run_editor.", "replacement": None},
+                    "rationale": "Planner over-selected weak evidence.",
+                },
+                "editor_overlay": {
+                    "change_status": "changed",
+                    "candidate_prompt": {"system_addendum": "Stop without mutation when target evidence is stale.", "replacement": None},
+                    "rationale": "Editor should stop stale target tasks.",
+                },
+                "evaluator_overlay": {
+                    "change_status": "unchanged",
+                    "candidate_prompt": {"replacement": None},
+                    "rationale": "Evaluator behavior is already sufficient.",
+                },
+            },
+        }
+
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    episode = {
+        "schema_name": "self_improvement_episode",
+        "episode_id": "episode-overlay-set",
+        "episode_kind": "preview_decision",
+        "target_kind": "skill",
+        "target_id": "demo-skill",
+        "decision": "run_editor",
+        "action": "skill_patch",
+        "executed": True,
+        "learnable": True,
+        "changed": True,
+        "outcome": "success",
+        "evidence_ids": ["ev1"],
+    }
+    (root / "episodes" / "2026-05-03").mkdir(parents=True)
+    (root / "episodes" / "2026-05-03" / "overlay.json").write_text(json.dumps(episode), encoding="utf-8")
+
+    candidate_set = generate_overlay_candidate_set(config=config, evidence=evidence_payload(), optimizer=fake_optimizer)
+
+    assert candidate_set["schema_name"] == "self_improvement_overlay_candidate_set"
+    assert candidate_set["source"] == "gepa"
+    assert candidate_set["optimizer"] == "fake-gepa"
+    assert candidate_set["gepa_result"] == "selected"
+    assert candidate_set["baseline_score"] == 0.41
+    assert candidate_set["candidate_score"] == 0.72
+    assert set(candidate_set["targets"]) == {"planner_overlay", "editor_overlay", "evaluator_overlay"}
+    assert {target["candidate_set_id"] for target in candidate_set["targets"].values()} == {candidate_set["candidate_set_id"]}
+    assert candidate_set["targets"]["planner_overlay"]["change_status"] == "changed"
+    assert candidate_set["targets"]["editor_overlay"]["change_status"] == "changed"
+    assert candidate_set["targets"]["evaluator_overlay"]["change_status"] == "unchanged"
+    assert candidate_set["targets"]["evaluator_overlay"]["candidate_prompt"] == {"system_addendum": None, "user_addendum": None, "replacement": None}
+    assert Path(candidate_set["candidate_set_path"]).exists()
+    assert seen["case_targets"] == ["editor_overlay", "evaluator_overlay", "planner_overlay"]

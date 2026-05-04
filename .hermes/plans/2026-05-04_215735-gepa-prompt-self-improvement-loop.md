@@ -282,6 +282,8 @@ bin/hermes-self-improve calibrate --target overlay-set --optimizer gepa --dry-ru
 
 ### Step 1: episode に overlay hash を残す
 
+Status: 実装済み（`90e11e0 feat: record overlay hashes in episodes`）。
+
 変更候補:
 
 - `outcome_store.py`
@@ -297,6 +299,8 @@ bin/hermes-self-improve improve --dry-run
 
 ### Step 2: episode から overlay-set eval cases を作る
 
+Status: 実装済み（`28f2320 feat: build overlay set eval cases`）。
+
 変更候補:
 
 - `runtime_eval_cases.py` を拡張
@@ -310,6 +314,8 @@ bin/hermes-self-improve calibrate --target overlay-set --dry-run
 ```
 
 ### Step 3: GEPA で overlay candidate set を作る
+
+Status: 実装中。candidate-set artifact の最小 contract は追加済み。
 
 変更候補:
 

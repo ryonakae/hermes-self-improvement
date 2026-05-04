@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 from .observer import _redact_text, _sha256_text, _stable_json
-from .prompt_overlays import MAX_ADDENDUM_CHARS, write_prompt_candidate
+from .prompt_overlays import MAX_ADDENDUM_CHARS, prompt_overlay_root, write_prompt_candidate
 from .prompts import base_prompt_hash
-from .runtime_eval_cases import build_planner_editor_runtime_eval_cases
+from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_planner_editor_runtime_eval_cases
 
 UTC = timezone.utc
 SAFETY_BOUNDARY_TERMS = (
@@ -24,6 +25,15 @@ SAFETY_BOUNDARY_TERMS = (
 )
 
 OptimizerFn = Callable[..., dict[str, Any]]
+OverlaySetOptimizerFn = Callable[..., dict[str, Any]]
+
+OVERLAY_TARGETS = ("planner_overlay", "editor_overlay", "evaluator_overlay")
+OVERLAY_TARGET_ROLES = {
+    "planner_overlay": "planner",
+    "editor_overlay": "editor",
+    "evaluator_overlay": "scorer",
+}
+VALID_CHANGE_STATUSES = {"changed", "unchanged"}
 
 
 def _dspy_available() -> bool:
@@ -87,6 +97,11 @@ def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
             "Prefer skip or defer for weak-only evidence, require concrete evidence ids before run_editor, "
             "and keep exact mutable-local skill evidence eligible for run_editor."
             + suffix
+        )
+    if role == "scorer":
+        return (
+            "Runtime eval cases indicate evaluator recommendations should track actual outcomes. "
+            "Prefer defer for insufficient confidence, keep successful low-risk mutations eligible, and do not override mutation scope."
         )
     return (
         "Runtime eval cases indicate editor edits should remain narrow. "
@@ -172,5 +187,113 @@ def generate_prompt_overlay_candidate(
     if write_candidate:
         path = write_prompt_candidate(config, role=role, candidate=candidate)
         saved = Path(path).read_text(encoding="utf-8")
-        candidate = __import__("json").loads(saved)
+        candidate = json.loads(saved)
     return candidate
+
+
+def _candidate_set_hash(payload: dict[str, Any]) -> str:
+    return _sha256_text(_stable_json({key: value for key, value in payload.items() if key not in {"candidate_set_hash", "candidate_set_path"}}))
+
+
+def _candidate_set_id(payload: dict[str, Any]) -> str:
+    return "overlay-set-" + _candidate_set_hash(payload)[:12]
+
+
+def _normalize_change_status(value: Any) -> str:
+    status = str(value or "changed").strip().lower()
+    if status not in VALID_CHANGE_STATUSES:
+        raise ValueError("invalid_overlay_change_status")
+    return status
+
+
+def _normalize_overlay_target_candidate(
+    raw: dict[str, Any],
+    *,
+    target: str,
+    candidate_set_id: str,
+    evidence: dict[str, Any],
+    max_text_chars: int,
+) -> dict[str, Any]:
+    if target not in OVERLAY_TARGET_ROLES:
+        raise ValueError("unknown_overlay_target")
+    role = OVERLAY_TARGET_ROLES[target]
+    change_status = _normalize_change_status(raw.get("change_status"))
+    prompt = raw.get("candidate_prompt") if isinstance(raw.get("candidate_prompt"), dict) else {}
+    candidate_prompt = {
+        "system_addendum": _truncate_text(prompt.get("system_addendum"), max_chars=max_text_chars),
+        "user_addendum": _truncate_text(prompt.get("user_addendum"), max_chars=max_text_chars),
+        "replacement": prompt.get("replacement"),
+    }
+    if change_status == "changed" and not candidate_prompt.get("system_addendum") and not candidate_prompt.get("user_addendum"):
+        candidate_prompt["system_addendum"] = _truncate_text(_fallback_addendum(role, evidence), max_chars=max_text_chars)
+    candidate = {
+        "target": target,
+        "role": role,
+        "candidate_set_id": candidate_set_id,
+        "change_status": change_status,
+        "base_prompt_hash": base_prompt_hash(role),
+        "candidate_prompt": candidate_prompt,
+        "rationale": _truncate_text(raw.get("rationale"), max_chars=max_text_chars),
+        "expected_effect": _truncate_text(raw.get("expected_effect"), max_chars=max_text_chars),
+        "risk_notes": _truncate_text(raw.get("risk_notes"), max_chars=max_text_chars),
+    }
+    validate_prompt_overlay_candidate(candidate, role=role, max_text_chars=max_text_chars)
+    candidate["candidate_hash"] = _candidate_hash(candidate)
+    return candidate
+
+
+def _write_overlay_candidate_set(config: dict[str, Any], candidate_set: dict[str, Any]) -> dict[str, Any]:
+    out_dir = prompt_overlay_root(config) / "prompt-candidate-sets"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    path = out_dir / f"{stamp}-{candidate_set['candidate_set_hash'][:12]}.json"
+    payload = dict(candidate_set)
+    payload["candidate_set_path"] = str(path)
+    payload["candidate_set_hash"] = _candidate_set_hash(payload)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def generate_overlay_candidate_set(
+    *,
+    config: dict[str, Any],
+    evidence: dict[str, Any],
+    optimizer: OverlaySetOptimizerFn | None = None,
+    max_text_chars: int = MAX_ADDENDUM_CHARS,
+    write_candidate: bool = True,
+) -> dict[str, Any]:
+    cases = build_overlay_set_runtime_eval_cases(config=config, limit=1000)
+    raw = optimizer(evidence=evidence, cases=cases, config=config) if optimizer is not None else {}
+    source = "gepa" if optimizer is not None else "rule_fallback"
+    seed = {
+        "schema_name": "self_improvement_overlay_candidate_set",
+        "schema_version": "1.0",
+        "created_at": datetime.now(UTC).isoformat(),
+        "source": source,
+        "optimizer": raw.get("optimizer") or source,
+        "gepa_result": raw.get("gepa_result") or "insufficient_data",
+        "baseline_score": raw.get("baseline_score"),
+        "candidate_score": raw.get("candidate_score"),
+        "runtime_private": True,
+        "runtime_eval_case_count": len(cases),
+        "evidence_hash": _sha256_text(_stable_json(evidence)),
+    }
+    candidate_set_id = _candidate_set_id(seed)
+    raw_targets = raw.get("targets") if isinstance(raw.get("targets"), dict) else {}
+    targets = {
+        target: _normalize_overlay_target_candidate(
+            raw_targets.get(target) if isinstance(raw_targets.get(target), dict) else {"change_status": "unchanged"},
+            target=target,
+            candidate_set_id=candidate_set_id,
+            evidence=evidence,
+            max_text_chars=max_text_chars,
+        )
+        for target in OVERLAY_TARGETS
+    }
+    candidate_set = dict(seed)
+    candidate_set["candidate_set_id"] = candidate_set_id
+    candidate_set["targets"] = targets
+    candidate_set["candidate_set_hash"] = _candidate_set_hash(candidate_set)
+    if write_candidate:
+        candidate_set = _write_overlay_candidate_set(config, candidate_set)
+    return candidate_set
