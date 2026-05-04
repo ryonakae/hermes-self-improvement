@@ -469,6 +469,8 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         "runtime_eval_cases": {"status": "not_built", "count": 0, "path": None},
         "autonomous_policy": summarize_autonomous_operation_policy(policy),
         "prompt_overlays": _empty_prompt_overlay_summary(),
+        "prompt_overlay_updates": {"status": "no_candidate", "promoted_roles": [], "failed_roles": []},
+        "evaluator_update": {"status": "no_candidate", "reason": None, "active_changed": False},
         "runtime_setup": check_runtime_setup(config),
     }
     if not calibration.get("enabled", True):
@@ -495,6 +497,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
     }
     if execute:
         prompt_promoted = False
+        promoted_roles: list[str] = []
         for role, prompt_candidate in prompt_candidates.items():
             regression = _run_prompt_overlay_regression(role=role, candidate=prompt_candidate, config=config)
             result["prompt_overlays"][role]["regression"] = regression
@@ -502,6 +505,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
                 result["current_status"] = "failed"
                 result["runtime_eval_cases"]["status"] = "not_written_regression_failed" if runtime_cases else "empty"
                 result["reasons"].append(str(regression.get("reason") or "prompt_overlay_regression_failed"))
+                result["prompt_overlay_updates"] = {"status": "failed", "promoted_roles": promoted_roles, "failed_roles": [role]}
                 return _attach_episode_summary(config, result)
             candidate_path = write_prompt_candidate(config, role=role, candidate=prompt_candidate)
             promote_prompt_candidate(config, role=role, candidate_path=candidate_path, regression=regression)
@@ -511,12 +515,22 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
                 "promoted": True,
             })
             prompt_promoted = True
+            promoted_roles.append(role)
+        if promoted_roles:
+            result["prompt_overlay_updates"] = {"status": "updated", "promoted_roles": promoted_roles, "failed_roles": []}
 
         evaluator_updated = False
         if candidate is not None:
             regression = _run_calibration_regression(candidate=candidate, config=config)
             result["regression"] = regression
             if regression.get("status") != "passed":
+                result["evaluator_update"] = {"status": "failed", "reason": regression.get("reason") or "regression_failed", "active_changed": False}
+                if prompt_promoted:
+                    result["current_status"] = "partial_update"
+                    result["active_changed"] = True
+                    result["runtime_eval_cases"]["status"] = "not_written_evaluator_regression_failed" if runtime_cases else "empty"
+                    result["reasons"].append("evaluator_" + str(regression.get("reason") or "regression_failed"))
+                    return _attach_episode_summary(config, result)
                 result["current_status"] = "failed"
                 result["runtime_eval_cases"]["status"] = "not_written_regression_failed" if runtime_cases else "empty"
                 result["reasons"].append(str(regression.get("reason") or "regression_failed"))
@@ -537,6 +551,13 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
             evaluator_updated = True
             result["active_evaluator_path"] = str(active_pointer_path)
             result["active_evaluator_hash"] = active_after_hash
+            result["evaluator_update"] = {
+                "status": "updated",
+                "reason": None,
+                "active_changed": True,
+                "active_evaluator_path": str(active_pointer_path),
+                "active_evaluator_hash": active_after_hash,
+            }
             result["ledger_path"] = str(_write_calibration_ledger(
                 config=config,
                 result=result,
@@ -550,4 +571,8 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
     else:
         result["current_status"] = "would_update"
         result["regression"] = {"status": "not_run", "reason": "preview"} if candidate is not None else None
+        if prompt_candidates:
+            result["prompt_overlay_updates"]["status"] = "would_update"
+        if candidate is not None:
+            result["evaluator_update"] = {"status": "would_update", "reason": "preview", "active_changed": False}
     return _attach_episode_summary(config, result)

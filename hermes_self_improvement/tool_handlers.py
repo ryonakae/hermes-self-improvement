@@ -197,6 +197,7 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     ledger_path = result.get("ledger_path") or result.get("artifact_path")
     autonomous_policy = result.get("autonomous_policy") if isinstance(result.get("autonomous_policy"), dict) else {}
+    evaluator_update = result.get("evaluator_update") if isinstance(result.get("evaluator_update"), dict) else {}
     full_payload = {
         "available": bool(ledger_path),
         "read_with": "read_file" if ledger_path else None,
@@ -221,6 +222,11 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
             "credit_assignment": evidence.get("credit_assignment") if isinstance(evidence.get("credit_assignment"), dict) else {},
         },
         "regression": {"status": regression.get("status")} if regression else {},
+        "evaluator_update": {
+            "status": evaluator_update.get("status"),
+            "reason": evaluator_update.get("reason"),
+            "active_changed": bool(evaluator_update.get("active_changed")),
+        } if evaluator_update else {},
         "autonomous_policy": autonomous_policy,
         "prompt_overlays": _compact_prompt_overlays(result.get("prompt_overlays")),
         "episodes": {"count": int(episodes.get("count") or 0), "path": episodes.get("path")},

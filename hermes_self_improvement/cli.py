@@ -483,6 +483,12 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     regression = result.get("regression") if isinstance(result.get("regression"), dict) else None
     if regression:
         lines.append(f"Regression: {regression.get('status')}")
+    evaluator_update = result.get("evaluator_update") if isinstance(result.get("evaluator_update"), dict) else None
+    if evaluator_update and evaluator_update.get("status") not in {None, "no_candidate"}:
+        reason = evaluator_update.get("reason")
+        suffix = f", reason {reason}" if reason else ""
+        lines.append("Evaluator:")
+        lines.append(f"- status: {evaluator_update.get('status')}{suffix}")
     if result.get("active_evaluator_path"):
         lines.append(f"Active evaluator: {result.get('active_evaluator_path')}")
     prompt_overlays = result.get("prompt_overlays") if isinstance(result.get("prompt_overlays"), dict) else {}

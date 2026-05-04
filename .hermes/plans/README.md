@@ -31,6 +31,10 @@ As of 2026-05-02, the latest completed implementation plan is:
 
 The latest completed implementation records are:
 
+- `archive/2026-05-04_213623-calibration-partial-success-status.md`
+  - **Status:** implemented.
+  - Split calibration prompt-overlay and evaluator sub-results so prompt overlay promotion followed by evaluator regression unavailability reports `partial_update`, keeps `active_changed=true`, and exposes compact evaluator status in CLI/tool summaries.
+
 - `archive/2026-05-04_093127-skill-archive-lifecycle.md`
   - **Status:** implemented.
   - Added first-class Curator-style skill archive lifecycle handling: `skill_archive` planner decisions, Curator primitive execution, active reference blocking, successor validation, archived-skill exclusion, structured archive episodes, archive credit-assignment buckets, compact lifecycle summaries, and fake LLM planner coverage.

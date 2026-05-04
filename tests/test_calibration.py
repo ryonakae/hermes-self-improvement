@@ -180,6 +180,29 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
     assert "planner: candidate yes, promoted no, reason planner_quality_signals" in out
 
 
+def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
+    cli = load_cli_module()
+
+    text = cli._render_calibration_summary({
+        "current_status": "partial_update",
+        "reasons": ["evaluator_regression_runner_not_configured"],
+        "active_changed": True,
+        "evidence_summary": {"total_events": 20, "disagreements": 5, "bad_outcomes": 0},
+        "regression": {"status": "failed", "reason": "regression_runner_not_configured"},
+        "prompt_overlays": {
+            "planner": {"candidate": True, "promoted": True, "reason": "planner_quality_signals"},
+        },
+        "evaluator_update": {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False},
+    })
+
+    assert "Calibration: partial_update" in text
+    assert "Reason: evaluator_regression_runner_not_configured" in text
+    assert "Evaluator:" in text
+    assert "- status: failed, reason regression_runner_not_configured" in text
+    assert "Prompt overlays:" in text
+    assert "planner: candidate yes, promoted yes" in text
+
+
 def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path)
@@ -348,6 +371,39 @@ def test_calibration_execute_promotes_prompt_overlay_after_regression_pass(monke
     assert Path(result["prompt_overlays"]["planner"]["candidate_path"]).exists()
     assert result["prompt_overlays"]["editor"]["promoted"] is True
     assert Path(result["prompt_overlays"]["editor"]["candidate_path"]).exists()
+
+
+def test_calibration_reports_partial_update_when_prompt_promoted_but_evaluator_regression_fails(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path)
+    planner_candidate = {
+        "role": "planner",
+        "base_prompt_hash": calibration.base_prompt_hash("planner"),
+        "candidate_prompt": {"system_addendum": "Prefer skip for weak-only evidence.", "replacement": None},
+        "candidate_hash": "sha256:planner-candidate",
+    }
+    monkeypatch.setattr(calibration, "collect_calibration_evidence", lambda config: {
+        "total_events": 20,
+        "disagreements": 5,
+        "bad_outcomes": 0,
+        "scorer_errors": 0,
+        "planner_prompt_signals": 1,
+    })
+    monkeypatch.setattr(calibration, "build_prompt_overlay_candidates", lambda config, evidence: {"planner": planner_candidate})
+    monkeypatch.setattr(calibration, "_run_prompt_overlay_regression", lambda *, role, candidate, config: {"status": "passed", "reason": "autonomous_evaluator_promote"})
+    monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "failed", "reason": "regression_runner_not_configured"})
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert result["current_status"] == "partial_update"
+    assert result["active_changed"] is True
+    assert result["prompt_overlay_updates"]["status"] == "updated"
+    assert result["prompt_overlay_updates"]["promoted_roles"] == ["planner"]
+    assert result["prompt_overlays"]["planner"]["promoted"] is True
+    assert result["evaluator_update"]["status"] == "failed"
+    assert result["evaluator_update"]["reason"] == "regression_runner_not_configured"
+    assert "evaluator_regression_runner_not_configured" in result["reasons"]
+    assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists()
 
 
 def test_calibration_execute_does_not_promote_prompt_overlay_on_regression_failure(monkeypatch, tmp_path):
