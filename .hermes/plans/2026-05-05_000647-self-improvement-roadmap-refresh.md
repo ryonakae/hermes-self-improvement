@@ -114,7 +114,7 @@ Keep these fixed unless a newer plan explicitly changes them:
 
 ### Slice 6: Dogfood one real overlay generation loop after artifact reuse
 
-**Status:** active next slice. Earlier dogfood was attempted before optional candidate-set reuse and clearer component summaries existed. Re-run the proof using the current `--from-candidate-set` path when a promotable dry-run artifact appears.
+**Status:** attempted again on 2026-05-05 JST after optional candidate-set reuse and component summaries. No promotion was available, so `--from-candidate-set` was correctly not executed. The run produced valid no-promotion evidence and points to Slice 7 case/scoring inspection if this repeats.
 
 **Objective:** Prove the closed loop with runtime artifacts: prompt overlay candidate-set promotion updates active overlay generation, later `improve` episodes record that generation/hash data, and later `calibrate` can use those episodes as runtime eval cases.
 
@@ -152,6 +152,44 @@ Keep these fixed unless a newer plan explicitly changes them:
    ```
 7. Inspect the new run/episode artifacts and confirm overlay generation/hash fields are recorded.
 8. Run a later `calibrate --dry-run` and confirm candidate-set eval cases can include the newly recorded episode.
+
+**Observed 2026-05-05 JST retry:**
+
+```text
+Before:
+- active overlay_generation_id: null
+- active roles: planner only
+
+calibrate --dry-run:
+- artifact: /Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260504T205852Z-77220e9de2f4.json
+- candidate set: overlay-set-c3bfc947657c
+- GEPA: no_improvement
+- decision: keep_candidate
+- changed targets: 0
+- available/runtime cases: 2856
+- optimizer cases: 3
+- selected targets: planner_overlay, editor_overlay, evaluator_overlay
+- baseline/candidate score: 0 / 0
+
+improve --dry-run --since-hours 1 --scorer heuristic:
+- artifact: /Users/ryo.nakae/.hermes/self-improvement/runs/run-20260504T210042Z.json
+- recorded 31 episodes
+- episodes recorded planner_overlay_hash
+- editor/evaluator overlay hashes were unavailable because no new overlay generation promoted
+
+later calibrate --dry-run:
+- artifact: /Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260504T210209Z-a0713ac0304d.json
+- candidate set: overlay-set-47bacb4b80e4
+- GEPA: no_improvement
+- decision: keep_candidate
+- changed targets: 0
+- runtime cases: 2853
+- selected targets stayed balanced across planner/editor/evaluator
+```
+
+Interpretation: the runtime eval case path is active and episodes contain overlay hash fields, but current evidence still asks GEPA to preserve behavior. The selected cases expect `skip` / `report_only`, have no scored outcomes, and do not justify a prompt overlay change. This is a healthy no-promotion result, not a failure to force through.
+
+**Next action:** if the next few dogfood previews remain `baseline_score == candidate_score == 0` with all targets `unchanged`, move to Slice 7 and inspect whether the scoring/case signal is too weak or whether the system is genuinely stable.
 
 **If no promotion appears:**
 
@@ -272,7 +310,7 @@ Supported plugin surfaces remain:
 - Optional dry-run candidate-set reuse is available only when an explicit artifact path is provided; default `calibrate` still generates/evaluates fresh candidates. **Done.**
 - CLI/tool summaries separate prompt overlay set state from evaluator state. **Done.**
 - `.hermes/plans/README.md` names this roadmap as the latest source of truth and marks Hermes core top-level CLI integration out of scope. **Done.**
-- A real dogfood run proves overlay generation/hash data flows from promotion to later improvement episodes and back into eval cases, or records repeated no-promotion reasons without weakening gates. **Remaining.**
+- A real dogfood run proves overlay generation/hash data flows from promotion to later improvement episodes and back into eval cases, or records repeated no-promotion reasons without weakening gates. **Attempted once after artifact reuse; no-promotion recorded.**
 - If dogfood repeatedly cannot promote, compact artifact inspection identifies whether the issue is no real improvement, weak scoring, or weak case selection. **Conditional remaining.**
 
 
