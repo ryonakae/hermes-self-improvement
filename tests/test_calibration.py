@@ -408,6 +408,35 @@ def test_calibration_execute_promotes_prompt_overlay_after_regression_pass(monke
     assert Path(result["prompt_overlays"]["editor"]["candidate_path"]).exists()
 
 
+def test_calibration_execute_promotes_overlay_candidate_set(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
+    write_planner_quality_run(cfg, {"step_decisions": {"skill": {"planner_quality": {"action_like_skips": 1}}}}, "planner-quality.json")
+    planner_candidate = {
+        "role": "planner",
+        "base_prompt_hash": calibration.base_prompt_hash("planner"),
+        "candidate_prompt": {"system_addendum": "Prefer exact evidence.", "replacement": None},
+        "candidate_hash": "sha256:planner-candidate",
+    }
+    candidate_set = {"candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json")}
+    evaluation = {"decision": "promote", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": [], "evaluation_hash": "sha256:evaluation"}
+    promoted = []
+
+    monkeypatch.setattr(calibration, "build_prompt_overlay_candidates", lambda config, evidence: {"planner": planner_candidate})
+    monkeypatch.setattr(calibration, "generate_overlay_candidate_set", lambda *, config, evidence: candidate_set)
+    monkeypatch.setattr(calibration, "evaluate_overlay_candidate_set", lambda value: evaluation)
+    monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: promoted.append((candidate_set, evaluation)) or {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["planner_overlay"], "candidate_paths": {"planner_overlay": str(tmp_path / "planner.json")}})
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert promoted == [(candidate_set, evaluation)]
+    assert result["current_status"] == "updated"
+    assert result["active_changed"] is True
+    assert result["overlay_candidate_set"]["status"] == "promoted"
+    assert result["overlay_candidate_set"]["overlay_generation_id"] == "overlay-set-001"
+    assert result["overlay_candidate_set"]["promoted_targets"] == ["planner_overlay"]
+
+
 def test_calibration_reports_partial_update_when_prompt_promoted_but_evaluator_regression_fails(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path)

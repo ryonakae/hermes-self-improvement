@@ -14,7 +14,7 @@ from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import build_outcome_score_aggregate
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .prompt_candidate_optimizer import generate_overlay_candidate_set, generate_prompt_overlay_candidate
-from .prompt_overlays import load_active_prompt_overlay, promote_prompt_candidate, write_prompt_candidate
+from .prompt_overlays import load_active_prompt_overlay, promote_overlay_candidate_set, promote_prompt_candidate, write_prompt_candidate
 from .prompts import base_prompt_hash
 from .runtime_eval_cases import build_planner_editor_runtime_eval_cases
 from .setup_runtime import check_runtime_setup
@@ -514,7 +514,26 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
     if execute:
         prompt_promoted = False
         promoted_roles: list[str] = []
-        for role, prompt_candidate in prompt_candidates.items():
+        if overlay_candidate_set is not None and overlay_candidate_set_evaluation is not None and overlay_candidate_set_evaluation.get("decision") == "promote":
+            promotion = promote_overlay_candidate_set(config, candidate_set=overlay_candidate_set, evaluation=overlay_candidate_set_evaluation)
+            promoted_targets = [str(target) for target in promotion.get("promoted_targets") or []]
+            result["overlay_candidate_set"].update({
+                "status": "promoted",
+                "overlay_generation_id": promotion.get("overlay_generation_id"),
+                "promoted_targets": promoted_targets,
+                "candidate_paths": promotion.get("candidate_paths") if isinstance(promotion.get("candidate_paths"), dict) else {},
+            })
+            prompt_promoted = bool(promoted_targets)
+            promoted_roles.extend(promoted_targets)
+            for target in promoted_targets:
+                role = {"planner_overlay": "planner", "editor_overlay": "editor"}.get(target)
+                if role and role in result["prompt_overlays"]:
+                    result["prompt_overlays"][role].update({
+                        "promoted": True,
+                        "candidate_path": (promotion.get("candidate_paths") or {}).get(target) if isinstance(promotion.get("candidate_paths"), dict) else None,
+                    })
+            result["prompt_overlay_updates"] = {"status": "updated", "promoted_roles": promoted_roles, "failed_roles": []}
+        for role, prompt_candidate in ({} if prompt_promoted else prompt_candidates).items():
             regression = _run_prompt_overlay_regression(role=role, candidate=prompt_candidate, config=config)
             result["prompt_overlays"][role]["regression"] = regression
             if regression.get("status") != "passed":
