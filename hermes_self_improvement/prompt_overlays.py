@@ -175,3 +175,42 @@ def load_active_prompt_overlay(config: dict[str, Any] | None, *, role: str, base
     candidate["candidate_path"] = str(candidate_path)
     candidate["runtime_private"] = True
     return candidate
+
+
+def promote_overlay_candidate_set(config: dict[str, Any], *, candidate_set: dict[str, Any], evaluation: dict[str, Any]) -> dict[str, Any]:
+    if evaluation.get("decision") != "promote":
+        raise ValueError("overlay_candidate_set_not_promotable")
+    candidate_set_id = str(candidate_set.get("candidate_set_id") or "")
+    if not candidate_set_id:
+        raise ValueError("candidate_set_id_missing")
+    targets = candidate_set.get("targets") if isinstance(candidate_set.get("targets"), dict) else {}
+    promoted_targets: list[str] = []
+    candidate_paths: dict[str, str] = {}
+    for target_name, target in targets.items():
+        if not isinstance(target, dict) or target.get("change_status") != "changed":
+            continue
+        role = str(target.get("role") or "")
+        _validate_role(role)
+        if target.get("candidate_set_id") != candidate_set_id:
+            raise ValueError("candidate_set_id_mismatch")
+        candidate_path = write_prompt_candidate(config, role=role, candidate=target)
+        promote_prompt_candidate(config, role=role, candidate_path=candidate_path, regression={"status": "passed", "source": "overlay_candidate_set", "candidate_set_id": candidate_set_id})
+        promoted_targets.append(str(target_name))
+        candidate_paths[str(target_name)] = str(candidate_path)
+    pointer_path = active_prompts_path(config)
+    pointer = _load_json(pointer_path) or {"schema_name": "self_improvement_active_prompt_overlays", "schema_version": "1.0", "roles": {}}
+    generations = pointer.get("overlay_generations") if isinstance(pointer.get("overlay_generations"), list) else []
+    generations.append({
+        "overlay_generation_id": candidate_set_id,
+        "candidate_set_path": candidate_set.get("candidate_set_path"),
+        "evaluation_hash": evaluation.get("evaluation_hash"),
+        "promoted_targets": promoted_targets,
+        "candidate_paths": candidate_paths,
+        "created_at": datetime.now(UTC).isoformat(),
+    })
+    pointer["overlay_generation_id"] = candidate_set_id
+    pointer["overlay_generations"] = generations[-20:]
+    pointer["updated_at"] = datetime.now(UTC).isoformat()
+    pointer_path.parent.mkdir(parents=True, exist_ok=True)
+    pointer_path.write_text(json.dumps(pointer, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return {"overlay_generation_id": candidate_set_id, "promoted_targets": promoted_targets, "candidate_paths": candidate_paths, "active_prompts_path": str(pointer_path)}
