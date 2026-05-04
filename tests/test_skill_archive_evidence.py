@@ -47,6 +47,44 @@ def test_build_active_skill_references_counts_enabled_cron_prompt_references(tmp
     assert refs["old-skill"]["non_blocking_references"] == [{"kind": "paused_cron_prompt_reference", "job": "paused prompt"}]
 
 
+def test_build_active_skill_references_counts_channel_skill_bindings_from_runtime_config():
+    config = {
+        "_hermes_config": {
+            "slack": {
+                "enabled": True,
+                "channel_skill_bindings": [
+                    {"id": "C123", "skills": ["old-skill"]},
+                    {"id": "C456", "skill": "other-skill"},
+                ],
+            },
+            "discord": {"enabled": False, "channel_skill_bindings": [{"id": "D123", "skills": ["old-skill"]}]},
+        }
+    }
+
+    refs = build_active_skill_references(config, candidate_names=["old-skill", "other-skill"])
+
+    assert refs["old-skill"]["active_reference_count"] == 1
+    assert refs["old-skill"]["blocking_references"] == [
+        {"kind": "active_config_channel_skill_binding", "platform": "slack", "channel": "C123"}
+    ]
+    assert refs["old-skill"]["non_blocking_references"] == [
+        {"kind": "disabled_config_channel_skill_binding", "platform": "discord", "channel": "D123"}
+    ]
+    assert refs["other-skill"]["blocking_references"] == [
+        {"kind": "active_config_channel_skill_binding", "platform": "slack", "channel": "C456"}
+    ]
+
+
+def test_build_active_skill_references_counts_configured_preload_lists():
+    config = {"_hermes_config": {"skills": {"preload": ["old-skill"], "disabled": ["not-active"]}, "preloaded_skills": ["other-skill"]}}
+
+    refs = build_active_skill_references(config, candidate_names=["old-skill", "other-skill", "not-active"])
+
+    assert refs["old-skill"]["blocking_references"] == [{"kind": "active_config_preload_skill", "path": "skills.preload"}]
+    assert refs["other-skill"]["blocking_references"] == [{"kind": "active_config_preload_skill", "path": "preloaded_skills"}]
+    assert "not-active" not in refs
+
+
 def test_attach_active_skill_references_updates_candidate_counts_without_dropping_evidence():
     pack = {
         "skill_candidates": [
