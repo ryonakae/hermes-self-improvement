@@ -140,10 +140,19 @@ def test_calibrate_command_uses_dry_run_surface_without_mode_or_hash_flags():
 
     assert args.self_improvement_cmd == "calibrate"
     assert args.dry_run is True
+    assert args.from_candidate_set is None
     assert not hasattr(args, "execute")
     assert not hasattr(args, "mode")
     assert not hasattr(args, "expected_item_hash")
     assert not hasattr(args, "confirm_apply")
+
+
+def test_calibrate_command_accepts_explicit_candidate_set_artifact():
+    args = parse_args(["calibrate", "--from-candidate-set", "/tmp/candidate-set.json"])
+
+    assert args.self_improvement_cmd == "calibrate"
+    assert args.dry_run is False
+    assert args.from_candidate_set == "/tmp/candidate-set.json"
 
 
 def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, capsys):
@@ -180,6 +189,48 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
     assert "Reason: insufficient_evidence" in out
     assert "Prompt overlays:" in out
     assert "planner: candidate yes, promoted no, reason planner_quality_signals" in out
+
+
+def test_calibrate_cli_handler_forwards_candidate_set_artifact(monkeypatch, tmp_path, capsys):
+    cli = load_cli_module()
+    calls = []
+    candidate_path = tmp_path / "candidate-set.json"
+    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"_self_improvement_root": str(tmp_path / "self-improvement")})
+
+    def fake_run_calibration(**kwargs):
+        calls.append(kwargs)
+        return {
+            "schema_name": "self_improvement_calibration_result",
+            "execute": kwargs["execute"],
+            "current_status": "updated",
+            "reasons": [],
+            "evidence_summary": {"total_events": 0, "disagreements": 0, "bad_outcomes": 0},
+            "overlay_candidate_set": {"status": "promoted", "source": "candidate_set_artifact", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(candidate_path), "changed_targets": ["planner_overlay"], "hard_violations": 0},
+        }
+
+    monkeypatch.setattr(cli, "run_calibration", fake_run_calibration)
+    args = parse_args(["calibrate", "--from-candidate-set", str(candidate_path)])
+
+    cli._handle_cli(args)
+
+    assert calls == [{"config": {"_self_improvement_root": str(tmp_path / "self-improvement")}, "execute": True, "candidate_set_artifact_path": str(candidate_path)}]
+    out = capsys.readouterr().out
+    assert "Overlay candidate set:" in out
+    assert "source candidate_set_artifact" in out
+    assert f"- artifact: {candidate_path}" in out
+
+
+def test_calibrate_cli_handler_rejects_dry_run_candidate_set_artifact(monkeypatch, tmp_path):
+    cli = load_cli_module()
+    monkeypatch.setattr(cli, "load_config", lambda *args, **kwargs: {"_self_improvement_root": str(tmp_path / "self-improvement")})
+    args = parse_args(["calibrate", "--dry-run", "--from-candidate-set", str(tmp_path / "candidate-set.json")])
+
+    try:
+        cli._handle_cli(args)
+    except SystemExit as exc:
+        assert "--from-candidate-set cannot be combined with --dry-run" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("dry-run candidate artifact reuse should fail")
 
 
 def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
@@ -354,8 +405,11 @@ def test_calibration_dry_run_evaluates_overlay_candidate_set(monkeypatch, tmp_pa
 
 def overlay_candidate_set_payload(calibration, tmp_path: Path, *, candidate_set_id: str = "overlay-set-001") -> dict:
     return {
+        "schema_name": "self_improvement_overlay_candidate_set",
+        "schema_version": "1.0",
         "candidate_set_id": candidate_set_id,
         "candidate_set_path": str(tmp_path / "candidate-set.json"),
+        "gepa_result": "selected",
         "targets": {
             "planner_overlay": {
                 "target": "planner_overlay",
@@ -374,6 +428,15 @@ def overlay_candidate_set_payload(calibration, tmp_path: Path, *, candidate_set_
                 "base_prompt_hash": base_prompt_hash("editor"),
                 "candidate_prompt": {"system_addendum": None, "replacement": None},
                 "candidate_hash": "sha256:editor-candidate",
+            },
+            "evaluator_overlay": {
+                "target": "evaluator_overlay",
+                "role": "scorer",
+                "candidate_set_id": candidate_set_id,
+                "change_status": "unchanged",
+                "base_prompt_hash": base_prompt_hash("scorer"),
+                "candidate_prompt": {"system_addendum": None, "replacement": None},
+                "candidate_hash": "sha256:scorer-candidate",
             },
         },
     }
@@ -414,6 +477,45 @@ def test_calibration_execute_promotes_overlay_candidate_set_without_single_role_
     assert result["prompt_overlays"]["planner"]["candidate"] is True
     assert result["prompt_overlays"]["planner"]["promoted"] is True
     assert result["prompt_overlays"]["planner"]["candidate_set_id"] == "overlay-set-001"
+
+
+def test_calibration_execute_reuses_candidate_set_artifact_without_regenerating(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
+    candidate_path = tmp_path / "self-improvement" / "evaluator" / "prompt-candidate-sets" / "candidate-set.json"
+    candidate_set = overlay_candidate_set_payload(calibration, candidate_path.parent)
+    candidate_set["candidate_set_path"] = str(candidate_path)
+    write_json(candidate_path, candidate_set)
+    promoted = []
+
+    def fail_generate(*, config, evidence):  # pragma: no cover - failure path
+        raise AssertionError("candidate set artifact reuse should not run GEPA generation")
+
+    monkeypatch.setattr(calibration, "generate_overlay_candidate_set", fail_generate)
+    monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: promoted.append((candidate_set, evaluation)) or {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["planner_overlay"], "candidate_paths": {"planner_overlay": str(tmp_path / "planner.json")}})
+
+    result = calibration.run_calibration(config=cfg, execute=True, candidate_set_artifact_path=str(candidate_path))
+
+    assert promoted
+    assert promoted[0][0]["candidate_set_path"] == str(candidate_path)
+    assert promoted[0][1]["decision"] == "promote"
+    assert result["current_status"] == "updated"
+    assert result["overlay_candidate_set"]["status"] == "promoted"
+    assert result["overlay_candidate_set"]["source"] == "candidate_set_artifact"
+    assert result["overlay_candidate_set"]["candidate_set_path"] == str(candidate_path)
+    assert result["prompt_overlays"]["planner"]["promoted"] is True
+
+
+def test_calibration_rejects_candidate_set_artifact_in_preview_mode(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path)
+
+    try:
+        calibration.run_calibration(config=cfg, execute=False, candidate_set_artifact_path=str(tmp_path / "candidate-set.json"))
+    except ValueError as exc:
+        assert "candidate_set_artifact_requires_execute" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("candidate set artifact reuse should require execute mode")
 
 
 def test_calibration_reports_partial_update_when_overlay_set_promoted_but_evaluator_regression_fails(monkeypatch, tmp_path):

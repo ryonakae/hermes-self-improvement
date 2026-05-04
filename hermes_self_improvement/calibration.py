@@ -427,7 +427,21 @@ def _attach_episode_summary(config: dict[str, Any], result: dict[str, Any]) -> d
     return result
 
 
-def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[str, Any]:
+def _load_overlay_candidate_set_artifact(path_value: str | Path) -> dict[str, Any]:
+    path = Path(str(path_value)).expanduser().resolve()
+    payload = _load_json_file(path)
+    if not isinstance(payload, dict):
+        raise ValueError("candidate_set_artifact_unreadable")
+    if payload.get("schema_name") != "self_improvement_overlay_candidate_set":
+        raise ValueError("candidate_set_artifact_schema_invalid")
+    payload = dict(payload)
+    payload["candidate_set_path"] = str(path)
+    return payload
+
+
+def run_calibration(*, config: dict[str, Any], execute: bool = False, candidate_set_artifact_path: str | Path | None = None) -> dict[str, Any]:
+    if candidate_set_artifact_path is not None and not execute:
+        raise ValueError("candidate_set_artifact_requires_execute")
     calibration = normalize_calibration_config(config)
     policy = build_autonomous_operation_policy(config)
     evidence = collect_calibration_evidence(config)
@@ -462,7 +476,12 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
     should_build_overlay_set = candidate is not None or _overlay_candidate_signal(evidence, overlay_case_count=overlay_case_count)
     overlay_candidate_set = None
     overlay_candidate_set_evaluation = None
-    if should_build_overlay_set:
+    if candidate_set_artifact_path is not None:
+        overlay_candidate_set = _load_overlay_candidate_set_artifact(candidate_set_artifact_path)
+        overlay_candidate_set_evaluation = evaluate_overlay_candidate_set(overlay_candidate_set)
+        _apply_overlay_candidate_set_summary(result, candidate_set=overlay_candidate_set, evaluation=overlay_candidate_set_evaluation)
+        result["overlay_candidate_set"]["source"] = "candidate_set_artifact"
+    elif should_build_overlay_set:
         overlay_candidate_set = generate_overlay_candidate_set(config=config, evidence=evidence)
         overlay_candidate_set_evaluation = evaluate_overlay_candidate_set(overlay_candidate_set)
         _apply_overlay_candidate_set_summary(result, candidate_set=overlay_candidate_set, evaluation=overlay_candidate_set_evaluation)

@@ -291,7 +291,7 @@ git commit -m "feat: select high-signal overlay eval cases"
 
 ### Slice 4: Add optional dry-run candidate-set reuse
 
-**Objective:** Let operators explicitly reuse a promotable dry-run overlay candidate-set artifact during `calibrate` execution, without changing the default execute behavior.
+**Status:** completed in this follow-up slice. `run_calibration()` now accepts `candidate_set_artifact_path` only in execute mode, loads the explicit overlay candidate-set artifact, evaluates it through the existing candidate-set acceptance checks, and promotes it without calling `generate_overlay_candidate_set()` / DSPy / GEPA. CLI support is exposed as `bin/hermes-self-improve calibrate --from-candidate-set <path>`. Agent-facing `self_improvement_calibrate` also accepts `candidate_set_artifact_path`, returns compact metadata, and rejects dry-run reuse.
 
 **Positioning:** This is an opt-in cost/control feature, not the default path. Most normal runs should continue to call `bin/hermes-self-improve calibrate` directly and generate/evaluate the current candidate set from current evidence. Reuse is only for the workflow where an operator already ran `calibrate --dry-run`, inspected the compact summary/artifact, and wants to promote exactly that candidate without paying for another GEPA run or accepting stochastic drift.
 

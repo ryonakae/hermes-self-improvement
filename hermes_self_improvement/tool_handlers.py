@@ -195,7 +195,7 @@ def _compact_overlay_candidate_set(value: Any) -> dict[str, Any]:
     item = value if isinstance(value, dict) else {}
     if not item:
         return {}
-    return {
+    out = {
         "status": item.get("status"),
         "decision": item.get("decision"),
         "gepa_result": item.get("gepa_result"),
@@ -204,6 +204,9 @@ def _compact_overlay_candidate_set(value: Any) -> dict[str, Any]:
         "changed_targets": item.get("changed_targets") if isinstance(item.get("changed_targets"), list) else [],
         "hard_violations": int(item.get("hard_violations") or 0),
     }
+    if item.get("source"):
+        out["source"] = item.get("source")
+    return out
 
 
 def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
@@ -293,8 +296,14 @@ def _handle_self_improvement_report_tool(args: dict[str, Any] | None = None, **_
 def _handle_self_improvement_calibrate_tool(args: dict[str, Any] | None = None, **_kw) -> str:
     args = args or {}
     dry_run = bool(args.get("dry_run", False))
+    candidate_set_artifact_path = args.get("candidate_set_artifact_path")
     try:
-        result = run_calibration(config=_config_from_args(args), execute=not dry_run)
+        if candidate_set_artifact_path and dry_run:
+            raise ValueError("candidate_set_artifact_requires_execute")
+        kwargs: dict[str, Any] = {"config": _config_from_args(args), "execute": not dry_run}
+        if candidate_set_artifact_path:
+            kwargs["candidate_set_artifact_path"] = str(candidate_set_artifact_path)
+        result = run_calibration(**kwargs)
         return tool_result(_compact_calibrate_tool_result(result, dry_run=dry_run))
     except Exception as exc:
         return tool_error("calibration_failed", error_detail=str(exc), target_changed=False)

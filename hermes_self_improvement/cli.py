@@ -494,6 +494,8 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     overlay_set = result.get("overlay_candidate_set") if isinstance(result.get("overlay_candidate_set"), dict) else {}
     if overlay_set and overlay_set.get("status") != "not_built":
         changed = overlay_set.get("changed_targets") if isinstance(overlay_set.get("changed_targets"), list) else []
+        source = overlay_set.get("source")
+        source_suffix = f", source {source}" if source else ""
         lines.append("Overlay candidate set:")
         lines.append(
             f"- status: {overlay_set.get('status')}, "
@@ -501,6 +503,7 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
             f"GEPA {overlay_set.get('gepa_result')}, "
             f"changed {len(changed)}, "
             f"hard violations {int(overlay_set.get('hard_violations') or 0)}"
+            f"{source_suffix}"
         )
         if overlay_set.get("candidate_set_id"):
             lines.append(f"- candidate set: {overlay_set.get('candidate_set_id')}")
@@ -881,6 +884,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 
     p_calibrate = sub.add_parser("calibrate", help="Calibrate evaluator prompts/rubrics; mutates by default when gates pass")
     p_calibrate.add_argument("--dry-run", action="store_true", help="Preview without promoting active evaluator state")
+    p_calibrate.add_argument("--from-candidate-set", default=None, help="Execute by reusing an explicit dry-run overlay candidate-set artifact path")
     p_calibrate.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_calibrate)
     p_calibrate.set_defaults(func=_handle_cli)
@@ -960,7 +964,14 @@ def _handle_cli(args: argparse.Namespace) -> None:
         return
 
     if cmd == "calibrate":
-        payload = run_calibration(config=config, execute=not bool(getattr(args, "dry_run", False)))
+        from_candidate_set = getattr(args, "from_candidate_set", None)
+        dry_run = bool(getattr(args, "dry_run", False))
+        if from_candidate_set and dry_run:
+            raise SystemExit("--from-candidate-set cannot be combined with --dry-run")
+        kwargs: dict[str, Any] = {"config": config, "execute": not dry_run}
+        if from_candidate_set:
+            kwargs["candidate_set_artifact_path"] = str(from_candidate_set)
+        payload = run_calibration(**kwargs)
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:

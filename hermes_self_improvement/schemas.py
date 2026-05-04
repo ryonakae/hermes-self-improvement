@@ -48,6 +48,7 @@ SELF_IMPROVEMENT_CALIBRATE_SCHEMA = {
         "properties": {
             "config_path": CONFIG_PATH_PROPERTY,
             "dry_run": {"type": "boolean", "default": False},
+            "candidate_set_artifact_path": {"type": "string", "description": "Optional explicit dry-run overlay candidate-set artifact path to reuse during execute mode."},
         },
     },
 }

@@ -133,6 +133,58 @@ def test_calibrate_tool_defaults_to_mutation_capable(monkeypatch, tmp_path):
     assert calls[0]["execute"] is True
 
 
+def test_calibrate_tool_forwards_candidate_set_artifact(monkeypatch, tmp_path):
+    mod = load_plugin_module()
+    calls = []
+    candidate_path = tmp_path / "candidate-set.json"
+
+    def fake_run_calibration(**kwargs):
+        calls.append(kwargs)
+        return {
+            "schema_name": "self_improvement_calibration_result",
+            "target_changed": True,
+            "active_changed": True,
+            "current_status": "updated",
+            "overlay_candidate_set": {"status": "promoted", "source": "candidate_set_artifact", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(candidate_path), "changed_targets": ["planner_overlay"], "hard_violations": 0},
+        }
+
+    mod._handle_self_improvement_calibrate_tool.__globals__["run_calibration"] = fake_run_calibration
+    raw = mod._handle_self_improvement_calibrate_tool({
+        "candidate_set_artifact_path": str(candidate_path),
+        "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
+    })
+
+    payload = parse_tool_payload(raw)
+    assert len(calls) == 1
+    assert calls[0]["execute"] is True
+    assert calls[0]["candidate_set_artifact_path"] == str(candidate_path)
+    assert calls[0]["config"]["_self_improvement_root"] == str(tmp_path / "self-improvement")
+    assert payload["overlay_candidate_set"]["source"] == "candidate_set_artifact"
+    assert payload["overlay_candidate_set"]["candidate_set_path"] == str(candidate_path)
+
+
+def test_calibrate_tool_rejects_dry_run_candidate_set_artifact(monkeypatch, tmp_path):
+    mod = load_plugin_module()
+    called = False
+
+    def fake_run_calibration(**kwargs):  # pragma: no cover - failure path
+        nonlocal called
+        called = True
+        return {}
+
+    mod._handle_self_improvement_calibrate_tool.__globals__["run_calibration"] = fake_run_calibration
+    raw = mod._handle_self_improvement_calibrate_tool({
+        "dry_run": True,
+        "candidate_set_artifact_path": str(tmp_path / "candidate-set.json"),
+        "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
+    })
+
+    payload = parse_tool_payload(raw)
+    assert called is False
+    assert payload["error"] == "calibration_failed"
+    assert "candidate_set_artifact_requires_execute" in payload["error_detail"]
+
+
 def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     mod = load_plugin_module()
     large_details = "x" * 20000
