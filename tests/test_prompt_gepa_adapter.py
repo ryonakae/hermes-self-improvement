@@ -143,6 +143,25 @@ def test_select_overlay_eval_cases_keeps_recent_order_after_balanced_selection()
     ]
 
 
+def test_select_overlay_eval_cases_prefers_executed_cases_over_unexecuted_skips():
+    cases = [
+        overlay_case("planner_overlay", case_hash="sha256:planner-skip", expected={"decision": "skip"}, decision="skip"),
+        overlay_case("planner_overlay", case_hash="sha256:planner-executed", executed=True, expected={"decision": "run_editor"}),
+        overlay_case("editor_overlay", case_hash="sha256:editor-skip", expected={"mutation": "skip"}, decision="skip"),
+        overlay_case("editor_overlay", case_hash="sha256:editor-executed", executed=True, expected={"mutation": "no_change"}),
+        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-report", expected={"recommendation": "report_only"}, decision="skip"),
+        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-executed", executed=True, expected={"recommendation": "report_only"}),
+    ]
+
+    selected = select_overlay_eval_cases(cases, max_cases=3)
+
+    assert [case["case_hash"] for case in selected] == [
+        "sha256:planner-executed",
+        "sha256:editor-executed",
+        "sha256:evaluator-executed",
+    ]
+
+
 def test_optimize_overlay_candidate_set_calls_dspy_gepa_and_returns_candidate_targets(tmp_path):
     FakeGEPA.calls.clear()
     config = {

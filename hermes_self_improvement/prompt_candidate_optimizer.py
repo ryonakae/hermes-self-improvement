@@ -254,6 +254,21 @@ def _write_overlay_candidate_set(config: dict[str, Any], candidate_set: dict[str
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _selected_case_signal(case: dict[str, Any], *, signal_score: int) -> dict[str, Any]:
+    input_payload = case.get("input") if isinstance(case.get("input"), dict) else {}
+    outcome = input_payload.get("outcome") if isinstance(input_payload.get("outcome"), dict) else {}
+    mutation_task = input_payload.get("mutation_task") if isinstance(input_payload.get("mutation_task"), dict) else {}
+    return {
+        "id": str(case.get("id") or case.get("case_hash") or ""),
+        "target": str(case.get("target") or ""),
+        "signal_score": signal_score,
+        "outcome": outcome.get("outcome"),
+        "changed": bool(outcome.get("changed")),
+        "executed": bool(outcome.get("executed")),
+        "decision": mutation_task.get("decision"),
+    }
+
+
 def _run_overlay_set_optimizer(
     *,
     evidence: dict[str, Any],
@@ -269,13 +284,14 @@ def _run_overlay_set_optimizer(
     max_cases = int(gepa_config.get("overlay_max_cases") or 3)
     optimizer_cases: list[dict[str, Any]] = []
     try:
-        from .prompt_gepa_adapter import optimize_overlay_candidate_set, select_overlay_eval_cases
+        from .prompt_gepa_adapter import _case_signal_score, optimize_overlay_candidate_set, select_overlay_eval_cases
         optimizer_cases = select_overlay_eval_cases(cases, max_cases=max_cases)
         raw = optimize_overlay_candidate_set(config=config, evidence=evidence, cases=optimizer_cases)
         raw.setdefault("optimizer_case_count", len(optimizer_cases))
         raw.setdefault("available_case_count", len(cases))
         raw.setdefault("selected_case_ids", [str(case.get("id") or case.get("case_hash") or "") for case in optimizer_cases])
         raw.setdefault("selected_case_targets", [str(case.get("target") or "") for case in optimizer_cases])
+        raw.setdefault("selected_case_signals", [_selected_case_signal(case, signal_score=_case_signal_score(case)) for case in optimizer_cases])
         return "gepa", raw
     except Exception as exc:
         return "gepa", {"optimizer": "dspy.GEPA", "gepa_result": "failed", "targets": {}, "risk_notes": f"overlay_gepa_failed:{exc}", "optimizer_case_count": len(optimizer_cases), "available_case_count": len(cases)}
@@ -306,6 +322,7 @@ def generate_overlay_candidate_set(
         "available_case_count": raw.get("available_case_count"),
         "selected_case_ids": raw.get("selected_case_ids") if isinstance(raw.get("selected_case_ids"), list) else [],
         "selected_case_targets": raw.get("selected_case_targets") if isinstance(raw.get("selected_case_targets"), list) else [],
+        "selected_case_signals": raw.get("selected_case_signals") if isinstance(raw.get("selected_case_signals"), list) else [],
         "evidence_hash": _sha256_text(_stable_json(evidence)),
     }
     candidate_set_id = _candidate_set_id(seed)

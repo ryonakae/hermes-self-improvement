@@ -92,6 +92,8 @@ def _prompt_source(role: str, overlay: dict[str, Any] | None = None) -> dict[str
             "overlay_hash": overlay.get("candidate_hash"),
             "overlay_path": overlay.get("candidate_path"),
         })
+        if overlay.get("overlay_generation_id"):
+            source["overlay_generation_id"] = overlay.get("overlay_generation_id")
     return source
 
 

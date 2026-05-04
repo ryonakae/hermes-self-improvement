@@ -114,7 +114,7 @@ Keep these fixed unless a newer plan explicitly changes them:
 
 ### Slice 6: Dogfood one real overlay generation loop after artifact reuse
 
-**Status:** attempted again on 2026-05-05 JST after optional candidate-set reuse and component summaries. No promotion was available, so `--from-candidate-set` was correctly not executed. The run produced valid no-promotion evidence and points to Slice 7 case/scoring inspection if this repeats.
+**Status:** completed on 2026-05-05 JST after Slice 7 scoring/case-signal fix. The first retry correctly recorded no-promotion; after case selection stopped over-prioritizing unexecuted skip/report-only cases, a promotable artifact was generated, explicitly promoted with `--from-candidate-set`, and later episodes recorded the promoted overlay generation/hash.
 
 **Objective:** Prove the closed loop with runtime artifacts: prompt overlay candidate-set promotion updates active overlay generation, later `improve` episodes record that generation/hash data, and later `calibrate` can use those episodes as runtime eval cases.
 
@@ -212,7 +212,7 @@ Only commit if repo docs/tests/code change. Runtime artifact proof alone is not 
 
 ### Slice 7: Inspect no-promotion scoring/case quality if dogfood still cannot promote
 
-**Status:** pending; only start if Slice 6 repeatedly produces `keep_candidate` / `no_improvement` and no active overlay generation proof.
+**Status:** completed on 2026-05-05 JST. Root cause was that `_case_signal_score()` gave too much weight to unexecuted skip/no-change expectations, so the bounded GEPA input repeatedly selected conservative no-op cases before executed mutation cases. The fix prioritizes executed/changed/outcome-bearing cases and records compact `selected_case_signals` in candidate-set artifacts.
 
 **Objective:** Determine whether GEPA has no real improvement to make, or whether the eval-case/scoring budget is too weak to recognize improvement.
 
@@ -236,6 +236,35 @@ Only commit if repo docs/tests/code change. Runtime artifact proof alone is not 
 2. Check whether selected cases are all low-signal/pending or if scoring always yields ties.
 3. If needed, adjust deterministic selection/scoring narrowly. Keep the default cap bounded and do not add classifier/normalizer layers.
 4. Re-run focused tests and dogfood preview.
+
+**Observed 2026-05-05 JST implementation:**
+
+```text
+Root cause:
+- selected cases were balanced by target, but the signal score overvalued unexecuted skip/defer and expected skip/no_change cases.
+- top selected cases before the fix were unknown-outcome no-op skip/report_only examples.
+
+Fix:
+- raised weight for outcome-bearing, changed, and executed cases.
+- removed the extra score bonus for expected skip/no_change.
+- added `selected_case_signals` to candidate-set artifacts with id, target, signal_score, outcome, changed, executed, and decision.
+- propagated `overlay_generation_id` from active overlay pointers into rendered prompt sources and episode records.
+- fixed improve CLI summary to display `overlay_hash` instead of falling back to base hash for runtime overlays.
+
+Dogfood proof after fix:
+- dry-run artifact: /Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260504T211215Z-b1a382834282.json
+- candidate set: overlay-set-ae9e25cf607d
+- GEPA: selected
+- decision: promote
+- changed targets: planner_overlay, evaluator_overlay
+- selected cases: executed `run_editor` / `skill_patch` examples across planner/editor/evaluator
+- explicit promotion: `bin/hermes-self-improve calibrate --from-candidate-set <artifact>`
+- result: partial_update because evaluator regression runner is still not configured, but prompt overlay set promoted successfully.
+- active overlay_generation_id: overlay-set-ae9e25cf607d
+- later improve episodes recorded `overlay_generation_id: overlay-set-ae9e25cf607d` and planner overlay hash `ceb78315114084cec64b2b75c5f1c9170df3ca482588928b5fb10ba584c9a371`.
+- later runtime eval cases included 93 cases carrying the promoted overlay generation id.
+```
+
 
 **Verification:**
 
@@ -310,8 +339,8 @@ Supported plugin surfaces remain:
 - Optional dry-run candidate-set reuse is available only when an explicit artifact path is provided; default `calibrate` still generates/evaluates fresh candidates. **Done.**
 - CLI/tool summaries separate prompt overlay set state from evaluator state. **Done.**
 - `.hermes/plans/README.md` names this roadmap as the latest source of truth and marks Hermes core top-level CLI integration out of scope. **Done.**
-- A real dogfood run proves overlay generation/hash data flows from promotion to later improvement episodes and back into eval cases, or records repeated no-promotion reasons without weakening gates. **Attempted once after artifact reuse; no-promotion recorded.**
-- If dogfood repeatedly cannot promote, compact artifact inspection identifies whether the issue is no real improvement, weak scoring, or weak case selection. **Conditional remaining.**
+- A real dogfood run proves overlay generation/hash data flows from promotion to later improvement episodes and back into eval cases, or records repeated no-promotion reasons without weakening gates. **Done.**
+- If dogfood repeatedly cannot promote, compact artifact inspection identifies whether the issue is no real improvement, weak scoring, or weak case selection. **Done for the observed no-promotion: weak case scoring was the cause.**
 
 
 ## Do not do

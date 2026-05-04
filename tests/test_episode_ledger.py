@@ -145,9 +145,8 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
 def test_record_run_episodes_records_overlay_generation_and_hashes(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = sample_run_result(tmp_path)
-    result["overlay_generation_id"] = "overlay-generation-001"
     result["prompt_sources"] = {
-        "planner": {"base_hash": "sha256:planner-base", "overlay_hash": "sha256:planner-overlay"},
+        "planner": {"base_hash": "sha256:planner-base", "overlay_hash": "sha256:planner-overlay", "overlay_generation_id": "overlay-generation-001"},
         "editor": {"base_hash": "sha256:editor-base", "overlay_hash": "sha256:editor-overlay"},
     }
     result["calibration"] = {"active_evaluator_hash": "sha256:evaluator-overlay"}

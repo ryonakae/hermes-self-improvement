@@ -17,12 +17,13 @@ def test_base_prompt_specs_have_stable_role_and_hashes():
 def test_render_planner_messages_applies_runtime_overlay_addendum():
     rendered = render_planner_messages(
         digest={"skill_candidates": []},
-        overlay={"candidate_hash": "abc123", "candidate_prompt": {"system_addendum": "Prefer explicit evidence over weak hints."}},
+        overlay={"candidate_hash": "abc123", "overlay_generation_id": "overlay-set-001", "candidate_prompt": {"system_addendum": "Prefer explicit evidence over weak hints."}},
     )
 
     assert rendered["prompt_source"]["role"] == "planner"
     assert rendered["prompt_source"]["overlay_active"] is True
     assert rendered["prompt_source"]["overlay_hash"] == "abc123"
+    assert rendered["prompt_source"]["overlay_generation_id"] == "overlay-set-001"
     assert "Prefer explicit evidence over weak hints." in rendered["messages"][0]["content"]
 
 

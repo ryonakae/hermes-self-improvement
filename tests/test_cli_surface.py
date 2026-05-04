@@ -294,6 +294,10 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
         "curator_telemetry": {"available": True, "candidate_count": 3, "rejected_count": 2},
         "evidence_pack": {"summary": {"evidence_count": 5, "ignored_count": 1}},
         "artifact_path": "/tmp/run.json",
+        "prompt_sources": {
+            "planner": {"overlay_active": True, "overlay_hash": "sha256:planner-overlay", "base_hash": "sha256:planner-base"},
+            "editor": {"overlay_active": False, "base_hash": "sha256:editor-base"},
+        },
     })
 
     assert "Self-improvement result" in text
@@ -310,6 +314,8 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "Hook evidence:" in text
     assert "related lookups: completed 1" in text
     assert "private eval cases: 3 written" in text
+    assert "- planner: runtime overlay hash sha256:planner-overlay" in text
+    assert "- editor: base hash sha256:editor-base" in text
     assert "Artifact: /tmp/run.json" in text
     assert "ledger" not in text.lower()
 

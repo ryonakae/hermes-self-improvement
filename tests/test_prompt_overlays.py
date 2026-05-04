@@ -108,6 +108,7 @@ def test_overlay_candidate_set_promotion_updates_changed_targets_and_generation(
     assert result["overlay_generation_id"] == "overlay-set-001"
     assert result["promoted_targets"] == ["planner_overlay"]
     assert loaded is not None
+    assert loaded["overlay_generation_id"] == "overlay-set-001"
     assert loaded["candidate_prompt"]["system_addendum"] == "Use stricter evidence checks."
     pointer = active_prompts_path(cfg).read_text(encoding="utf-8")
     assert "overlay-set-001" in pointer

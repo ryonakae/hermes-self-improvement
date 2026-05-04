@@ -174,6 +174,9 @@ def load_active_prompt_overlay(config: dict[str, Any] | None, *, role: str, base
         return None
     candidate["candidate_path"] = str(candidate_path)
     candidate["runtime_private"] = True
+    generation_id = pointer.get("overlay_generation_id")
+    if isinstance(generation_id, str) and generation_id.strip():
+        candidate["overlay_generation_id"] = generation_id.strip()
     return candidate
 
 

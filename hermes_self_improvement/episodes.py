@@ -65,7 +65,15 @@ def _overlay_hash(prompt_sources: dict[str, Any], role: str) -> str:
 
 
 def _overlay_generation_id(run_result: dict[str, Any], prompt_sources: dict[str, Any]) -> str | None:
-    for source in (run_result, prompt_sources, run_result.get("calibration") if isinstance(run_result.get("calibration"), dict) else {}):
+    sources: list[dict[str, Any]] = [run_result, prompt_sources]
+    for role in ("planner", "editor", "scorer", "evaluator"):
+        role_source = prompt_sources.get(role) if isinstance(prompt_sources.get(role), dict) else None
+        if role_source is not None:
+            sources.append(role_source)
+    calibration = run_result.get("calibration") if isinstance(run_result.get("calibration"), dict) else None
+    if calibration is not None:
+        sources.append(calibration)
+    for source in sources:
         if not isinstance(source, dict):
             continue
         value = source.get("overlay_generation_id") or source.get("prompt_overlay_generation_id")
