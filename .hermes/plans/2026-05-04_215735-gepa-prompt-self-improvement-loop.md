@@ -1,8 +1,25 @@
 # GEPA による overlay prompt 自己改善ループ計画
 
+**Status:** completed / implemented through `bb3f045 feat: connect GEPA overlay optimizer`.
+
 作成: 2026-05-04 21:57 JST
-更新: 2026-05-04 22:00 JST
+更新: 2026-05-05 00:06 JST
 対象: `/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement`
+
+## 実装結果
+
+この plan の主要 slice は実装済み。
+
+- episode に overlay generation/hash を記録。
+- episode から planner/editor/evaluator の overlay-set eval cases を生成。
+- planner/editor/evaluator を1つの runtime-private overlay candidate set として扱う contract を追加。
+- candidate-set artifact acceptance checks と `promote|keep_candidate|reject` decision を追加。
+- `calibrate` に candidate-set 生成・評価・execute 時 promotion を接続。
+- DSPy/GEPA adapter を overlay candidate set 生成へ接続。
+- GEPA stdout/stderr/tqdm は CLI に混ぜず artifact 側へ保存。
+- CLI/tool result は compact summary + artifact path に維持。
+
+残りはこの plan を直接続けず、`2026-05-05_000647-self-improvement-roadmap-refresh.md` を source of truth とする。
 
 ## ゴール
 

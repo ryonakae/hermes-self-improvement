@@ -2,34 +2,23 @@
 
 ## Current source of truth
 
-As of 2026-05-02, the latest completed implementation plan is:
+As of 2026-05-05, the current implementation and remaining-work source of truth is:
 
-- `2026-05-02_151616-planner-hint-weighting-and-cluster-evidence.md`
-  - **Status:** completed.
-  - Added evidence strength metadata, conservative weak-only fallback behavior, compact recurring tool-error cluster evidence, and planner quality metrics for weak-only / cluster-selected decisions.
+- `2026-05-05_000647-self-improvement-roadmap-refresh.md`
+  - **Status:** active follow-up roadmap.
+  - Records the observed code state through `bb3f045 feat: connect GEPA overlay optimizer` and defines the remaining slices: make overlay-set the only prompt-overlay promotion path, dogfood one real generation loop, improve bounded GEPA case selection, clarify calibration sub-results, and keep top-level `hermes self-improvement ...` CLI integration separate from plugin quality work.
 
-- `2026-05-02_074457-evidence-target-extraction-quality.md`
-  - **Status:** completed.
-  - Added deterministic evidence target hints and planner quality metrics so explicit, alias, tool-class, and path evidence can attach to existing mutable Curator candidates before planner selection.
+The latest completed implementation plan is:
 
-
-- `2026-05-02_020641-planner-editor-quality-proof.md`
-  - **Status:** completed.
-  - Added planner quality proof counts, strict planner normalization for evidence-backed editor work, and structured editor prompts.
-
-- `2026-05-02_013520-global-planner-before-editor.md`
-  - **Status:** completed.
-  - Renamed the decision role to `planner`, added a global skill planner before the per-skill editor, made dry-run execute planner preview without editor mutation, and routed mutating runs only through planner `run_editor` decisions.
-
-- `2026-05-02_001205-remove-gepa-compare-scorers.md`
-  - **Status:** completed.
-  - Removed `gepa` / `compare` from primary proposal scorer surfaces, made `llm` the `improve` / `report` default, and kept GEPA/DSPy scoped to `calibrate` / evaluator optimization.
-
-- `2026-05-01_154324-rename-model-roles.md`
-  - **Status:** superseded by planner terminology.
-  - Renamed model routing from implementation-oriented `llm / mutation / gepa` to role-based `judge / editor / evaluator`; the decision role is now `planner`.
+- `2026-05-04_215735-gepa-prompt-self-improvement-loop.md`
+  - **Status:** completed / implemented.
+  - Added overlay generation/hash episode recording, overlay-set runtime eval cases, runtime-private planner/editor/evaluator candidate-set artifacts, GEPA adapter connection, acceptance checks, execute-time overlay-set promotion, and compact CLI/tool summaries.
 
 The latest completed implementation records are:
+
+- `2026-05-04_194014-mutation-agent-json-contract.md`
+  - **Status:** completed / implemented.
+  - Replaced the old handwritten JSON mutation-agent protocol with the native skill-tool editor harness. Editor LLMs use bounded skill tools directly while the plugin constrains target, provenance, allowed actions, and trace recording.
 
 - `archive/2026-05-04_213623-calibration-partial-success-status.md`
   - **Status:** implemented.
@@ -39,48 +28,29 @@ The latest completed implementation records are:
   - **Status:** implemented.
   - Added first-class Curator-style skill archive lifecycle handling: `skill_archive` planner decisions, Curator primitive execution, active reference blocking, successor validation, archived-skill exclusion, structured archive episodes, archive credit-assignment buckets, compact lifecycle summaries, and fake LLM planner coverage.
 
-- `archive/2026-05-01_135922-remove-remaining-legacy-compatibility.md`
-  - **Status:** completed.
-  - Removed remaining unreleased compatibility surfaces: JSON config input, package-internal direct-file import fallback shims, and legacy/compatibility wording that implied old behavior was supported.
-
-- `archive/2026-05-01_112925-target-based-memory-mutation.md`
-  - **Status:** completed.
-  - Reworked memory mutation routing so tool selection follows the normalized edit target (`builtin_user`, `builtin_memory`, `external_memory`) instead of a provider-first memory setting. Built-in targets use the `memory` tool, external targets use provider tools, and ambiguous targets fail closed.
-
-- `archive/2026-05-01_094555-curator-telemetry-source-of-truth.md`
-  - **Status:** completed.
-  - Implemented Curator/Hermes telemetry as the skill candidate source-of-truth, automatic Curator lifecycle transition preview/run before telemetry loading, candidate-aware evidence packs, candidate-driven skill runner, evidence-triggered related-memory lookup context, calibrate-only scorer/evaluator judgment-loop responsibility, and Curator-vs-hook visibility in report/status.
-
-- `archive/2026-05-01_015758-obsolete-terminology-cleanup.md`
-  - **Status:** completed.
-  - Canonicalized unattended mutation/scorer/restore/historical-reader terminology after the legacy internals cleanup, then removed unreleased compatibility shims for obsolete config/ledger keys.
-
-- `archive/2026-05-01_011409-obsolete-internal-legacy-cleanup.md`
-  - **Status:** completed.
-  - Removed stale next-action guidance, dropped legacy re-exports/runtime imports, deleted legacy apply/ledger/drift internals and legacy-only tests, and shrank recovery/verification/outcome helpers.
-
-- `archive/2026-04-30_234117-curator-aligned-self-improvement-runner.md`
-  - **Status:** completed.
-  - Reworked the plugin toward a Curator-aligned runner with four primary surfaces (`improve`, `calibrate`, `report`, `status`) and removed the legacy plan/apply/rollback/outcome primary surface.
-
 The current implemented baseline is:
 
-- Primary CLI surface: `improve / calibrate / report / status`.
+- Primary CLI surface: `improve / calibrate / report / status` via `bin/hermes-self-improve`.
 - Primary tool surface: `self_improvement_improve / self_improvement_calibrate / self_improvement_report / self_improvement_status`.
+- Plugin tool and slash-command surfaces work; top-level `hermes self-improvement ...` remains a Hermes core CLI wiring task and is not required for plugin quality work.
 - `improve` and `calibrate` are mutation-capable by default; `--dry-run` is the preview boundary.
+- Mutation scope is limited to skill improvements, memory improvements, and scorer/evaluator/prompt-overlay self-improvement.
+- Runtime config, prompt/tool policy, arbitrary docs, repo structure, gateway settings, and cron settings are not mutation targets.
 - `improve` uses Curator/Hermes telemetry as the skill candidate source-of-truth after running or previewing Curator automatic lifecycle transitions.
 - Obsolete local mutable active/stale skills may be archived through the Curator `tools.skill_usage.archive_skill` lifecycle primitive when the planner selects `archive_skill` and hard preflight invariants pass; archived skills are excluded from future candidate paths.
-- Skill improvement runs through a global planner first; dry-run previews planner decisions, while mutating runs execute only planner `run_editor` targets via the per-skill editor. Evidence attachment records strength (`strong` explicit, `medium` alias/path/cluster, `weak` generic tool-class), and deterministic fallback skips weak-only candidates.
-- `calibrate` owns planner/editor/evaluator prompt and rubric improvement; `improve` does not run DSPy/GEPA calibration.
-- Legacy primary `plan / apply / rollback / outcome`, `--execute`, `--items`, and `self_improvement_record_outcome` are removed from the user-facing surface.
+- Skill improvement runs through a global planner first; dry-run previews planner decisions, while mutating runs execute only planner `run_editor` targets via the native skill-tool editor harness. Evidence attachment records strength (`strong` explicit, `medium` alias/path/cluster, `weak` generic tool-class), and deterministic fallback skips weak-only candidates.
 - Skill mutation runs through bounded official skill tools only; no terminal/file/git/direct filesystem fallback.
 - Memory mutation is target-routed: `builtin_user` / `builtin_memory` use the built-in `memory` tool; `external_memory` uses the active external provider tool; missing targets fail closed. No direct memory store edits.
 - `improve` and `report` proposal scoring default to `llm`; the only primary scorer choices are `llm` and `heuristic`.
-- GEPA/DSPy are not live proposal scorers; they are used by `calibrate` for evaluator / prompt / rubric optimization.
-- Runtime-private calibration eval cases are stored under runtime state, not repo-tracked eval assets.
+- `calibrate` owns planner/editor/evaluator prompt overlay and evaluator/rubric improvement; `improve` does not run DSPy/GEPA calibration.
+- GEPA/DSPy are not live proposal scorers. They are used by `calibrate` to generate runtime-private overlay candidate sets and evaluator/scorer calibration artifacts.
+- Runtime-private overlay candidate sets treat `planner_overlay`, `editor_overlay`, and `evaluator_overlay` as one generation unit with per-target `changed|unchanged`.
+- Overlay candidate-set acceptance checks are intentionally thin: artifact readability, consistent generation metadata, no full replacement, addendum limits, active-before rollback metadata, and GEPA result mapping.
+- Agent-facing tool results expose only compact summaries and artifact paths. Full prompt text, GEPA logs, evidence, candidate payloads, and run payloads stay in runtime-private artifacts or explicit CLI `--json` output.
+- Legacy primary `plan / apply / rollback / outcome`, `--execute`, `--items`, and `self_improvement_record_outcome` are removed from the user-facing surface.
 - Historical apply artifact readers are removed from report/calibration paths; reports now summarize current runner artifacts, calibration ledgers, and explicit review outcomes only.
 
-When archived or older plans conflict with this list, this index wins unless a newer active plan explicitly supersedes it.
+When archived or older plans conflict with this list, this index and `2026-05-05_000647-self-improvement-roadmap-refresh.md` win unless a newer active plan explicitly supersedes them.
 
 ## Archive policy
 
