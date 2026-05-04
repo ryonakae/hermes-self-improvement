@@ -256,6 +256,33 @@ def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
     assert "planner: candidate yes, promoted yes" in text
 
 
+def test_calibration_summary_separates_overlay_set_from_failed_evaluator():
+    cli = load_cli_module()
+
+    text = cli._render_calibration_summary({
+        "current_status": "failed",
+        "reasons": ["regression_runner_not_configured"],
+        "active_changed": False,
+        "evidence_summary": {"total_events": 20, "disagreements": 0, "bad_outcomes": 0},
+        "regression": {"status": "failed", "reason": "regression_runner_not_configured"},
+        "evaluator_update": {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False},
+        "overlay_candidate_set": {
+            "status": "evaluated",
+            "decision": "keep_candidate",
+            "gepa_result": "no_improvement",
+            "candidate_set_id": "overlay-set-001",
+            "candidate_set_path": "/tmp/candidate-set.json",
+            "changed_targets": [],
+            "hard_violations": 0,
+        },
+    })
+
+    assert "Component status:" in text
+    assert "- prompt overlay set: evaluated, decision keep_candidate, GEPA no_improvement, changed 0" in text
+    assert "- evaluator: failed, reason regression_runner_not_configured, active changed no" in text
+    assert "Regression:" not in text
+
+
 def test_calibration_summary_includes_compact_overlay_candidate_set():
     cli = load_cli_module()
 

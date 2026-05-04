@@ -453,6 +453,33 @@ def _add_config_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _prompt_overlay_set_component(overlay_set: dict[str, Any]) -> str | None:
+    if not overlay_set or overlay_set.get("status") == "not_built":
+        return None
+    changed = overlay_set.get("changed_targets") if isinstance(overlay_set.get("changed_targets"), list) else []
+    source = overlay_set.get("source")
+    source_suffix = f", source {source}" if source else ""
+    return (
+        f"- prompt overlay set: {overlay_set.get('status')}, "
+        f"decision {overlay_set.get('decision')}, "
+        f"GEPA {overlay_set.get('gepa_result')}, "
+        f"changed {len(changed)}"
+        f"{source_suffix}"
+    )
+
+
+def _evaluator_component(evaluator_update: dict[str, Any], regression: dict[str, Any] | None) -> str | None:
+    if evaluator_update and evaluator_update.get("status") not in {None, "no_candidate"}:
+        reason = evaluator_update.get("reason") or (regression or {}).get("reason")
+        reason_part = f", reason {reason}" if reason else ""
+        active_changed = "yes" if evaluator_update.get("active_changed") else "no"
+        return f"- evaluator: {evaluator_update.get('status')}{reason_part}, active changed {active_changed}"
+    if regression:
+        reason = regression.get("reason")
+        reason_part = f", reason {reason}" if reason else ""
+        return f"- evaluator: regression {regression.get('status')}{reason_part}"
+    return None
+
 
 def _render_calibration_summary(result: dict[str, Any]) -> str:
     evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
@@ -481,9 +508,18 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     if reasons:
         lines.append("Reason: " + ", ".join(str(reason) for reason in reasons))
     regression = result.get("regression") if isinstance(result.get("regression"), dict) else None
-    if regression:
-        lines.append(f"Regression: {regression.get('status')}")
     evaluator_update = result.get("evaluator_update") if isinstance(result.get("evaluator_update"), dict) else None
+    overlay_set = result.get("overlay_candidate_set") if isinstance(result.get("overlay_candidate_set"), dict) else {}
+    components = [
+        item for item in (
+            _prompt_overlay_set_component(overlay_set),
+            _evaluator_component(evaluator_update or {}, regression),
+        )
+        if item
+    ]
+    if components:
+        lines.append("Component status:")
+        lines.extend(components)
     if evaluator_update and evaluator_update.get("status") not in {None, "no_candidate"}:
         reason = evaluator_update.get("reason")
         suffix = f", reason {reason}" if reason else ""
@@ -491,7 +527,6 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
         lines.append(f"- status: {evaluator_update.get('status')}{suffix}")
     if result.get("active_evaluator_path"):
         lines.append(f"Active evaluator: {result.get('active_evaluator_path')}")
-    overlay_set = result.get("overlay_candidate_set") if isinstance(result.get("overlay_candidate_set"), dict) else {}
     if overlay_set and overlay_set.get("status") != "not_built":
         changed = overlay_set.get("changed_targets") if isinstance(overlay_set.get("changed_targets"), list) else []
         source = overlay_set.get("source")

@@ -381,6 +381,8 @@ git commit -m "feat: reuse overlay candidate artifacts on request"
 
 ### Slice 5: Tighten status and report surfaces around partial success
 
+**Status:** completed in this follow-up slice. CLI calibration summaries now include a `Component status` block that separately reports the prompt overlay set and evaluator status, and no longer emits a standalone legacy `Regression:` line that made evaluator failure look like the whole overlay path failed. Agent-facing compact calibrate results now include a `components` object with `prompt_overlay_set` and `evaluator` sub-results while keeping the existing compact `overlay_candidate_set` payload.
+
 **Objective:** Make operator-facing output clearly separate prompt overlay set status from evaluator calibration status.
 
 **Files:**

@@ -209,6 +209,24 @@ def _compact_overlay_candidate_set(value: Any) -> dict[str, Any]:
     return out
 
 
+def _compact_calibration_components(*, overlay_candidate_set: dict[str, Any], evaluator_update: dict[str, Any]) -> dict[str, Any]:
+    changed_targets = overlay_candidate_set.get("changed_targets") if isinstance(overlay_candidate_set.get("changed_targets"), list) else []
+    return {
+        "prompt_overlay_set": {
+            "status": overlay_candidate_set.get("status"),
+            "decision": overlay_candidate_set.get("decision"),
+            "gepa_result": overlay_candidate_set.get("gepa_result"),
+            "changed_targets": changed_targets,
+            "hard_violations": int(overlay_candidate_set.get("hard_violations") or 0),
+        },
+        "evaluator": {
+            "status": evaluator_update.get("status"),
+            "reason": evaluator_update.get("reason"),
+            "active_changed": bool(evaluator_update.get("active_changed")),
+        },
+    }
+
+
 def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
     evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
     regression = result.get("regression") if isinstance(result.get("regression"), dict) else {}
@@ -216,6 +234,7 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
     ledger_path = result.get("ledger_path") or result.get("artifact_path")
     autonomous_policy = result.get("autonomous_policy") if isinstance(result.get("autonomous_policy"), dict) else {}
     evaluator_update = result.get("evaluator_update") if isinstance(result.get("evaluator_update"), dict) else {}
+    overlay_candidate_set = _compact_overlay_candidate_set(result.get("overlay_candidate_set"))
     full_payload = {
         "available": bool(ledger_path),
         "read_with": "read_file" if ledger_path else None,
@@ -247,7 +266,8 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
         } if evaluator_update else {},
         "autonomous_policy": autonomous_policy,
         "prompt_overlays": _compact_prompt_overlays(result.get("prompt_overlays")),
-        "overlay_candidate_set": _compact_overlay_candidate_set(result.get("overlay_candidate_set")),
+        "overlay_candidate_set": overlay_candidate_set,
+        "components": _compact_calibration_components(overlay_candidate_set=overlay_candidate_set, evaluator_update=evaluator_update),
         "episodes": {"count": int(episodes.get("count") or 0), "path": episodes.get("path")},
         "active_evaluator_path": result.get("active_evaluator_path"),
         "ledger_path": ledger_path,
