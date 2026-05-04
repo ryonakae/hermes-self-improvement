@@ -176,3 +176,39 @@ def test_fake_optimizer_can_produce_overlay_candidate_set(tmp_path):
     assert candidate_set["targets"]["evaluator_overlay"]["candidate_prompt"] == {"system_addendum": None, "user_addendum": None, "replacement": None}
     assert Path(candidate_set["candidate_set_path"]).exists()
     assert seen["case_targets"] == ["editor_overlay", "evaluator_overlay", "planner_overlay"]
+
+
+def test_default_overlay_candidate_set_uses_gepa_adapter_when_enabled(monkeypatch, tmp_path):
+    import hermes_self_improvement.prompt_candidate_optimizer as optimizer_module
+
+    calls = []
+
+    def fake_build_cases(*, config, limit):
+        return [{"target": "planner_overlay", "case_hash": f"sha256:case-{index}"} for index in range(100)]
+
+    def fake_optimize_overlay_candidate_set(*, config, evidence, cases):
+        calls.append({"config": config, "evidence": evidence, "cases": cases})
+        return {
+            "optimizer": "dspy.GEPA",
+            "gepa_result": "selected",
+            "baseline_score": 0.3,
+            "candidate_score": 0.7,
+            "targets": {
+                "planner_overlay": {"change_status": "changed", "candidate_prompt": {"system_addendum": "Use GEPA guidance.", "replacement": None}},
+                "editor_overlay": {"change_status": "unchanged", "candidate_prompt": {"replacement": None}},
+                "evaluator_overlay": {"change_status": "unchanged", "candidate_prompt": {"replacement": None}},
+            },
+        }
+
+    monkeypatch.setattr(optimizer_module, "build_overlay_set_runtime_eval_cases", fake_build_cases)
+    monkeypatch.setitem(__import__("sys").modules, "hermes_self_improvement.prompt_gepa_adapter", type("FakeAdapter", (), {"optimize_overlay_candidate_set": staticmethod(fake_optimize_overlay_candidate_set)}))
+
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "gepa_scorer": {"enabled": True, "max_full_evals": 2, "overlay_max_cases": 7}}
+    candidate_set = generate_overlay_candidate_set(config=config, evidence={"total_events": 1})
+
+    assert calls
+    assert len(calls[0]["cases"]) == 7
+    assert candidate_set["source"] == "gepa"
+    assert candidate_set["optimizer"] == "dspy.GEPA"
+    assert candidate_set["gepa_result"] == "selected"
+    assert candidate_set["targets"]["planner_overlay"]["change_status"] == "changed"

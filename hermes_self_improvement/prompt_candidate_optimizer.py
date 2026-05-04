@@ -254,6 +254,30 @@ def _write_overlay_candidate_set(config: dict[str, Any], candidate_set: dict[str
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _run_overlay_set_optimizer(
+    *,
+    evidence: dict[str, Any],
+    cases: list[dict[str, Any]],
+    config: dict[str, Any],
+    optimizer: OverlaySetOptimizerFn | None,
+) -> tuple[str, dict[str, Any]]:
+    if optimizer is not None:
+        return "gepa", optimizer(evidence=evidence, cases=cases, config=config)
+    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    if not bool(gepa_config.get("enabled", True)) or int(gepa_config.get("max_full_evals") or 0) <= 0 or not cases:
+        return "rule_fallback", {}
+    max_cases = int(gepa_config.get("overlay_max_cases") or 3)
+    optimizer_cases = cases[: max(1, max_cases)]
+    try:
+        from .prompt_gepa_adapter import optimize_overlay_candidate_set
+        raw = optimize_overlay_candidate_set(config=config, evidence=evidence, cases=optimizer_cases)
+        raw.setdefault("optimizer_case_count", len(optimizer_cases))
+        raw.setdefault("available_case_count", len(cases))
+        return "gepa", raw
+    except Exception as exc:
+        return "gepa", {"optimizer": "dspy.GEPA", "gepa_result": "failed", "targets": {}, "risk_notes": f"overlay_gepa_failed:{exc}", "optimizer_case_count": len(optimizer_cases), "available_case_count": len(cases)}
+
+
 def generate_overlay_candidate_set(
     *,
     config: dict[str, Any],
@@ -263,8 +287,7 @@ def generate_overlay_candidate_set(
     write_candidate: bool = True,
 ) -> dict[str, Any]:
     cases = build_overlay_set_runtime_eval_cases(config=config, limit=1000)
-    raw = optimizer(evidence=evidence, cases=cases, config=config) if optimizer is not None else {}
-    source = "gepa" if optimizer is not None else "rule_fallback"
+    source, raw = _run_overlay_set_optimizer(evidence=evidence, cases=cases, config=config, optimizer=optimizer)
     seed = {
         "schema_name": "self_improvement_overlay_candidate_set",
         "schema_version": "1.0",
@@ -276,6 +299,8 @@ def generate_overlay_candidate_set(
         "candidate_score": raw.get("candidate_score"),
         "runtime_private": True,
         "runtime_eval_case_count": len(cases),
+        "optimizer_case_count": raw.get("optimizer_case_count"),
+        "available_case_count": raw.get("available_case_count"),
         "evidence_hash": _sha256_text(_stable_json(evidence)),
     }
     candidate_set_id = _candidate_set_id(seed)

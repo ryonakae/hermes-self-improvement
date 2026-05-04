@@ -95,6 +95,7 @@ def _default_config() -> dict[str, Any]:
             "max_full_evals": 2,
             "num_threads": 4,
             "track_stats": True,
+            "overlay_max_cases": 3,
         },
         "scorer_comparison_policy": {
             "default": {

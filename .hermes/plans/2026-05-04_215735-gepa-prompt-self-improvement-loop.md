@@ -315,7 +315,7 @@ bin/hermes-self-improve calibrate --target overlay-set --dry-run
 
 ### Step 3: GEPA で overlay candidate set を作る
 
-Status: 実装中。candidate-set artifact の最小 contract は追加済み。
+Status: 実装済み。overlay candidate set contract、runtime eval cases、DSPy/GEPA adapter、default optimizer 接続まで追加済み。
 
 変更候補:
 
