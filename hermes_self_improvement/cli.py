@@ -720,7 +720,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         planner_decision = item.get("planner_decision") if isinstance(item.get("planner_decision"), dict) else {}
         if planner_decision.get("decision") != "run_editor":
             continue
-        reason = str(item.get("reason") or "unknown")
+        result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
+        reason = str(result_payload.get("outcome") or result_payload.get("error") or item.get("reason") or "unknown")
         editor_stop_counts[reason] = editor_stop_counts.get(reason, 0) + 1
     lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
     for decision in memory_step.get("decisions") or []:

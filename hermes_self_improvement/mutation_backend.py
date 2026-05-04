@@ -10,6 +10,12 @@ from typing import Any, Callable, Protocol
 ALLOWED_MUTATION_AGENT_TOOLS = {"skills_list", "skill_view", "skill_manage"}
 ALLOWED_SKILL_MANAGE_ACTIONS = {"create", "patch", "edit", "delete", "write_file", "remove_file"}
 SUBMIT_MUTATION_RESULT_TOOL = "submit_mutation_result"
+NON_MUTATING_AGENT_OUTCOMES = {
+    "skipped_superseded",
+    "stopped_stale_target",
+    "stopped_conflict",
+    "stopped_uncertain_needs_review",
+}
 _REQUIRED_SUCCESS_FIELDS = ("used_tools", "changed_skills", "created_skills", "deleted_skills", "verification_notes", "rollback_hints")
 
 
@@ -56,6 +62,9 @@ def _coerce_int(value: Any, default: int) -> int:
 def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(result.get("success"), bool):
         return {"success": False, "error": "mutation_agent_result_missing_success"}
+    outcome = str(result.get("outcome") or "")
+    if not result.get("success") and outcome in NON_MUTATING_AGENT_OUTCOMES:
+        result["success"] = True
     if not result.get("success"):
         return result
     for key in _REQUIRED_SUCCESS_FIELDS:

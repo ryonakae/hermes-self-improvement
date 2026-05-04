@@ -284,7 +284,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
                 "planner": {"summary": {"archive_candidates": 1}},
                 "decisions": [
                     {"decision": "archive_skill_preview"},
-                    {"decision": "rejected", "reason": "native_tool_call_unsupported", "planner_decision": {"decision": "run_editor"}},
+                    {"decision": "rejected", "reason": "Verbose natural-language reason that should not become a counter key", "result": {"outcome": "skipped_superseded"}, "planner_decision": {"decision": "run_editor"}},
                     {"decision": "rejected", "reason": "submit_result_missing", "planner_decision": {"decision": "run_editor"}},
                     {"decision": "rejected", "reason": "submit_result_missing", "planner_decision": {"decision": "run_editor"}},
                 ],
@@ -299,7 +299,8 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "Self-improvement result" in text
     assert "Skill improvements:" in text
     assert "- changed 2 skills" in text
-    assert "editor stopped/rejected: native_tool_call_unsupported 1, submit_result_missing 2" in text
+    assert "editor stopped/rejected: skipped_superseded 1, submit_result_missing 2" in text
+    assert "Verbose natural-language reason" not in text
     assert "Skill lifecycle:" in text
     assert "- archive candidates 1, would archive 1, archived 0, blocked 0" in text
     assert "Memory improvements:" in text

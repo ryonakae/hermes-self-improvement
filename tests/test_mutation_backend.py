@@ -162,6 +162,31 @@ def test_native_backend_non_mutating_finalizer_succeeds_without_changes():
     assert result["changed_skills"] == []
 
 
+def test_native_backend_normalizes_false_success_non_mutating_outcome_to_completed_run():
+    backend = NativeSkillToolEditorBackend(
+        tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {"success": True}, skill_manage_fn=lambda **_: {}),
+        llm_call=lambda messages, **kwargs: _tool_response(
+            "submit_mutation_result",
+            {
+                "success": False,
+                "outcome": "skipped_superseded",
+                "reason": "already covered",
+                "changed_skills": [],
+                "created_skills": [],
+                "deleted_skills": [],
+                "verification_notes": ["read current skill"],
+                "rollback_hints": [],
+            },
+        ),
+    )
+
+    result = backend.run("prompt", {"targets": {"primary_skill": "demo"}}, {})
+
+    assert result["success"] is True
+    assert result["outcome"] == "skipped_superseded"
+    assert result["changed_skills"] == []
+
+
 def test_native_backend_rejects_disallowed_tool_request():
     backend = NativeSkillToolEditorBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
