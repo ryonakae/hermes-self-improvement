@@ -173,6 +173,42 @@ git commit -m "refactor: make overlay sets the prompt calibration path"
 
 ### Slice 2: Dogfood one real overlay generation loop
 
+**Status:** attempted on 2026-05-05 JST, not fully completed. The first dogfood run proved the candidate-set path and selected-case artifact shape, but did not produce an active overlay generation promotion.
+
+Observed result:
+
+```text
+Before:
+- active overlay_generation_id: null
+- active roles: planner only
+
+calibrate --dry-run after Slice 3 case selection:
+- decision: promote
+- GEPA: selected
+- changed targets: 3
+- available_case_count: 2883
+- optimizer_case_count: 3
+- selected_case_targets: planner_overlay, editor_overlay, evaluator_overlay
+
+calibrate execute immediately after:
+- decision: keep_candidate
+- GEPA: no_improvement
+- changed targets: 0
+- active overlay_generation_id: still null
+- active generation count: still 0
+
+improve --dry-run after execute:
+- planner still used the pre-existing runtime overlay
+- editor still used base prompt
+- no new overlay generation/hash proof was available
+```
+
+Interpretation:
+
+- Do not weaken GEPA/acceptance to force a promotion.
+- The no-promotion outcome is valid evidence.
+- A new issue is now visible: dry-run and execute each rerun GEPA, so a promotable dry-run candidate is not the exact candidate promoted by execute. If exact dry-run-to-execute continuity becomes important, add a separate follow-up design for candidate artifact execution/promotion rather than smuggling it into this slice.
+
 **Objective:** Prove the closed loop with runtime artifacts, not only unit tests.
 
 **Files:**
@@ -207,6 +243,8 @@ Use `read_file` on the artifact paths reported by compact summaries. Do not dump
 Only commit if repo docs/tests change.
 
 ### Slice 3: Improve overlay case selection budget
+
+**Status:** completed in this follow-up slice. `select_overlay_eval_cases()` now applies a deterministic bounded selection policy before DSPy/GEPA: target-balanced round-robin across `planner_overlay`, `editor_overlay`, and `evaluator_overlay`, high-signal cases first within each target, preserving recent/source order after selection. Candidate-set artifacts now record `selected_case_ids` and `selected_case_targets` alongside available/optimizer case counts.
 
 **Objective:** Keep GEPA input small while selecting better cases than simple list order.
 

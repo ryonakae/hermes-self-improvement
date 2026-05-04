@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from hermes_self_improvement.prompt_gepa_adapter import optimize_overlay_candidate_set
+from hermes_self_improvement.prompt_gepa_adapter import optimize_overlay_candidate_set, select_overlay_eval_cases
 
 
 class FakePrediction:
@@ -93,16 +93,54 @@ class FakeDspy:
             return FakePrediction()
 
 
-def overlay_case(target: str) -> dict:
+def overlay_case(target: str, *, case_hash: str | None = None, outcome: str = "unknown", changed: bool = False, executed: bool = False, expected: dict | None = None, decision: str = "run_editor") -> dict:
     return {
         "schema_name": "self_improvement_runtime_eval_case",
         "case_family": "overlay_set",
         "target": target,
         "role": target.removesuffix("_overlay") if target != "evaluator_overlay" else "evaluator",
-        "input": {"evidence_ids": ["ev1"], "mutation_task": {"decision": "run_editor"}},
-        "expected": {"decision": "run_editor"},
-        "case_hash": f"sha256:{target}",
+        "input": {"evidence_ids": ["ev1"], "mutation_task": {"decision": decision}, "outcome": {"outcome": outcome, "changed": changed, "executed": executed}},
+        "expected": expected or {"decision": "run_editor"},
+        "case_hash": case_hash or f"sha256:{target}",
     }
+
+
+def test_select_overlay_eval_cases_balances_targets_and_prefers_high_signal():
+    cases = [
+        overlay_case("planner_overlay", case_hash="sha256:planner-low"),
+        overlay_case("planner_overlay", case_hash="sha256:planner-high", outcome="failed", expected={"decision": "skip"}, decision="skip"),
+        overlay_case("editor_overlay", case_hash="sha256:editor-low"),
+        overlay_case("editor_overlay", case_hash="sha256:editor-high", changed=True, executed=True, expected={"mutation": "skip"}),
+        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-low"),
+        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-high", outcome="rejected_by_human", expected={"recommendation": "human_review"}),
+    ]
+
+    selected = select_overlay_eval_cases(cases, max_cases=3)
+
+    assert [case["case_hash"] for case in selected] == [
+        "sha256:planner-high",
+        "sha256:editor-high",
+        "sha256:evaluator-high",
+    ]
+    assert [case["target"] for case in selected] == ["planner_overlay", "editor_overlay", "evaluator_overlay"]
+
+
+def test_select_overlay_eval_cases_keeps_recent_order_after_balanced_selection():
+    cases = [
+        overlay_case("planner_overlay", case_hash="sha256:planner-new", outcome="failed"),
+        overlay_case("editor_overlay", case_hash="sha256:editor-new", outcome="failed"),
+        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-new", outcome="failed"),
+        overlay_case("planner_overlay", case_hash="sha256:planner-old", outcome="failed"),
+    ]
+
+    selected = select_overlay_eval_cases(cases, max_cases=4)
+
+    assert [case["case_hash"] for case in selected] == [
+        "sha256:planner-new",
+        "sha256:editor-new",
+        "sha256:evaluator-new",
+        "sha256:planner-old",
+    ]
 
 
 def test_optimize_overlay_candidate_set_calls_dspy_gepa_and_returns_candidate_targets(tmp_path):

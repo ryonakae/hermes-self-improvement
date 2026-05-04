@@ -200,15 +200,25 @@ def test_default_overlay_candidate_set_uses_gepa_adapter_when_enabled(monkeypatc
             },
         }
 
+    selected_cases = []
+
+    def fake_select_overlay_eval_cases(cases, *, max_cases):
+        selected_cases.append((len(cases), max_cases))
+        return cases[-max_cases:]
+
     monkeypatch.setattr(optimizer_module, "build_overlay_set_runtime_eval_cases", fake_build_cases)
-    monkeypatch.setitem(__import__("sys").modules, "hermes_self_improvement.prompt_gepa_adapter", type("FakeAdapter", (), {"optimize_overlay_candidate_set": staticmethod(fake_optimize_overlay_candidate_set)}))
+    monkeypatch.setitem(__import__("sys").modules, "hermes_self_improvement.prompt_gepa_adapter", type("FakeAdapter", (), {"optimize_overlay_candidate_set": staticmethod(fake_optimize_overlay_candidate_set), "select_overlay_eval_cases": staticmethod(fake_select_overlay_eval_cases)}))
 
     config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "gepa_scorer": {"enabled": True, "max_full_evals": 2, "overlay_max_cases": 7}}
     candidate_set = generate_overlay_candidate_set(config=config, evidence={"total_events": 1})
 
     assert calls
+    assert selected_cases == [(100, 7)]
     assert len(calls[0]["cases"]) == 7
+    assert calls[0]["cases"][0]["case_hash"] == "sha256:case-93"
     assert candidate_set["source"] == "gepa"
     assert candidate_set["optimizer"] == "dspy.GEPA"
     assert candidate_set["gepa_result"] == "selected"
     assert candidate_set["targets"]["planner_overlay"]["change_status"] == "changed"
+    assert candidate_set["selected_case_ids"][0] == "sha256:case-93"
+    assert candidate_set["selected_case_targets"] == ["planner_overlay"] * 7

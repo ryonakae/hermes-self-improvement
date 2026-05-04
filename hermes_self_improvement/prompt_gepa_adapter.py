@@ -75,6 +75,83 @@ def _loads_object(text: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _case_signal_score(case: dict[str, Any]) -> int:
+    score = 0
+    input_payload = case.get("input") if isinstance(case.get("input"), dict) else {}
+    expected = case.get("expected") if isinstance(case.get("expected"), dict) else {}
+    outcome = input_payload.get("outcome") if isinstance(input_payload.get("outcome"), dict) else {}
+    mutation_task = input_payload.get("mutation_task") if isinstance(input_payload.get("mutation_task"), dict) else {}
+    outcome_value = str(outcome.get("outcome") or "").lower()
+    if outcome_value in {"failed", "rejected", "rejected_by_human"}:
+        score += 5
+    elif outcome_value in {"success", "accepted", "passed"}:
+        score += 3
+    if bool(outcome.get("changed")):
+        score += 2
+    if bool(outcome.get("executed")):
+        score += 1
+    if input_payload.get("evidence_ids"):
+        score += 1
+    if str(mutation_task.get("decision") or "") in {"skip", "defer"}:
+        score += 1
+    if str(expected.get("recommendation") or "") == "human_review":
+        score += 4
+    if str(expected.get("mutation") or "") in {"skip", "no_change"}:
+        score += 2
+    if str(expected.get("decision") or "") in {"skip", "defer"}:
+        score += 2
+    return score
+
+
+def select_overlay_eval_cases(cases: list[dict[str, Any]], *, max_cases: int) -> list[dict[str, Any]]:
+    if max_cases <= 0 or not cases:
+        return []
+    indexed = list(enumerate(cases))
+    groups: dict[str, list[tuple[int, dict[str, Any]]]] = {target: [] for target in OVERLAY_TARGETS}
+    extras: list[tuple[int, dict[str, Any]]] = []
+    for index, case in indexed:
+        target = str(case.get("target") or "")
+        if target in groups:
+            groups[target].append((index, case))
+        else:
+            extras.append((index, case))
+    def sort_key(item: tuple[int, dict[str, Any]]) -> tuple[int, int]:
+        index, case = item
+        return (-_case_signal_score(case), index)
+    for target in groups:
+        groups[target].sort(key=sort_key)
+    extras.sort(key=sort_key)
+    selected: list[tuple[int, dict[str, Any]]] = []
+    seen_hashes: set[str] = set()
+    while len(selected) < max_cases:
+        added = False
+        for target in OVERLAY_TARGETS:
+            bucket = groups[target]
+            while bucket:
+                item = bucket.pop(0)
+                case_hash = str(item[1].get("case_hash") or item[1].get("id") or id(item[1]))
+                if case_hash in seen_hashes:
+                    continue
+                seen_hashes.add(case_hash)
+                selected.append(item)
+                added = True
+                break
+            if len(selected) >= max_cases:
+                break
+        if not added:
+            break
+    for item in extras:
+        if len(selected) >= max_cases:
+            break
+        case_hash = str(item[1].get("case_hash") or item[1].get("id") or id(item[1]))
+        if case_hash in seen_hashes:
+            continue
+        seen_hashes.add(case_hash)
+        selected.append(item)
+    selected.sort(key=lambda item: item[0])
+    return [case for _, case in selected]
+
+
 def _examples_from_cases(cases: list[dict[str, Any]], *, evidence: dict[str, Any], dspy: Any) -> list[Any]:
     evidence_json = _json_dumps(evidence)
     cases_json = _json_dumps(cases)
