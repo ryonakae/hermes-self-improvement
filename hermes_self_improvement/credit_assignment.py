@@ -28,6 +28,12 @@ def _score_rows(*, config: dict[str, Any], limit: int) -> list[dict[str, Any]]:
             "reason": episode.get("reason"),
             "evidence_ids": episode.get("evidence_ids") if isinstance(episode.get("evidence_ids"), list) else [],
             "evidence_strength": str(episode.get("evidence_strength") or _infer_evidence_strength(episode)),
+            "archive_reason": episode.get("archive_reason"),
+            "successor_skill": episode.get("successor_skill"),
+            "successor_validation": episode.get("successor_validation"),
+            "blocking_reference_count": episode.get("blocking_reference_count"),
+            "lifecycle_before": episode.get("lifecycle_before"),
+            "lifecycle_after": episode.get("lifecycle_after"),
         }
         rows.append(row)
     return rows
@@ -91,6 +97,33 @@ def _window_rows(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     return buckets
 
 
+def _archive_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if row.get("decision") == "archive_skill" or row.get("action") == "skill_archive"]
+
+
+def _archive_successor_present(row: dict[str, Any]) -> str:
+    return "yes" if str(row.get("successor_skill") or "").strip() else "no"
+
+
+def _archive_blocking_reference_count(row: dict[str, Any]) -> str:
+    try:
+        return str(int(row.get("blocking_reference_count") or 0))
+    except (TypeError, ValueError):
+        return "unknown"
+
+
+def _archive_groups(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    archive_rows = _archive_rows(rows)
+    return {
+        "by_archive_reason": _group(archive_rows, lambda row: row.get("archive_reason")),
+        "by_archive_successor_present": _group(archive_rows, _archive_successor_present),
+        "by_archive_successor_validation": _group(archive_rows, lambda row: row.get("successor_validation")),
+        "by_archive_blocking_reference_count": _group(archive_rows, _archive_blocking_reference_count),
+        "by_archive_lifecycle_before": _group(archive_rows, lambda row: row.get("lifecycle_before")),
+        "by_archive_lifecycle_after": _group(archive_rows, lambda row: row.get("lifecycle_after")),
+    }
+
+
 def _hash_payload(payload: Any) -> str:
     return "sha256:" + _sha256_text(_stable_json(payload))
 
@@ -115,6 +148,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
         "by_evidence_strength": _group(rows, lambda row: row.get("evidence_strength")),
         "by_window": {window: _bucket_summary(window_rows) for window, window_rows in window_buckets.items()},
     }
+    aggregate.update(_archive_groups(rows))
     aggregate["aggregate_hash"] = _hash_payload({key: value for key, value in aggregate.items() if key != "aggregate_hash"})
     return aggregate
 

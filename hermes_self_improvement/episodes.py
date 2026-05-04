@@ -182,6 +182,29 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
         episode["reason"] = str(decision.get("reason"))[:240]
     if decision.get("archive_reason"):
         episode["archive_reason"] = str(decision.get("archive_reason"))[:120]
+    if normalized_decision == "archive_skill":
+        archive_context = decision.get("archive_context") if isinstance(decision.get("archive_context"), dict) else {}
+        result = decision.get("result") if isinstance(decision.get("result"), dict) else {}
+        successor = decision.get("successor") or planner_decision.get("successor") or archive_context.get("successor")
+        if successor:
+            episode["successor_skill"] = str(successor)[:120]
+        successor_validation = planner_decision.get("successor_validation") or decision.get("successor_validation")
+        if successor_validation:
+            episode["successor_validation"] = str(successor_validation)[:120]
+        blocking_references = decision.get("blocking_references") if isinstance(decision.get("blocking_references"), list) else archive_context.get("blocking_references")
+        if isinstance(blocking_references, list):
+            episode["blocking_reference_count"] = len(blocking_references)
+        elif decision.get("active_reference_count") is not None:
+            try:
+                episode["blocking_reference_count"] = int(decision.get("active_reference_count") or 0)
+            except (TypeError, ValueError):
+                episode["blocking_reference_count"] = 0
+        before_state = result.get("before_state") or archive_context.get("before_state") or decision.get("candidate_state")
+        after_state = result.get("after_state")
+        if before_state:
+            episode["lifecycle_before"] = str(before_state)[:80]
+        if after_state:
+            episode["lifecycle_after"] = str(after_state)[:80]
     if decision.get("evidence_ids"):
         episode["evidence_ids"] = [str(item) for item in decision.get("evidence_ids") or []]
     return validate_episode(episode)

@@ -112,6 +112,37 @@ def test_credit_assignment_keeps_unobserved_and_ambiguous_links_low_confidence(t
     assert aggregate["by_evidence_strength"]["unknown"]["episodes"] == 1
 
 
+def test_credit_assignment_groups_archive_outcomes_by_lifecycle_factors(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "episodes" / "2026-05-03" / "archive.json", episode_payload(
+        "archive-episode",
+        decision="archive_skill",
+        action="skill_archive",
+        target_id="old-skill",
+        archive_reason="obsolete_marker",
+        successor_skill="new-skill",
+        successor_validation="valid_active_skill",
+        blocking_reference_count=0,
+        lifecycle_before="stale",
+        lifecycle_after="archived",
+    ))
+    write_json(root / "outcomes" / "2026-05-03" / "archive-outcome.json", outcome_payload(
+        "archive-episode",
+        "short",
+        {"validation_passed": True, "related_failure_delta": -1, "repeat_fix_needed": False},
+    ))
+
+    aggregate = build_credit_assignment_aggregate(config=config, limit=100)
+
+    assert aggregate["by_archive_reason"]["obsolete_marker"]["episodes"] == 1
+    assert aggregate["by_archive_successor_present"]["yes"]["episodes"] == 1
+    assert aggregate["by_archive_successor_validation"]["valid_active_skill"]["episodes"] == 1
+    assert aggregate["by_archive_blocking_reference_count"]["0"]["episodes"] == 1
+    assert aggregate["by_archive_lifecycle_before"]["stale"]["episodes"] == 1
+    assert aggregate["by_archive_reason"]["obsolete_marker"]["mean_outcome_score"] > 0
+
+
 def test_credit_assignment_includes_hash_for_current_baseline_comparison(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])

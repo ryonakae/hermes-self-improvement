@@ -176,8 +176,17 @@ def test_record_run_episodes_preserves_archive_skill_decision(tmp_path):
             "changed": True,
             "evidence_ids": ["ev_archive"],
             "archive_reason": "obsolete_marker",
-            "planner_decision": {"decision": "archive_skill", "archive_reason": "obsolete_marker"},
-            "result": {"success": True, "tool_name": "skill_usage.archive_skill", "after_state": "archived"},
+            "successor": "new-skill",
+            "archive_context": {"before_state": "stale", "successor": "new-skill"},
+            "blocking_references": [],
+            "active_reference_count": 0,
+            "planner_decision": {
+                "decision": "archive_skill",
+                "archive_reason": "obsolete_marker",
+                "successor": "new-skill",
+                "successor_validation": "valid_active_skill",
+            },
+            "result": {"success": True, "tool_name": "skill_usage.archive_skill", "before_state": "stale", "after_state": "archived"},
         }
     ]
 
@@ -188,5 +197,10 @@ def test_record_run_episodes_preserves_archive_skill_decision(tmp_path):
     assert episode["decision"] == "archive_skill"
     assert episode["action"] == "skill_archive"
     assert episode["archive_reason"] == "obsolete_marker"
+    assert episode["successor_skill"] == "new-skill"
+    assert episode["successor_validation"] == "valid_active_skill"
+    assert episode["blocking_reference_count"] == 0
+    assert episode["lifecycle_before"] == "stale"
+    assert episode["lifecycle_after"] == "archived"
     assert episode["executed"] is True
     assert episode["changed"] is True
