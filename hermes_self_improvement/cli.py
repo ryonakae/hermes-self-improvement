@@ -711,6 +711,17 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         and item.get("decision") in {"rejected", "skip"}
         and (item.get("archive_reason") or str(item.get("reason") or "").startswith("archive_blocked"))
     )
+    editor_stop_counts: dict[str, int] = {}
+    for item in skill_decisions:
+        if not isinstance(item, dict):
+            continue
+        if item.get("decision") != "rejected":
+            continue
+        planner_decision = item.get("planner_decision") if isinstance(item.get("planner_decision"), dict) else {}
+        if planner_decision.get("decision") != "run_editor":
+            continue
+        reason = str(item.get("reason") or "unknown")
+        editor_stop_counts[reason] = editor_stop_counts.get(reason, 0) + 1
     lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
     for decision in memory_step.get("decisions") or []:
         if isinstance(decision, dict):
@@ -756,6 +767,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Evidence/proposals:",
         f"- considered {int(decision_summary.get('total') or 0)} proposal signals",
     ]
+    if editor_stop_counts:
+        lines.append("- editor stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(editor_stop_counts.items())))
     if selected_preview:
         lines.append("Selected for editor:")
         for item in selected_preview:

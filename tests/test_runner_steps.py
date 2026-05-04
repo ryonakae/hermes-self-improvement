@@ -53,6 +53,9 @@ def test_build_skill_agent_task_uses_skills_only_constraints():
     assert task["type"] == "skill_agent_task"
     assert task["task_kind"] == "skill_improve"
     assert task["targets"] == {"primary_skill": "demo-skill"}
+    assert task["observed_problem"]
+    assert task["desired_outcome"]
+    assert "Do not duplicate guidance" in "\n".join(task["non_goals"])
     assert "You are the Hermes self-improvement skill editor." in task["instructions"]
     assert "Target skill:" in task["instructions"]
     assert "Planner decision:" in task["instructions"]
@@ -60,7 +63,7 @@ def test_build_skill_agent_task_uses_skills_only_constraints():
     assert "Hard stops:" in task["instructions"]
     assert "Call skill_view" in task["instructions"]
     joined = "\n".join(task["constraints"])
-    assert "skills_list" in joined and "skill_view" in joined and "skill_manage" in joined
+    assert "skills_list" in joined and "skill_view" in joined and "skill_manage" in joined and "submit_mutation_result" in joined
     assert "direct filesystem" in joined
 
 

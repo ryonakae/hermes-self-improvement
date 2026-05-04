@@ -81,7 +81,7 @@ def _default_config() -> dict[str, Any]:
             },
         },
         "mutation": {
-            "backend": "hermes_auxiliary_tool_loop",
+            "backend": "native_skill_tool_editor",
             "enabled": True,
             "max_tool_calls": 8,
             "max_iterations": 6,

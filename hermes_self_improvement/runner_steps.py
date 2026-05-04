@@ -193,15 +193,34 @@ def build_skill_agent_task(
         overlay=overlay,
     )
     instructions = rendered["instructions"]
+    observed_problem = planner_meta.get("observed_problem") or planner_meta.get("change_intent") or planner_meta.get("rationale") or "Improve the target skill if current content confirms the attached evidence."
+    desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("editor_instructions") or planner_meta.get("change_intent") or "A small reusable procedural improvement, or a non-mutating stop if already covered."
+    suggested_focus = planner_meta.get("suggested_focus") if isinstance(planner_meta.get("suggested_focus"), list) else []
+    if not suggested_focus and planner_meta.get("editor_instructions"):
+        suggested_focus = [planner_meta.get("editor_instructions")]
+    non_goals = planner_meta.get("non_goals") if isinstance(planner_meta.get("non_goals"), list) else []
+    if not non_goals:
+        non_goals = [
+            "Do not apply an exact patch recipe from the planner without reading the current skill.",
+            "Do not duplicate guidance already present in the skill.",
+            "Do not edit unrelated skills or repo files.",
+        ]
+    evidence_ids = [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]
     return {
         "type": "skill_agent_task",
         "task_kind": "skill_improve",
         "targets": {"primary_skill": skill_name},
         "candidate": candidate_meta,
+        "observed_problem": observed_problem,
+        "desired_outcome": desired_outcome,
+        "suggested_focus": suggested_focus,
+        "non_goals": non_goals,
+        "confidence": planner_meta.get("confidence") or planner_meta.get("priority"),
+        "evidence_ids": evidence_ids,
         "instructions": instructions,
         "prompt_source": {"editor": rendered["prompt_source"]},
         "constraints": [
-            "Use only skills_list, skill_view, skill_manage.",
+            "Use only skills_list, skill_view, skill_manage, submit_mutation_result.",
             "Do not use terminal/file/git/direct filesystem tools.",
             "Operate only on mutable local skills resolved by the plugin.",
             "Do not mutate plugin-bundled, hub-installed, external-dir, built-in, or Hermes core files.",

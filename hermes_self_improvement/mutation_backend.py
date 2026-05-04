@@ -9,6 +9,7 @@ from typing import Any, Callable, Protocol
 
 ALLOWED_MUTATION_AGENT_TOOLS = {"skills_list", "skill_view", "skill_manage"}
 ALLOWED_SKILL_MANAGE_ACTIONS = {"create", "patch", "edit", "delete", "write_file", "remove_file"}
+SUBMIT_MUTATION_RESULT_TOOL = "submit_mutation_result"
 _REQUIRED_SUCCESS_FIELDS = ("used_tools", "changed_skills", "created_skills", "deleted_skills", "verification_notes", "rollback_hints")
 
 
@@ -50,19 +51,6 @@ def _coerce_int(value: Any, default: int) -> int:
         return int(value)
     except Exception:
         return int(default)
-
-
-def parse_backend_json(raw: dict[str, Any] | str, *, final: bool = True) -> dict[str, Any]:
-    if isinstance(raw, str):
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            return {"success": False, "error": "mutation_agent_result_not_json" if final else "mutation_agent_step_not_json"}
-    else:
-        parsed = raw
-    if not isinstance(parsed, dict):
-        return {"success": False, "error": "mutation_agent_result_not_object" if final else "mutation_agent_step_not_object"}
-    return parsed
 
 
 def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -251,18 +239,83 @@ def _model_editor_config(config: dict[str, Any] | None) -> dict[str, Any]:
     return editor
 
 
-def _call_hermes_auxiliary(messages: list[dict[str, Any]], *, config: dict[str, Any] | None, task_name: str) -> str:
+def _skill_tool_schema(name: str, description: str, properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required or [],
+                "additionalProperties": True,
+            },
+        },
+    }
+
+
+def native_editor_tool_schemas() -> list[dict[str, Any]]:
+    return [
+        _skill_tool_schema("skills_list", "List available Hermes skills.", {}, []),
+        _skill_tool_schema(
+            "skill_view",
+            "Read a Hermes skill by name before deciding whether a mutation is needed.",
+            {"name": {"type": "string"}, "file_path": {"type": "string"}},
+            ["name"],
+        ),
+        _skill_tool_schema(
+            "skill_manage",
+            "Create, patch, edit, delete, or update files for an allowed local skill target.",
+            {
+                "action": {"type": "string", "enum": sorted(ALLOWED_SKILL_MANAGE_ACTIONS)},
+                "name": {"type": "string"},
+                "old_string": {"type": "string"},
+                "new_string": {"type": "string"},
+                "content": {"type": "string"},
+                "file_path": {"type": "string"},
+                "file_content": {"type": "string"},
+                "replace_all": {"type": "boolean"},
+                "absorbed_into": {"type": "string"},
+            },
+            ["action", "name"],
+        ),
+        _skill_tool_schema(
+            SUBMIT_MUTATION_RESULT_TOOL,
+            "Finish the mutation run with the structured result. This tool does not mutate anything.",
+            {
+                "success": {"type": "boolean"},
+                "outcome": {"type": "string"},
+                "reason": {"type": "string"},
+                "changed_skills": {"type": "array", "items": {"type": "string"}},
+                "created_skills": {"type": "array", "items": {"type": "string"}},
+                "deleted_skills": {"type": "array", "items": {"type": "string"}},
+                "verification_notes": {"type": "array", "items": {"type": "string"}},
+                "rollback_hints": {"type": "array", "items": {"type": "string"}},
+            },
+            ["success", "changed_skills", "created_skills", "deleted_skills", "verification_notes", "rollback_hints"],
+        ),
+    ]
+
+
+def _call_hermes_auxiliary_native(
+    messages: list[dict[str, Any]],
+    *,
+    tools: list[dict[str, Any]],
+    config: dict[str, Any] | None,
+    task_name: str,
+) -> Any:
     try:
         try:
             from .dspy_program import _ensure_hermes_agent_on_path as ensure_path
         except Exception:  # pragma: no cover
             from dspy_program import _ensure_hermes_agent_on_path as ensure_path
         ensure_path()
-        from agent.auxiliary_client import call_llm, extract_content_or_reasoning  # type: ignore
+        from agent.auxiliary_client import call_llm  # type: ignore
     except Exception as exc:
         raise RuntimeError(f"mutation_agent_unavailable:{exc}") from exc
     cfg = _model_editor_config(config)
-    response = call_llm(
+    return call_llm(
         task=task_name,
         provider=cfg.get("provider") or "auto",
         model=cfg.get("model") or None,
@@ -271,22 +324,91 @@ def _call_hermes_auxiliary(messages: list[dict[str, Any]], *, config: dict[str, 
         messages=messages,
         temperature=None,
         max_tokens=_coerce_int(cfg.get("max_tokens"), 1000),
+        tools=tools,
         timeout=_coerce_int(cfg.get("timeout"), 45),
         extra_body=cfg.get("extra_body") if isinstance(cfg.get("extra_body"), dict) else None,
     )
-    return str(extract_content_or_reasoning(response) or "")
+
+
+def _get_attr_or_key(value: Any, key: str, default: Any = None) -> Any:
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
+def _response_message(response: Any) -> Any | None:
+    choices = _get_attr_or_key(response, "choices")
+    if not choices:
+        return None
+    first = choices[0]
+    return _get_attr_or_key(first, "message")
+
+
+def _parse_tool_args(raw: Any) -> dict[str, Any] | None:
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw or "{}")
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    if raw is None:
+        return {}
+    return None
+
+
+def _extract_native_tool_calls(response: Any) -> list[dict[str, Any]] | None:
+    message = _response_message(response)
+    if message is None:
+        return None
+    tool_calls = _get_attr_or_key(message, "tool_calls") or []
+    if not isinstance(tool_calls, list):
+        return None
+    calls: list[dict[str, Any]] = []
+    for index, raw_call in enumerate(tool_calls):
+        function = _get_attr_or_key(raw_call, "function")
+        name = _get_attr_or_key(function, "name") if function is not None else _get_attr_or_key(raw_call, "name")
+        raw_args = _get_attr_or_key(function, "arguments") if function is not None else _get_attr_or_key(raw_call, "arguments")
+        args = _parse_tool_args(raw_args)
+        calls.append({
+            "id": str(_get_attr_or_key(raw_call, "id") or f"call_{index}"),
+            "name": str(name or ""),
+            "args": args,
+        })
+    return calls
+
+
+def _assistant_tool_call_message(call: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": call["id"],
+                "type": "function",
+                "function": {"name": call["name"], "arguments": json.dumps(call.get("args") or {}, ensure_ascii=False, sort_keys=True)},
+            }
+        ],
+    }
 
 
 @dataclass
-class HermesAuxiliaryMutationBackend:
+class NativeSkillToolEditorBackend:
     tool_executor: SkillToolExecutor
-    llm_call: Callable[..., str] | None = None
+    llm_call: Callable[..., Any] | None = None
     limits: MutationBackendLimits = field(default_factory=MutationBackendLimits)
 
-    def _llm(self, messages: list[dict[str, Any]], *, config: dict[str, Any] | None) -> str:
+    def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None) -> Any:
         if self.llm_call is not None:
-            return self.llm_call(messages, config=config, timeout=self.limits.timeout_seconds, max_tokens=_coerce_int(_model_editor_config(config).get("max_tokens"), 1000))
-        return _call_hermes_auxiliary(messages, config=config, task_name="self_improvement_mutation_agent")
+            return self.llm_call(
+                messages,
+                tools=tools,
+                config=config,
+                timeout=self.limits.timeout_seconds,
+                max_tokens=_coerce_int(_model_editor_config(config).get("max_tokens"), 1000),
+            )
+        return _call_hermes_auxiliary_native(messages, tools=tools, config=config, task_name="self_improvement_mutation_agent")
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
         limit_check = self.limits.check()
@@ -294,30 +416,47 @@ class HermesAuxiliaryMutationBackend:
             return {"success": False, "error": "mutation_agent_limits_invalid", "reasons": limit_check.get("reasons") or []}
         if not self.tool_executor.available():
             return {"success": False, "error": "mutation_agent_unavailable", "reasons": [self.tool_executor.unavailable_reason or "skill_tool_registry_unavailable"]}
+        tools = native_editor_tool_schemas()
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": "Return strict JSON only. Use type=tool_call with an allowed skill tool, or type=final with the required final result schema."},
+            {
+                "role": "system",
+                "content": (
+                    "You are a constrained Hermes skill editor. Use only the provided skill tools. "
+                    "Read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
+                    "If the skill already covers the point, is stale, or is uncertain, do not mutate. Finish every run by calling submit_mutation_result."
+                ),
+            },
             {"role": "user", "content": prompt + "\n\nTask JSON:\n" + json.dumps(task, ensure_ascii=False, sort_keys=True)},
         ]
         actual_used: list[dict[str, Any]] = []
         tool_calls = 0
         for _iteration in range(self.limits.max_iterations):
             try:
-                raw = self._llm(messages, config=config)
+                response = self._llm(messages, tools=tools, config=config)
             except RuntimeError as exc:
                 return {"success": False, "error": "mutation_agent_unavailable", "reasons": [str(exc)]}
             except Exception as exc:
                 return {"success": False, "error": "mutation_agent_llm_failed", "reasons": [str(exc)]}
-            step = parse_backend_json(raw, final=False)
-            if not isinstance(step, dict) or step.get("error"):
-                return step
-            step_type = step.get("type")
-            if step_type == "tool_call":
-                tool = str(step.get("tool") or "")
-                if tool not in ALLOWED_MUTATION_AGENT_TOOLS:
-                    return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_MUTATION_AGENT_TOOLS)}
-                args = step.get("args")
+            calls = _extract_native_tool_calls(response)
+            if calls is None:
+                return {"success": False, "error": "native_tool_call_unsupported"}
+            if not calls:
+                return _with_last_safe_step({"success": False, "error": "submit_result_missing"}, actual_used)
+            for call in calls:
+                tool = call.get("name") or ""
+                args = call.get("args")
                 if not isinstance(args, dict):
                     return _with_last_safe_step({"success": False, "error": "tool_args_not_object", "tool": tool}, actual_used)
+                if tool == SUBMIT_MUTATION_RESULT_TOOL:
+                    final = dict(args)
+                    final["used_tools"] = list(actual_used)
+                    final["tool_trace"] = list(actual_used)
+                    allowed_targets = _task_allowed_targets(task)
+                    if allowed_targets:
+                        final["_allowed_targets"] = sorted(allowed_targets)
+                    return validate_backend_success_result(final)
+                if tool not in ALLOWED_MUTATION_AGENT_TOOLS:
+                    return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_MUTATION_AGENT_TOOLS)}
                 args_error = _validate_tool_call_args(tool, args)
                 if args_error:
                     return _with_last_safe_step(args_error, actual_used)
@@ -334,20 +473,8 @@ class HermesAuxiliaryMutationBackend:
                 if args.get("name"):
                     trace_entry["name"] = args.get("name")
                 actual_used.append(trace_entry)
-                messages.append({"role": "assistant", "content": json.dumps(step, ensure_ascii=False, sort_keys=True)})
-                messages.append({"role": "user", "content": "Tool result JSON:\n" + json.dumps(result, ensure_ascii=False, sort_keys=True)})
-                continue
-            if step_type == "final":
-                final = dict(step)
-                final.pop("type", None)
-                final["used_tools"] = actual_used
-                final["tool_trace"] = list(actual_used)
-                allowed_targets = _task_allowed_targets(task)
-                if allowed_targets:
-                    final["_allowed_targets"] = sorted(allowed_targets)
-                parsed = validate_backend_success_result(final)
-                return parsed
-            return {"success": False, "error": "mutation_agent_unknown_step_type", "step_type": step_type}
+                messages.append(_assistant_tool_call_message(call))
+                messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False, sort_keys=True)})
         return {"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_iterations_exceeded"]}
 
 
@@ -371,21 +498,21 @@ def build_mutation_backend(config: dict[str, Any] | None = None) -> MutationBack
             return CallableBackend()
     mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
     enabled = bool(mutation.get("enabled", True))
-    backend_name = str(mutation.get("backend") or "hermes_auxiliary_tool_loop")
+    backend_name = str(mutation.get("backend") or "native_skill_tool_editor")
     if not enabled or backend_name == "disabled":
         return UnavailableMutationBackend("mutation_agent_backend_disabled")
-    if backend_name != "hermes_auxiliary_tool_loop":
+    if backend_name != "native_skill_tool_editor":
         return UnavailableMutationBackend("mutation_agent_backend_unknown")
     executor = resolve_skill_tool_executor(config)
-    return HermesAuxiliaryMutationBackend(tool_executor=executor, limits=MutationBackendLimits.from_config(config))
+    return NativeSkillToolEditorBackend(tool_executor=executor, limits=MutationBackendLimits.from_config(config))
 
 
 def mutation_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
-    configured = str(mutation.get("backend") or "hermes_auxiliary_tool_loop")
+    configured = str(mutation.get("backend") or "native_skill_tool_editor")
     if bool(mutation.get("enabled", True)) is False or configured == "disabled":
         return {"configured": configured, "available": False, "reason": "mutation_agent_backend_disabled"}
-    if configured != "hermes_auxiliary_tool_loop":
+    if configured != "native_skill_tool_editor":
         return {"configured": configured, "available": False, "reason": "mutation_agent_backend_unknown"}
     executor = resolve_skill_tool_executor(config)
     readiness = check_skill_tool_executor_readiness(executor)

@@ -98,8 +98,8 @@ def test_runner_fails_closed_if_bounded_agent_backend_unavailable(tmp_path):
     assert "bounded_skills_only_agent_backend_unavailable" in result["reasons"]
 
 
-def test_runner_parses_structured_json_and_rejects_non_json_or_invalid_schema():
-    assert parse_mutation_agent_result("not json")["error"] == "mutation_agent_result_not_json"
+def test_runner_parses_structured_result_and_rejects_text_or_invalid_schema():
+    assert parse_mutation_agent_result("not json")["error"] == "mutation_agent_result_text_unsupported"
     assert parse_mutation_agent_result({"ok": True})["error"] == "mutation_agent_result_missing_success"
     parsed = parse_mutation_agent_result(success_result())
     assert parsed["success"] is True
@@ -126,20 +126,25 @@ def test_validate_reported_tools_allows_only_skill_tools():
     assert validate_reported_tools({"used_tools": [{"tool": "file"}]})["status"] == "failed"
 
 
-def test_mutation_agent_prompt_includes_stale_target_stop_contract(tmp_path):
+def test_mutation_agent_prompt_includes_native_tool_editor_contract(tmp_path):
     from hermes_self_improvement.mutation_agent import build_mutation_agent_prompt
 
     prompt = build_mutation_agent_prompt({
         "type": "skill_agent_task",
         "task_kind": "skill_improve",
         "targets": {"primary_skill": "demo-skill"},
-        "instructions": "Improve stale instructions.",
+        "observed_problem": "Repeated patch failures.",
+        "desired_outcome": "Improve guidance if missing.",
+        "suggested_focus": ["unique patch context"],
+        "non_goals": ["do not duplicate existing guidance"],
         "constraints": ["Use only skills_list, skill_view, skill_manage."],
     })
 
-    assert "stopped_stale_target" in prompt
-    assert "skipped_superseded" in prompt
+    assert "planner handoff is evidence-backed intent" in prompt
+    assert "not an exact patch command" in prompt
     assert "read the current target" in prompt
+    assert "submit_mutation_result" in prompt
+    assert "Return only JSON" not in prompt
 
 
 def test_parse_mutation_agent_result_accepts_non_mutating_stop_outcome():

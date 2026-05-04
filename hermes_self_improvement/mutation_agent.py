@@ -139,10 +139,22 @@ def validate_skill_agent_task(task: dict[str, Any], *, config: dict[str, Any] | 
 def build_mutation_agent_prompt(task: dict[str, Any]) -> str:
     task_kind = str(task.get("task_kind") or "")
     targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
-    instructions = str(task.get("instructions") or "")
     constraints = task.get("constraints") if isinstance(task.get("constraints"), list) else []
-    expected = task.get("expected_outcome") if isinstance(task.get("expected_outcome"), dict) else {}
-    contract = task.get("verification_contract") if isinstance(task.get("verification_contract"), dict) else {}
+    semantic_fields = {
+        key: task.get(key)
+        for key in (
+            "observed_problem",
+            "desired_outcome",
+            "suggested_focus",
+            "non_goals",
+            "confidence",
+            "evidence_ids",
+            "instructions",
+            "expected_outcome",
+            "verification_contract",
+        )
+        if task.get(key) not in (None, "", [], {})
+    }
     return f"""You are a Hermes self-improvement semantic mutation agent.
 
 Task kind: {task_kind}
@@ -151,55 +163,27 @@ Targets: {json.dumps(targets, ensure_ascii=False, sort_keys=True)}
 Skill vs memory classification:
 {SKILL_MEMORY_CLASSIFICATION_BLOCK}
 
-Instructions:
-{instructions}
+Planner handoff:
+{json.dumps(semantic_fields, ensure_ascii=False, indent=2, sort_keys=True)}
 
 Hard constraints:
-- Use only these Hermes skill tools: skills_list, skill_view, skill_manage.
+- Use only these Hermes skill tools: skills_list, skill_view, skill_manage, submit_mutation_result.
 - Do not use terminal, file tools, git, browser, web, delegation, cron, direct filesystem access, direct database/provider internals, or plugin README/AGENTS/config mutation.
 - Operate only on the declared mutable-local skill targets.
-- Before applying any mutation, read the current target through the allowed skill tools and compare it with the plan baseline, rationale, and intended change.
-- If the current target is materially different from the plan premise, already fixed, stale, contradictory, or uncertain, do not call skill_manage. Return a non-mutating outcome instead.
+- The planner handoff is evidence-backed intent, not an exact patch command.
+- Before applying any mutation, read the current target through the allowed skill tools and compare it with the observed problem, desired outcome, suggested focus, and non-goals.
+- If the current target is materially different from the premise, already fixed, stale, contradictory, or uncertain, do not call skill_manage. Finish with submit_mutation_result using a non-mutating outcome instead.
 - Allowed non-mutating outcomes: skipped_superseded, stopped_stale_target, stopped_conflict, stopped_uncertain_needs_review.
 - Never invent a broader improvement, edit unrelated sections, or modify unrelated skills to make the plan fit.
-- Stop and return success=false if the task asks you to operate outside scope.
-""" + "\n".join(f"- {item}" for item in constraints) + f"""
-
-Expected outcome:
-{json.dumps(expected, ensure_ascii=False, indent=2, sort_keys=True)}
-
-Verification contract:
-{json.dumps(contract, ensure_ascii=False, indent=2, sort_keys=True)}
-
-Return only JSON with this shape:
-{{
-  "success": true,
-  "outcome": "applied | skipped_superseded | stopped_stale_target | stopped_conflict | stopped_uncertain_needs_review",
-  "reason": "short reason when outcome is not applied",
-  "task_kind": "{task_kind}",
-  "used_tools": [{{"tool": "skill_view", "target": "..."}}, {{"tool": "skill_manage", "action": "edit", "name": "..."}}],
-  "changed_skills": [],
-  "created_skills": [],
-  "deleted_skills": [],
-  "ready_to_delete_source": false,
-  "merged_points": [],
-  "removed_as_duplicate": [],
-  "conflicts_resolved": [],
-  "supporting_files_moved": [],
-  "verification_notes": [],
-  "rollback_hints": []
-}}
-"""
+- Stop and finish with success=false if the task asks you to operate outside scope.
+- Finish every run by calling submit_mutation_result; do not encode the final result in assistant text.
+""" + "\n".join(f"- {item}" for item in constraints)
 
 
 def parse_mutation_agent_result(raw: dict[str, Any] | str) -> dict[str, Any]:
     if isinstance(raw, str):
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            return {"success": False, "error": "mutation_agent_result_not_json"}
-    else:
-        parsed = raw
+        return {"success": False, "error": "mutation_agent_result_text_unsupported"}
+    parsed = raw
     if not isinstance(parsed, dict):
         return {"success": False, "error": "mutation_agent_result_not_object"}
     if not isinstance(parsed.get("success"), bool):

@@ -6,8 +6,9 @@ import os
 from pathlib import Path
 
 import pytest
+from types import SimpleNamespace
 
-from hermes_self_improvement.mutation_backend import HermesAuxiliaryMutationBackend, SkillToolExecutor, mutation_backend_status
+from hermes_self_improvement.mutation_backend import NativeSkillToolEditorBackend, SkillToolExecutor, mutation_backend_status
 
 
 def _sha256(text: str) -> str:
@@ -20,6 +21,23 @@ def _write_temp_skill(root: Path, name: str, content: str) -> Path:
     path = skill_dir / "SKILL.md"
     path.write_text(content, encoding="utf-8")
     return path
+
+
+def _native_tool_response(name: str, args: dict, call_id: str):
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    tool_calls=[
+                        SimpleNamespace(
+                            id=call_id,
+                            function=SimpleNamespace(name=name, arguments=json.dumps(args)),
+                        )
+                    ]
+                )
+            )
+        ]
+    )
 
 
 def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools(tmp_path):
@@ -49,19 +67,19 @@ def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools
         return json.dumps({"success": True})
 
     responses = iter([
-        json.dumps({"type": "tool_call", "tool": "skill_view", "args": {"name": "demo-skill"}}),
-        json.dumps({"type": "tool_call", "tool": "skill_manage", "args": {"action": "patch", "name": "demo-skill", "old_string": "Old guidance.", "new_string": "Improved guidance."}}),
-        json.dumps({
-            "type": "final",
+        _native_tool_response("skill_view", {"name": "demo-skill"}, "call_view"),
+        _native_tool_response("skill_manage", {"action": "patch", "name": "demo-skill", "old_string": "Old guidance.", "new_string": "Improved guidance."}, "call_patch"),
+        _native_tool_response("submit_mutation_result", {
             "success": True,
+            "outcome": "applied",
             "changed_skills": ["demo-skill"],
             "created_skills": [],
             "deleted_skills": [],
             "verification_notes": ["Updated disposable demo skill."],
             "rollback_hints": ["Restore original SKILL.md content."],
-        }),
+        }, "call_final"),
     ])
-    backend = HermesAuxiliaryMutationBackend(
+    backend = NativeSkillToolEditorBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=fake_list, skill_view_fn=fake_view, skill_manage_fn=fake_manage),
         llm_call=lambda messages, **kwargs: next(responses),
     )
@@ -87,7 +105,7 @@ def test_live_mutation_backend_smoke_isolated_status_only(tmp_path, monkeypatch)
     hermes_home = tmp_path / "hermes-home"
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
     assert not Path.home().joinpath(".hermes", "skills").resolve().is_relative_to(tmp_path.resolve())
-    status = mutation_backend_status({"mutation": {"backend": "hermes_auxiliary_tool_loop", "enabled": True}})
+    status = mutation_backend_status({"mutation": {"backend": "native_skill_tool_editor", "enabled": True}})
     if not status.get("available"):
         pytest.skip(f"mutation backend unavailable: {status.get('reason')}")
     assert status["available"] is True

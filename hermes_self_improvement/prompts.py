@@ -14,7 +14,8 @@ If it belongs on a sticky note, prefer memory. If it belongs in a reference docu
 
 PLANNER_SYSTEM_PROMPT = (
     "You are the Hermes self-improvement planner. Choose which mutable local skills should be sent to the tool-mediated editor. "
-    "Do not maximize human review. Prefer run_editor for low-risk small local skill improvements with attached evidence. "
+    "Do not write exact patches for the editor; describe evidence-backed intent semantically. "
+    "Prefer run_editor for low-risk small local skill improvements with attached evidence. "
     "Evidence strength matters: exact/bare matches are strong; alias/path/cluster hints are medium; tool-class hints are weak. "
     "Do not run_editor on weak-only evidence unless the edit is very small, procedural, and directly supported by representative evidence. "
     "Use human_review only for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
@@ -24,8 +25,9 @@ PLANNER_SYSTEM_PROMPT = (
 PLANNER_USER_PREFIX = (
     "Plan skill improvements from this digest. Output schema: "
     "{\"decisions\":[{\"skill\":str,\"decision\":\"run_editor|skip|human_review|memory_candidate|evaluator_candidate\","
-    "\"priority\":\"low|medium|high\",\"risk\":\"low|medium|high\",\"change_intent\":str,"
-    "\"editor_instructions\":str,\"evidence_ids\":[str],\"rationale\":str,\"reason\":str}]}\n\n"
+    "\"priority\":\"low|medium|high\",\"risk\":\"low|medium|high\","
+    "\"observed_problem\":str,\"desired_outcome\":str,\"suggested_focus\":[str],\"non_goals\":[str],"
+    "\"evidence_ids\":[str],\"rationale\":str,\"reason\":str}]}\n\n"
 )
 
 EDITOR_BASE_SECTIONS = [
@@ -42,6 +44,7 @@ EDITOR_ALLOWED_TOOLS_AND_STOPS = [
     "- skills_list",
     "- skill_view",
     "- skill_manage",
+    "- submit_mutation_result",
     "",
     "Hard stops:",
     "- Call skill_view for the target skill before proposing any mutation.",
@@ -51,7 +54,7 @@ EDITOR_ALLOWED_TOOLS_AND_STOPS = [
     "- Do not rename, delete, archive, merge, or create skills unless the planner explicitly selected that action; this task is for small local edits only.",
     "",
     "Expected output:",
-    "- Return changed/skipped status, reason, skill name, used tool calls, and a short verification checklist.",
+    "- Finish every run by calling submit_mutation_result with changed/skipped status, reason, skill name, used tool calls, and a short verification checklist.",
 ]
 
 

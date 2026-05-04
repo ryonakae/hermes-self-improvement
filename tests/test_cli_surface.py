@@ -280,7 +280,15 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
         "calibration": {"current_status": "updated", "runtime_eval_cases": {"count": 3, "status": "written"}},
         "step_decisions": {
             "summary": {"total": 4},
-            "skill": {"planner": {"summary": {"archive_candidates": 1}}, "decisions": [{"decision": "archive_skill_preview"}]},
+            "skill": {
+                "planner": {"summary": {"archive_candidates": 1}},
+                "decisions": [
+                    {"decision": "archive_skill_preview"},
+                    {"decision": "rejected", "reason": "native_tool_call_unsupported", "planner_decision": {"decision": "run_editor"}},
+                    {"decision": "rejected", "reason": "submit_result_missing", "planner_decision": {"decision": "run_editor"}},
+                    {"decision": "rejected", "reason": "submit_result_missing", "planner_decision": {"decision": "run_editor"}},
+                ],
+            },
             "memory": {"decisions": [{"related_memory_lookup": {"status": "completed"}}]},
         },
         "curator_telemetry": {"available": True, "candidate_count": 3, "rejected_count": 2},
@@ -291,6 +299,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "Self-improvement result" in text
     assert "Skill improvements:" in text
     assert "- changed 2 skills" in text
+    assert "editor stopped/rejected: native_tool_call_unsupported 1, submit_result_missing 2" in text
     assert "Skill lifecycle:" in text
     assert "- archive candidates 1, would archive 1, archived 0, blocked 0" in text
     assert "Memory improvements:" in text
