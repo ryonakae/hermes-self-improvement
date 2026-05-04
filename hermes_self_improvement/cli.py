@@ -491,6 +491,21 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
         lines.append(f"- status: {evaluator_update.get('status')}{suffix}")
     if result.get("active_evaluator_path"):
         lines.append(f"Active evaluator: {result.get('active_evaluator_path')}")
+    overlay_set = result.get("overlay_candidate_set") if isinstance(result.get("overlay_candidate_set"), dict) else {}
+    if overlay_set and overlay_set.get("status") != "not_built":
+        changed = overlay_set.get("changed_targets") if isinstance(overlay_set.get("changed_targets"), list) else []
+        lines.append("Overlay candidate set:")
+        lines.append(
+            f"- status: {overlay_set.get('status')}, "
+            f"decision {overlay_set.get('decision')}, "
+            f"GEPA {overlay_set.get('gepa_result')}, "
+            f"changed {len(changed)}, "
+            f"hard violations {int(overlay_set.get('hard_violations') or 0)}"
+        )
+        if overlay_set.get("candidate_set_id"):
+            lines.append(f"- candidate set: {overlay_set.get('candidate_set_id')}")
+        if overlay_set.get("candidate_set_path"):
+            lines.append(f"- artifact: {overlay_set.get('candidate_set_path')}")
     prompt_overlays = result.get("prompt_overlays") if isinstance(result.get("prompt_overlays"), dict) else {}
     if prompt_overlays:
         lines.append("Prompt overlays:")

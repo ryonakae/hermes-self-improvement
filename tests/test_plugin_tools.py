@@ -153,6 +153,7 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
                 "editor": {"candidate": False, "promoted": False, "candidate_hash": None, "candidate_path": None, "regression": None},
             },
             "evaluator_update": {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False},
+            "overlay_candidate_set": {"status": "promoted", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0, "candidate_payload": large_details},
         }
 
     mod._handle_self_improvement_calibrate_tool.__globals__["run_calibration"] = fake_run_calibration
@@ -175,6 +176,7 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
     assert payload["full_payload"]["path"] == str(tmp_path / "ledger.json")
     assert payload["prompt_overlays"]["planner"] == {"candidate": True, "promoted": False, "candidate_hash": "hash-planner", "candidate_path": str(tmp_path / "candidate.json"), "regression": {"status": "passed"}}
     assert payload["prompt_overlays"]["editor"]["candidate"] is False
+    assert payload["overlay_candidate_set"] == {"status": "promoted", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0}
     assert large_details not in raw
     assert len(raw) < 4000
 

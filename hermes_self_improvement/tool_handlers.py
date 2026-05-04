@@ -191,6 +191,21 @@ def _compact_prompt_overlays(value: Any) -> dict[str, Any]:
     return out
 
 
+def _compact_overlay_candidate_set(value: Any) -> dict[str, Any]:
+    item = value if isinstance(value, dict) else {}
+    if not item:
+        return {}
+    return {
+        "status": item.get("status"),
+        "decision": item.get("decision"),
+        "gepa_result": item.get("gepa_result"),
+        "candidate_set_id": item.get("candidate_set_id"),
+        "candidate_set_path": item.get("candidate_set_path"),
+        "changed_targets": item.get("changed_targets") if isinstance(item.get("changed_targets"), list) else [],
+        "hard_violations": int(item.get("hard_violations") or 0),
+    }
+
+
 def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
     evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
     regression = result.get("regression") if isinstance(result.get("regression"), dict) else {}
@@ -229,6 +244,7 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
         } if evaluator_update else {},
         "autonomous_policy": autonomous_policy,
         "prompt_overlays": _compact_prompt_overlays(result.get("prompt_overlays")),
+        "overlay_candidate_set": _compact_overlay_candidate_set(result.get("overlay_candidate_set")),
         "episodes": {"count": int(episodes.get("count") or 0), "path": episodes.get("path")},
         "active_evaluator_path": result.get("active_evaluator_path"),
         "ledger_path": ledger_path,

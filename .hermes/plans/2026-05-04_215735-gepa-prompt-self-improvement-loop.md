@@ -362,6 +362,8 @@ bin/hermes-self-improve calibrate --target overlay-set --optimizer gepa --dry-ru
 
 ### Step 5: 出力を compact に保つ
 
+Status: 実装済み。CLI summary と agent-facing calibrate tool result は overlay candidate set を compact counts/status/artifact path だけで表示し、full payload は artifact 側に保持する。
+
 変更候補:
 
 - `tool_handlers.py`

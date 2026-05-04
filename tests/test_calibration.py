@@ -203,6 +203,29 @@ def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
     assert "planner: candidate yes, promoted yes" in text
 
 
+def test_calibration_summary_includes_compact_overlay_candidate_set():
+    cli = load_cli_module()
+
+    text = cli._render_calibration_summary({
+        "current_status": "updated",
+        "evidence_summary": {"total_events": 20, "disagreements": 0, "bad_outcomes": 0},
+        "overlay_candidate_set": {
+            "status": "promoted",
+            "decision": "promote",
+            "gepa_result": "selected",
+            "candidate_set_id": "overlay-set-001",
+            "candidate_set_path": "/tmp/candidate-set.json",
+            "changed_targets": ["planner_overlay"],
+            "hard_violations": 0,
+        },
+    })
+
+    assert "Overlay candidate set:" in text
+    assert "- status: promoted, decision promote, GEPA selected, changed 1, hard violations 0" in text
+    assert "- candidate set: overlay-set-001" in text
+    assert "- artifact: /tmp/candidate-set.json" in text
+
+
 def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path)
