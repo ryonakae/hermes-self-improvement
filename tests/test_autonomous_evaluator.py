@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from hermes_self_improvement.autonomous_evaluator import evaluate_prompt_candidate, compact_autonomous_evaluation_summary
+from hermes_self_improvement.autonomous_evaluator import (
+    compact_autonomous_evaluation_summary,
+    evaluate_overlay_candidate_set,
+    evaluate_prompt_candidate,
+)
 
 
 def weak_case() -> dict:
@@ -146,3 +150,64 @@ def test_compact_summary_excludes_case_details_and_prompts():
     assert "system_addendum" not in serialized
     assert summary["case_count"] == 1
     assert summary["candidate_hash"] == "sha256:candidate"
+
+
+def overlay_candidate_set(tmp_path: Path, *, gepa_result: str = "selected", planner_change: str = "changed", replacement=None) -> dict:
+    candidate_set = {
+        "schema_name": "self_improvement_overlay_candidate_set",
+        "schema_version": "1.0",
+        "candidate_set_id": "overlay-set-001",
+        "gepa_result": gepa_result,
+        "targets": {
+            "planner_overlay": {
+                "target": "planner_overlay",
+                "role": "planner",
+                "candidate_set_id": "overlay-set-001",
+                "change_status": planner_change,
+                "base_prompt_hash": "sha256:planner-base",
+                "candidate_prompt": {"system_addendum": "Prefer concrete evidence.", "replacement": replacement},
+            },
+            "editor_overlay": {
+                "target": "editor_overlay",
+                "role": "editor",
+                "candidate_set_id": "overlay-set-001",
+                "change_status": "unchanged",
+                "base_prompt_hash": "sha256:editor-base",
+                "candidate_prompt": {"system_addendum": None, "user_addendum": None, "replacement": None},
+            },
+            "evaluator_overlay": {
+                "target": "evaluator_overlay",
+                "role": "scorer",
+                "candidate_set_id": "overlay-set-001",
+                "change_status": "unchanged",
+                "base_prompt_hash": "sha256:scorer-base",
+                "candidate_prompt": {"system_addendum": None, "user_addendum": None, "replacement": None},
+            },
+        },
+    }
+    path = tmp_path / "candidate-set.json"
+    candidate_set["candidate_set_path"] = str(path)
+    path.write_text(json.dumps(candidate_set, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    return candidate_set
+
+
+def test_overlay_candidate_set_selected_with_changed_target_promotes(tmp_path):
+    result = evaluate_overlay_candidate_set(overlay_candidate_set(tmp_path))
+
+    assert result["decision"] == "promote"
+    assert result["gepa_result"] == "selected"
+    assert result["changed_targets"] == ["planner_overlay"]
+    assert result["hard_violations"] == []
+
+
+def test_overlay_candidate_set_no_improvement_keeps_candidate(tmp_path):
+    result = evaluate_overlay_candidate_set(overlay_candidate_set(tmp_path, gepa_result="no_improvement"))
+
+    assert result["decision"] == "keep_candidate"
+
+
+def test_overlay_candidate_set_full_replacement_rejects(tmp_path):
+    result = evaluate_overlay_candidate_set(overlay_candidate_set(tmp_path, replacement="replace base"))
+
+    assert result["decision"] == "reject"
+    assert any(item["code"] == "full_prompt_replacement_not_allowed" for item in result["hard_violations"])

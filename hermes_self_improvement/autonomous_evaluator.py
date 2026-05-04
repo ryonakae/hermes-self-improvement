@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from statistics import mean
 from typing import Any
 
@@ -8,6 +10,11 @@ from .observer import _sha256_text, _stable_json
 DEFAULT_THRESHOLD = 0.1
 DEFAULT_MIN_CONFIDENCE = 0.6
 DEFAULT_MAX_PROMPT_CHARS = 6000
+OVERLAY_TARGETS = ("planner_overlay", "editor_overlay", "evaluator_overlay")
+GEPA_PROMOTE_RESULTS = {"selected", "improved"}
+GEPA_KEEP_RESULTS = {"no_improvement", "tie", "insufficient_data"}
+GEPA_REJECT_RESULTS = {"invalid", "worse", "failed"}
+VALID_CHANGE_STATUSES = {"changed", "unchanged"}
 
 
 def _candidate_hash(candidate: dict[str, Any]) -> str | None:
@@ -234,3 +241,86 @@ def compact_autonomous_evaluation_summary(result: dict[str, Any]) -> dict[str, A
         "baseline": result.get("baseline") if isinstance(result.get("baseline"), dict) else {},
         "evaluation_hash": result.get("evaluation_hash"),
     }
+
+
+def _load_candidate_set_artifact(candidate_set: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    path_value = candidate_set.get("candidate_set_path")
+    if not path_value:
+        return candidate_set, [{"severity": "hard", "code": "candidate_set_artifact_missing"}]
+    try:
+        path = Path(str(path_value)).expanduser().resolve()
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return candidate_set, [{"severity": "hard", "code": "candidate_set_artifact_unreadable"}]
+    if not isinstance(loaded, dict):
+        return candidate_set, [{"severity": "hard", "code": "candidate_set_artifact_invalid"}]
+    return loaded, []
+
+
+def _target_prompt_chars(target: dict[str, Any]) -> int:
+    prompt = target.get("candidate_prompt") if isinstance(target.get("candidate_prompt"), dict) else {}
+    return sum(len(value) for value in (prompt.get("system_addendum"), prompt.get("user_addendum"), prompt.get("replacement")) if isinstance(value, str))
+
+
+def _overlay_acceptance_violations(candidate_set: dict[str, Any], *, max_prompt_chars: int) -> list[dict[str, Any]]:
+    violations: list[dict[str, Any]] = []
+    if candidate_set.get("schema_name") != "self_improvement_overlay_candidate_set":
+        violations.append({"severity": "hard", "code": "candidate_set_schema_invalid"})
+    candidate_set_id = str(candidate_set.get("candidate_set_id") or "")
+    if not candidate_set_id:
+        violations.append({"severity": "hard", "code": "candidate_set_id_missing"})
+    targets = candidate_set.get("targets") if isinstance(candidate_set.get("targets"), dict) else {}
+    missing = [target for target in OVERLAY_TARGETS if target not in targets]
+    if missing:
+        violations.append({"severity": "hard", "code": "candidate_set_targets_missing", "targets": missing})
+    for target_name in OVERLAY_TARGETS:
+        target = targets.get(target_name)
+        if not isinstance(target, dict):
+            continue
+        if target.get("candidate_set_id") != candidate_set_id:
+            violations.append({"severity": "hard", "code": "candidate_set_id_mismatch", "target": target_name})
+        if target.get("target") != target_name:
+            violations.append({"severity": "hard", "code": "candidate_target_mismatch", "target": target_name})
+        if str(target.get("change_status") or "") not in VALID_CHANGE_STATUSES:
+            violations.append({"severity": "hard", "code": "invalid_change_status", "target": target_name})
+        if not isinstance(target.get("base_prompt_hash"), str) or not target.get("base_prompt_hash"):
+            violations.append({"severity": "hard", "code": "rollback_identity_missing", "target": target_name})
+        prompt = target.get("candidate_prompt") if isinstance(target.get("candidate_prompt"), dict) else {}
+        if prompt.get("replacement") is not None:
+            violations.append({"severity": "hard", "code": "full_prompt_replacement_not_allowed", "target": target_name})
+        chars = _target_prompt_chars(target)
+        if chars > int(max_prompt_chars):
+            violations.append({"severity": "hard", "code": "prompt_budget_exceeded", "target": target_name, "prompt_chars": chars, "max_prompt_chars": int(max_prompt_chars)})
+    return violations
+
+
+def _overlay_candidate_decision(*, gepa_result: str, changed_targets: list[str], hard_violations: list[dict[str, Any]]) -> str:
+    if hard_violations or gepa_result in GEPA_REJECT_RESULTS:
+        return "reject"
+    if gepa_result in GEPA_PROMOTE_RESULTS and changed_targets:
+        return "promote"
+    if gepa_result in GEPA_KEEP_RESULTS or not changed_targets:
+        return "keep_candidate"
+    return "reject"
+
+
+def evaluate_overlay_candidate_set(candidate_set: dict[str, Any], *, max_prompt_chars: int = DEFAULT_MAX_PROMPT_CHARS) -> dict[str, Any]:
+    loaded, artifact_violations = _load_candidate_set_artifact(candidate_set)
+    violations = artifact_violations + _overlay_acceptance_violations(loaded, max_prompt_chars=max_prompt_chars)
+    hard_violations = [item for item in violations if item.get("severity") == "hard"]
+    targets = loaded.get("targets") if isinstance(loaded.get("targets"), dict) else {}
+    changed_targets = [target for target in OVERLAY_TARGETS if isinstance(targets.get(target), dict) and targets[target].get("change_status") == "changed"]
+    gepa_result = str(loaded.get("gepa_result") or "failed")
+    decision = _overlay_candidate_decision(gepa_result=gepa_result, changed_targets=changed_targets, hard_violations=hard_violations)
+    result = {
+        "schema_name": "self_improvement_overlay_candidate_set_evaluation",
+        "schema_version": "1.0",
+        "candidate_set_id": loaded.get("candidate_set_id"),
+        "candidate_set_path": loaded.get("candidate_set_path") or candidate_set.get("candidate_set_path"),
+        "gepa_result": gepa_result,
+        "decision": decision,
+        "changed_targets": changed_targets,
+        "hard_violations": hard_violations,
+    }
+    result["evaluation_hash"] = "sha256:" + _sha256_text(_stable_json({key: value for key, value in result.items() if key != "evaluation_hash"}))
+    return result

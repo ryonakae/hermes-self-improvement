@@ -338,6 +338,8 @@ bin/hermes-self-improve calibrate --target overlay-set --optimizer gepa --max-fu
 
 ### Step 4: GEPA eval result と acceptance checks をつなぐ
 
+Status: 実装中。candidate-set acceptance checks と GEPA result に基づく `promote|keep_candidate|reject` 判定は追加済み。`calibrate` 接続と active overlay set promotion は未接続。
+
 変更候補:
 
 - `autonomous_evaluator.py`
