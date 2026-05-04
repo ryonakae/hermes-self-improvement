@@ -127,6 +127,51 @@ def test_llm_planner_uses_active_prompt_overlay(monkeypatch, tmp_path):
     assert result["prompt_source"]["planner"]["overlay_active"] is True
 
 
+def test_llm_planner_accepts_archive_decision_from_fake_model(monkeypatch):
+    pack_data = pack()
+    pack_data["evidence"].append({
+        "id": "ev_archive",
+        "kind": "skill_lifecycle_candidate",
+        "target_skill": "unused-skill",
+        "action": "skill_archive",
+        "archive_reason": "obsolete_marker",
+        "likely_targets": [{"target": "skill", "weight": 1.0}],
+    })
+    pack_data["views"]["skill"].append("ev_archive")
+    cfg = {"model": {"planner": {"provider": "auto", "model": "fake-planner"}}}
+
+    def fake_call_llm(**kwargs):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": '{"decisions":[{"skill":"unused-skill","decision":"archive_skill","evidence_ids":["ev_archive"],"archive_reason":"obsolete_marker"}]}'
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(planner, "_ensure_hermes_agent_on_path", lambda: None)
+    import types
+    import sys
+
+    aux = types.ModuleType("agent.auxiliary_client")
+    aux.call_llm = fake_call_llm
+    aux.extract_content_or_reasoning = lambda response: response["choices"][0]["message"]["content"]
+    pkg = types.ModuleType("agent")
+    sys.modules["agent"] = pkg
+    sys.modules["agent.auxiliary_client"] = aux
+
+    result = run_skill_planner(build_skill_planner_digest(pack_data), config=cfg)
+    decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
+
+    assert result["planner_source"] == "llm"
+    assert result["summary"]["archive_candidates"] == 1
+    assert decision["decision"] == "archive_skill"
+    assert decision["archive_reason"] == "obsolete_marker"
+    assert decision["evidence_ids"] == ["ev_archive"]
+
+
 def test_run_skill_planner_deterministic_fallback_skips_no_evidence_candidates_without_model_config():
     result = run_skill_planner(build_skill_planner_digest(pack()), config={})
 

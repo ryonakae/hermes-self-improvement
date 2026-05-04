@@ -1,6 +1,6 @@
 # Skill archive lifecycle for hermes-self-improvement
 
-**Status:** mostly implemented; remaining work is llm archive fixture/smoke and daily digest polish
+**Status:** implemented; monitor real archive outcomes via credit assignment and daily reports
 **Created:** 2026-05-04 09:31
 
 ## Goal
@@ -546,7 +546,7 @@ Expected dry-run should include lifecycle summary without huge tool result paylo
 
 ## Implementation status
 
-Implemented commits through `0585745` and follow-up report work:
+Implemented commits through `e9cfb6b` plus the fake LLM archive fixture:
 
 - lifecycle candidates emit `skill_archive`, not `skill_delete`;
 - `archive_skill` is a planner decision and no longer routed to human review;
@@ -556,12 +556,14 @@ Implemented commits through `0585745` and follow-up report work:
 - successor hints are validated when the planner selects one;
 - archived skills are excluded from scanner / explicit candidate / Curator candidate paths;
 - archive decisions are recorded as episodes with lifecycle metadata;
-- credit assignment now groups archive outcomes by archive reason, successor presence/validation, blocking reference count, and lifecycle state.
+- credit assignment now groups archive outcomes by archive reason, successor presence/validation, blocking reference count, and lifecycle state;
+- reports surface recent archive lifecycle counts and blocked reasons;
+- fake LLM planner fixture proves an archive decision can flow through the LLM planner path without hitting an external model.
 
-Remaining work:
+Follow-up monitoring:
 
-- add a deterministic `--scorer llm` archive candidate fixture/smoke;
-- polish daily digest/report consumption if the concierge job needs more than the current report lifecycle summary.
+- watch real archive outcomes in credit assignment after mutating `improve` starts archiving actual obsolete skills;
+- adjust daily digest wording only if the current report lifecycle summary is too terse for operations.
 
 ## Non-goals
 
