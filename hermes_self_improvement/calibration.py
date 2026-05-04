@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .autonomous_evaluator import compact_autonomous_evaluation_summary, evaluate_prompt_candidate
+from .autonomous_evaluator import compact_autonomous_evaluation_summary, evaluate_overlay_candidate_set, evaluate_prompt_candidate
 from .autonomous_policy import build_autonomous_operation_policy, summarize_autonomous_operation_policy
 from .config import normalize_calibration_config
 from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
@@ -13,7 +13,7 @@ from .episodes import record_calibration_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import build_outcome_score_aggregate
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
-from .prompt_candidate_optimizer import generate_prompt_overlay_candidate
+from .prompt_candidate_optimizer import generate_overlay_candidate_set, generate_prompt_overlay_candidate
 from .prompt_overlays import load_active_prompt_overlay, promote_prompt_candidate, write_prompt_candidate
 from .prompts import base_prompt_hash
 from .runtime_eval_cases import build_planner_editor_runtime_eval_cases
@@ -471,6 +471,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
         "prompt_overlays": _empty_prompt_overlay_summary(),
         "prompt_overlay_updates": {"status": "no_candidate", "promoted_roles": [], "failed_roles": []},
         "evaluator_update": {"status": "no_candidate", "reason": None, "active_changed": False},
+        "overlay_candidate_set": {"status": "not_built", "decision": None, "candidate_set_id": None, "candidate_set_path": None, "changed_targets": []},
         "runtime_setup": check_runtime_setup(config),
     }
     if not calibration.get("enabled", True):
@@ -479,6 +480,21 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False) -> dict[st
 
     candidate = _candidate_from_evidence(evidence, calibration)
     prompt_candidates = build_prompt_overlay_candidates(config, evidence)
+    overlay_candidate_set = None
+    overlay_candidate_set_evaluation = None
+    if candidate is not None or prompt_candidates:
+        overlay_candidate_set = generate_overlay_candidate_set(config=config, evidence=evidence)
+        overlay_candidate_set_evaluation = evaluate_overlay_candidate_set(overlay_candidate_set)
+        result["overlay_candidate_set"] = {
+            "status": "evaluated",
+            "decision": overlay_candidate_set_evaluation.get("decision"),
+            "gepa_result": overlay_candidate_set_evaluation.get("gepa_result"),
+            "candidate_set_id": overlay_candidate_set.get("candidate_set_id"),
+            "candidate_set_path": overlay_candidate_set.get("candidate_set_path"),
+            "changed_targets": overlay_candidate_set_evaluation.get("changed_targets") or [],
+            "hard_violations": len(overlay_candidate_set_evaluation.get("hard_violations") or []),
+            "evaluation_hash": overlay_candidate_set_evaluation.get("evaluation_hash"),
+        }
     for role in ("planner", "editor"):
         result["prompt_overlays"][role] = _prompt_overlay_summary(role, candidate=prompt_candidates.get(role))
     runtime_cases = build_runtime_eval_cases(config) if (candidate is not None or prompt_candidates) else []

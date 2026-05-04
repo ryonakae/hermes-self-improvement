@@ -293,6 +293,41 @@ def test_calibration_dry_run_previews_prompt_overlay_candidates_without_active_p
     assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists() is False
 
 
+def test_calibration_dry_run_evaluates_overlay_candidate_set(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
+    write_planner_quality_run(cfg, {"step_decisions": {"skill": {"planner_quality": {"action_like_skips": 1}}}}, "planner-quality.json")
+
+    def fake_generate_overlay_candidate_set(*, config, evidence):
+        path = Path(config["_self_improvement_root"]) / "evaluator" / "prompt-candidate-sets" / "candidate-set.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {"candidate_set_id": "overlay-set-001", "candidate_set_path": str(path)}
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return payload
+
+    monkeypatch.setattr(calibration, "generate_overlay_candidate_set", fake_generate_overlay_candidate_set)
+    monkeypatch.setattr(calibration, "evaluate_overlay_candidate_set", lambda candidate_set: {
+        "decision": "keep_candidate",
+        "gepa_result": "insufficient_data",
+        "changed_targets": [],
+        "hard_violations": [],
+        "evaluation_hash": "sha256:evaluation",
+    })
+
+    result = calibration.run_calibration(config=cfg, execute=False)
+
+    assert result["overlay_candidate_set"] == {
+        "status": "evaluated",
+        "decision": "keep_candidate",
+        "gepa_result": "insufficient_data",
+        "candidate_set_id": "overlay-set-001",
+        "candidate_set_path": str(Path(cfg["_self_improvement_root"]) / "evaluator" / "prompt-candidate-sets" / "candidate-set.json"),
+        "changed_targets": [],
+        "hard_violations": 0,
+        "evaluation_hash": "sha256:evaluation",
+    }
+
+
 def test_prompt_overlay_regression_uses_autonomous_evaluator(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path, evidence={"window_days": 30, "min_evidence_events": 99, "min_bad_outcomes": 99})
