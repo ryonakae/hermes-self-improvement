@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from hermes_self_improvement.runtime_eval_cases import build_planner_editor_runtime_eval_cases
+from hermes_self_improvement.runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_planner_editor_runtime_eval_cases
 
 
 def write_json(path: Path, payload: dict) -> None:
@@ -111,6 +111,44 @@ def test_runtime_eval_cases_convert_editor_target_mismatch_to_skip(tmp_path):
     assert cases[0]["case_type"] == "editor_target_mismatch_skip"
     assert cases[0]["role"] == "editor"
     assert cases[0]["expected"]["mutation"] == "skip"
+
+
+def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "episodes" / "2026-05-03" / "overlay.json", episode_payload(
+        "episode-overlay",
+        decision="run_editor",
+        action="skill_patch",
+        executed=True,
+        changed=True,
+        evidence_strength="strong",
+        reason="exact mutable local skill evidence",
+        overlay_generation_id="overlay-generation-001",
+        planner_overlay_hash="sha256:planner-overlay",
+        editor_overlay_hash="sha256:editor-overlay",
+        evaluator_overlay_hash="sha256:evaluator-overlay",
+        outcome="success",
+    ))
+
+    cases = build_overlay_set_runtime_eval_cases(config=config, limit=100)
+
+    assert {case["target"] for case in cases} == {"planner_overlay", "editor_overlay", "evaluator_overlay"}
+    assert {case["case_family"] for case in cases} == {"overlay_set"}
+    by_target = {case["target"]: case for case in cases}
+    assert by_target["planner_overlay"]["expected"] == {"decision": "run_editor"}
+    assert by_target["editor_overlay"]["expected"] == {"mutation": "changed"}
+    assert by_target["evaluator_overlay"]["expected"] == {"recommendation": "review_low_risk_candidate"}
+    for case in cases:
+        assert case["source_episode_id"] == "episode-overlay"
+        assert case["input"]["evidence_ids"] == ["ev1"]
+        assert case["input"]["overlay_generation_id"] == "overlay-generation-001"
+        assert case["input"]["planner_overlay_hash"] == "sha256:planner-overlay"
+        assert case["input"]["editor_overlay_hash"] == "sha256:editor-overlay"
+        assert case["input"]["evaluator_overlay_hash"] == "sha256:evaluator-overlay"
+    serialized = json.dumps(cases)
+    assert "candidate_prompt" not in serialized
+    assert "system_addendum" not in serialized
 
 
 def test_runtime_eval_cases_deduplicate_by_case_hash(tmp_path):
