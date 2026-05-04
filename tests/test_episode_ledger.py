@@ -142,6 +142,29 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
     assert planner_episode["executed"] is True
 
 
+def test_record_run_episodes_records_overlay_generation_and_hashes(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = sample_run_result(tmp_path)
+    result["overlay_generation_id"] = "overlay-generation-001"
+    result["prompt_sources"] = {
+        "planner": {"base_hash": "sha256:planner-base", "overlay_hash": "sha256:planner-overlay"},
+        "editor": {"base_hash": "sha256:editor-base", "overlay_hash": "sha256:editor-overlay"},
+    }
+    result["calibration"] = {"active_evaluator_hash": "sha256:evaluator-overlay"}
+    result["step_decisions"]["skill"]["prompt_sources"] = result["prompt_sources"]
+
+    record_run_episodes(config=config, run_result=result)
+
+    episode = [item for item in load_recent_episodes(config=config, limit=10) if item["target_id"] == "demo-skill"][0]
+    assert episode["overlay_generation_id"] == "overlay-generation-001"
+    assert episode["planner_overlay_hash"] == "sha256:planner-overlay"
+    assert episode["editor_overlay_hash"] == "sha256:editor-overlay"
+    assert episode["evaluator_overlay_hash"] == "sha256:evaluator-overlay"
+    assert episode["planner_prompt_hash"] == "sha256:planner-overlay"
+    assert episode["editor_prompt_hash"] == "sha256:editor-overlay"
+    assert episode["evaluator_hash"] == "sha256:evaluator-overlay"
+
+
 def test_record_run_episodes_uses_mutation_metadata_for_executed_skill_change(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = sample_run_result(tmp_path)

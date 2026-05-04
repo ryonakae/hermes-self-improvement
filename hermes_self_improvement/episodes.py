@@ -55,6 +55,25 @@ def _prompt_hash(prompt_sources: dict[str, Any], role: str) -> str:
     return "unavailable"
 
 
+def _overlay_hash(prompt_sources: dict[str, Any], role: str) -> str:
+    source = prompt_sources.get(role) if isinstance(prompt_sources.get(role), dict) else {}
+    for key in ("overlay_hash", "active_hash", "candidate_hash"):
+        value = source.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "unavailable"
+
+
+def _overlay_generation_id(run_result: dict[str, Any], prompt_sources: dict[str, Any]) -> str | None:
+    for source in (run_result, prompt_sources, run_result.get("calibration") if isinstance(run_result.get("calibration"), dict) else {}):
+        if not isinstance(source, dict):
+            continue
+        value = source.get("overlay_generation_id") or source.get("prompt_overlay_generation_id")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def _evaluator_hash(run_result: dict[str, Any]) -> str:
     calibration = run_result.get("calibration") if isinstance(run_result.get("calibration"), dict) else {}
     for key in ("active_evaluator_hash", "evaluator_hash", "active_after_hash"):
@@ -78,11 +97,18 @@ def _source_hashes(run_result: dict[str, Any], step: dict[str, Any] | None = Non
         prompt_sources.update(run_result["prompt_sources"])
     if isinstance(step, dict) and isinstance(step.get("prompt_sources"), dict):
         prompt_sources.update(step["prompt_sources"])
-    return {
+    hashes = {
         "planner_prompt_hash": _prompt_hash(prompt_sources, "planner"),
         "editor_prompt_hash": _prompt_hash(prompt_sources, "editor"),
         "evaluator_hash": _evaluator_hash(run_result),
+        "planner_overlay_hash": _overlay_hash(prompt_sources, "planner"),
+        "editor_overlay_hash": _overlay_hash(prompt_sources, "editor"),
+        "evaluator_overlay_hash": _evaluator_hash(run_result),
     }
+    generation_id = _overlay_generation_id(run_result, prompt_sources)
+    if generation_id:
+        hashes["overlay_generation_id"] = generation_id
+    return hashes
 
 
 def _episode_id(seed: dict[str, Any], created_at: str) -> str:
