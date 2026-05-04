@@ -289,7 +289,97 @@ bin/hermes-self-improve calibrate --dry-run
 git commit -m "feat: select high-signal overlay eval cases"
 ```
 
-### Slice 4: Tighten status and report surfaces around partial success
+### Slice 4: Add optional dry-run candidate-set reuse
+
+**Objective:** Let operators explicitly reuse a promotable dry-run overlay candidate-set artifact during `calibrate` execution, without changing the default execute behavior.
+
+**Positioning:** This is an opt-in cost/control feature, not the default path. Most normal runs should continue to call `bin/hermes-self-improve calibrate` directly and generate/evaluate the current candidate set from current evidence. Reuse is only for the workflow where an operator already ran `calibrate --dry-run`, inspected the compact summary/artifact, and wants to promote exactly that candidate without paying for another GEPA run or accepting stochastic drift.
+
+**Files:**
+
+- Modify: `hermes_self_improvement/calibration.py`
+- Modify: `hermes_self_improvement/cli.py`
+- Modify if agent tool support is desired: `hermes_self_improvement/tool_handlers.py` and plugin schema/registration file
+- Modify: `tests/test_calibration.py`
+- Modify: `tests/test_cli_surface.py`
+- Modify if tool support is added: `tests/test_plugin_tools.py`
+- Modify if helper coverage is cleaner there: `tests/test_feedback_loop.py`, `tests/test_prompt_overlays.py`
+
+**Current issue:**
+
+Dogfood showed this sequence:
+
+```text
+calibrate --dry-run:
+- decision: promote
+- GEPA: selected
+- changed targets: 3
+
+calibrate execute immediately after:
+- GEPA reran
+- decision: keep_candidate
+- GEPA: no_improvement
+- changed targets: 0
+```
+
+That is acceptable as the default behavior, but it wastes LLM/GEPA cost when the operator intentionally wants to apply the reviewed dry-run candidate. It also makes the dry-run artifact less useful as an exact preview.
+
+**Target behavior:**
+
+- Default remains unchanged:
+  - `bin/hermes-self-improve calibrate` builds/evaluates a fresh candidate set.
+  - No implicit reuse of the latest dry-run artifact.
+- Add an explicit option, recommended spelling:
+  - `bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json`
+- The option is valid only for execute mode. Combining it with `--dry-run` should fail fast with a clear message, because dry-run is how the artifact was produced.
+- When `--from-candidate-set` is present:
+  - load the candidate-set artifact from the provided path,
+  - validate the candidate-set schema and target/base-hash consistency using the existing overlay candidate-set acceptance checks,
+  - evaluate it with `evaluate_overlay_candidate_set()` if the artifact does not already include a trusted evaluation payload, or re-evaluate cheaply without rerunning GEPA,
+  - if the decision is `promote`, call `promote_overlay_candidate_set()` directly,
+  - do not call `generate_overlay_candidate_set()` / DSPy / GEPA.
+- The result summary must say it reused an artifact, e.g. `source: candidate_set_artifact`, and include the artifact path.
+- Keep LLM-facing tool output compact. Do not inline the candidate-set JSON.
+
+**Non-goals:**
+
+- Do not make dry-run artifacts auto-apply later.
+- Do not add a general approval/apply/rollback surface.
+- Do not weaken GEPA acceptance or hard invariant checks.
+- Do not use "latest artifact" discovery as a default; require an explicit path to avoid accidental stale promotion.
+
+**TDD tasks:**
+
+1. Add a failing calibration test where `execute=True` and `candidate_set_artifact_path` is passed; assert `generate_overlay_candidate_set()` is not called.
+2. Add a failing test proving the loaded candidate set is passed through `evaluate_overlay_candidate_set()` / `promote_overlay_candidate_set()` and promotes changed targets when the decision is `promote`.
+3. Add a failing test for invalid combinations: `execute=False` / `--dry-run` with `--from-candidate-set` fails clearly.
+4. Add a failing CLI test proving `--from-candidate-set` is parsed and forwarded to `run_calibration()`.
+5. Add a failing CLI summary test proving reused artifacts are visible as compact metadata.
+6. Implement a small loader/helper for candidate-set artifacts. Keep it schema-focused and avoid a broad artifact registry abstraction.
+7. Wire `run_calibration(config, execute=True, candidate_set_artifact_path=...)` to use the loaded artifact path instead of generating a fresh GEPA candidate.
+8. If exposing this to the agent-facing tool, add an optional `candidate_set_artifact_path` parameter and the same compact summary behavior. If not, document it as CLI-only for now.
+9. Run focused tests, then full suite and smoke.
+
+**Verification:**
+
+```bash
+python3 -m pytest tests/test_calibration.py tests/test_cli_surface.py tests/test_feedback_loop.py tests/test_prompt_overlays.py -q
+python3 -m pytest tests/test_plugin_tools.py -q
+python3 -m pytest -q
+python3 -m py_compile __init__.py hermes_self_improvement/*.py
+bin/hermes-self-improve calibrate --dry-run
+# If the dry-run reports a promotable candidate, manually test:
+# bin/hermes-self-improve calibrate --from-candidate-set /path/from/dry-run.json
+git diff --check
+```
+
+**Commit:**
+
+```bash
+git commit -m "feat: reuse overlay candidate artifacts on request"
+```
+
+### Slice 5: Tighten status and report surfaces around partial success
 
 **Objective:** Make operator-facing output clearly separate prompt overlay set status from evaluator calibration status.
 
@@ -335,7 +425,7 @@ bin/hermes-self-improve calibrate --dry-run
 git commit -m "fix: clarify calibration sub-results"
 ```
 
-### Slice 5: Top-level Hermes CLI integration, separate from plugin quality
+### Slice 6: Top-level Hermes CLI integration, separate from plugin quality
 
 **Objective:** Decide whether to fix Hermes core plugin CLI wiring or continue using `bin/hermes-self-improve` as the supported top-level entrypoint.
 
@@ -362,6 +452,7 @@ Do not block self-improvement quality work on this. Treat it as a separate Herme
 - `generate_prompt_overlay_candidate()` is removed from active calibration flow or clearly demoted to test/legacy-free utility status.
 - A real dogfood run proves overlay generation/hash data flows from promotion to later improvement episodes and back into eval cases, or records a clear no-promotion reason without weakening gates.
 - GEPA overlay case selection is bounded, deterministic, high-signal, and compact-output-safe.
+- Optional dry-run candidate-set reuse is available only when an explicit artifact path is provided; default `calibrate` still generates/evaluates fresh candidates.
 - CLI/tool summaries separate prompt overlay set state from evaluator state.
 - `.hermes/plans/README.md` names this roadmap and the GEPA overlay plan as the latest source of truth.
 
@@ -373,4 +464,5 @@ Do not block self-improvement quality work on this. Treat it as a separate Herme
 - Do not make GEPA mutate repo base prompts.
 - Do not loosen acceptance checks to force promotion.
 - Do not dump full GEPA/candidate/evidence payloads into agent-facing tool results.
+- Do not implicitly promote the latest dry-run candidate artifact without an explicit path.
 - Do not handle top-level `hermes self-improvement` by adding another plugin-local wrapper hack.
