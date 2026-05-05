@@ -79,16 +79,11 @@ def test_report_integration_is_quiet_when_no_artifacts(tmp_path):
     assert "## Calibration summary" not in out["report"]
 
 
-def test_report_includes_review_outcome_summary(tmp_path):
+def test_report_does_not_include_removed_review_outcome_surface(tmp_path):
     mod = load_plugin_module()
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    outcome_path = tmp_path / "self-improvement" / "outcomes" / "2026-04-30" / "rejected.json"
-    outcome_path.parent.mkdir(parents=True, exist_ok=True)
-    outcome_path.write_text(json.dumps({"schema_name": "self_improvement_review_outcome", "outcome": "rejected_by_human", "item_id": "step-001", "source": "user"}), encoding="utf-8")
 
     out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")
 
-    assert out["operational_reports"]["review_outcomes"]["summary"]["total"] == 1
-    assert out["operational_reports"]["review_outcomes"]["auto_apply_permission"] is False
-    assert "## Review outcomes" in out["report"]
-    assert "does not grant unattended mutation permission" in out["report"]
+    assert "review_outcomes" not in out["operational_reports"]
+    assert "## Review outcomes" not in out["report"]

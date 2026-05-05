@@ -80,7 +80,7 @@ def test_gepa_adapter_runtime_scorer_uses_real_dspy_program_boundary(monkeypatch
                     {
                         "id": "proposal-1",
                         "score": 81,
-                        "recommendation": "human_review",
+                        "recommendation": "defer",
                         "risk": "medium",
                         "confidence": "high",
                         "rationale": "Fake DSPy program score.",
@@ -143,7 +143,7 @@ def test_evaluate_offline_program_reports_eval_case_results():
     assert result["dspy_required_for_runtime_gepa"] is True
     assert "dspy_available" in result
     case_ids = {case["id"] for case in result["cases"]}
-    assert "repeated-tool-failure-human-review" in case_ids
+    assert "repeated-tool-failure-defer" in case_ids
     assert "dangerous-auto-apply-denied" in case_ids
     assert all("score" in case and "passed" in case and "checks" in case for case in result["cases"])
     assert all("score_breakdown" in case["score"] for case in result["cases"])

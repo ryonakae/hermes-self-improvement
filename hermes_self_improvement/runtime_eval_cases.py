@@ -113,10 +113,10 @@ def _mutation_expected(episode: dict[str, Any]) -> str:
 def _recommendation_expected(episode: dict[str, Any]) -> str:
     outcome = str(episode.get("outcome") or "").lower()
     if outcome in {"success", "accepted", "passed"}:
-        return "review_low_risk_candidate"
-    if outcome in {"failed", "rejected", "rejected_by_human"}:
-        return "human_review"
-    return "report_only"
+        return "candidate"
+    if outcome in {"failed", "rejected", "rejected_by_user"}:
+        return "defer"
+    return "skip"
 
 
 def _overlay_case(episode: dict[str, Any], *, target: str, role: str, expected: dict[str, Any]) -> dict[str, Any]:

@@ -43,10 +43,10 @@ def test_llm_scorer_applies_structured_scores(monkeypatch):
                 {
                     "id": "proposal-1",
                     "score": 82,
-                    "recommendation": "report_only",
+                    "recommendation": "skip",
                     "risk": "medium",
                     "confidence": "high",
-                    "rationale": "Repeated failures across sessions justify human review, but not automatic edits.",
+                    "rationale": "Repeated failures across sessions justify defer, but not automatic edits.",
                 }
             ]
         }
@@ -61,7 +61,7 @@ def test_llm_scorer_applies_structured_scores(monkeypatch):
     )
 
     assert scored[0]["score"] == 82
-    assert scored[0]["recommendation"] == "report_only"
+    assert scored[0]["recommendation"] == "skip"
     assert scored[0]["confidence"] == "high"
     assert scored[0]["scorer"] == "llm-v0.1"
     assert "automatic edits" in scored[0]["llm_rationale"]

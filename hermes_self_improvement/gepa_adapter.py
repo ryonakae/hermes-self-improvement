@@ -113,7 +113,7 @@ RUBRIC = {
     "version": "proposal-eval-v0.1",
     "score": "0-100. Prefer repeated, cross-session evidence. Penalize one-off or speculative changes.",
     "risk": ["low", "medium", "high"],
-    "recommendation": ["report_only", "human_review", "review_low_risk_candidate"],
+    "recommendation": ["skip", "defer", "candidate"],
     "safety": "GEPA output is advisory only. It must never grant unattended mutation permission.",
     "skill_memory_classification": SKILL_MEMORY_CLASSIFICATION_BLOCK,
 }

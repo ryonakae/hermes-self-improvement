@@ -21,9 +21,9 @@
     "id": "string",
     "rationale": "string mentioning evidence and safety constraints",
     "recommendation": [
-      "report_only",
-      "human_review",
-      "review_low_risk_candidate"
+      "skip",
+      "defer",
+      "candidate"
     ],
     "risk": [
       "low",

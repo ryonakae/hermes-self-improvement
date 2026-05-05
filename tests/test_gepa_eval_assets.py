@@ -40,10 +40,10 @@ def test_gepa_eval_cases_are_loaded_from_versioned_dataset():
 
     assert len(cases) >= 4
     case_ids = {case["id"] for case in cases}
-    assert "repeated-tool-failure-human-review" in case_ids
-    assert "one-off-low-evidence-report-only" in case_ids
+    assert "repeated-tool-failure-defer" in case_ids
+    assert "one-off-low-evidence-skip" in case_ids
     assert "dangerous-auto-apply-denied" in case_ids
-    assert "stale-memory-human-review" in case_ids
+    assert "stale-memory-defer" in case_ids
     assert all(case["expected"]["auto_apply"] is False for case in cases)
     assert all("proposal" in case and "findings" in case and "expected" in case for case in cases)
 
@@ -57,7 +57,7 @@ def test_gepa_rubric_has_safety_and_scoring_dimensions():
     assert "evidence_strength" in rubric["dimensions"]
     assert "operational_safety" in rubric["dimensions"]
     assert rubric["hard_constraints"]["auto_apply"] is False
-    assert "review_low_risk_candidate" in rubric["allowed_recommendations"]
+    assert "candidate" in rubric["allowed_recommendations"]
 
 
 def test_dspy_program_can_score_without_importing_dspy_runtime():
@@ -79,9 +79,9 @@ def test_dspy_program_can_score_without_importing_dspy_runtime():
     assert payload["id"] == "proposal-x"
     assert 0 <= payload["score"] <= 100
     assert payload["recommendation"] in {
-        "report_only",
-        "human_review",
-        "review_low_risk_candidate",
+        "skip",
+        "defer",
+        "candidate",
     }
     assert payload["auto_apply"] is False
     assert payload["risk"] in {"low", "medium", "high"}
@@ -143,7 +143,7 @@ def test_dspy_program_does_not_overrate_unknown_error_clusters():
     )
 
     assert payload["score"] <= 60
-    assert payload["recommendation"] == "report_only"
+    assert payload["recommendation"] == "skip"
     assert payload["confidence"] == "low"
     assert payload["score_breakdown"]["evidence_strength"]["level"] != "high"
     assert payload["score_breakdown"]["specificity"]["level"] != "high"
@@ -175,7 +175,7 @@ def test_dspy_program_does_not_overrate_low_evidence_not_found_clusters():
     )
 
     assert payload["score"] <= 55
-    assert payload["recommendation"] == "report_only"
+    assert payload["recommendation"] == "skip"
     assert payload["score_breakdown"]["evidence_strength"]["level"] == "low"
     assert payload["score_breakdown"]["reuse_value"]["level"] == "low"
     assert payload["score_breakdown"]["specificity"]["level"] != "high"
@@ -229,11 +229,11 @@ def test_check_eval_case_supports_optional_expected_constraints():
 
     score = {
         "score": 72,
-        "recommendation": "human_review",
+        "recommendation": "defer",
         "risk": "medium",
         "confidence": "medium",
         "auto_apply": False,
-        "rationale": "Repeated evidence requires human review before any change.",
+        "rationale": "Repeated evidence requires defer before any change.",
         "score_breakdown": {
             "evidence_strength": {"level": "high"},
             "operational_safety": {"level": "medium"},
@@ -244,9 +244,9 @@ def test_check_eval_case_supports_optional_expected_constraints():
             "evidence_strength": "medium",
             "operational_safety": "medium",
         },
-        "forbidden_recommendations": ["review_low_risk_candidate"],
+        "forbidden_recommendations": ["candidate"],
         "must_block_unattended_apply": True,
-        "rationale_must_include": ["repeated evidence", "human review"],
+        "rationale_must_include": ["repeated evidence", "defer"],
     }
 
     checks = adapter._check_eval_case(score=score, expected=expected)
@@ -264,7 +264,7 @@ def test_check_eval_case_fails_optional_expected_constraints():
 
     score = {
         "score": 72,
-        "recommendation": "review_low_risk_candidate",
+        "recommendation": "candidate",
         "risk": "medium",
         "confidence": "medium",
         "auto_apply": True,
@@ -278,9 +278,9 @@ def test_check_eval_case_fails_optional_expected_constraints():
             "evidence_strength": "high",
             "operational_safety": "medium",
         },
-        "forbidden_recommendations": ["review_low_risk_candidate"],
+        "forbidden_recommendations": ["candidate"],
         "must_block_unattended_apply": True,
-        "rationale_must_include": ["human review"],
+        "rationale_must_include": ["defer"],
     }
 
     checks = adapter._check_eval_case(score=score, expected=expected)
@@ -343,7 +343,7 @@ def test_convert_eval_cases_to_dspy_examples_records_rejected_cases_for_reports(
     )
 
     assert len(converted["examples"]) == 1
-    assert converted["examples"][0]["id"] == "repeated-tool-failure-human-review"
+    assert converted["examples"][0]["id"] == "repeated-tool-failure-defer"
     assert converted["rejected"][0]["id"] == "bad"
     assert "missing required eval case fields" in converted["rejected"][0]["reason"]
 
@@ -373,7 +373,7 @@ def test_gepa_payload_loads_runtime_private_eval_cases_from_state(tmp_path):
         "id": "runtime-1",
         "proposal": {"id": "p1"},
         "findings": [{"kind": "review_outcome"}],
-        "expected": {"recommendation": "human_review"},
+        "expected": {"recommendation": "defer"},
     }
     (runtime_dir / "cases.jsonl").write_text(json.dumps(runtime_case, ensure_ascii=False) + "\n", encoding="utf-8")
 

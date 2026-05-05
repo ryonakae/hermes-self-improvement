@@ -42,7 +42,7 @@ class FakePrediction:
         {
             "id": "proposal-1",
             "score": 80,
-            "recommendation": "human_review",
+            "recommendation": "defer",
             "risk": "medium",
             "confidence": "high",
             "rationale": "Evidence from findings supports this score.",

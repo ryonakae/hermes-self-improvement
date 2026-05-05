@@ -29,7 +29,7 @@ Semantics:
 
 Do not schedule or reintroduce legacy approval / low-risk / hash-confirmation commands. `plan`, `apply`, `rollback`, `outcome`, `record_outcome`, item selection flags, hash confirmation flags, and old GEPA-specific primary commands are not part of the surface.
 
-Human and runtime feedback are evidence for future runs. Reports summarize review/outcome signals, but feedback never grants unattended mutation permission.
+User and runtime feedback are evidence for future runs. Reports summarize review/outcome signals, but feedback never grants unattended mutation permission.
 
 Validation after code or docs changes:
 

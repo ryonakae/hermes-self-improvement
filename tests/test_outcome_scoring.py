@@ -50,11 +50,11 @@ def outcome_payload(episode_id="episode-1", window="immediate", signals=None, sc
     }
 
 
-def test_load_outcome_observations_ignores_legacy_review_outcomes(tmp_path):
+def test_load_outcome_observations_ignores_unknown_outcome_schemas(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     write_json(root / "outcomes" / "2026-05-03" / "obs.json", outcome_payload())
-    write_json(root / "outcomes" / "2026-05-03" / "review.json", {"schema_name": "self_improvement_review_outcome", "outcome": "failed"})
+    write_json(root / "outcomes" / "2026-05-03" / "unknown.json", {"schema_name": "unknown_outcome_schema", "outcome": "failed"})
 
     loaded = load_outcome_observations(config=config, limit=10)
 

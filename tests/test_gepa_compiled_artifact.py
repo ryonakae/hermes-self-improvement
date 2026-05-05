@@ -29,7 +29,7 @@ class FakePrediction:
         {
             "id": "proposal-compiled",
             "score": 88,
-            "recommendation": "human_review",
+            "recommendation": "defer",
             "risk": "medium",
             "confidence": "high",
             "rationale": "Loaded compiled GEPA artifact and used findings evidence.",
@@ -122,7 +122,7 @@ def test_gepa_adapter_compiled_mode_uses_configured_artifact(monkeypatch, tmp_pa
                     {
                         "id": "proposal-compiled",
                         "score": 91,
-                        "recommendation": "human_review",
+                        "recommendation": "defer",
                         "risk": "medium",
                         "confidence": "high",
                         "rationale": "Fake compiled artifact score.",
@@ -162,7 +162,7 @@ def test_gepa_adapter_compiled_mode_can_resolve_active_evaluator_pointer(monkeyp
                 "mode": "compiled_program_eval",
                 "optimizer": "gepa",
                 "program": "ProposalScoringDspyProgram",
-                "scores": [{"id": "proposal-compiled", "score": 77, "recommendation": "human_review", "risk": "medium", "confidence": "medium", "rationale": "pointer", "auto_apply": True}],
+                "scores": [{"id": "proposal-compiled", "score": 77, "recommendation": "defer", "risk": "medium", "confidence": "medium", "rationale": "pointer", "auto_apply": True}],
             }
 
     monkeypatch.setattr(adapter, "require_dspy", lambda: FakeDspy)

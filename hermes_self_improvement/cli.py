@@ -23,7 +23,6 @@ from .next_actions import render_next_actions
 from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
 from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
 from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
-from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .recovery_engine import memory_rollback_status
 from .scoring import _call_llm_scorer, score_proposals_impl
 from .setup_runtime import check_runtime_setup, run_setup, runtime_layout
@@ -151,19 +150,6 @@ def _format_score_breakdown(raw: Any) -> str:
     return "; ".join(parts)
 
 
-def build_review_outcome_report_payload(*, config: dict[str, Any], limit: int = 100) -> dict[str, Any]:
-    explicit = load_review_outcomes(config=config, limit=limit)
-    return {
-        "schema_name": "self_improvement_review_outcome_report",
-        "schema_version": "1.0",
-        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
-        "limit": limit,
-        "total": len(explicit),
-        "summary": summarize_review_outcomes(explicit),
-        "outcomes": explicit[: min(limit, 10)],
-        "auto_apply_permission": False,
-    }
-
 
 def _load_report_json(path: Path) -> dict[str, Any] | None:
     try:
@@ -238,7 +224,6 @@ def _build_operational_report_payloads(config: dict[str, Any]) -> dict[str, Any]
         "recent_evidence": _recent_json_files(_reports_dir(config) / "evidence", pattern="evidence-*.json", limit=5),
         "runtime_eval_cases": _runtime_private_eval_case_summary(config),
         "calibration": build_calibration_report_payload(config=config, limit=5),
-        "review_outcomes": build_review_outcome_report_payload(config=config, limit=100),
     }
 
 
@@ -294,16 +279,6 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
                 f"- `{ledger.get('ledger_id')}`: regression `{ledger.get('regression_status')}`, "
                 f"reason `{ledger.get('candidate_reason')}`"
             )
-
-    review_payload = payloads.get("review_outcomes") if isinstance(payloads.get("review_outcomes"), dict) else {}
-    review_summary = review_payload.get("summary") if isinstance(review_payload.get("summary"), dict) else {}
-    if int(review_summary.get("total") or 0):
-        lines.extend(["", "## Review outcomes"])
-        lines.append(f"- total: {int(review_summary.get('total') or 0)}")
-        by_outcome = review_summary.get("by_outcome") if isinstance(review_summary.get("by_outcome"), dict) else {}
-        for name, count in sorted(by_outcome.items()):
-            lines.append(f"- {name}: {count}")
-        lines.append("- does not grant unattended mutation permission")
 
     return lines
 
@@ -693,7 +668,7 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         "Autonomous policy:",
         f"- calibrate: {'mutation-capable' if policy.get('calibrate_mutation_capable') else 'read-only'}, requires {policy.get('calibrate_requires') or 'unknown'}",
         f"- improve: {'mutation-capable' if policy.get('improve_mutation_capable') else 'read-only'}, skill targets {', '.join(policy.get('improve_skill_targets') or []) or 'none'}",
-        f"- defer requires human review: {bool(policy.get('defer_requires_human_review'))}",
+        f"- defer executes mutation: {bool(policy.get('defer_executes_mutation'))}",
     ]
     setup = payload.get("runtime_setup") if isinstance(payload.get("runtime_setup"), dict) else {}
     if setup:
@@ -969,7 +944,6 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "mutation_backend": mutation_backend_status(config),
             "merge_verifier": merge_verifier_status(config),
             "memory_rollback": memory_rollback_status(config),
-            "review_outcomes": build_review_outcome_report_payload(config=config, limit=100).get("summary"),
             "runtime_setup": check_runtime_setup(config),
             "autonomous_policy": summarize_autonomous_operation_policy(policy),
             "autonomous_policy_full": policy,

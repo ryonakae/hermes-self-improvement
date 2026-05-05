@@ -54,7 +54,7 @@ def test_llm_scorer_is_primary_external_proposal_scorer(monkeypatch):
                 {
                     "id": "proposal-1",
                     "score": 92,
-                    "recommendation": "human_review",
+                    "recommendation": "defer",
                     "risk": "medium",
                     "confidence": "high",
                     "rationale": "Planner sees repeated evidence but requires review.",
@@ -62,7 +62,7 @@ def test_llm_scorer_is_primary_external_proposal_scorer(monkeypatch):
                 {
                     "id": "proposal-2",
                     "score": 55,
-                    "recommendation": "report_only",
+                    "recommendation": "skip",
                     "risk": "low",
                     "confidence": "low",
                     "rationale": "Weak evidence.",
@@ -83,7 +83,7 @@ def test_llm_scorer_is_primary_external_proposal_scorer(monkeypatch):
     assert first["id"] == "proposal-1"
     assert first["scorer"] == "llm-v0.1"
     assert first["score"] == 92
-    assert first["recommendation"] == "human_review"
+    assert first["recommendation"] == "defer"
     assert first["auto_apply"] is False
     assert "Planner sees repeated evidence" in first["llm_rationale"]
     assert "gepa_score" not in first
@@ -133,7 +133,7 @@ def test_render_report_does_not_include_compare_summary_for_current_scorer():
                 "action": "review_existing_skill_or_add_pitfall",
                 "risk": "medium",
                 "score": 64,
-                "recommendation": "human_review",
+                "recommendation": "defer",
                 "reason": "Repeated tool failure.",
                 "scorer": "llm-v0.1",
                 "auto_apply": False,

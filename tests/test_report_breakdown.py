@@ -48,7 +48,7 @@ def test_render_report_includes_score_breakdown_summary():
                 "action": "review_existing_skill_or_add_pitfall",
                 "risk": "medium",
                 "score": 73,
-                "recommendation": "human_review",
+                "recommendation": "defer",
                 "reason": "Observed repeated failures.",
                 "scorer": "llm-v0.1",
                 "score_breakdown": {

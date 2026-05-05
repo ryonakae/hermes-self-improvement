@@ -45,7 +45,7 @@ class FakeDspy:
         def __call__(self, **kwargs):
             self.calls.append(kwargs)
             return FakePrediction(
-                '{"score": 91, "recommendation": "review_low_risk_candidate", '
+                '{"score": 91, "recommendation": "candidate", '
                 '"risk": "low", "confidence": "high", "rationale": "Repeated evidence in findings.", '
                 '"auto_apply": true, "score_breakdown": {"evidence_strength": {"level": "high", "points": 30, "weight": 30, "reason": "seen repeatedly"}}}'
             )
@@ -77,7 +77,7 @@ def test_build_dspy_program_uses_structured_json_fields_without_importing_real_d
 
     assert result["id"] == "proposal-1"
     assert result["score"] == 91
-    assert result["recommendation"] == "review_low_risk_candidate"
+    assert result["recommendation"] == "candidate"
     assert result["risk"] == "low"
     assert result["confidence"] == "high"
     assert result["auto_apply"] is False
@@ -209,7 +209,7 @@ def test_dspy_program_accepts_first_json_object_and_ignores_trailing_model_text(
     mod = load_program_module()
 
     raw = (
-        '{"id":"proposal-1","score":77,"recommendation":"human_review",'
+        '{"id":"proposal-1","score":77,"recommendation":"defer",'
         '"risk":"medium","confidence":"medium","rationale":"ok","auto_apply":false}'
         '\n\nAdditional explanation that should not be parsed as JSON.'
     )
@@ -218,7 +218,7 @@ def test_dspy_program_accepts_first_json_object_and_ignores_trailing_model_text(
 
     assert result["id"] == "proposal-1"
     assert result["score"] == 77
-    assert result["recommendation"] == "human_review"
+    assert result["recommendation"] == "defer"
     assert result["auto_apply"] is False
 
 

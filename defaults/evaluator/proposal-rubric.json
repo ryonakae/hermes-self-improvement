@@ -3,9 +3,9 @@
   "purpose": "Score Hermes self-improvement proposals for manual review, not unattended application.",
   "score_range": [0, 100],
   "allowed_recommendations": [
-    "report_only",
-    "human_review",
-    "review_low_risk_candidate"
+    "skip",
+    "defer",
+    "candidate"
   ],
   "allowed_risks": ["low", "medium", "high"],
   "allowed_confidence": ["low", "medium", "high"],
@@ -13,8 +13,8 @@
     "auto_apply": false,
     "never_reconstruct_secrets": true,
     "never_directly_patch_skills_or_memory": true,
-    "require_human_review_for_semantic_skill_changes": true,
-    "require_human_review_for_memory_reclassification_or_deletion": true
+    "defer_semantic_skill_changes": true,
+    "defer_memory_reclassification_or_deletion": true
   },
   "dimensions": {
     "evidence_strength": {
@@ -49,8 +49,8 @@
     }
   },
   "recommendation_policy": {
-    "report_only": "Use for low evidence, high risk, one-off, or ambiguous proposals.",
-    "human_review": "Use when evidence is useful but the change may alter semantics, routing, memory, or cron behavior.",
-    "review_low_risk_candidate": "Use only for low-risk, reversible cleanup candidates with concrete evidence. This is still not unattended mutation permission."
+    "skip": "Use for low evidence, high risk, one-off, or ambiguous proposals.",
+    "defer": "Use when evidence is useful but the change may alter semantics, routing, memory, or cron behavior.",
+    "candidate": "Use only for low-risk, reversible cleanup candidates with concrete evidence. This is still not unattended mutation permission."
   }
 }

@@ -82,7 +82,7 @@ def _case_signal_score(case: dict[str, Any]) -> int:
     outcome = input_payload.get("outcome") if isinstance(input_payload.get("outcome"), dict) else {}
     mutation_task = input_payload.get("mutation_task") if isinstance(input_payload.get("mutation_task"), dict) else {}
     outcome_value = str(outcome.get("outcome") or "").lower()
-    if outcome_value in {"failed", "rejected", "rejected_by_human"}:
+    if outcome_value in {"failed", "rejected", "rejected_by_user"}:
         score += 8
     elif outcome_value in {"success", "accepted", "passed"}:
         score += 6
@@ -94,7 +94,7 @@ def _case_signal_score(case: dict[str, Any]) -> int:
         score += 1
     if str(mutation_task.get("decision") or "") in {"skip", "defer"}:
         score += 1
-    if str(expected.get("recommendation") or "") == "human_review":
+    if str(expected.get("recommendation") or "") == "defer":
         score += 3
     return score
 

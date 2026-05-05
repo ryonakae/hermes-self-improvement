@@ -13,7 +13,7 @@ from .episodes import record_calibration_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import build_outcome_score_aggregate
 from .outcome_observer import compact_outcome_prepass_summary, run_outcome_prepass
-from .outcome_store import load_review_outcomes, summarize_review_outcomes
+
 from .prompt_candidate_optimizer import generate_overlay_candidate_set
 from .prompt_overlays import promote_overlay_candidate_set
 from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_planner_editor_runtime_eval_cases
@@ -107,16 +107,6 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
         "sources": [],
     }
 
-    outcomes = load_review_outcomes(config=config, limit=1000)
-    outcome_summary = summarize_review_outcomes(outcomes)
-    summary["review_outcomes"] = outcome_summary["total"]
-    summary["explicit_human_review_outcomes"] = outcome_summary.get("explicit_human_review_outcomes", 0)
-    summary["review_outcome_summary"] = outcome_summary
-    if outcome_summary["total"]:
-        summary["bad_outcomes"] += int(outcome_summary.get("bad_outcomes") or 0)
-        summary["total_events"] += int(outcome_summary.get("total") or 0)
-        summary["sources"].extend(str(row.get("path")) for row in outcomes if row.get("path"))
-
     if run_prepass:
         outcome_prepass = run_outcome_prepass(config=config, now=now)
         summary["outcome_prepass"] = compact_outcome_prepass_summary(outcome_prepass)
@@ -134,10 +124,16 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
     }
     if int(outcome_scores.get("observation_count") or 0):
         summary["total_events"] += int(outcome_scores.get("observation_count") or 0)
+        by_target_kind = outcome_scores.get("by_target_kind") if isinstance(outcome_scores.get("by_target_kind"), dict) else {}
+        summary["bad_outcomes"] += sum(
+            int(bucket.get("scored") or 0)
+            for bucket in by_target_kind.values()
+            if isinstance(bucket, dict) and bucket.get("mean_score") is not None and float(bucket.get("mean_score") or 0) < 0
+        )
     summary["credit_assignment"] = compact_credit_assignment_summary(credit_assignment)
 
     for path, payload in _iter_recent_json(root, window_days=window_days, now=now) or []:
-        if payload.get("schema_name") in {"self_improvement_review_outcome", "self_improvement_outcome_observation", "self_improvement_outcome_prepass", "self_improvement_episode"}:
+        if payload.get("schema_name") in {"self_improvement_outcome_observation", "self_improvement_outcome_prepass", "self_improvement_episode"}:
             continue
         schema = payload.get("schema_name")
         source_recorded = False
@@ -276,30 +272,10 @@ def _runtime_eval_cases_path(config: dict[str, Any], candidate: dict[str, Any]) 
 
 
 
-def _review_outcome_case(row: dict[str, Any], index: int) -> dict[str, Any] | None:
-    outcome = str(row.get("outcome") or "")
-    if outcome not in {"rejected_by_human", "failed"}:
-        return None
-    case = {
-        "id": f"runtime-review-outcome-{_sha256_text(_stable_json({'index': index, 'row': row}))[:10]}",
-        "description": "Runtime-private human/outcome feedback case generated from self-improvement review outcomes.",
-        "source": {"kind": "review_outcome", "path": row.get("path"), "plan_id": row.get("plan_id"), "item_id": row.get("item_id"), "outcome": outcome},
-        "proposal": {"id": row.get("proposal_id") or row.get("item_id") or f"review-outcome-{index}", "target": row.get("target_kind"), "change_type": row.get("change_type"), "risk": row.get("risk"), "recommendation": row.get("recommendation")},
-        "findings": [{"kind": "human_or_runtime_outcome", "outcome": outcome, "reason": row.get("reason")}],
-        "expected": {"risk_min": "medium", "recommendation": "human_review", "requires_human_review": True},
-    }
-    case["case_hash"] = _sha256_text(_stable_json(case))
-    return case
-
-
 def build_runtime_eval_cases(config: dict[str, Any], *, now: datetime | None = None) -> list[dict[str, Any]]:
     calibration = normalize_calibration_config(config)
     cases: list[dict[str, Any]] = []
 
-    for index, row in enumerate(load_review_outcomes(config=config, limit=1000)):
-        case = _review_outcome_case(row, index)
-        if case is not None:
-            cases.append(case)
     cases.extend(build_planner_editor_runtime_eval_cases(config=config, limit=1000))
     deduped: dict[str, dict[str, Any]] = {}
     for case in cases:

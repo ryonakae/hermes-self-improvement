@@ -43,7 +43,7 @@ def sample_run_result(tmp_path):
                     {
                         "skill": "other-skill",
                         "decision": "defer",
-                        "original_decision": "human_review",
+                        "original_decision": "defer",
                         "defer_reason": "insufficient_confidence",
                         "changed": False,
                         "evidence_ids": ["ev2"],
@@ -81,7 +81,7 @@ def test_record_run_episodes_writes_append_only_skill_and_memory_episodes(tmp_pa
     assert by_target["demo-skill"]["action"] == "no_op"
     assert by_target["demo-skill"]["executed"] is False
     assert by_target["other-skill"]["decision"] == "defer"
-    assert by_target["other-skill"]["original_decision"] == "human_review"
+    assert by_target["other-skill"]["original_decision"] == "defer"
     assert by_target["memory:mem1"]["target_kind"] == "memory"
     assert by_target["memory:mem1"]["decision"] == "memory_candidate"
     assert by_target["memory:mem1"]["action"] == "no_op"

@@ -36,7 +36,7 @@ def sample_example():
         "expected": {
             "score_min": 65,
             "score_max": 90,
-            "recommendation": "human_review",
+            "recommendation": "defer",
             "risk": "medium",
             "confidence_min": "medium",
             "auto_apply": False,
@@ -50,7 +50,7 @@ def test_gepa_metric_rewards_matching_prediction_with_textual_feedback():
     result = metric.evaluate_prediction(
         example=sample_example(),
         prediction=Prediction(
-            '{"id":"proposal-1","score":72,"recommendation":"human_review",'
+            '{"id":"proposal-1","score":72,"recommendation":"defer",'
             '"risk":"medium","confidence":"high","rationale":"Concrete evidence: skill_view failed 4 times with examples.",'
             '"auto_apply":false}'
         ),
@@ -68,7 +68,7 @@ def test_gepa_metric_penalizes_auto_apply_and_missing_evidence_rationale():
     result = metric.evaluate_prediction(
         example=sample_example(),
         prediction=Prediction(
-            '{"id":"proposal-1","score":99,"recommendation":"review_low_risk_candidate",'
+            '{"id":"proposal-1","score":99,"recommendation":"candidate",'
             '"risk":"low","confidence":"low","rationale":"Looks good.","auto_apply":true}'
         ),
     )
@@ -102,7 +102,7 @@ def test_gepa_metric_returns_float_when_requested_for_optimizer_compatibility():
     score = metric.gepa_feedback_metric(
         sample_example(),
         Prediction(
-            '{"id":"proposal-1","score":72,"recommendation":"human_review",'
+            '{"id":"proposal-1","score":72,"recommendation":"defer",'
             '"risk":"medium","confidence":"medium","rationale":"Evidence count 4 from skill_view examples.",'
             '"auto_apply":false}'
         ),

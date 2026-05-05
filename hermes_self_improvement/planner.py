@@ -280,7 +280,7 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
         "constraints": {
             "mutable_targets_only": True,
             "editor_tools_only": ["skills_list", "skill_view", "skill_manage"],
-            "human_review_for": [],
+            "defer_for": [],
             "defer_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge"],
         },
     }

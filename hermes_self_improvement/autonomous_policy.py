@@ -43,7 +43,6 @@ def build_autonomous_operation_policy(config: dict[str, Any] | None = None) -> d
             "requires_tool_mediated_execution": True,
         },
         "defer": {
-            "requires_human_review": False,
             "executes_mutation": False,
             "records_episode": True,
             "used_as_learning_signal": True,
@@ -70,5 +69,5 @@ def summarize_autonomous_operation_policy(policy: dict[str, Any]) -> dict[str, A
         "improve_mutation_capable": bool(improve.get("mutation_capable")),
         "improve_skill_targets": improve.get("allowed_skill_targets") if isinstance(improve.get("allowed_skill_targets"), list) else [],
         "improve_skill_lifecycle_actions": improve.get("allowed_skill_lifecycle_actions") if isinstance(improve.get("allowed_skill_lifecycle_actions"), list) else [],
-        "defer_requires_human_review": bool(defer.get("requires_human_review")),
+        "defer_executes_mutation": bool(defer.get("executes_mutation")),
     }

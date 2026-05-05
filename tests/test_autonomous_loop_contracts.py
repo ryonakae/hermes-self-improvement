@@ -118,11 +118,11 @@ def test_autonomous_evaluator_result_requires_baseline_for_promotion():
 
 
 def test_unsupported_decision_normalizes_to_skip_without_legacy_special_case():
-    normalized = normalize_autonomous_decision({"decision": "human_review", "reason": "ambiguous target"})
+    normalized = normalize_autonomous_decision({"decision": "manual_review", "reason": "ambiguous target"})
 
     assert normalized["decision"] == "skip"
     assert normalized["reason"] == "ambiguous target"
-    assert normalized["original_decision"] == "human_review"
+    assert normalized["original_decision"] == "manual_review"
 
 
 def test_compact_summaries_exclude_large_prompt_fields():

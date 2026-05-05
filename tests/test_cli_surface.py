@@ -435,12 +435,11 @@ def test_legacy_apply_modules_are_not_importable():
             pass
 
 
-def test_partial_legacy_modules_only_export_report_compatibility_helpers():
+def test_partial_legacy_modules_do_not_reintroduce_removed_helpers():
     sys.path.insert(0, str(PLUGIN_DIR))
     try:
         recovery = importlib.import_module("hermes_self_improvement.recovery_engine")
         verification = importlib.import_module("hermes_self_improvement.verification")
-        outcome_store = importlib.import_module("hermes_self_improvement.outcome_store")
     finally:
         try:
             sys.path.remove(str(PLUGIN_DIR))
@@ -461,6 +460,4 @@ def test_partial_legacy_modules_only_export_report_compatibility_helpers():
     for name in ["verify_skill_rename_phase", "verify_skill_merge_phase", "build_merge_verifier", "auxiliary_merge_verifier"]:
         assert name not in verification.__dict__, f"apply-phase verification helper should be removed: {name}"
 
-    assert callable(outcome_store.load_review_outcomes)
-    assert callable(outcome_store.summarize_review_outcomes)
-    assert "record_review_outcome" not in outcome_store.__dict__
+    assert importlib.util.find_spec("hermes_self_improvement.outcome_store") is None

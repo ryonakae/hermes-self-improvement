@@ -218,13 +218,13 @@ def test_skill_planner_falls_back_when_llm_planner_fails(monkeypatch):
     assert "planner down" in result["error"]
 
 
-def test_skill_planner_treats_human_review_as_unsupported_decision():
+def test_skill_planner_treats_unsupported_review_decision_as_skip():
     def fake_planner(*, digest, config):
         return {
             "decisions": [
                 {
                     "skill": "demo-skill",
-                    "decision": "human_review",
+                    "decision": "manual_review",
                     "evidence_ids": ["ev1"],
                     "change_intent": "ambiguous target",
                     "reason": "needs non-autonomous review",
@@ -236,11 +236,11 @@ def test_skill_planner_treats_human_review_as_unsupported_decision():
     decision = result["decisions"][0]
 
     assert decision["decision"] == "skip"
-    assert decision["original_decision"] == "human_review"
+    assert decision["original_decision"] == "manual_review"
     assert decision["reason"] == "needs non-autonomous review"
     assert result["summary"]["skipped"] == 2
     assert result["summary"]["deferred"] == 0
-    assert "human_review" not in result["summary"]
+    assert "defer" not in result["summary"]
 
 
 def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence():

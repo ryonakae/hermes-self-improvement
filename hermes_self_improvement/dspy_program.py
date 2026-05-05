@@ -10,9 +10,9 @@ from types import SimpleNamespace
 from typing import Any
 
 ALLOWED_RECOMMENDATIONS = {
-    "report_only",
-    "human_review",
-    "review_low_risk_candidate",
+    "skip",
+    "defer",
+    "candidate",
 }
 ALLOWED_RISKS = {"low", "medium", "high"}
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
@@ -291,7 +291,7 @@ def sanitize_score_output(raw: Any, *, proposal_id: str = "") -> dict[str, Any]:
     result = {
         "id": str(parsed.get("id") or proposal_id),
         "score": max(0, min(100, score)),
-        "recommendation": _coerce_choice(parsed.get("recommendation"), ALLOWED_RECOMMENDATIONS, "report_only"),
+        "recommendation": _coerce_choice(parsed.get("recommendation"), ALLOWED_RECOMMENDATIONS, "skip"),
         "risk": _coerce_choice(parsed.get("risk"), ALLOWED_RISKS, "medium"),
         "confidence": _coerce_choice(parsed.get("confidence"), ALLOWED_CONFIDENCE, "low"),
         "rationale": str(parsed.get("rationale") or ""),
@@ -603,9 +603,9 @@ def _evidence_count(findings: list[dict[str, Any]]) -> int:
 
 def _recommendation_for(*, score: int, risk: str, auto_apply_requested: bool) -> str:
     if auto_apply_requested or risk == "high":
-        return "human_review"
+        return "defer"
     if risk == "low" and score >= 70:
-        return "review_low_risk_candidate"
+        return "candidate"
     if score >= 60:
-        return "human_review"
-    return "report_only"
+        return "defer"
+    return "skip"

@@ -138,7 +138,7 @@ def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
     by_target = {case["target"]: case for case in cases}
     assert by_target["planner_overlay"]["expected"] == {"decision": "run_editor"}
     assert by_target["editor_overlay"]["expected"] == {"mutation": "changed"}
-    assert by_target["evaluator_overlay"]["expected"] == {"recommendation": "review_low_risk_candidate"}
+    assert by_target["evaluator_overlay"]["expected"] == {"recommendation": "candidate"}
     for case in cases:
         assert case["source_episode_id"] == "episode-overlay"
         assert case["input"]["evidence_ids"] == ["ev1"]

@@ -112,7 +112,7 @@ def test_select_overlay_eval_cases_balances_targets_and_prefers_high_signal():
         overlay_case("editor_overlay", case_hash="sha256:editor-low"),
         overlay_case("editor_overlay", case_hash="sha256:editor-high", changed=True, executed=True, expected={"mutation": "skip"}),
         overlay_case("evaluator_overlay", case_hash="sha256:evaluator-low"),
-        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-high", outcome="rejected_by_human", expected={"recommendation": "human_review"}),
+        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-high", outcome="rejected_by_user", expected={"recommendation": "defer"}),
     ]
 
     selected = select_overlay_eval_cases(cases, max_cases=3)
@@ -149,8 +149,8 @@ def test_select_overlay_eval_cases_prefers_executed_cases_over_unexecuted_skips(
         overlay_case("planner_overlay", case_hash="sha256:planner-executed", executed=True, expected={"decision": "run_editor"}),
         overlay_case("editor_overlay", case_hash="sha256:editor-skip", expected={"mutation": "skip"}, decision="skip"),
         overlay_case("editor_overlay", case_hash="sha256:editor-executed", executed=True, expected={"mutation": "no_change"}),
-        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-report", expected={"recommendation": "report_only"}, decision="skip"),
-        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-executed", executed=True, expected={"recommendation": "report_only"}),
+        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-report", expected={"recommendation": "skip"}, decision="skip"),
+        overlay_case("evaluator_overlay", case_hash="sha256:evaluator-executed", executed=True, expected={"recommendation": "skip"}),
     ]
 
     selected = select_overlay_eval_cases(cases, max_cases=3)

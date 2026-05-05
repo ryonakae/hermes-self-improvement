@@ -46,7 +46,7 @@ def test_evidence_pack_routes_corrections_subagents_and_llm_failures():
     since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
     until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
     events = [
-        {"ts": since.isoformat(), "event": "review_outcome", "outcome": "rejected_by_human", "message": "wrong memory"},
+        {"ts": since.isoformat(), "event": "review_outcome", "outcome": "rejected_by_user", "message": "wrong memory"},
         {"ts": since.isoformat(), "event": "subagent_stop", "status": "failed", "message": "implementation failed"},
         {"ts": since.isoformat(), "event": "post_llm_call", "status": "warning", "finish_reason": "length", "provider": "openrouter"},
         {"ts": since.isoformat(), "event": "scorer_evaluator_disagreement", "scorer_disagreements": ["risk_disagreement"]},

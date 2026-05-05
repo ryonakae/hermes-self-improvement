@@ -95,7 +95,7 @@ def test_status_tool_reports_memory_rollback_readiness(tmp_path):
     assert "memory-rollback-store-validation" in payload["memory_rollback"]["proof_plan"]
     assert payload["autonomous_policy"]["calibrate_requires"] == "autonomous_evaluator_promote"
     assert payload["autonomous_policy"]["improve_skill_targets"] == ["local_mutable_active", "local_mutable_stale"]
-    assert payload["autonomous_policy"]["defer_requires_human_review"] is False
+    assert payload["autonomous_policy"]["defer_executes_mutation"] is False
 
 
 def test_calibrate_tool_dry_run_does_not_promote(tmp_path):
@@ -298,7 +298,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                     "planner": {
                         "status": "completed",
                         "planner_source": "deterministic_fallback",
-                        "summary": {"candidate_count": 2, "selected_for_editor": 1, "archive_candidates": 1, "skipped": 1, "human_review": 0, "memory_candidates": 0, "evaluator_candidates": 0},
+                        "summary": {"candidate_count": 2, "selected_for_editor": 1, "archive_candidates": 1, "skipped": 1, "deferred": 0, "memory_candidates": 0, "evaluator_candidates": 0},
                         "decisions": [{"skill": "a", "decision": "run_editor", "editor_instructions": large_instruction}],
                     },
                     "planner_quality": {"attached_candidate_count": 1, "unmatched_evidence_count": 2, "selected_with_evidence": 1, "action_like_skips": 0, "hint_attached_evidence_count": 1, "hint_attached_candidate_count": 1, "cluster_evidence_count": 0, "attachments_by_match_kind": {"hint_tool_class": 1}, "editor_task_count": 1, "editor_prompt_chars": {"max": 500, "min": 500, "total": 500}},
