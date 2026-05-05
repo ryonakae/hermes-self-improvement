@@ -12,6 +12,7 @@ from .credit_assignment import build_credit_assignment_aggregate, compact_credit
 from .episodes import record_calibration_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import build_outcome_score_aggregate
+from .outcome_observer import compact_outcome_prepass_summary, run_outcome_prepass
 from .outcome_store import load_review_outcomes, summarize_review_outcomes
 from .prompt_candidate_optimizer import generate_overlay_candidate_set
 from .prompt_overlays import promote_overlay_candidate_set
@@ -92,7 +93,7 @@ def _planner_prompt_signal_count(quality: dict[str, Any]) -> int:
     return signals
 
 
-def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
+def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None = None, run_prepass: bool = True) -> dict[str, Any]:
     calibration = normalize_calibration_config(config)
     evidence_cfg = calibration.get("evidence") if isinstance(calibration.get("evidence"), dict) else {}
     window_days = int(evidence_cfg.get("window_days", 30) or 0)
@@ -116,6 +117,12 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
         summary["total_events"] += int(outcome_summary.get("total") or 0)
         summary["sources"].extend(str(row.get("path")) for row in outcomes if row.get("path"))
 
+    if run_prepass:
+        outcome_prepass = run_outcome_prepass(config=config, now=now)
+        summary["outcome_prepass"] = compact_outcome_prepass_summary(outcome_prepass)
+    else:
+        summary["outcome_prepass"] = {"status": "skipped", "reason": "read_only_evidence_collection"}
+
     outcome_scores = build_outcome_score_aggregate(config=config, limit=1000)
     credit_assignment = build_credit_assignment_aggregate(config=config, limit=1000)
     summary["outcome_scores"] = {
@@ -130,7 +137,7 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
     summary["credit_assignment"] = compact_credit_assignment_summary(credit_assignment)
 
     for path, payload in _iter_recent_json(root, window_days=window_days, now=now) or []:
-        if payload.get("schema_name") == "self_improvement_review_outcome":
+        if payload.get("schema_name") in {"self_improvement_review_outcome", "self_improvement_outcome_observation", "self_improvement_outcome_prepass", "self_improvement_episode"}:
             continue
         schema = payload.get("schema_name")
         source_recorded = False

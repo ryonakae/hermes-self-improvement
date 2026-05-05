@@ -121,6 +121,8 @@ Overlay は planner / editor / evaluator を1つの候補セットとして扱�
 
 Promotion 後は `overlay_generation_id` が improve 実行、episode、runtime eval case に流れます。これで「新しい overlay が次の改善判断を良くしたか」を後から追えます。
 
+`improve` は変更内容を episode として記録します。`calibrate` は前回 `calibrate` 以降の観測から outcome observation を作り、明示的に紐づく episode だけを採点します。紐づかない観測はアーティファクトに残しますが、scoring には使いません。
+
 ## DSPy/GEPAとはなにか
 
 DSPy は、LLM への指示や評価を Python プログラムとして扱うためのフレームワークです。手書きプロンプトを文字列として置くだけではなく、入力、出力、評価関数、最適化対象を分けて扱えます。

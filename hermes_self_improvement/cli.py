@@ -128,7 +128,7 @@ def build_calibration_report_payload(*, config: dict[str, Any], limit: int = 5) 
         "schema_version": "1.0",
         "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
         "limit": limit,
-        "evidence_summary": collect_calibration_evidence(config),
+        "evidence_summary": collect_calibration_evidence(config, run_prepass=False),
         "ledger_count": len(ledgers),
         "ledgers": ledgers,
     }

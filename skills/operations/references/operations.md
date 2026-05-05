@@ -22,8 +22,8 @@ Semantics:
 - `setup --reset` is destructive for the runtime directory only. It asks for y/N confirmation on an interactive terminal and fails non-interactively unless `--yes` is passed.
 - `improve` is mutation-capable by default, but internal runner gates still decide whether anything changes.
 - `improve --dry-run` builds evidence and run artifacts without mutation. Normal CLI output and agent tool result are compact; full details belong in the run artifact or CLI `--json`.
-- `calibrate` may promote scorer/evaluator state or runtime-private prompt overlay sets only when evidence and required gates pass.
-- `calibrate --dry-run` previews calibration and writes candidate-set artifacts without writing active evaluator/overlay state.
+- `calibrate` may promote scorer/evaluator state or runtime-private prompt overlay sets only when evidence and required gates pass. Before scoring, it also runs an outcome prepass over observations since the previous `calibrate`.
+- `calibrate --dry-run` previews calibration and writes candidate-set artifacts without writing active evaluator/overlay state. The outcome prepass still writes compact outcome/prepass artifacts so the evidence summary reflects newly attributable observations.
 - `calibrate --from-candidate-set /path/to/candidate-set.json` explicitly evaluates and promotes/rejects that artifact without rerunning GEPA/DSPy. Do not auto-discover the latest dry-run artifact.
 - `report` and `status` are read-only.
 

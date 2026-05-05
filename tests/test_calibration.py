@@ -5,6 +5,7 @@ import importlib
 import importlib.util
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from hermes_self_improvement.prompts import base_prompt_hash
@@ -681,6 +682,39 @@ def test_collect_calibration_evidence_includes_windowed_outcome_scores(tmp_path)
     assert evidence["credit_assignment"]["episode_count"] == 1
     assert evidence["credit_assignment"]["scored_episode_count"] == 1
     assert evidence["credit_assignment"]["overall"]["mean_outcome_score"] > 0
+
+
+def test_collect_calibration_evidence_runs_outcome_prepass_before_scoring(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 1}}}
+    root = Path(config["_self_improvement_root"])
+    base_episode = {
+        "schema_name": "self_improvement_episode",
+        "schema_version": "1.0",
+        "episode_kind": "executed_mutation",
+        "target_kind": "skill",
+        "target_id": "demo-skill",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
+        "evaluator_hash": "sha256:evaluator",
+        "decision": "run_editor",
+        "action": "skill_patch",
+        "executed": True,
+        "learnable": True,
+        "changed": True,
+    }
+    first = dict(base_episode, episode_id="episode-1", created_at="2026-05-03T00:00:00+00:00")
+    second = dict(base_episode, episode_id="episode-2", created_at="2026-05-03T02:00:00+00:00")
+    write_json(root / "episodes" / "2026-05-03" / "episode-1.json", first)
+    write_json(root / "episodes" / "2026-05-03" / "episode-2.json", second)
+
+    evidence = calibration.collect_calibration_evidence(config, now=datetime(2026, 5, 3, 3, 0, tzinfo=timezone.utc))
+
+    assert evidence["outcome_prepass"]["written_observation_count"] == 1
+    assert evidence["outcome_prepass"]["signals"]["target_reedit_shortly_after_mutation"] == 1
+    assert evidence["outcome_scores"]["observation_count"] == 1
+    assert evidence["outcome_scores"]["scored_episode_count"] == 1
+    assert Path(evidence["outcome_prepass"]["artifact_path"]).exists()
 
 
 def test_collect_calibration_evidence_distinguishes_explicit_human_outcomes(tmp_path):
