@@ -12,7 +12,6 @@ from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_planner_messages
 
 SCHEMA_NAME = "self_improvement_skill_planner_result"
-ALLOWED_DECISIONS = {"run_editor", "archive_skill", "skip", "defer", "human_review", "memory_candidate", "evaluator_candidate"}
 ALLOWED_PRIORITIES = {"low", "medium", "high"}
 ALLOWED_RISKS = {"low", "medium", "high"}
 
@@ -354,8 +353,6 @@ def _normalize_decision(
     if skill not in candidate_names:
         return None
     decision = str(raw.get("decision") or "skip").strip()
-    if decision not in ALLOWED_DECISIONS:
-        decision = "skip"
     normalized_decision = normalize_autonomous_decision({"decision": decision})
     decision = str(normalized_decision.get("decision") or "skip")
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item)]

@@ -134,7 +134,6 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
                 "archive_candidates": int(planner_summary.get("archive_candidates") or 0),
                 "skipped": int(planner_summary.get("skipped") or 0),
                 "deferred": int(planner_summary.get("deferred") or 0),
-                "human_review": int(planner_summary.get("human_review") or 0),
                 "memory_candidates": int(planner_summary.get("memory_candidates") or 0),
                 "evaluator_candidates": int(planner_summary.get("evaluator_candidates") or 0),
                 "quality": {

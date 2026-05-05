@@ -218,7 +218,7 @@ def test_skill_planner_falls_back_when_llm_planner_fails(monkeypatch):
     assert "planner down" in result["error"]
 
 
-def test_skill_planner_normalizes_human_review_to_defer():
+def test_skill_planner_treats_human_review_as_unsupported_decision():
     def fake_planner(*, digest, config):
         return {
             "decisions": [
@@ -235,10 +235,11 @@ def test_skill_planner_normalizes_human_review_to_defer():
     result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
     decision = result["decisions"][0]
 
-    assert decision["decision"] == "defer"
+    assert decision["decision"] == "skip"
     assert decision["original_decision"] == "human_review"
-    assert decision["defer_reason"] == "insufficient_confidence"
-    assert result["summary"]["deferred"] == 1
+    assert decision["reason"] == "needs non-autonomous review"
+    assert result["summary"]["skipped"] == 2
+    assert result["summary"]["deferred"] == 0
     assert "human_review" not in result["summary"]
 
 

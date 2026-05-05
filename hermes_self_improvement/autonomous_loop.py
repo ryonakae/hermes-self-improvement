@@ -31,7 +31,6 @@ DECISIONS = {
     "memory_candidate",
     "evaluator_candidate",
 }
-LEGACY_DECISIONS = {"human_review"}
 ACTIONS = {
     "skill_patch",
     "skill_archive",
@@ -106,11 +105,6 @@ def _reject_forbidden_large_context_fields(payload: Any) -> None:
 def normalize_autonomous_decision(raw: dict[str, Any]) -> dict[str, Any]:
     payload = _require_object(raw, "decision")
     decision = str(payload.get("decision") or "skip").strip()
-    if decision == "human_review":
-        payload["original_decision"] = "human_review"
-        payload["decision"] = "defer"
-        payload.setdefault("defer_reason", "insufficient_confidence")
-        return payload
     if decision not in DECISIONS:
         payload["original_decision"] = decision
         payload["decision"] = "skip"

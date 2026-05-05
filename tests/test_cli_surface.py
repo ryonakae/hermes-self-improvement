@@ -281,7 +281,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
         "step_decisions": {
             "summary": {"total": 4},
             "skill": {
-                "planner": {"summary": {"archive_candidates": 1, "candidate_count": 4, "selected_for_editor": 1, "skipped": 1, "deferred": 1, "human_review": 1}},
+                "planner": {"summary": {"archive_candidates": 1, "candidate_count": 4, "selected_for_editor": 1, "skipped": 1, "deferred": 1}},
                 "decisions": [
                     {"decision": "archive_skill_preview"},
                     {"decision": "rejected", "reason": "Verbose natural-language reason that should not become a counter key", "result": {"outcome": "skipped_superseded"}, "planner_decision": {"decision": "run_editor"}},

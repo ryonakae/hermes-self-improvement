@@ -117,11 +117,11 @@ def test_autonomous_evaluator_result_requires_baseline_for_promotion():
     assert validate_autonomous_evaluator_result(payload)["decision"] == "promote"
 
 
-def test_human_review_normalizes_to_defer_with_original_decision():
+def test_unsupported_decision_normalizes_to_skip_without_legacy_special_case():
     normalized = normalize_autonomous_decision({"decision": "human_review", "reason": "ambiguous target"})
 
-    assert normalized["decision"] == "defer"
-    assert normalized["defer_reason"] == "insufficient_confidence"
+    assert normalized["decision"] == "skip"
+    assert normalized["reason"] == "ambiguous target"
     assert normalized["original_decision"] == "human_review"
 
 
