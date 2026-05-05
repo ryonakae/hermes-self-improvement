@@ -17,13 +17,14 @@ bin/hermes-self-improve calibrate --dry-run
 
 Semantics:
 
-- `setup` creates `${HERMES_HOME:-~/.hermes}/self-improvement` runtime directories, default evaluator assets, and `evaluator/active.json`. It does not call LLMs, GEPA, skill mutation, or memory mutation.
+- `setup` creates `${HERMES_HOME:-~/.hermes}/self-improvement` runtime directories, default evaluator assets, `evaluator/active.json`, and prompt-overlay runtime state paths such as `evaluator/active-prompts.json`. It does not call LLMs, GEPA, skill mutation, or memory mutation.
 - `setup --check` is read-only.
 - `setup --reset` is destructive for the runtime directory only. It asks for y/N confirmation on an interactive terminal and fails non-interactively unless `--yes` is passed.
 - `improve` is mutation-capable by default, but internal runner gates still decide whether anything changes.
-- `improve --dry-run` builds evidence and run artifacts without mutation.
-- `calibrate` may promote scorer/evaluator state only when evidence and regression gates pass.
-- `calibrate --dry-run` previews calibration without writing active evaluator state or runtime eval cases.
+- `improve --dry-run` builds evidence and run artifacts without mutation. Normal CLI output and agent tool result are compact; full details belong in the run artifact or CLI `--json`.
+- `calibrate` may promote scorer/evaluator state or runtime-private prompt overlay sets only when evidence and required gates pass.
+- `calibrate --dry-run` previews calibration and writes candidate-set artifacts without writing active evaluator/overlay state.
+- `calibrate --from-candidate-set /path/to/candidate-set.json` explicitly evaluates and promotes/rejects that artifact without rerunning GEPA/DSPy. Do not auto-discover the latest dry-run artifact.
 - `report` and `status` are read-only.
 
 Do not schedule or reintroduce legacy approval / low-risk / hash-confirmation commands. `plan`, `apply`, `rollback`, `outcome`, `record_outcome`, item selection flags, hash confirmation flags, and old GEPA-specific primary commands are not part of the surface.
@@ -38,4 +39,5 @@ python -m pytest tests -q
 bin/hermes-self-improve status
 bin/hermes-self-improve improve --dry-run
 bin/hermes-self-improve calibrate --dry-run
+bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json
 ```

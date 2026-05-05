@@ -33,9 +33,9 @@ Curator は skill の usage、lifecycle、pinned / archived state を知って�
 
 ### 4. dry-run と artifact を前提にしている
 
-`improve --dry-run` は、変更せずに planner まで実行します。どの候補を選んだか、なぜ選んだか、どう直す予定かを summary と artifact に残します。
+`improve --dry-run` は、変更せずに planner まで実行します。どの候補を選んだか、なぜ選んだか、どう直す予定かを short summary と artifact に残します。
 
-通常出力は短くし、詳細は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` に保存します。agent tool result に巨大な payload を返さないので、会話 context も壊しにくくなります。
+通常 CLI 出力と agent tool result は短くし、詳細は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` などの artifact に保存します。`--json` は operator/debug 用の escape hatch です。agent tool result には巨大な evidence、planner decisions、editor instructions、prompt candidate 本文を返さないので、会話 context を壊しにくくなります。
 
 ## hook はなぜ必要か
 
@@ -141,18 +141,25 @@ bin/hermes-self-improve improve
 
 `--dry-run` では変更しません。planner まで実行し、どの候補を選んだか、なぜ選んだか、どう直す予定かを summary と artifact に残します。
 
+Agent tool の `self_improvement_improve` は、この full run payload をそのまま返しません。返すのは `schema_name`, operation, dry-run/execute state, changed flag, evidence/step counts, prompt source/hash metadata, artifact path, next actions などの compact summary だけです。詳細を読みたいときは `full_payload.path` / `artifact_path` を明示的に開きます。
+
 ### `calibrate`
 
 scorer / evaluator の調整 runner です。
 
 DSPy / GEPA はここで使います。skill や memory を直接書き換えるためには使いません。
 
+Planner / editor / evaluator の prompt は repo-tracked base prompt を直接書き換えず、runtime-private overlay candidate set として扱います。`calibrate` は overlay set を評価し、GEPA が改善ありと判断し hard checks を通った場合だけ promotion します。dry-run で出た candidate をそのまま適用したい場合は、明示的に artifact path を指定します。
+
 ```bash
 bin/hermes-self-improve calibrate --dry-run
 bin/hermes-self-improve calibrate
+bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json
 ```
 
-`calibrate` が active evaluator state を更新するのは、regression gate を通った場合だけです。runtime-private eval cases は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/runtime-eval-cases/` に置きます。
+`calibrate` が active evaluator / overlay state を更新するのは、必要な gate を通った場合だけです。runtime-private eval cases は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/runtime-eval-cases/` に置きます。
+
+Agent tool の `self_improvement_calibrate` も compact summary を返します。primary surface は `components.prompt_overlay_set`, `components.evaluator`, `overlay_candidate_set`, `full_payload.path` です。role-level `prompt_overlays` や full candidate payload は tool result に返しません。
 
 ### `setup`
 
@@ -239,9 +246,11 @@ ${HERMES_HOME}/self-improvement/
   outcomes/
   ledgers/
   evaluator/active.json
+  evaluator/active-prompts.json
   evaluator/defaults/
   evaluator/programs/
   evaluator/candidates/
+  evaluator/prompt-candidate-sets/
   evaluator/runtime-eval-cases/
   cache/dspy/
 ```
@@ -251,6 +260,8 @@ ${HERMES_HOME}/self-improvement/
 - `state/events.jsonl`: hook が記録した redacted event
 - `runs/`: `improve` / `calibrate` の run artifact
 - `evaluator/active.json`: active evaluator pointer
+- `evaluator/active-prompts.json`: active runtime-private prompt overlay set pointer
+- `evaluator/prompt-candidate-sets/`: GEPA/DSPy が生成した overlay candidate set artifacts
 - `evaluator/runtime-eval-cases/`: user-specific な runtime eval cases
 - `cache/dspy/`: DSPy / GEPA 周辺の cache
 

@@ -22,7 +22,7 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - Archived skills は通常の candidate / duplicate-prevention / restore candidate として使わない。Curator behavior に合わせる。
 - Memory mutation は memory tool / provider-native memory tool だけで実行する。evidence-triggered related-memory recall/search context は使うが、built-in memory files、provider DB、provider internals を直接編集しない。full memory lifecycle / sweep はしない。
 - Rollback は primary feature ではない。失敗や誤変更は future evidence として次の improvement run で correction する。Curator-style archive restore は別扱い。
-- Scorer/evaluator self-improvement は prompt / rubric / runtime-private eval cases が対象。Python implementation code は自己変更しない。Planner/editor prompt overlays は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/` の runtime-private state として扱い、repo base prompt は `hermes_self_improvement/prompts.py` で version/hash/test する。
+- Scorer/evaluator self-improvement は prompt / rubric / runtime-private eval cases が対象。Python implementation code は自己変更しない。Planner/editor/evaluator prompt overlays は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/` の runtime-private overlay set として扱い、repo base prompt は `hermes_self_improvement/prompts.py` で version/hash/test する。
 - DSPy/GEPA は hook / plugin discovery path では lazy import を維持し、Hermes runtime 全体の必須依存にしない。
 - Proposal scoring は `llm`（既定）または `heuristic` のみ。scoring は advisory で、無人変更の許可として扱わない。GEPA/DSPy は `calibrate` で evaluator / prompt / rubric 改善に使う。
 - Model routing は current schema の `model.planner`（proposal/evidence planning）、`model.editor`（mutation agent）、`model.evaluator`（DSPy/GEPA evaluator calibration）だけを使う。旧 role key は残さない。
@@ -43,7 +43,7 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - `evals/proposal/`: repo-tracked public evaluator regression seed。user-specific runtime eval cases はここに混ぜない
 - `skills/operations/SKILL.md`: この bundled operational skill
 
-Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下。主な subdir は `state/`, `daily/`, `runs/`, `evaluator/`, `cache/`。`evaluator/` は evaluator の runtime state と default asset copy を置く場所で、GEPA はその中の optimizer 実装の一つとして扱う。
+Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下。主な subdir は `state/`, `daily/`, `runs/`, `evidence/`, `ledgers/`, `evaluator/`, `cache/`。`evaluator/` は evaluator state、`active-prompts.json`、prompt candidate sets、runtime eval cases、default asset copy を置く場所で、GEPA はその中の optimizer 実装の一つとして扱う。
 
 ## 日常コマンド
 
@@ -55,6 +55,7 @@ bin/hermes-self-improve improve
 bin/hermes-self-improve improve --dry-run
 bin/hermes-self-improve calibrate
 bin/hermes-self-improve calibrate --dry-run
+bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json
 ```
 
 Primary plugin tools:
@@ -107,7 +108,7 @@ Expected: enabled true, error null, tools 4。
 
 - Evidence skill target names may be bare (`skill-name`) or qualified (`dir-name:skill-name`). Resolve exact qualified Curator candidate matches first; otherwise fall back to bare-name matching and attach evidence to every mutable candidate with that bare name so the mutation agent can decide. Do not hardcode a user-specific prefix such as `hermes-custom:`.
 - Planner quality should be judged from proof counts, not selected count alone. Watch `attached_candidate_count`, `unmatched_evidence_count`, `selected_with_evidence`, `action_like_skips`, target-hint attachment counts/match kinds, evidence-strength counts, `weak_only_selected_count`, cluster evidence counts, editor prompt chars, and planner/editor prompt source/hash in dry-run output/artifacts. If target hints attach nearly everything, inspect match kinds and strength before trusting the planner selection.
-- Agent tool handlers must not return full run/calibration payloads. Return compact summaries with artifact paths; keep full payloads in runtime artifacts or CLI `--json` only. Never include full prompt text or prompt candidates in tool results; return prompt source/hash/path metadata only.
+- Agent tool handlers must not return full run/calibration payloads. Return compact summaries with artifact paths; keep full payloads in runtime artifacts or CLI `--json` only. `self_improvement_improve` should return counts/status, prompt source/hash metadata, `artifact_path` / `full_payload.path`, and short next actions. `self_improvement_calibrate` should expose `components.prompt_overlay_set`, `components.evaluator`, `overlay_candidate_set`, and `full_payload.path`. Never include full evidence, planner decision bodies, editor instructions, full prompt text, role-level `prompt_overlays`, or prompt candidates in tool results.
 - root 直下に `tools.py` や `tools/` package を置かない。Hermes core `tools.registry` を shadow する。
 - Plugin-bundled skills は repo file として編集する。`skill_manage` で plugin-bundled skill を編集しない。
 - `importlib.util.module_from_spec` で unit test する場合は、`exec_module` 前に `sys.modules[spec.name] = module` を入れる。

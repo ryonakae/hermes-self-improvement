@@ -81,4 +81,4 @@ PY
 - `skills/operations/`: bundled operational skill
 - `tests/`: pytest suite
 
-Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存します。`setup` が `state/`, `daily/`, `runs/`, `evidence/`, `outcomes/`, `ledgers/`, `evaluator/`, `cache/dspy/` を作ります。run artifact は `runs/`、event は `state/events.jsonl`、active evaluator pointer は `evaluator/active.json`、runtime-private eval cases は `evaluator/runtime-eval-cases/`。
+Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下に保存します。`setup` が `state/`, `daily/`, `runs/`, `evidence/`, `outcomes/`, `ledgers/`, `evaluator/`, `cache/dspy/` を作ります。run artifact は `runs/`、event は `state/events.jsonl`、active evaluator pointer は `evaluator/active.json`、active prompt overlay pointer は `evaluator/active-prompts.json`、prompt candidate set artifact は `evaluator/prompt-candidate-sets/`、runtime-private eval cases は `evaluator/runtime-eval-cases/`。
