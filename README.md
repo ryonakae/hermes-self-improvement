@@ -1,59 +1,36 @@
 # hermes-self-improvement
 
-`hermes-self-improvement` は、Hermes の実行履歴から改善材料を集め、skill / memory / scorer / evaluator を更新する user plugin です。
+`hermes-self-improvement` は、Hermes の実行履歴から skill / memory / scorer / evaluator の改善材料を集める user plugin です。hook は観測だけを行い、変更は `improve` / `calibrate` runner が担当します。Hermes core、runtime config、tool policy、任意の docs は自己改善対象にしません。
 
-Hermes は会話中に多くの手がかりを残します。tool の失敗、ユーザーの訂正、subagent のズレ、うまくいった回避策、判断器が外したケース。この plugin はそれらを runtime evidence として保存し、あとで `improve` と `calibrate` が読みます。
-
-この plugin は Hermes core を書き換えません。hook は観測だけを行い、変更は runner が担当します。変更対象も `skill`, `memory`, `scorer`, `evaluator` に絞ります。runtime config、tool policy、任意の docs、Hermes core は自己改善対象にしません。
-
-## どういうプラグインか
-
-主な入口は5つです。
+まず read-only で状態を見ます。
 
 ```bash
-bin/hermes-self-improve setup
+bin/hermes-self-improve setup --check
 bin/hermes-self-improve status
 bin/hermes-self-improve report --since-hours 24
+```
+
+改善案だけを見るときは dry-run を使います。
+
+```bash
 bin/hermes-self-improve improve --dry-run
 bin/hermes-self-improve calibrate --dry-run
 ```
 
-`setup` は runtime directory を作ります。LLM、GEPA、skill mutation、memory mutation は動かしません。
-
-`status` と `report` は read-only です。まずここで plugin、runtime、Curator telemetry、直近 event を確認します。
-
-`improve` は skill / memory を改善します。既定では変更可能です。確認だけしたいときは `--dry-run` を付けます。
+実行時は変更が入ります。
 
 ```bash
-bin/hermes-self-improve improve --dry-run
 bin/hermes-self-improve improve
-```
-
-`calibrate` は scorer / evaluator / runtime-private prompt overlay を改善します。こちらも既定では変更可能です。
-
-```bash
-bin/hermes-self-improve calibrate --dry-run
 bin/hermes-self-improve calibrate
 ```
 
-Dry-run で出た overlay candidate set をそのまま適用したいときだけ、artifact path を明示します。
+Dry-run の overlay candidate set を適用するときだけ、artifact path を指定します。
 
 ```bash
 bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json
 ```
 
-通常 CLI 出力と agent tool result は短い summary だけを返します。full payload は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下の artifact に保存します。`--json` は operator/debug 用です。
-
-Agent から使える tool は4つです。
-
-```text
-self_improvement_status
-self_improvement_report
-self_improvement_improve
-self_improvement_calibrate
-```
-
-`self_improvement_improve` と `self_improvement_calibrate` は full evidence、planner decision 本文、editor instructions、prompt candidate 本文を返しません。LLM-facing result には counts、status、hash、artifact path だけを入れます。
+通常 CLI 出力と agent tool result は compact summary と artifact path だけを返します。full payload は `${HERMES_HOME:-~/.hermes}/self-improvement/` に保存し、operator/debug では `--json` で読みます。Agent tools は `self_improvement_status`, `self_improvement_report`, `self_improvement_improve`, `self_improvement_calibrate` の4つです。
 
 ## 導入方法
 
