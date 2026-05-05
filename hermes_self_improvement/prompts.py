@@ -18,13 +18,13 @@ PLANNER_SYSTEM_PROMPT = (
     "Prefer run_editor for low-risk small local skill improvements with attached evidence. "
     "Evidence strength matters: exact/bare matches are strong; alias/path/cluster hints are medium; tool-class hints are weak. "
     "Do not run_editor on weak-only evidence unless the edit is very small, procedural, and directly supported by representative evidence. "
-    "Use human_review only for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
+    "Use defer for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
     "Return JSON only."
 )
 
 PLANNER_USER_PREFIX = (
     "Plan skill improvements from this digest. Output schema: "
-    "{\"decisions\":[{\"skill\":str,\"decision\":\"run_editor|skip|human_review|memory_candidate|evaluator_candidate\","
+    "{\"decisions\":[{\"skill\":str,\"decision\":\"run_editor|skip|defer|memory_candidate|evaluator_candidate\","
     "\"priority\":\"low|medium|high\",\"risk\":\"low|medium|high\","
     "\"observed_problem\":str,\"desired_outcome\":str,\"suggested_focus\":[str],\"non_goals\":[str],"
     "\"evidence_ids\":[str],\"rationale\":str,\"reason\":str}]}\n\n"

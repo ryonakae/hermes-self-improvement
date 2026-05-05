@@ -60,7 +60,7 @@ GEPA / DSPy are not live proposal scorers. They belong to `calibrate`, where the
 
 ## Global skill planner
 
-`improve` runs skill changes as `analyzer/evidence builder -> global planner -> per-skill editor`. The planner receives a compact redacted digest: mutable Curator skill candidates, attached evidence ids/previews, target-resolution metadata, and unmatched evidence counts. It returns `run_editor`, `skip`, `human_review`, `memory_candidate`, or `evaluator_candidate` decisions.
+`improve` runs skill changes as `analyzer/evidence builder -> global planner -> per-skill editor`. The planner receives a compact redacted digest: mutable Curator skill candidates, attached evidence ids/previews, target-resolution metadata, and unmatched evidence counts. It returns `run_editor`, `skip`, `defer`, `memory_candidate`, or `evaluator_candidate` decisions.
 
 Dry-run executes the planner and writes the planner payload plus digest into the run artifact, but does not execute editor mutation. Mutating runs send only `run_editor` decisions to the bounded skill editor, together with the planner's `change_intent`, `editor_instructions`, and selected `evidence_ids`. If planner LLM routing fails, the runner falls back to a deterministic evidence-attached plan; the fallback skips weak-only tool-class evidence and runs editor only when strong/medium evidence is attached.
 

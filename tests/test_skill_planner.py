@@ -239,7 +239,7 @@ def test_skill_planner_normalizes_human_review_to_defer():
     assert decision["original_decision"] == "human_review"
     assert decision["defer_reason"] == "insufficient_confidence"
     assert result["summary"]["deferred"] == 1
-    assert result["summary"]["human_review"] == 1
+    assert "human_review" not in result["summary"]
 
 
 def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence():

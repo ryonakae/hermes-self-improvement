@@ -743,7 +743,6 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     planner_decisions = planner.get("decisions") if isinstance(planner.get("decisions"), list) else []
     skill_decisions = skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "run_editor"][:5]
-    human_review_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "human_review"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
@@ -803,7 +802,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}",
         "Skill planner:",
         f"- source: {planner.get('planner_source') or 'unknown'}, status: {planner.get('status') or skill_step.get('status') or 'unknown'}",
-        f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for editor: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}, human review: {int(planner_summary.get('human_review') or 0)}",
+        f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for editor: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}",
         f"- proof: attached candidates {int(planner_quality.get('attached_candidate_count') or 0)}, unmatched evidence {int(planner_quality.get('unmatched_evidence_count') or 0)}, selected with evidence {int(planner_quality.get('selected_with_evidence') or 0)}, action-like skips {int(planner_quality.get('action_like_skips') or 0)}",
         f"- target hints: hint-attached evidence {int(planner_quality.get('hint_attached_evidence_count') or 0)}, hint-attached candidates {int(planner_quality.get('hint_attached_candidate_count') or 0)}, cluster evidence {int(planner_quality.get('cluster_evidence_count') or 0)}",
         f"- evidence strength: strong {strong_count}, medium {medium_count}, weak {weak_count}, weak-only selected {int(planner_quality.get('weak_only_selected_count') or 0)}",
@@ -833,10 +832,6 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         lines.append("Selected for editor:")
         for item in selected_preview:
             lines.append(f"- {item.get('skill')}: {item.get('change_intent') or item.get('rationale') or item.get('reason') or 'planned'}")
-    if human_review_preview:
-        lines.append("Human review:")
-        for item in human_review_preview:
-            lines.append(f"- {item.get('skill')}: {item.get('reason') or item.get('rationale') or 'review required'}")
     if result.get("artifact_path"):
         lines.append(f"Artifact: {result.get('artifact_path')}")
     rendered_actions = render_next_actions(result.get("next_actions") if isinstance(result.get("next_actions"), list) else [])

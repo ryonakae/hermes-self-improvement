@@ -159,7 +159,6 @@ def _summary_counts(decisions: list[dict[str, Any]], candidate_count: int) -> di
         "archive_candidates": sum(1 for item in decisions if item.get("decision") == "archive_skill"),
         "skipped": sum(1 for item in decisions if item.get("decision") == "skip"),
         "deferred": sum(1 for item in decisions if item.get("decision") == "defer"),
-        "human_review": sum(1 for item in decisions if item.get("original_decision") == "human_review"),
         "memory_candidates": sum(1 for item in decisions if item.get("decision") == "memory_candidate"),
         "evaluator_candidates": sum(1 for item in decisions if item.get("decision") == "evaluator_candidate"),
     }
@@ -282,7 +281,8 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
         "constraints": {
             "mutable_targets_only": True,
             "editor_tools_only": ["skills_list", "skill_view", "skill_manage"],
-            "human_review_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge"],
+            "human_review_for": [],
+            "defer_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge"],
         },
     }
 
