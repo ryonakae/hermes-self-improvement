@@ -1,36 +1,10 @@
 # hermes-self-improvement
 
-`hermes-self-improvement` は、Hermes の実行履歴からスキル、メモリ、scorer、evaluator の改善材料を集めるユーザープラグインです。フックは観測だけを行い、変更は `improve` / `calibrate` ランナーが担当します。Hermes 本体、実行時設定、ツール方針、任意のドキュメントは自己改善対象にしません。
+`hermes-self-improvement` は、Hermes の実行履歴からスキル、メモリ、scorer、evaluator の改善材料を集めるユーザープラグインです。
 
-まず読み取り専用で状態を見ます。
+Curator より細かい実行時の観測データを使い、スキルだけでなくメモリも改善します。さらに DSPy/GEPA で判断器そのものを改善し、次の `improve` / `calibrate` に戻します。
 
-```bash
-bin/hermes-self-improve setup --check
-bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24
-```
-
-改善案だけを見るときは `--dry-run` を使います。
-
-```bash
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate --dry-run
-```
-
-実行時は変更が入ります。
-
-```bash
-bin/hermes-self-improve improve
-bin/hermes-self-improve calibrate
-```
-
-Dry-run の overlay 候補セットを適用するときだけ、アーティファクトのパスを指定します。
-
-```bash
-bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json
-```
-
-通常の CLI 出力と agent tool の結果は、短い要約とアーティファクトのパスだけを返します。完全な出力は `${HERMES_HOME:-~/.hermes}/self-improvement/` に保存し、運用・デバッグでは `--json` で読みます。Agent tool は `self_improvement_status`, `self_improvement_report`, `self_improvement_improve`, `self_improvement_calibrate` の4つです。
+フックは観測だけを行います。Hermes 本体、実行時設定、ツール方針、任意のドキュメントは自己改善対象にしません。
 
 ## 導入方法
 
