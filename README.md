@@ -1,181 +1,50 @@
 # hermes-self-improvement
 
-Hermes の実行履歴から改善材料を集め、skill / memory / scorer / evaluator を育てるための plugin です。
+`hermes-self-improvement` は、Hermes の実行履歴から改善材料を集め、skill / memory / scorer / evaluator を更新する user plugin です。
 
-普通の会話や開発作業では、あとから効いてくる情報がたくさん残ります。ユーザーの訂正、tool の失敗、subagent の結果、うまくいった回避策、判断器が外したケース。`hermes-self-improvement` はそれらを runtime evidence として集め、`improve` と `calibrate` で次の改善に変えます。
+Hermes は会話中に多くの手がかりを残します。tool の失敗、ユーザーの訂正、subagent のズレ、うまくいった回避策、判断器が外したケース。この plugin はそれらを runtime evidence として保存し、あとで `improve` と `calibrate` が読みます。
 
-## この plugin の強み
+この plugin は Hermes core を書き換えません。hook は観測だけを行い、変更は runner が担当します。変更対象も `skill`, `memory`, `scorer`, `evaluator` に絞ります。runtime config、tool policy、任意の docs、Hermes core は自己改善対象にしません。
 
-### 1. 実際の失敗から改善できる
+## どういうプラグインか
 
-静的なルールや手書きメモだけでは、Hermes がどこで迷ったか、どの tool が失敗したか、どの判断があとから否定されたかを拾いきれません。
-
-この plugin は実行中の event と run artifact を使います。改善対象を「なんとなく古そうな skill」ではなく、実際の失敗や訂正に紐づく候補へ寄せられます。
-
-### 2. Curator の telemetry と runtime hook を組み合わせる
-
-Curator は skill の usage、lifecycle、pinned / archived state を知っています。一方で、会話中の tool failure や memory failure、ユーザーからの訂正、subagent の結果までは細かく持ちません。
-
-この plugin は両方を使います。
-
-- Curator: skill 候補の source of truth
-- runtime hook: その候補を直す理由になる具体的な evidence
-
-この分担があるので、skill を雑に総当たりで直すのではなく、「使われていて、直す理由があるもの」に絞れます。
-
-### 3. `improve` と `calibrate` を分けている
-
-`improve` は行動する自己改善です。skill と memory の改善案を作り、必要なら公式 tool 経由で反映します。
-
-`calibrate` は判断器を育てる自己改善です。scorer / evaluator の prompt、rubric、runtime-private eval cases を調整します。
-
-この2つを分けると、日常の小さな改善と、判断器そのものの調整を別々に確認できます。失敗したときの切り分けも簡単になります。
-
-### 4. dry-run と artifact を前提にしている
-
-`improve --dry-run` は、変更せずに planner まで実行します。どの候補を選んだか、なぜ選んだか、どう直す予定かを short summary と artifact に残します。
-
-通常 CLI 出力と agent tool result は短くし、詳細は `${HERMES_HOME:-~/.hermes}/self-improvement/runs/` などの artifact に保存します。`--json` は operator/debug 用の escape hatch です。agent tool result には巨大な evidence、planner decisions、editor instructions、prompt candidate 本文を返さないので、会話 context を壊しにくくなります。
-
-## hook はなぜ必要か
-
-Hermes の自己改善に必要な情報は、セッション終了後の要約だけでは足りません。
-
-たとえば、tool が失敗した直後には、失敗した tool 名、引数、エラーの種類、どの作業の途中だったかが分かります。ユーザーが訂正した瞬間には、どの memory や skill が古かったのかを推測しやすい文脈があります。subagent が期待と違う結果を返したときも、親タスクとのズレをその場で記録できます。
-
-hook はこの「その瞬間の文脈」を軽く記録するためにあります。
-
-ただし hook は観測だけを担当します。hook 内で LLM call、GEPA optimizer、skill patch、memory edit、重い集計は動かしません。実行中の Hermes を重くしないためです。集めた event は、あとで `report`、`improve`、`calibrate` が読みます。
-
-## まず使うコマンド
-
-初回または runtime directory を確認したいとき:
-
-```bash
-bin/hermes-self-improve setup --check
-bin/hermes-self-improve status
-```
-
-直近の状況を読むだけ:
-
-```bash
-bin/hermes-self-improve report --since-hours 24
-```
-
-変更せずに改善案を見る:
-
-```bash
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate --dry-run
-```
-
-実際に変更を許す:
-
-```bash
-bin/hermes-self-improve improve
-bin/hermes-self-improve calibrate
-```
-
-`improve` と `calibrate` は、既定では変更可能な runner です。確認だけしたいときは必ず `--dry-run` を付けてください。
-
-## この plugin が扱うもの
-
-| 対象 | 何をするか |
-|---|---|
-| `skill` | Hermes が再利用する手順書を、実際の失敗や訂正に合わせて直す |
-| `memory` | ユーザー設定や環境情報など、長く使う記憶を追加・修正・削除する |
-| `scorer` | 改善案の良し悪しを判定する採点基準を調整する |
-| `evaluator` | scorer / planner の評価プロンプトや rubric を改善する |
-
-変更経路は公式 tool に寄せます。skill は `skill_manage` などの Hermes skill tools、memory は memory tool / provider-native memory tool を使います。filesystem や provider DB を直接触る設計にはしません。
-
-開発や運用で迷ったら、まず `AGENTS.md` を読んでください。実装判断に踏み込むときだけ、`AGENTS.md` から参照されている plan や reference を確認します。
-
-## コマンドの役割
-
-### `status`
-
-plugin と runtime の状態を確認します。変更はしません。
-
-見るもの:
-
-- plugin が有効か
-- mutation backend が使えるか
-- DSPy / GEPA が使えるか
-- runtime directory が初期化済みか
-- Curator telemetry が読めるか
-- 直近の event / run artifact があるか
-
-```bash
-bin/hermes-self-improve status
-bin/hermes-self-improve status --json
-```
-
-### `report`
-
-直近の event や artifact を読み、今の状態を短くまとめます。変更はしません。
-
-```bash
-bin/hermes-self-improve report --since-hours 24
-bin/hermes-self-improve report --since-hours 24 --json
-```
-
-`--json` は operator/debug 用です。通常は Markdown 表示で十分です。
-
-### `improve`
-
-skill / memory の改善 runner です。
-
-主な流れ:
-
-1. Curator / Hermes telemetry から skill candidate を読む
-2. runtime hook の event から evidence を集める
-3. planner が直す候補を選ぶ
-4. mutation worker が公式 tool 経由で変更する
-5. run artifact を保存する
-
-```bash
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve improve
-```
-
-`--dry-run` では変更しません。planner まで実行し、どの候補を選んだか、なぜ選んだか、どう直す予定かを summary と artifact に残します。
-
-Agent tool の `self_improvement_improve` は、この full run payload をそのまま返しません。返すのは `schema_name`, operation, dry-run/execute state, changed flag, evidence/step counts, prompt source/hash metadata, artifact path, next actions などの compact summary だけです。詳細を読みたいときは `full_payload.path` / `artifact_path` を明示的に開きます。
-
-### `calibrate`
-
-scorer / evaluator の調整 runner です。
-
-DSPy / GEPA はここで使います。skill や memory を直接書き換えるためには使いません。
-
-Planner / editor / evaluator の prompt は repo-tracked base prompt を直接書き換えず、runtime-private overlay candidate set として扱います。`calibrate` は overlay set を評価し、GEPA が改善ありと判断し hard checks を通った場合だけ promotion します。dry-run で出た candidate をそのまま適用したい場合は、明示的に artifact path を指定します。
-
-```bash
-bin/hermes-self-improve calibrate --dry-run
-bin/hermes-self-improve calibrate
-bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json
-```
-
-`calibrate` が active evaluator / overlay state を更新するのは、必要な gate を通った場合だけです。runtime-private eval cases は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/runtime-eval-cases/` に置きます。
-
-Agent tool の `self_improvement_calibrate` も compact summary を返します。primary surface は `components.prompt_overlay_set`, `components.evaluator`, `overlay_candidate_set`, `full_payload.path` です。role-level `prompt_overlays` や full candidate payload は tool result に返しません。
-
-### `setup`
-
-runtime directory を初期化します。LLM / GEPA / mutation は実行しません。
+主な入口は5つです。
 
 ```bash
 bin/hermes-self-improve setup
-bin/hermes-self-improve setup --check
-bin/hermes-self-improve setup --reset
+bin/hermes-self-improve status
+bin/hermes-self-improve report --since-hours 24
+bin/hermes-self-improve improve --dry-run
+bin/hermes-self-improve calibrate --dry-run
 ```
 
-`setup --reset` は `${HERMES_HOME:-~/.hermes}/self-improvement` を削除して作り直します。対話環境では確認を挟みます。非対話実行では `--yes` が必要です。
+`setup` は runtime directory を作ります。LLM、GEPA、skill mutation、memory mutation は動かしません。
 
-## Agent から使える tools
+`status` と `report` は read-only です。まずここで plugin、runtime、Curator telemetry、直近 event を確認します。
 
-Hermes の agent tool surface は4つです。
+`improve` は skill / memory を改善します。既定では変更可能です。確認だけしたいときは `--dry-run` を付けます。
+
+```bash
+bin/hermes-self-improve improve --dry-run
+bin/hermes-self-improve improve
+```
+
+`calibrate` は scorer / evaluator / runtime-private prompt overlay を改善します。こちらも既定では変更可能です。
+
+```bash
+bin/hermes-self-improve calibrate --dry-run
+bin/hermes-self-improve calibrate
+```
+
+Dry-run で出た overlay candidate set をそのまま適用したいときだけ、artifact path を明示します。
+
+```bash
+bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json
+```
+
+通常 CLI 出力と agent tool result は短い summary だけを返します。full payload は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下の artifact に保存します。`--json` は operator/debug 用です。
+
+Agent から使える tool は4つです。
 
 ```text
 self_improvement_status
@@ -184,26 +53,149 @@ self_improvement_improve
 self_improvement_calibrate
 ```
 
-`setup` は CLI-only です。
+`self_improvement_improve` と `self_improvement_calibrate` は full evidence、planner decision 本文、editor instructions、prompt candidate 本文を返しません。LLM-facing result には counts、status、hash、artifact path だけを入れます。
 
-通常操作は `status`, `report`, `improve`, `calibrate` に絞ります。入口を増やすと、人間も agent もどれを実行すべきか判断しにくくなります。
+## 導入方法
 
-## Curator との関係
+### 1. Plugin を配置する
 
-この plugin は Curator が持つ skill telemetry / lifecycle / pinned / archive state を source of truth として使います。
+Hermes が読む plugin directory に repo を置きます。
 
-運用時は Curator を `disabled` にせず、必要なら `paused` にします。
+```bash
+mkdir -p ~/.hermes/plugins
+git clone git@github.com:ryonakae/hermes-self-improvement.git \
+  ~/.hermes/plugins/hermes-self-improvement
+cd ~/.hermes/plugins/hermes-self-improvement
+```
+
+依存関係は Python package として入れます。DSPy/GEPA を使うので `dspy` が必要です。
+
+```bash
+python3 -m pip install -e .
+```
+
+Hermes gateway や CLI が既に起動している場合は、plugin discovery のために新しい session / gateway restart が必要です。
+
+### 2. Runtime directory を初期化する
+
+```bash
+bin/hermes-self-improve setup
+bin/hermes-self-improve status
+```
+
+まず read-only で見るなら次を使います。
+
+```bash
+bin/hermes-self-improve setup --check
+bin/hermes-self-improve report --since-hours 24
+```
+
+### 3. Curator を pause する
+
+この plugin は Curator の skill usage / lifecycle / pinned / archive state を source of truth として読みます。Curator を `disabled` にすると、その telemetry も lifecycle state も弱くなります。
+
+運用では Curator を止めきらず、background review だけを止めるために pause します。
 
 ```bash
 hermes curator pause
 hermes curator status
 ```
 
-`paused` でも skill usage / lifecycle / pinned / archive state は読めます。background review agent は自動起動しません。
+`paused` でも telemetry は読めます。Curator の自律 maintenance は走りません。
 
-## 設定
+### 4. Cron job を入れる
 
-既定値は `hermes_self_improvement/config.py` の code defaults が持ちます。local override が必要なときだけ、plugin root に YAML を置きます。
+おすすめは、self-improvement job を Slack に直接出さず、local producer として走らせる形です。日次 digest が別にある環境では、その digest が必要な要点だけを拾います。
+
+まず read-only の health/report を入れます。
+
+```bash
+hermes cron create '20 7 * * *' \
+  --name self-improvement-status \
+  --deliver local \
+  --workdir ~/.hermes/plugins/hermes-self-improvement \
+  'Run `bin/hermes-self-improve status` and `bin/hermes-self-improve report --since-hours 24`. Keep the output short and include artifact paths.'
+```
+
+実運用では `improve` と `calibrate` を時間差で走らせます。どちらも mutation-capable なので、最初は自分の環境で dry-run を確認してから切り替えてください。
+
+```bash
+hermes cron create '10 3 * * *' \
+  --name self-improvement-improve \
+  --deliver local \
+  --workdir ~/.hermes/plugins/hermes-self-improvement \
+  'Run `bin/hermes-self-improve improve --since-hours 24`. Return a compact summary and artifact path.'
+
+hermes cron create '40 3 * * *' \
+  --name self-improvement-calibrate \
+  --deliver local \
+  --workdir ~/.hermes/plugins/hermes-self-improvement \
+  'Run `bin/hermes-self-improve calibrate`. Return component status, overlay candidate-set status, and artifact path.'
+```
+
+Gateway 停止や laptop sleep が多い環境では、cron の catch-up 方針も確認してください。重い optimizer を大量にまとめて走らせると、翌朝に無駄な負荷が出ます。
+
+## プラグインの強み
+
+### Curator より詳細な観測データを使う
+
+Curator は skill の usage、lifecycle、pinned、archived state をよく知っています。ただ、会話中の細かい失敗までは持ちません。
+
+この plugin は runtime hook で次の情報を拾います。
+
+- tool failure context
+- memory operation / failure
+- user correction
+- session outcome
+- subagent outcome
+- LLM / API failure metadata
+
+Hook は軽く保ちます。hook 内で LLM、GEPA、skill patch、memory edit、重い集計は走らせません。
+
+### スキルに加えてメモリも自動改善する
+
+Curator の主戦場は skill maintenance です。この plugin は skill と memory を同じ evidence pack から扱います。
+
+Skill 変更は `skill_manage` などの Hermes skill tools で行います。archive が必要なときは Curator-style lifecycle を使います。filesystem delete や自前 `mv` は使いません。
+
+Memory 変更は memory tool / provider-native memory tool で行います。built-in memory file、provider DB、provider internals は直接編集しません。
+
+### DSPy/GEPA で自己改善の判断器も育てる
+
+`improve` は skill / memory を直します。`calibrate` は、その判断に使う scorer / evaluator / prompt overlay を直します。
+
+Planner / editor / evaluator の prompt は repo-tracked base prompt を直接書き換えません。`calibrate` は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/active-prompts.json` に runtime-private overlay set を持ちます。
+
+Overlay は planner / editor / evaluator を1つの candidate set として扱います。各 target は `changed` / `unchanged` を持つので、promotion しても3つ全部を書き換えるとは限りません。
+
+Promotion 後は `overlay_generation_id` が improve run、episode、runtime eval case に流れます。これで「新しい overlay が次の改善判断を良くしたか」を後から追えます。
+
+## DSPy/GEPAとはなにか
+
+DSPy は、LLM への指示や評価を Python program として扱うための framework です。手書き prompt を文字列として置くだけではなく、入力、出力、評価関数、最適化対象を分けて扱えます。
+
+GEPA は DSPy の optimizer の一つです。評価ケースを使って prompt や instruction を改善します。この plugin では、GEPA を「skill や memory を直接書き換える機械」として使いません。GEPA は scorer / evaluator / prompt overlay の改善に使います。
+
+この plugin での流れはこうです。
+
+```text
+runtime evidence
+-> runtime eval cases
+-> DSPy/GEPA optimization
+-> overlay candidate set
+-> acceptance checks
+-> active-prompts.json
+-> later improve episodes
+-> next runtime eval cases
+```
+
+GEPA が `no_improvement` と判断したら、それは正常な結果です。失敗ではありません。変更する根拠がないときに preserve behavior を選べることも、自己改善には必要です。
+
+## その他開発向け情報
+
+### 設定
+
+既定値は `hermes_self_improvement/config.py` にあります。local override が必要なときだけ YAML を置きます。
 
 ```bash
 cp config.example.yaml config.yaml
@@ -222,9 +214,9 @@ code defaults
 -> Hermes runtime memory overlay
 ```
 
-`config.yaml` と `config.local.yaml` は local runtime 用で gitignore 済みです。API key や provider secret は commit しないでください。custom endpoint を使う場合も、local file では `${ENV_VAR}` 参照を優先します。
+`config.yaml` と `config.local.yaml` は local runtime 用です。API key や provider secret は commit しないでください。
 
-Model routing は責務ごとに分けます。
+Model routing は3つです。
 
 | key | 用途 |
 |---|---|
@@ -232,7 +224,7 @@ Model routing は責務ごとに分けます。
 | `model.editor` | 選ばれた skill / memory の mutation agent |
 | `model.evaluator` | DSPy / GEPA による evaluator / prompt / rubric calibration |
 
-## Runtime files
+### Runtime files
 
 `setup` は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下を作ります。
 
@@ -255,37 +247,30 @@ ${HERMES_HOME}/self-improvement/
   cache/dspy/
 ```
 
-主な置き場所:
-
-- `state/events.jsonl`: hook が記録した redacted event
-- `runs/`: `improve` / `calibrate` の run artifact
-- `evaluator/active.json`: active evaluator pointer
-- `evaluator/active-prompts.json`: active runtime-private prompt overlay set pointer
-- `evaluator/prompt-candidate-sets/`: GEPA/DSPy が生成した overlay candidate set artifacts
-- `evaluator/runtime-eval-cases/`: user-specific な runtime eval cases
-- `cache/dspy/`: DSPy / GEPA 周辺の cache
+主なファイルは次の通りです。`state/events.jsonl` は hook event、`runs/` は run artifact、`evidence/` は evidence pack、`evaluator/active.json` は active evaluator pointer、`evaluator/active-prompts.json` は active overlay pointer です。`evaluator/prompt-candidate-sets/` には DSPy/GEPA の overlay candidate set、`evaluator/runtime-eval-cases/` には user-specific eval cases、`cache/dspy/` には DSPy/GEPA cache を置きます。
 
 Repo-tracked default evaluator assets は `defaults/evaluator/`、public regression seed は `evals/proposal/` に置きます。
 
-## 開発するとき
+### 開発時の確認
 
-まず現状を確認します。
+まず作業前に状態を見ます。
 
 ```bash
 git status --short
 bin/hermes-self-improve status
 ```
 
-通常変更後:
+通常変更後はこれを通します。
 
 ```bash
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
 bin/hermes-self-improve status
+git diff --check
 ```
 
-Plugin registration / tool surface を触った場合:
+Plugin registration / tool surface を触ったら、Hermes plugin manager からも確認します。
 
 ```bash
 PY=${PYTHON:-python3}
@@ -301,31 +286,8 @@ PY
 
 期待値は plugin enabled、error null、tools 4 です。
 
-## 主要ファイル
+### 主要ファイル
 
-| path | 役割 |
-|---|---|
-| `plugin.yaml` | plugin manifest / exposed tools |
-| `__init__.py` | root の thin plugin entrypoint |
-| `hermes_self_improvement/cli.py` | CLI parser と runner orchestration |
-| `hermes_self_improvement/schemas.py` | plugin tool schema |
-| `hermes_self_improvement/tool_handlers.py` | plugin tool handlers |
-| `hermes_self_improvement/observer.py` | hook observer、redaction、JSONL telemetry |
-| `hermes_self_improvement/analysis.py` | event aggregation / evidence extraction |
-| `hermes_self_improvement/calibration.py` | scorer / evaluator calibration |
-| `hermes_self_improvement/mutation_policy.py` | memory provider capability / strategy helpers |
-| `hermes_self_improvement/mutation_worker.py` | tool-mediated mutation executor |
-| `AGENTS.md` | 開発時の約束事 |
-| `.hermes/plans/` | repo-tracked implementation plans |
-| `tests/` | pytest suite |
+入口は `plugin.yaml`、root `__init__.py`、`hermes_self_improvement/cli.py`、`hermes_self_improvement/schemas.py`、`hermes_self_improvement/tool_handlers.py` です。観測は `observer.py`、集計は `analysis.py`、calibration は `calibration.py`、memory/skill mutation は `mutation_policy.py` と `mutation_worker.py` を見ます。
 
-## 読む順番
-
-初めて触るなら、この順で十分です。
-
-1. この README
-2. `AGENTS.md`
-3. 変更対象に関係する `.hermes/plans/` または reference
-4. 実装ファイルと tests
-
-README は入口です。開発時の約束事は `AGENTS.md`、設計の履歴は repo-tracked plan に置きます。
+初めて触るなら、`AGENTS.md`、`skills/operations/SKILL.md`、関係する `.hermes/plans/` を読んでから実装に入ってください。tests は `tests/` にあります。
