@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`hermes-self-improvement` は、Hermes runtime の観測イベントから skill / memory / scorer / evaluator の改善材料を作る user plugin です。hook は観測専用です。mutation は `improve` / `calibrate` runner で扱います。
+`hermes-self-improvement` は、Hermes runtime の観測イベントから skill / memory / scorer / evaluator の改善材料を作る user plugin です。hook は観測専用です。mutation は `improve` / `calibrate` runner で扱います。初めて触るときは、まず `README.md` で全体像を確認してください。
 
 ## 着手前チェック
 
@@ -18,12 +18,14 @@ bin/hermes-self-improve status
 ```bash
 bin/hermes-self-improve setup --check
 bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24 --json
-bin/hermes-self-improve improve
+bin/hermes-self-improve report --since-hours 24
 bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate
 bin/hermes-self-improve calibrate --dry-run
+bin/hermes-self-improve improve
+bin/hermes-self-improve calibrate
 ```
+
+上から read-only、dry-run、mutation-capable の順です。`improve` と `calibrate` は既定で変更可能なので、確認だけなら `--dry-run` を付けてください。
 
 CLI の primary runner/tool surface は `improve / calibrate / report / status` の4つです。`setup` は CLI-only の安全な runtime bootstrap で、agent tool には出しません。`plan / apply / rollback / outcome`、`--execute`、item/hash 指定 flag、legacy/debug command は primary surface に戻しません。
 
@@ -36,6 +38,7 @@ PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
 bin/hermes-self-improve status
+git diff --check
 ```
 
 Tool schema / registration を触った場合:
@@ -63,7 +66,7 @@ PY
 - memory mutation は memory tool / provider-native memory tool 経由だけ。built-in memory file や provider DB を直接編集しない。
 - `improve` / `calibrate` は default mutation-capable。preview-only は `--dry-run`。
 - rollback は primary feature ではない。失敗は future evidence として correction する。
-- plugin は target repo の commit を作らない。commit は作業者の workflow に委譲する。
+- plugin の自己改善対象は target repo の commit を作らない。repo 内の実装・docs を手作業で変更した場合は、作業者の workflow で commit する。
 
 ## 重要パス
 
