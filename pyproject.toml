@@ -7,6 +7,7 @@ name = "hermes-self-improvement"
 version = "0.1.0"
 description = "Hermes user plugin for observing runtime events and generating guarded self-improvement proposals."
 requires-python = ">=3.11"
+license = "MIT"
 dependencies = [
   "dspy>=3.1,<4",
 ]

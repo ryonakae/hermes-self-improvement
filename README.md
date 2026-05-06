@@ -196,3 +196,7 @@ PY
 入口は `plugin.yaml`、root `__init__.py`、`hermes_self_improvement/cli.py`、`hermes_self_improvement/schemas.py`、`hermes_self_improvement/tool_handlers.py` です。観測は `observer.py`、集計は `analysis.py`、calibration は `calibration.py`、memory/skill mutation は `mutation_policy.py` と `mutation_worker.py` を見ます。
 
 初めて触るなら、`AGENTS.md`、`skills/operations/SKILL.md`、関係する `.hermes/plans/` を読んでから実装に入ってください。テストは `tests/` にあります。
+
+## ライセンス
+
+MIT License.
