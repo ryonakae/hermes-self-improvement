@@ -1,10 +1,54 @@
 # hermes-self-improvement
 
-`hermes-self-improvement` は、Hermes の実行履歴からスキル、メモリ、scorer、evaluator の改善材料を集めるユーザープラグインです。
+`hermes-self-improvement` は、[Hermes Agent](https://hermes-agent.nousresearch.com/) の実行時の観測データから、スキル、メモリを自己改善するプラグインです。
+さらに [DSPy/GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) で、改善の判断そのものを自己改善します。
 
-Curator より細かい実行時の観測データを使い、スキルだけでなくメモリも改善します。さらに DSPy/GEPA で判断器そのものを改善し、次の `improve` / `calibrate` に戻します。
+## どう動き、どう自己改善するか
 
-フックは観測だけを行います。Hermes 本体、実行時設定、ツール方針、任意のドキュメントは自己改善対象にしません。
+このプラグインは、Hermes の会話を実行時フックで観測します。Hermes Agent の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) はスキルの利用状況、ライフサイクルなどの状態をよく知っていますが、会話中の細かい失敗などの情報までは取得していません。このプラグインはそこを補い、以下のような情報を記録します。
+
+- ツール失敗時の文脈
+- メモリ操作と失敗
+- ユーザーの訂正
+- セッション結果
+- subagent の結果
+- LLM / API 失敗のメタデータ
+
+フックは観測だけを行います。観測後の処理は、コマンド名ではなく内部の役割で見ると分かりやすくなります。planner は証拠から改善方針を選び、editor は選ばれたスキルやメモリを直し、evaluator は結果や候補を評価します。判断に使う実行時専用の overlay prompt は、あとから調整され、次の実行に反映されます。
+
+```text
+[1] Hermes の実行
+      ↓
+[2] フックでイベントを記録
+      ↓
+[3] 観測を証拠パックにまとめる
+      ↓
+[4] planner が改善方針を選ぶ
+      ↓
+[5] editor が必要な変更だけを実行
+      ↓
+[6] evaluator が結果や候補を評価し、episode / outcome に保存
+      ↓
+[7] planner / editor / evaluator の overlay を調整する
+      │
+      └──── 次の [1] Hermes の実行へ戻る
+```
+
+`improve` は、この流れのうち証拠パック作成、改善方針の選択、スキル / メモリの改善、episode 記録を担います。Curator の主な役割はスキル保守ですが、このプラグインはスキルとメモリの両方を扱います。直近30日（設定値 `calibration.evidence.window_days`）の観測は、重複排除したうえで outcome scoring や GEPA 用の実行時評価ケースに使います。
+
+`calibrate` は、`improve` の判断そのものを見直します。[DSPy](https://dspy.ai/) は LLM への指示や評価を Python プログラムとして扱うためのフレームワークで、[GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) は評価ケースを使って指示を改善する optimizer です。採用された overlay は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/active-prompts.json` に保存され、次の `improve` で使われます。
+
+## よく使うコマンド
+主なコマンドは以下の4つです。
+
+| コマンド | 役割 | 変更するか |
+|---|---|---|
+| `status` | 実行時ディレクトリ、観測、評価器の状態を見る | しない |
+| `report` | 直近の観測を読み取り、改善材料を要約する | しない |
+| `improve` | 観測からスキル / メモリの改善案を選び、実行する | する |
+| `calibrate` | 改善判断に使う scorer / evaluator / プロンプト overlay を調整する | する |
+
+`improve` と `calibrate` は既定で変更可能です。確認だけしたいときは `--dry-run` を付けます。
 
 ## 導入方法
 
@@ -43,108 +87,29 @@ bin/hermes-self-improve report --since-hours 24
 
 ### 3. Curator を pause する
 
-このプラグインは Curator のスキル利用状況、ライフサイクル、pinned / archive 状態を判断元として読みます。Curator を `disabled` にすると、そのテレメトリもライフサイクル状態も弱くなります。
-
-運用では Curator を止めきらず、バックグラウンドレビューだけを止めるために pause します。
+このプラグインは、Hermes Agent の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) のスキル利用状況、ライフサイクル、pinned / archive 状態を判断元として読み取ります。Curator を `disabled` にすると、そのテレメトリもライフサイクル状態も弱くなります。
+Curator による観測を止めず、バックグラウンドレビューだけを止めるために pause します。
 
 ```bash
 hermes curator pause
 hermes curator status
 ```
 
-`paused` でもテレメトリは読めます。Curator の自律メンテナンスは走りません。
+### 4. cron ジョブを設定する
 
-### 4. cron ジョブを入れる
-
-おすすめは、self-improvement ジョブを Slack に直接出さず、ローカル出力のジョブとして走らせる形です。日次レポートが別にある環境では、そのレポートが必要な要点だけを拾います。
-
-まず読み取り専用の health/report を入れます。
+cron では、まず `--dry-run` 付きで動きを確認してください。実運用では、1本の producer job にして `status`、`calibrate`、`improve`、`report` を順に走らせる構成が扱いやすいです。通知先は環境に合わせて変えてください。以下は `local` に保存する薄い例です。
 
 ```bash
-hermes cron create '20 7 * * *' \
-  --name self-improvement-status \
+hermes cron create '0 4 * * *' \
+  --name self-improvement-maintenance \
   --deliver local \
   --workdir ~/.hermes/plugins/hermes-self-improvement \
-  '`bin/hermes-self-improve status` と `bin/hermes-self-improve report --since-hours 24` を実行する。出力は短くし、アーティファクトのパスを含める。'
+  '`bin/hermes-self-improve status` で状態を確認し、`bin/hermes-self-improve calibrate`、`bin/hermes-self-improve improve --scorer llm`、`bin/hermes-self-improve report --since-hours 24` を順に実行する。出力は短い要約とアーティファクトのパスだけにする。'
 ```
 
-実運用では `improve` と `calibrate` を時間差で走らせます。どちらも変更可能なので、最初は自分の環境で dry-run を確認してから切り替えてください。
+`improve` と `calibrate` は既定で変更可能です。最初は手元で `calibrate --dry-run` と `improve --dry-run` を確認してから cron に入れてください。読み取り専用の監視だけが欲しい場合は、`status` と `report --since-hours 24` だけを別 job にしてもかまいません。
 
-```bash
-hermes cron create '10 3 * * *' \
-  --name self-improvement-improve \
-  --deliver local \
-  --workdir ~/.hermes/plugins/hermes-self-improvement \
-  '`bin/hermes-self-improve improve --since-hours 24` を実行する。短い要約とアーティファクトのパスだけを返す。'
-
-hermes cron create '40 3 * * *' \
-  --name self-improvement-calibrate \
-  --deliver local \
-  --workdir ~/.hermes/plugins/hermes-self-improvement \
-  '`bin/hermes-self-improve calibrate` を実行する。component status、overlay 候補セットの状態、アーティファクトのパスだけを返す。'
-```
-
-Gateway 停止や PC スリープが多い環境では、cron の catch-up 方針も確認してください。重い最適化をまとめて走らせると、翌朝に無駄な負荷が出ます。
-
-## プラグインの強み
-
-### Curator より詳細な観測データを使う
-
-Curator はスキルの利用状況、ライフサイクル、pinned / archived 状態をよく知っています。ただ、会話中の細かい失敗までは持ちません。
-
-このプラグインは実行時フックで次の情報を拾います。
-
-- ツール失敗時の文脈
-- メモリ操作と失敗
-- ユーザーの訂正
-- セッション結果
-- subagent の結果
-- LLM / API 失敗のメタデータ
-
-フックは軽く保ちます。フック内で LLM、GEPA、スキル修正、メモリ編集、重い集計は走らせません。
-
-### スキルに加えてメモリも自動改善する
-
-Curator の主戦場はスキル保守です。このプラグインはスキルとメモリを同じ証拠パックから扱います。
-
-スキル変更は `skill_manage` などの Hermes のスキルツールで行います。archive が必要なときは Curator 方式のライフサイクルを使います。ファイル削除や自前 `mv` は使いません。
-
-メモリ変更は memory tool / provider-native memory tool で行います。built-in memory file、provider DB、provider internals は直接編集しません。
-
-### DSPy/GEPA で自己改善の判断器も育てる
-
-`improve` はスキルとメモリを直します。`calibrate` は、その判断に使う scorer、evaluator、プロンプト overlay を直します。
-
-Planner / editor / evaluator のプロンプトは、リポジトリ管理の base prompt を直接書き換えません。`calibrate` は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/active-prompts.json` に実行時専用の overlay set を持ちます。
-
-Overlay は planner / editor / evaluator を1つの候補セットとして扱います。各対象は `changed` / `unchanged` を持つので、promotion しても3つ全部を書き換えるとは限りません。
-
-Promotion 後は `overlay_generation_id` が improve 実行、episode、runtime eval case に流れます。これで「新しい overlay が次の改善判断を良くしたか」を後から追えます。
-
-`improve` は変更内容を episode として記録します。`calibrate` は直近30日（設定値 `calibration.evidence.window_days`）の観測を毎回見直し、同じ観測は識別子で重複排除します。明示的に紐づく observation だけを outcome scoring に使い、紐づかない観測は弱・中・強の材料として集計します。繰り返し出る未紐づき観測は GEPA 用の実行時評価ケースにも使います。
-
-## DSPy/GEPAとはなにか
-
-DSPy は、LLM への指示や評価を Python プログラムとして扱うためのフレームワークです。手書きプロンプトを文字列として置くだけではなく、入力、出力、評価関数、最適化対象を分けて扱えます。
-
-GEPA は DSPy の最適化器の一つです。評価ケースを使ってプロンプトや指示を改善します。このプラグインでは、GEPA を「スキルやメモリを直接書き換える機械」として使いません。GEPA は scorer、evaluator、プロンプト overlay の改善に使います。
-
-このプラグインでの流れはこうです。
-
-```text
-実行時の証拠
--> 実行時評価ケース
--> DSPy/GEPA による最適化
--> overlay 候補セット
--> 受け入れチェック
--> active-prompts.json
--> 後続の improve episode
--> 次の実行時評価ケース
-```
-
-GEPA が `no_improvement` と判断したら、それは正常な結果です。失敗ではありません。変更する根拠がないときに挙動維持を選べることも、自己改善には必要です。
-
-## その他開発向け情報
+## その他
 
 ### 設定
 
@@ -154,17 +119,6 @@ GEPA が `no_improvement` と判断したら、それは正常な結果です。
 cp config.example.yaml config.yaml
 # またはローカル上書き
 $EDITOR config.local.yaml
-```
-
-読み込み順は下へ行くほど強くなります。
-
-```text
-コード既定値
--> config.yaml
--> config.local.yaml
--> HERMES_SELF_IMPROVE_CONFIG
--> --config
--> Hermes 実行時メモリ overlay
 ```
 
 `config.yaml` と `config.local.yaml` はローカル実行用です。API key や provider secret は commit しないでください。
@@ -201,8 +155,6 @@ ${HERMES_HOME}/self-improvement/
 ```
 
 主なファイルは次の通りです。`state/events.jsonl` はフックイベント、`runs/` は実行アーティファクト、`evidence/` は証拠パック、`evaluator/active.json` は active evaluator pointer、`evaluator/active-prompts.json` は active overlay pointer です。`evaluator/prompt-candidate-sets/` には DSPy/GEPA の overlay 候補セット、`evaluator/runtime-eval-cases/` にはユーザー固有の評価ケース、`cache/dspy/` には DSPy/GEPA キャッシュを置きます。
-
-リポジトリ管理の既定 evaluator assets は `defaults/evaluator/`、公開 regression seed は `evals/proposal/` に置きます。
 
 ### 開発時の確認
 
