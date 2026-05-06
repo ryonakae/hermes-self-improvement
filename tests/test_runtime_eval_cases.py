@@ -161,3 +161,43 @@ def test_runtime_eval_cases_deduplicate_by_case_hash(tmp_path):
     cases = build_planner_editor_runtime_eval_cases(config=config, limit=100)
 
     assert len(cases) == 1
+
+
+def test_overlay_eval_cases_include_recurring_unmatched_failure_cluster(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "outcome-prepass" / "2026-05-06" / "prepass.json", {
+        "schema_name": "self_improvement_outcome_prepass",
+        "schema_version": "1.0",
+        "created_at": "2026-05-06T00:00:00+00:00",
+        "collection_window": {"mode": "rolling_30_days"},
+        "unmatched_observation_count": 3,
+        "unmatched": [
+            {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:cronjob:unknown_error", "reason": "cluster_episode_not_matched"},
+            {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:cronjob:unknown_error", "reason": "cluster_episode_not_matched"},
+            {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:cronjob:unknown_error", "reason": "cluster_episode_not_matched"},
+        ],
+    })
+
+    cases = build_overlay_set_runtime_eval_cases(config=config, limit=100)
+
+    assert {case["target"] for case in cases} == {"planner_overlay", "editor_overlay", "evaluator_overlay"}
+    assert {case["source"]["kind"] for case in cases} == {"recurring_unmatched_observation"}
+    assert all(case["input"]["confidence"] == "medium" for case in cases)
+    assert all(case["input"]["cluster_id"] == "tool_error:cronjob:unknown_error" for case in cases)
+    planner_case = next(case for case in cases if case["target"] == "planner_overlay")
+    assert planner_case["expected"] == {"decision": "defer"}
+
+
+def test_overlay_eval_cases_ignore_sparse_unmatched_failure_cluster(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "outcome-prepass" / "2026-05-06" / "prepass.json", {
+        "schema_name": "self_improvement_outcome_prepass",
+        "schema_version": "1.0",
+        "created_at": "2026-05-06T00:00:00+00:00",
+        "unmatched_observation_count": 1,
+        "unmatched": [{"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:patch:not_found"}],
+    })
+
+    assert build_overlay_set_runtime_eval_cases(config=config, limit=100) == []

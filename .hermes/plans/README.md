@@ -2,7 +2,13 @@
 
 ## Current source of truth
 
-As of 2026-05-05, the current implementation and remaining-work source of truth is:
+As of 2026-05-06, the current implementation and remaining-work source of truth is:
+
+- `2026-05-06_090000-gepa-calibration-signal-window.md`
+  - **Status:** implemented.
+  - Updated `calibrate` so daily runs use a rolling evidence window instead of resetting at the previous calibrate, classify materials as weak/medium/strong, and build GEPA overlay candidate sets only when there is sufficient material. Repeated unmatched failure clusters can now become runtime-private overlay eval cases; promotion gates remain strict.
+
+The prior roadmap remains the broader source of truth:
 
 - `2026-05-05_000647-self-improvement-roadmap-refresh.md`
   - **Status:** active follow-up roadmap.

@@ -121,7 +121,7 @@ Overlay は planner / editor / evaluator を1つの候補セットとして扱�
 
 Promotion 後は `overlay_generation_id` が improve 実行、episode、runtime eval case に流れます。これで「新しい overlay が次の改善判断を良くしたか」を後から追えます。
 
-`improve` は変更内容を episode として記録します。`calibrate` は前回 `calibrate` 以降の観測から outcome observation を作り、明示的に紐づく episode だけを採点します。紐づかない観測はアーティファクトに残しますが、scoring には使いません。
+`improve` は変更内容を episode として記録します。`calibrate` は直近30日（設定値 `calibration.evidence.window_days`）の観測を毎回見直し、同じ観測は識別子で重複排除します。明示的に紐づく observation だけを outcome scoring に使い、紐づかない観測は弱・中・強の材料として集計します。繰り返し出る未紐づき観測は GEPA 用の実行時評価ケースにも使います。
 
 ## DSPy/GEPAとはなにか
 

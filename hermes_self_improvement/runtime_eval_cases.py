@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from .episodes import load_recent_episodes
-from .observer import _sha256_text, _stable_json
+from .observer import _reports_dir, _sha256_text, _stable_json
 
 UNSAFE_TARGET_MARKERS = (
     "ambiguous",
@@ -211,10 +213,81 @@ def build_planner_editor_runtime_eval_cases(*, config: dict[str, Any], limit: in
     return list(deduped.values())
 
 
+def _bootstrap_overlay_case(*, cluster_id: str, count: int, target: str, role: str, expected: dict[str, Any], source_path: str | None) -> dict[str, Any]:
+    case = {
+        "schema_name": "self_improvement_runtime_eval_case",
+        "schema_version": "1.0",
+        "case_family": "overlay_set",
+        "case_type": f"{target}_from_recurring_unmatched_observation",
+        "target": target,
+        "role": role,
+        "source_episode_id": None,
+        "source": {"kind": "recurring_unmatched_observation", "cluster_id": cluster_id, "path": source_path, "count": count},
+        "input": {
+            "proposal": {},
+            "findings": [],
+            "evidence_ids": [cluster_id],
+            "mutation_task": {"decision": "defer", "action": "review_existing_skill_or_add_pitfall"},
+            "outcome": {"outcome": "unmatched_recurring_failure", "changed": False, "executed": False},
+            "cluster_id": cluster_id,
+            "confidence": "medium",
+            "source_kind": "recurring_unmatched_observation",
+            "observation_count": count,
+        },
+        "expected": expected,
+    }
+    seed_source = {key: value for key, value in case["source"].items() if key != "path"}
+    seed = {key: case[key] for key in ("case_family", "case_type", "target", "role", "input", "expected")}
+    seed["source"] = seed_source
+    case["case_hash"] = "sha256:" + _sha256_text(_stable_json(seed))
+    case["id"] = f"{target}-{case['case_hash'].split(':', 1)[1][:12]}"
+    return case
+
+
+def _load_json(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _recurring_unmatched_overlay_cases(config: dict[str, Any], *, limit: int) -> list[dict[str, Any]]:
+    root = _reports_dir(config) / "outcome-prepass"
+    if not root.exists():
+        return []
+    cluster_counts: dict[str, int] = {}
+    cluster_paths: dict[str, str] = {}
+    for path in sorted(root.glob("**/*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:limit]:
+        payload = _load_json(path)
+        if not payload or payload.get("schema_name") != "self_improvement_outcome_prepass":
+            continue
+        unmatched = payload.get("unmatched") if isinstance(payload.get("unmatched"), list) else []
+        for item in unmatched:
+            if not isinstance(item, dict) or item.get("signal") != "same_failure_cluster_recurrence":
+                continue
+            cluster_id = str(item.get("cluster_id") or "").strip()
+            if not cluster_id:
+                continue
+            cluster_counts[cluster_id] = cluster_counts.get(cluster_id, 0) + 1
+            cluster_paths.setdefault(cluster_id, str(path))
+    cases: list[dict[str, Any]] = []
+    for cluster_id, count in sorted(cluster_counts.items()):
+        if count < 3:
+            continue
+        cases.extend([
+            _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="planner_overlay", role="planner", expected={"decision": "defer"}, source_path=cluster_paths.get(cluster_id)),
+            _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="editor_overlay", role="editor", expected={"mutation": "skip"}, source_path=cluster_paths.get(cluster_id)),
+            _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="evaluator_overlay", role="evaluator", expected={"recommendation": "defer"}, source_path=cluster_paths.get(cluster_id)),
+        ])
+    return cases
+
+
 def build_overlay_set_runtime_eval_cases(*, config: dict[str, Any], limit: int = 1000) -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
     for episode in load_recent_episodes(config=config, limit=limit):
         cases.extend(_overlay_cases_from_episode(episode))
+    cases.extend(_recurring_unmatched_overlay_cases(config, limit=limit))
     deduped: dict[str, dict[str, Any]] = {}
     for case in cases:
         deduped[str(case.get("case_hash") or case.get("id"))] = case

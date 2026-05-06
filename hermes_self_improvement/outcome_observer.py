@@ -9,6 +9,7 @@ from .autonomous_loop import validate_outcome_observation
 from .episodes import load_recent_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import load_outcome_observations, outcome_root
+from .config import normalize_calibration_config
 
 UTC = timezone.utc
 REEDIT_WINDOW = timedelta(days=7)
@@ -57,14 +58,18 @@ def _latest_created_at(episodes: list[dict[str, Any]], predicate) -> datetime | 
 
 def determine_collection_window(*, config: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
     end = (now or _now()).astimezone(UTC)
-    episodes = load_recent_episodes(config=config, limit=1000)
-    previous_calibrate = _latest_created_at(episodes, _is_calibration_episode)
-    if previous_calibrate is not None:
-        return {"mode": "since_previous_calibrate", "start": _iso(previous_calibrate), "end": _iso(end), "fallback_used": False}
-    latest_improve = _latest_created_at(episodes, _is_improve_episode)
-    if latest_improve is not None:
-        return {"mode": "since_latest_improve", "start": _iso(latest_improve), "end": _iso(end), "fallback_used": True}
-    return {"mode": "last_7_days", "start": _iso(end - timedelta(days=7)), "end": _iso(end), "fallback_used": True}
+    calibration = normalize_calibration_config(config)
+    evidence_cfg = calibration.get("evidence") if isinstance(calibration.get("evidence"), dict) else {}
+    lookback_days = int(evidence_cfg.get("window_days", 30) or 0)
+    if lookback_days <= 0:
+        return {"mode": "all_time", "start": None, "end": _iso(end), "fallback_used": False, "lookback_days": 0}
+    return {
+        "mode": f"rolling_{lookback_days}_days",
+        "start": _iso(end - timedelta(days=lookback_days)),
+        "end": _iso(end),
+        "fallback_used": False,
+        "lookback_days": lookback_days,
+    }
 
 
 def _date_dir(root: Path, created_at: datetime) -> Path:
@@ -379,6 +384,21 @@ def _write_prepass_artifact(config: dict[str, Any], payload: dict[str, Any], cre
     return str(path)
 
 
+def _unmatched_summary(unmatched: list[dict[str, Any]]) -> dict[str, Any]:
+    by_cluster: dict[str, int] = {}
+    by_signal: dict[str, int] = {}
+    for item in unmatched:
+        if not isinstance(item, dict):
+            continue
+        signal = str(item.get("signal") or "unknown")
+        by_signal[signal] = by_signal.get(signal, 0) + 1
+        cluster_id = str(item.get("cluster_id") or "").strip()
+        if cluster_id:
+            by_cluster[cluster_id] = by_cluster.get(cluster_id, 0) + 1
+    recurring_clusters = {cluster_id: count for cluster_id, count in by_cluster.items() if count >= 3}
+    return {"by_signal": by_signal, "by_cluster": by_cluster, "recurring_clusters": recurring_clusters}
+
+
 def compact_outcome_prepass_summary(prepass: dict[str, Any]) -> dict[str, Any]:
     window = prepass.get("collection_window") if isinstance(prepass.get("collection_window"), dict) else {}
     return {
@@ -388,6 +408,7 @@ def compact_outcome_prepass_summary(prepass: dict[str, Any]) -> dict[str, Any]:
         "deduped_observation_count": int(prepass.get("deduped_observation_count") or 0),
         "invalid_observation_count": int(prepass.get("invalid_observation_count") or 0),
         "signals": prepass.get("signals") if isinstance(prepass.get("signals"), dict) else {},
+        "unmatched_summary": prepass.get("unmatched_summary") if isinstance(prepass.get("unmatched_summary"), dict) else {},
         "artifact_path": prepass.get("artifact_path"),
     }
 
@@ -419,6 +440,7 @@ def run_outcome_prepass(*, config: dict[str, Any], now: datetime | None = None) 
         "deduped_observation_count": int(write_summary.get("deduped_observation_count") or 0),
         "invalid_observation_count": int(write_summary.get("invalid_observation_count") or 0),
         "signals": _signal_counts(candidates),
+        "unmatched_summary": _unmatched_summary(unmatched),
         "observation_paths": write_summary.get("observation_paths") or [],
         "unmatched": unmatched[:50],
         "invalid": write_summary.get("invalid") or [],

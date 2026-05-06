@@ -143,7 +143,58 @@ def test_calibration_bad_outcome_threshold_requests_candidate(tmp_path):
 
     assert result["current_status"] == "would_update"
     assert result["evidence_summary"]["bad_outcomes"] == 2
+    assert result["evidence_summary"]["signal_strength"]["strong"] >= 1
     assert result["candidate"]["reason"] == "bad_outcomes"
+
+
+def test_calibration_classifies_recurring_unmatched_failures_as_medium_signal(tmp_path):
+    mod = load_plugin_module()
+    cfg = base_config(tmp_path)
+    root = Path(cfg["_self_improvement_root"])
+    events = [
+        {
+            "ts": f"2026-05-05T10:0{index}:00+00:00",
+            "event": "post_tool_call",
+            "status": "error",
+            "tool_name": "cronjob",
+            "error_kind": "unknown_error",
+            "session_id": f"session-{index}",
+        }
+        for index in range(3)
+    ]
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text("".join(json.dumps(event, sort_keys=True) + "\n" for event in events), encoding="utf-8")
+
+    evidence = mod.collect_calibration_evidence(cfg, now=datetime(2026, 5, 6, tzinfo=timezone.utc))
+
+    assert evidence["outcome_prepass"]["unmatched_observation_count"] == 3
+    assert evidence["signal_strength"]["weak"] == 3
+    assert evidence["signal_strength"]["medium"] == 1
+    assert evidence["gepa_trigger"]["should_build_overlay_set"] is True
+    assert "medium_signal_cluster" in evidence["gepa_trigger"]["reasons"]
+
+
+def test_calibration_does_not_trigger_gepa_for_sparse_weak_signal(tmp_path):
+    mod = load_plugin_module()
+    cfg = base_config(tmp_path)
+    root = Path(cfg["_self_improvement_root"])
+    event = {
+        "ts": "2026-05-05T10:00:00+00:00",
+        "event": "post_tool_call",
+        "status": "error",
+        "tool_name": "patch",
+        "error_kind": "not_found",
+        "session_id": "session-1",
+    }
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text(json.dumps(event, sort_keys=True) + "\n", encoding="utf-8")
+
+    evidence = mod.collect_calibration_evidence(cfg, now=datetime(2026, 5, 6, tzinfo=timezone.utc))
+
+    assert evidence["signal_strength"]["weak"] == 1
+    assert evidence["signal_strength"]["medium"] == 0
+    assert evidence["gepa_trigger"]["should_build_overlay_set"] is False
+    assert "insufficient_signal" in evidence["gepa_trigger"]["reasons"]
 
 
 def test_calibration_preview_does_not_write_active_pointer(tmp_path):

@@ -59,7 +59,7 @@ def write_episode(root: Path, payload: dict, name: str | None = None) -> None:
     write_json(root / "episodes" / date / (name or f"{payload['episode_id']}.json"), payload)
 
 
-def test_collection_window_prefers_previous_calibrate(tmp_path):
+def test_collection_window_uses_rolling_30_days_even_with_previous_calibrate(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     write_episode(root, episode_payload("improve-1", created_at="2026-05-05T08:00:00+00:00"))
@@ -79,30 +79,26 @@ def test_collection_window_prefers_previous_calibrate(tmp_path):
 
     window = determine_collection_window(config=config, now=datetime(2026, 5, 5, 12, 0, tzinfo=timezone.utc))
 
-    assert window["mode"] == "since_previous_calibrate"
-    assert window["start"] == "2026-05-05T09:00:00+00:00"
+    assert window["mode"] == "rolling_30_days"
+    assert window["start"] == "2026-04-05T12:00:00+00:00"
     assert window["end"] == "2026-05-05T12:00:00+00:00"
     assert window["fallback_used"] is False
+    assert window["lookback_days"] == 30
 
 
-def test_collection_window_falls_back_to_latest_improve_then_seven_days(tmp_path):
-    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    root = Path(config["_self_improvement_root"])
+def test_collection_window_uses_configured_rolling_days(tmp_path):
+    config = {
+        "_self_improvement_root": str(tmp_path / "self-improvement"),
+        "calibration": {"evidence": {"window_days": 14}},
+    }
     now = datetime(2026, 5, 5, 12, 0, tzinfo=timezone.utc)
-    write_episode(root, episode_payload("improve-1", created_at="2026-05-04T10:00:00+00:00"))
 
     window = determine_collection_window(config=config, now=now)
 
-    assert window["mode"] == "since_latest_improve"
-    assert window["start"] == "2026-05-04T10:00:00+00:00"
-    assert window["fallback_used"] is True
-
-    empty_config = {"_self_improvement_root": str(tmp_path / "empty")}
-    empty_window = determine_collection_window(config=empty_config, now=now)
-
-    assert empty_window["mode"] == "last_7_days"
-    assert empty_window["start"] == "2026-04-28T12:00:00+00:00"
-    assert empty_window["fallback_used"] is True
+    assert window["mode"] == "rolling_14_days"
+    assert window["start"] == "2026-04-21T12:00:00+00:00"
+    assert window["fallback_used"] is False
+    assert window["lookback_days"] == 14
 
 
 def test_write_outcome_observations_dedupes_by_episode_signal_and_source(tmp_path):

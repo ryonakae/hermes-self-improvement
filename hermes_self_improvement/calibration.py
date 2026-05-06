@@ -155,9 +155,10 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
                 if str(path) not in summary["sources"]:
                     summary["sources"].append(str(path))
 
+    overlay_case_count = len(build_overlay_set_runtime_eval_cases(config=config, limit=1000))
+    summary["signal_strength"] = _signal_strength_summary(summary, overlay_case_count=overlay_case_count)
+    summary["gepa_trigger"] = _gepa_trigger_summary(summary["signal_strength"], overlay_case_count=overlay_case_count)
     return summary
-
-
 def _prompt_overlay_summary(role: str, *, candidate: dict[str, Any] | None = None, reason: str = "no_signal") -> dict[str, Any]:
     return {
         "role": role,
@@ -177,14 +178,52 @@ def _empty_prompt_overlay_summary() -> dict[str, Any]:
 OVERLAY_TARGET_TO_ROLE = {"planner_overlay": "planner", "editor_overlay": "editor", "evaluator_overlay": "scorer"}
 
 
+def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: int) -> dict[str, Any]:
+    outcome_prepass = evidence.get("outcome_prepass") if isinstance(evidence.get("outcome_prepass"), dict) else {}
+    unmatched_count = int(outcome_prepass.get("unmatched_observation_count") or 0)
+    unmatched_summary = outcome_prepass.get("unmatched_summary") if isinstance(outcome_prepass.get("unmatched_summary"), dict) else {}
+    recurring_clusters = unmatched_summary.get("recurring_clusters") if isinstance(unmatched_summary.get("recurring_clusters"), dict) else {}
+    weak_by_tool: dict[str, int] = {}
+    by_cluster = unmatched_summary.get("by_cluster") if isinstance(unmatched_summary.get("by_cluster"), dict) else {}
+    for cluster_id, count in by_cluster.items():
+        parts = str(cluster_id).split(":")
+        if len(parts) >= 3 and parts[0] == "tool_error":
+            weak_by_tool[parts[1]] = weak_by_tool.get(parts[1], 0) + int(count or 0)
+    strong = int(evidence.get("bad_outcomes") or 0) + int(evidence.get("scorer_errors") or 0) + int(evidence.get("disagreements") or 0)
+    strong += int((outcome_prepass.get("signals") or {}).get("user_correction_recurrence") or 0) if isinstance(outcome_prepass.get("signals"), dict) else 0
+    medium = len(recurring_clusters) + int(evidence.get("planner_prompt_signals") or 0)
+    return {
+        "weak": unmatched_count,
+        "medium": medium,
+        "strong": strong,
+        "recurring_clusters": recurring_clusters,
+        "weak_by_tool": weak_by_tool,
+        "overlay_runtime_eval_cases": overlay_case_count,
+    }
+
+
+def _gepa_trigger_summary(signal_strength: dict[str, Any], *, overlay_case_count: int) -> dict[str, Any]:
+    reasons: list[str] = []
+    if int(signal_strength.get("strong") or 0) >= 1:
+        reasons.append("strong_signal")
+    if int(signal_strength.get("medium") or 0) >= 1:
+        reasons.append("medium_signal_cluster")
+    if int(signal_strength.get("weak") or 0) >= 10:
+        reasons.append("weak_signal_volume")
+    weak_by_tool = signal_strength.get("weak_by_tool") if isinstance(signal_strength.get("weak_by_tool"), dict) else {}
+    if any(int(count or 0) >= 5 for count in weak_by_tool.values()):
+        reasons.append("same_tool_weak_signal_volume")
+    if overlay_case_count >= 3:
+        reasons.append("runtime_eval_cases")
+    if not reasons:
+        reasons.append("insufficient_signal")
+    return {"should_build_overlay_set": reasons != ["insufficient_signal"], "reasons": reasons}
+
+
 def _overlay_candidate_signal(evidence: dict[str, Any], *, overlay_case_count: int) -> bool:
-    return any([
-        int(evidence.get("planner_prompt_signals") or 0) > 0,
-        int(evidence.get("bad_outcomes") or 0) > 0,
-        int(evidence.get("scorer_errors") or 0) > 0,
-        int(evidence.get("disagreements") or 0) > 0,
-        overlay_case_count > 0,
-    ])
+    signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else _signal_strength_summary(evidence, overlay_case_count=overlay_case_count)
+    trigger = evidence.get("gepa_trigger") if isinstance(evidence.get("gepa_trigger"), dict) else _gepa_trigger_summary(signal_strength, overlay_case_count=overlay_case_count)
+    return bool(trigger.get("should_build_overlay_set"))
 
 
 def _apply_overlay_candidate_set_summary(result: dict[str, Any], *, candidate_set: dict[str, Any], evaluation: dict[str, Any]) -> None:

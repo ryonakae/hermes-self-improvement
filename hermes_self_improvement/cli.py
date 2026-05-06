@@ -479,6 +479,23 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
         f"mean {credit_overall.get('mean_outcome_score') if credit_overall.get('mean_outcome_score') is not None else 'pending'}, "
         f"confidence {credit_overall.get('confidence') if credit_overall else 0.0}",
     ]
+    signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else {}
+    if signal_strength:
+        lines.append(
+            "Signal strength: "
+            f"weak {int(signal_strength.get('weak') or 0)}, "
+            f"medium {int(signal_strength.get('medium') or 0)}, "
+            f"strong {int(signal_strength.get('strong') or 0)}, "
+            f"eval cases {int(signal_strength.get('overlay_runtime_eval_cases') or 0)}"
+        )
+    gepa_trigger = evidence.get("gepa_trigger") if isinstance(evidence.get("gepa_trigger"), dict) else {}
+    if gepa_trigger:
+        trigger_reasons = gepa_trigger.get("reasons") if isinstance(gepa_trigger.get("reasons"), list) else []
+        lines.append(
+            "GEPA trigger: "
+            f"{'yes' if gepa_trigger.get('should_build_overlay_set') else 'no'}, "
+            f"reason {', '.join(str(reason) for reason in trigger_reasons) if trigger_reasons else 'none'}"
+        )
     reasons = result.get("reasons") if isinstance(result.get("reasons"), list) else []
     if reasons:
         lines.append("Reason: " + ", ".join(str(reason) for reason in reasons))
