@@ -50,6 +50,60 @@ def test_build_skill_planner_digest_attaches_evidence_and_caps_previews():
     assert digest["unmatched_evidence"]["by_reason"]["skill_target_missing"] == 1
 
 
+def test_skill_planner_digest_attaches_inventory_candidate_to_all_group_targets():
+    pack_data = {
+        "summary": {"event_count": 0, "evidence_count": 1, "ignored_count": 0},
+        "views": {"skill": ["inv-1"], "memory": [], "scorer": [], "evaluator": []},
+        "evidence": [{
+            "id": "inv-1",
+            "kind": "skill_inventory_candidate",
+            "inventory": {
+                "group_kind": "similar_skills",
+                "target_names": ["alpha-main", "alpha-legacy"],
+                "hints": ["legacy skill may be folded into canonical"],
+            },
+            "likely_targets": [{"target": "skill", "weight": 0.9}],
+        }],
+        "skill_candidates": [
+            {"name": "alpha-main", "mutable": True, "state": "active", "provenance": "agent_created"},
+            {"name": "alpha-legacy", "mutable": True, "state": "stale", "provenance": "agent_created"},
+        ],
+    }
+
+    digest = build_skill_planner_digest(pack_data)
+
+    rows = {row["name"]: row for row in digest["skill_candidates"]}
+    assert rows["alpha-main"]["attached_evidence_count"] == 1
+    assert rows["alpha-legacy"]["attached_evidence_count"] == 1
+    assert rows["alpha-main"]["medium_evidence_count"] >= 1
+    assert rows["alpha-main"]["evidence_match"] == "inventory_group"
+    assert rows["alpha-main"]["representative_evidence"][0]["inventory"]["group_kind"] == "similar_skills"
+
+
+def test_planner_allows_run_editor_with_inventory_evidence():
+    pack_data = {
+        "summary": {"event_count": 0, "evidence_count": 1, "ignored_count": 0},
+        "views": {"skill": ["inv-1"], "memory": [], "scorer": [], "evaluator": []},
+        "evidence": [{
+            "id": "inv-1",
+            "kind": "skill_inventory_candidate",
+            "inventory": {"group_kind": "similar_skills", "target_names": ["alpha-main"]},
+            "likely_targets": [{"target": "skill", "weight": 0.9}],
+        }],
+        "skill_candidates": [
+            {"name": "alpha-main", "mutable": True, "state": "active", "provenance": "agent_created"},
+        ],
+    }
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "alpha-main", "decision": "run_editor", "evidence_ids": ["inv-1"], "risk": "low"}]}
+
+    result = run_skill_planner(build_skill_planner_digest(pack_data), config={"_skill_planner_func": fake_planner})
+
+    assert result["decisions"][0]["decision"] == "run_editor"
+    assert result["decisions"][0]["evidence_ids"] == ["inv-1"]
+
+
 def test_run_skill_planner_uses_injected_planner_and_normalizes_decisions():
     calls = []
 

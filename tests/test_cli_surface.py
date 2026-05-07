@@ -224,6 +224,18 @@ def test_improve_cli_json_keeps_full_payload_for_operator_debug(monkeypatch, tmp
     assert large_details in out
 
 
+def test_builtin_memory_paths_use_profile_memory_dir(monkeypatch, tmp_path):
+    cli = load_cli_module()
+    hermes_home = tmp_path / "hermes-home"
+    monkeypatch.setattr(cli, "get_hermes_home", lambda: hermes_home)
+
+    assert cli._builtin_memory_paths({}) == {
+        "memory": hermes_home / "memories" / "MEMORY.md",
+        "user": hermes_home / "memories" / "USER.md",
+    }
+
+
+
 def test_run_improve_wires_curator_lifecycle_and_telemetry(monkeypatch, tmp_path):
     cli = load_cli_module()
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
@@ -292,7 +304,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
             "memory": {"decisions": [{"related_memory_lookup": {"status": "completed"}}]},
         },
         "curator_telemetry": {"available": True, "candidate_count": 3, "rejected_count": 2},
-        "evidence_pack": {"summary": {"evidence_count": 5, "ignored_count": 1}},
+        "evidence_pack": {"summary": {"evidence_count": 5, "ignored_count": 1, "inventory_evidence_count": 2, "evidence_by_kind": {"skill_inventory_candidate": 1, "memory_inventory_candidate": 1}}},
         "artifact_path": "/tmp/run.json",
         "prompt_sources": {
             "planner": {"overlay_active": True, "overlay_hash": "sha256:planner-overlay", "base_hash": "sha256:planner-base"},
@@ -312,6 +324,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "Curator telemetry:" in text
     assert "- skill candidates: 3" in text
     assert "Hook evidence:" in text
+    assert "inventory: 2 (skill 1, memory 1)" in text
     assert "related lookups: completed 1" in text
     assert "private eval cases: 3 written" in text
     assert "- planner: runtime overlay hash sha256:planner-overlay" in text

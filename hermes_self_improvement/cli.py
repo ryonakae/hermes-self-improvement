@@ -13,6 +13,7 @@ from .autonomous_policy import build_autonomous_operation_policy, summarize_auto
 from .calibration import collect_calibration_evidence, run_calibration
 from .config import (
     DEFAULT_RETENTION_DAYS,
+    get_hermes_home,
     load_config,
 )
 from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
@@ -30,6 +31,14 @@ from .verification import merge_verifier_status
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
+
+
+def _builtin_memory_paths(config: dict[str, Any]) -> dict[str, Path]:
+    cfg_paths = config.get("memory_inventory_paths") if isinstance(config.get("memory_inventory_paths"), dict) else {}
+    if cfg_paths:
+        return {str(target): Path(str(path)).expanduser() for target, path in cfg_paths.items() if str(target) in {"memory", "user"}}
+    home = get_hermes_home()
+    return {"memory": home / "memories" / "MEMORY.md", "user": home / "memories" / "USER.md"}
 
 
 def _load_gepa_adapter_module(name: str = "hermes_self_improvement_gepa_adapter_cli") -> Any:
@@ -589,7 +598,13 @@ def run_improve(
     until = datetime.now(UTC)
     since = until - timedelta(hours=int(since_hours))
     events = _load_events(_event_path(config), since=since)
-    evidence_pack = build_evidence_pack(events, since, until, curator_telemetry=curator_telemetry)
+    evidence_pack = build_evidence_pack(
+        events,
+        since,
+        until,
+        curator_telemetry=curator_telemetry,
+        memory_paths=_builtin_memory_paths(config),
+    )
     candidate_names = [str(item.get("name") or "") for item in evidence_pack.get("skill_candidates") or [] if isinstance(item, dict) and item.get("name")]
     active_references = build_active_skill_references(config, candidate_names=candidate_names)
     evidence_pack = attach_active_skill_references(evidence_pack, active_references)
@@ -741,6 +756,10 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     planner_prompt = prompt_sources.get("planner") if isinstance(prompt_sources.get("planner"), dict) else {}
     editor_prompt = prompt_sources.get("editor") if isinstance(prompt_sources.get("editor"), dict) else {}
     evidence_strength_counts = planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {}
+    evidence_by_kind = evidence_summary.get("evidence_by_kind") if isinstance(evidence_summary.get("evidence_by_kind"), dict) else {}
+    inventory_count = int(evidence_summary.get("inventory_evidence_count") or 0)
+    skill_inventory_count = int(evidence_by_kind.get("skill_inventory_candidate") or 0)
+    memory_inventory_count = int(evidence_by_kind.get("memory_inventory_candidate") or 0)
     strong_count = int(evidence_strength_counts.get("strong") or 0)
     medium_count = int(evidence_strength_counts.get("medium") or 0)
     weak_count = int(evidence_strength_counts.get("weak") or 0)
@@ -791,7 +810,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- skill candidates: {int(curator.get('candidate_count') or 0)}",
         f"- rejected: {int(curator.get('rejected_count') or 0)}",
         "Hook evidence:",
-        f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}",
+        f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}, inventory: {inventory_count} (skill {skill_inventory_count}, memory {memory_inventory_count})",
         "Skill planner:",
         f"- source: {planner.get('planner_source') or 'unknown'}, status: {planner.get('status') or skill_step.get('status') or 'unknown'}",
         f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for editor: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}",

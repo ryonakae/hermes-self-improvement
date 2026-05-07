@@ -14,6 +14,14 @@ from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_editor_instructions
 
 
+MEMORY_SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
+
+
+def _looks_sensitive_memory_text(text: str) -> bool:
+    lowered = str(text or "").lower()
+    return any(marker in lowered for marker in MEMORY_SECRET_MARKERS)
+
+
 def _parse_preview(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -137,6 +145,90 @@ def _execute_memory_context(context: dict[str, Any], config: dict[str, Any] | No
     if context.get("tool_name") == "memory":
         return execute_memory_tool_operation(context.get("tool_args") or {}, memory_fn=cfg.get("_memory_tool_fn"))
     return execute_memory_provider_tool_operation(context, provider_tool_fn=cfg.get("_memory_provider_tool_fn"))
+
+
+def _normalize_inventory_operation(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    if not isinstance(raw, dict):
+        return None, "memory_operation_invalid"
+    target = str(raw.get("target") or "").strip()
+    if target not in {"memory", "user"}:
+        return None, "memory_target_invalid"
+    op_name = str(raw.get("operation") or raw.get("action") or "").strip()
+    op_map = {
+        "add": "memory_add",
+        "memory_add": "memory_add",
+        "replace": "memory_replace",
+        "memory_replace": "memory_replace",
+        "remove": "memory_delete",
+        "delete": "memory_delete",
+        "memory_delete": "memory_delete",
+    }
+    operation = op_map.get(op_name)
+    if not operation:
+        return None, "memory_operation_invalid"
+    old_text = str(raw.get("old_text") or "").strip()
+    content = str(raw.get("content") or raw.get("current_claim") or "").strip()
+    if operation in {"memory_replace", "memory_delete"} and not old_text:
+        return None, "memory_old_text_missing"
+    if operation in {"memory_add", "memory_replace"} and not content:
+        return None, "memory_content_missing"
+    if _looks_sensitive_memory_text(old_text) or _looks_sensitive_memory_text(content):
+        return None, "memory_sensitive_text"
+    normalized = {
+        "operation": operation,
+        "target": target,
+        "reason": _redact_text(str(raw.get("reason") or "memory_inventory_candidate"), max_chars=240),
+    }
+    if old_text:
+        normalized["old_text"] = _redact_text(old_text, max_chars=500)
+    if content:
+        normalized["content"] = _redact_text(content, max_chars=500)
+    return normalized, None
+
+
+def _call_memory_inventory_planner_llm(*, evidence: list[dict[str, Any]], config: dict[str, Any]) -> list[dict[str, Any]]:
+    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
+    planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
+    provider = planner_config.get("provider") or "auto"
+    model = planner_config.get("model") or None
+    timeout = int(planner_config.get("timeout") or 60)
+    max_tokens = int(planner_config.get("max_tokens") or 1800)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are the Hermes self-improvement memory planner. Convert fuzzy memory inventory evidence into concrete memory tool operations. "
+                "Return JSON only: {\"operations\":[{\"evidence_id\":str,\"operation\":\"add|replace|remove\",\"target\":\"memory|user\",\"old_text\":str,\"content\":str,\"reason\":str}]}. "
+                "Use replace/remove only with exact old_text from evidence. Skip unsafe, sensitive, or ambiguous cases by omitting them."
+            ),
+        },
+        {"role": "user", "content": json.dumps({"evidence": evidence}, ensure_ascii=False, sort_keys=True, default=str)},
+    ]
+    from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+    from .scoring import _ensure_hermes_agent_on_path, _extract_json_object
+
+    _ensure_hermes_agent_on_path()
+    response = call_llm(task="memory", provider=provider, model=model, messages=messages, temperature=None, max_tokens=max_tokens, timeout=timeout)
+    payload = _extract_json_object(extract_content_or_reasoning(response))
+    operations = payload.get("operations") if isinstance(payload, dict) else None
+    return operations if isinstance(operations, list) else []
+
+
+def _memory_inventory_operations(evidence: list[dict[str, Any]], config: dict[str, Any] | None) -> list[dict[str, Any]]:
+    cfg = config or {}
+    planner_fn = cfg.get("_memory_inventory_planner_fn") if isinstance(cfg, dict) else None
+    inventory_evidence = [item for item in evidence if isinstance(item, dict) and item.get("kind") == "memory_inventory_candidate"]
+    if not inventory_evidence:
+        return []
+    if callable(planner_fn):
+        raw = planner_fn(inventory_evidence, config=cfg)
+        return raw if isinstance(raw, list) else []
+    if isinstance(cfg.get("model"), dict):
+        try:
+            return _call_memory_inventory_planner_llm(evidence=inventory_evidence, config=cfg)
+        except Exception:
+            return []
+    return []
 
 
 MAX_EDITOR_EVIDENCE_ITEMS = 8
@@ -387,9 +479,76 @@ def run_memory_improvement_step(
     external_provider = _external_memory_provider(config)
     decisions: list[dict[str, Any]] = []
     changed = 0
+    evidence_by_id = {str(item.get("id") or ""): item for item in memory_evidence if isinstance(item, dict)}
+
+    for raw_operation in _memory_inventory_operations(memory_evidence, config):
+        evidence_id = str(raw_operation.get("evidence_id") or "")
+        operation, reject_reason = _normalize_inventory_operation(raw_operation)
+        if reject_reason or not operation:
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "rejected",
+                "reason": reject_reason or "memory_operation_invalid",
+                "changed": False,
+                "operation": raw_operation,
+            })
+            continue
+        source_evidence = evidence_by_id.get(evidence_id, {"id": evidence_id})
+        context = build_memory_mutation_context(provider=external_provider, operation=operation)
+        related_lookup = build_related_memory_lookup_context(
+            provider=external_provider,
+            evidence=[source_evidence],
+            lookup_fn=(config or {}).get("_memory_lookup_fn"),
+        )
+        if isinstance(context, dict):
+            context = {**context, "related_memory_lookup": related_lookup}
+        if not context.get("execution_enabled"):
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "rejected",
+                "reason": (context.get("reasons") or [context.get("resolved_strategy") or "memory_context_not_executable"])[0],
+                "changed": False,
+                "operation": operation,
+                "context": context,
+                "related_memory_lookup": related_lookup,
+            })
+            continue
+        if not mutate:
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "accepted",
+                "reason": "dry_run_would_execute_memory_tool",
+                "changed": False,
+                "operation": operation,
+                "context": context,
+                "related_memory_lookup": related_lookup,
+            })
+            continue
+        result = _execute_memory_context(context, config)
+        did_change = bool(result.get("success"))
+        changed += 1 if did_change else 0
+        decisions.append({
+            "evidence_id": evidence_id,
+            "decision": "accepted" if did_change else "rejected",
+            "reason": result.get("error") or context.get("resolved_strategy") or "memory_tool_completed",
+            "changed": did_change,
+            "operation": operation,
+            "context": context,
+            "related_memory_lookup": related_lookup,
+            "result": result,
+        })
 
     for item in memory_evidence:
         evidence_id = str(item.get("id") or "")
+        if item.get("kind") == "memory_inventory_candidate":
+            if not any(decision.get("evidence_id") == evidence_id for decision in decisions):
+                decisions.append({
+                    "evidence_id": evidence_id,
+                    "decision": "rejected",
+                    "reason": "memory_inventory_operation_missing",
+                    "changed": False,
+                })
+            continue
         operation = _memory_operation_from_evidence(item)
         if not operation:
             decisions.append({

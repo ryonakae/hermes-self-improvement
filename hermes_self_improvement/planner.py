@@ -89,7 +89,7 @@ def _redacted_preview(value: Any, *, max_chars: int = 220) -> str:
 
 def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
     event = item.get("event") if isinstance(item.get("event"), dict) else {}
-    return {
+    out = {
         "id": str(item.get("id") or ""),
         "kind": str(item.get("kind") or ""),
         "source": item.get("source"),
@@ -99,8 +99,11 @@ def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
         "count": item.get("count"),
         "severity": item.get("severity"),
         "args_preview": _redacted_preview(event.get("args_preview"), max_chars=180),
-        "result_preview": _redacted_preview(event.get("result_preview") or event.get("message") or item.get("summary"), max_chars=220),
+        "result_preview": _redacted_preview(event.get("result_preview") or event.get("message") or item.get("summary") or item.get("rationale"), max_chars=220),
     }
+    if isinstance(item.get("inventory"), dict):
+        out["inventory"] = item["inventory"]
+    return out
 
 
 def _archive_markers(evidence: list[dict[str, Any]]) -> list[str]:
@@ -138,7 +141,7 @@ def _successor_validation(successor: str | None, candidate_by_name: dict[str, di
 def _hint_strength(match_kind: str) -> str:
     if match_kind in {"exact", "bare_name"}:
         return "strong"
-    if match_kind in {"hint_alias", "hint_path", "hint_proposal_cluster"}:
+    if match_kind in {"hint_alias", "hint_path", "hint_proposal_cluster", "inventory_group"}:
         return "medium"
     return "weak"
 
@@ -194,6 +197,22 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
 
     for item in skill_evidence:
         evidence_id = str(item.get("id") or "")
+        if item.get("kind") == "skill_inventory_candidate" and isinstance(item.get("inventory"), dict):
+            target_names = [str(name) for name in item["inventory"].get("target_names") or [] if str(name)]
+            matched_any = False
+            for target_name in target_names:
+                matched_names, normalized_skill, match_kind = _resolve_candidate_skill_names(target_name, candidate_by_name)
+                if not matched_names:
+                    continue
+                matched_any = True
+                for matched_name in matched_names:
+                    attach(matched_name, item, {
+                        "raw_evidence_skill": target_name,
+                        "normalized_skill": normalized_skill,
+                        "evidence_match": "inventory_group" if match_kind != "missing" else match_kind,
+                    })
+            if matched_any:
+                continue
         skill_name = _skill_name_from_evidence(item)
         if skill_name:
             matched_names, normalized_skill, match_kind = _resolve_candidate_skill_names(skill_name, candidate_by_name)

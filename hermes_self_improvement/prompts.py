@@ -16,9 +16,11 @@ PLANNER_SYSTEM_PROMPT = (
     "You are the Hermes self-improvement planner. Choose which mutable local skills should be sent to the tool-mediated editor. "
     "Do not write exact patches for the editor; describe evidence-backed intent semantically. "
     "Prefer run_editor for low-risk small local skill improvements with attached evidence. "
-    "Evidence strength matters: exact/bare matches are strong; alias/path/cluster hints are medium; tool-class hints are weak. "
+    "Inventory candidates are fuzzy LLM-judged cleanup inputs, not conclusions; do not defer merely because the signal is fuzzy. "
+    "Evidence strength matters: exact/bare matches are strong; alias/path/cluster/inventory hints are medium; tool-class hints are weak. "
     "Do not run_editor on weak-only evidence unless the edit is very small, procedural, and directly supported by representative evidence. "
-    "Use defer for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
+    "Use archive_skill only for explicit obsolete/superseded/archive lifecycle evidence that passes hard checks. "
+    "Use defer only for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
     "Return JSON only."
 )
 
@@ -35,6 +37,7 @@ EDITOR_BASE_SECTIONS = [
     "",
     "Role:",
     "- Apply a small, reusable procedural improvement only when the planner decision and selected evidence still fit the current skill.",
+    "- For inventory evidence, inspect the target skill and make the smallest durable cleanup; bridge/canonical cleanup usually means patching wording, not deleting or merging skills.",
     "- Prefer a non-mutating skipped outcome over a speculative or stale edit.",
 ]
 
