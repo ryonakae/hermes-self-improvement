@@ -12,6 +12,7 @@ from .observer import _redact_text
 from .planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
 from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_editor_instructions
+from .target_resolver import build_target_resolution_digest, run_target_resolver
 
 
 MEMORY_SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
@@ -343,6 +344,13 @@ def run_skill_improvement_step(
             "decisions": [],
         }
 
+    target_resolution_digest = build_target_resolution_digest(
+        evidence_pack,
+        skill_candidates=candidates,
+        memory_context={},
+    )
+    target_resolutions = run_target_resolver(target_resolution_digest, config=config)
+    evidence_pack = {**evidence_pack, "target_resolutions": target_resolutions}
     digest = build_skill_planner_digest(evidence_pack)
     planner = run_skill_planner(digest, config=config)
     all_evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
@@ -362,6 +370,8 @@ def run_skill_improvement_step(
             "changed_skills": [],
             "planner": planner,
             "planner_digest": digest,
+            "target_resolution_digest": target_resolution_digest,
+            "target_resolutions": target_resolutions,
             "prompt_sources": prompt_sources,
             "decisions": [],
         }
@@ -462,6 +472,8 @@ def run_skill_improvement_step(
         "changed_skills": sorted(set(changed_skills)),
         "planner": planner,
         "planner_digest": digest,
+        "target_resolution_digest": target_resolution_digest,
+        "target_resolutions": target_resolutions,
         "planner_quality": quality,
         "prompt_sources": prompt_sources,
         "decisions": decisions,

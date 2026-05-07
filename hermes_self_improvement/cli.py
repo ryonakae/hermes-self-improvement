@@ -16,6 +16,12 @@ from .config import (
     get_hermes_home,
     load_config,
 )
+from .conversation_memory import (
+    build_conversation_memory_windows,
+    build_memory_gap_digest,
+    make_conversation_memory_gap_candidate,
+    run_memory_gap_extractor,
+)
 from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
 from .evidence import build_evidence_pack, write_evidence_pack
 from .episodes import record_run_episodes
@@ -605,6 +611,46 @@ def run_improve(
         curator_telemetry=curator_telemetry,
         memory_paths=_builtin_memory_paths(config),
     )
+    conversation_windows = build_conversation_memory_windows(events)
+    memory_gap_digest = build_memory_gap_digest(conversation_windows, existing_memories=[], recent_candidates=[])
+    memory_gap_payload = run_memory_gap_extractor(memory_gap_digest, config=config)
+    memory_gap_evidence = []
+    for candidate in memory_gap_payload.get("candidates") or []:
+        if not isinstance(candidate, dict) or candidate.get("action") not in {"add", "replace"}:
+            continue
+        memory_gap_evidence.append(make_conversation_memory_gap_candidate(
+            candidate_id=str(candidate.get("candidate_id") or "") or None,
+            target=str(candidate.get("target") or "user"),
+            action=str(candidate.get("action") or "defer"),
+            candidate_fact=str(candidate.get("candidate_fact") or ""),
+            old_text=str(candidate.get("old_text") or "") or None,
+            confidence=str(candidate.get("confidence") or "medium"),
+            relation_to_existing=str(candidate.get("relation_to_existing") or "missing"),
+            context_windows=conversation_windows[:5],
+            rationale=str(candidate.get("reason") or "conversation-derived memory gap"),
+        ))
+    if memory_gap_evidence:
+        evidence_pack["evidence"] = [*(evidence_pack.get("evidence") or []), *memory_gap_evidence]
+        views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
+        views = {**views, "memory": [*(views.get("memory") or []), *[str(item.get("id")) for item in memory_gap_evidence if item.get("id")]]}
+        evidence_pack["views"] = views
+        summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
+        evidence_by_kind = summary.get("evidence_by_kind") if isinstance(summary.get("evidence_by_kind"), dict) else {}
+        evidence_by_kind = {**evidence_by_kind, "conversation_memory_gap_candidate": int(evidence_by_kind.get("conversation_memory_gap_candidate") or 0) + len(memory_gap_evidence)}
+        evidence_pack["summary"] = {
+            **summary,
+            "evidence_count": int(summary.get("evidence_count") or 0) + len(memory_gap_evidence),
+            "conversation_memory_window_count": len(conversation_windows),
+            "conversation_memory_gap_candidate_count": len(memory_gap_evidence),
+            "evidence_by_kind": evidence_by_kind,
+        }
+    else:
+        summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
+        evidence_pack["summary"] = {
+            **summary,
+            "conversation_memory_window_count": len(conversation_windows),
+            "conversation_memory_gap_candidate_count": 0,
+        }
     candidate_names = [str(item.get("name") or "") for item in evidence_pack.get("skill_candidates") or [] if isinstance(item, dict) and item.get("name")]
     active_references = build_active_skill_references(config, candidate_names=candidate_names)
     evidence_pack = attach_active_skill_references(evidence_pack, active_references)

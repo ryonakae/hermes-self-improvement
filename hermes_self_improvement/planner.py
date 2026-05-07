@@ -181,6 +181,14 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     evidence_resolution: dict[str, list[dict[str, Any]]] = {name: [] for name in candidate_by_name}
     unmatched: list[dict[str, Any]] = []
     by_reason: dict[str, int] = {}
+    resolver_resolutions: dict[str, list[dict[str, Any]]] = {}
+    raw_target_resolutions = evidence_pack.get("target_resolutions") if isinstance(evidence_pack.get("target_resolutions"), dict) else {}
+    for resolution in raw_target_resolutions.get("resolutions") or []:
+        if not isinstance(resolution, dict):
+            continue
+        candidate_id = str(resolution.get("candidate_id") or "")
+        if candidate_id:
+            resolver_resolutions.setdefault(candidate_id, []).append(resolution)
 
     def attach(matched_name: str, item: dict[str, Any], meta: dict[str, Any]) -> None:
         if matched_name not in candidate_by_name:
@@ -197,6 +205,27 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
 
     for item in skill_evidence:
         evidence_id = str(item.get("id") or "")
+        resolved_any = False
+        for resolution in resolver_resolutions.get(evidence_id, []):
+            if str(resolution.get("target_kind") or "skill") != "skill":
+                continue
+            if str(resolution.get("decision_hint") or "") == "block":
+                continue
+            target = str(resolution.get("target") or "")
+            if target not in candidate_by_name:
+                continue
+            resolved_any = True
+            attach(target, item, {
+                "raw_evidence_skill": target,
+                "normalized_skill": _bare_skill_name(target),
+                "evidence_match": "llm_target_resolver",
+                "target_hint_source": "llm_target_resolver",
+                "target_hint_confidence": resolution.get("confidence"),
+                "target_hint_reason": resolution.get("reason"),
+                "decision_hint": resolution.get("decision_hint"),
+            })
+        if resolved_any:
+            continue
         if item.get("kind") == "skill_inventory_candidate" and isinstance(item.get("inventory"), dict):
             target_names = [str(name) for name in item["inventory"].get("target_names") or [] if str(name)]
             matched_any = False

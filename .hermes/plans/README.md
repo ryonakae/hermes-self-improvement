@@ -2,11 +2,17 @@
 
 ## Current source of truth
 
-As of 2026-05-07, the current active implementation plan is:
+As of 2026-05-08, the current active implementation plan is:
+
+- `2026-05-08_003603-llm-target-resolve-and-conversation-memory-gaps.md`
+  - **Status:** active / planned.
+  - Extends the existing `improve` flow with LLM target resolution, context-windowed unmatched evidence candidates, and conversation-derived memory gap candidates. Program code gathers compact context and enforces hard stops; LLMs judge fuzzy target resolution and `apply / defer / skip / block`. Auto-apply is intentionally less conservative for low-to-medium-risk skill patches, stale path/command fixes, and memory add/replace, while avoiding new commands, approval queues, apply-mode taxonomies, or separate lanes.
+
+The prior active implementation plan is:
 
 - `2026-05-07_095543-llm-inventory-candidates.md`
-  - **Status:** active / planned.
-  - Extends the existing `improve` flow with LLM-judged skill and memory inventory candidates so self-improvement is not dominated by tool failures. Program code collects compact inventory groups and hard safety metadata; the existing planner/editor and memory tool path decide and auto-apply safe changes. This plan deliberately avoids a new command, approval queue, or separate “lane”.
+  - **Status:** active / partially implemented / absorbed by the 2026-05-08 follow-up.
+  - Extends the existing `improve` flow with LLM-judged skill and memory inventory candidates so self-improvement is not dominated by tool failures. Program code collects compact inventory groups and hard safety metadata; the existing planner/editor and memory tool path decide and auto-apply safe changes. Continue its implemented inventory pieces, but use the 2026-05-08 plan for target resolution, conversation-derived memory gaps, and simplified apply semantics.
 
 The latest completed implementation plan is:
 

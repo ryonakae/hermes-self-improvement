@@ -68,15 +68,40 @@ def _compact_event(ev: dict[str, Any]) -> dict[str, Any]:
         "error_kind",
         "result_preview",
         "args_preview",
+        "user_message_preview",
+        "assistant_response_preview",
         "provider",
         "model",
         "finish_reason",
     )
     out = {key: ev.get(key) for key in keys if ev.get(key) is not None}
-    for key in ("result_preview", "args_preview"):
+    for key in ("result_preview", "args_preview", "user_message_preview", "assistant_response_preview"):
         if isinstance(out.get(key), str):
             out[key] = _redact_text(out[key], max_chars=300)
     return out
+
+
+def build_context_window(events: list[dict[str, Any]], *, center_index: int, radius: int = 3) -> dict[str, Any]:
+    if not events:
+        return {"center_index": center_index, "session_id": "", "events": []}
+    bounded_index = max(0, min(center_index, len(events) - 1))
+    center = events[bounded_index]
+    session_id = str(center.get("session_id") or "")
+    start = max(0, bounded_index - max(radius, 0))
+    end = min(len(events), bounded_index + max(radius, 0) + 1)
+    window_events: list[dict[str, Any]] = []
+    for index in range(start, end):
+        ev = events[index]
+        if session_id and str(ev.get("session_id") or "") != session_id:
+            continue
+        compact = _compact_event(ev)
+        compact["index"] = index
+        window_events.append(compact)
+    return {
+        "center_index": bounded_index,
+        "session_id": session_id,
+        "events": window_events,
+    }
 
 
 def _targets(*targets: tuple[str, float]) -> list[dict[str, Any]]:
@@ -295,6 +320,87 @@ def _cluster_findings_from_events(events: list[dict[str, Any]]) -> list[dict[str
     return findings
 
 
+def _unmatched_theme_for_event(ev: dict[str, Any]) -> str | None:
+    if ev.get("event") != "post_tool_call":
+        return None
+    status = str(ev.get("status") or "").lower()
+    if status not in {"error", "warning", "failed", "failure"}:
+        return None
+    tool_name = str(ev.get("tool_name") or "")
+    error_kind = str(ev.get("error_kind") or "")
+    text = " ".join(str(ev.get(key) or "") for key in ("args_preview", "result_preview", "message", "error")).lower()
+    if tool_name == "patch" and (
+        error_kind in {"unknown_error", "not_found"}
+        or "path required" in text
+        or "old_string and new_string are identical" in text
+        or "found 2 matches" in text
+        or "could not find a match" in text
+    ):
+        return "patch_tool_workflow"
+    if error_kind == "permission_denied" or "operation not permitted" in text or "permission denied" in text:
+        return "sandbox_permission_workflow"
+    if error_kind == "timeout" or "timed out" in text or "timeout" in text:
+        return "timeout_workflow"
+    if tool_name == "terminal" and (
+        error_kind in {"terminal_nonzero_exit", "unknown_error"}
+        or "not a git repository" in text
+        or "no such file or directory" in text
+        or "command not found" in text
+        or "invalid_grant" in text
+        or "permission denied" in text
+    ):
+        return "terminal_preflight_workflow"
+    return None
+
+
+def _theme_rationale(theme: str, count: int) -> str:
+    if theme == "patch_tool_workflow":
+        return f"Observed {count} patch failures that likely need reusable patch/tool-editing workflow guidance."
+    if theme == "terminal_preflight_workflow":
+        return f"Observed {count} terminal failures that likely need cwd/repo/path/auth preflight guidance."
+    if theme == "sandbox_permission_workflow":
+        return f"Observed {count} permission failures that likely need sandbox/Safehouse constraint guidance."
+    if theme == "timeout_workflow":
+        return f"Observed {count} timeout failures that likely need long-running/background process guidance."
+    return f"Observed {count} recurring unmatched failures that may need skill guidance."
+
+
+def build_unmatched_improvement_candidates(
+    events: list[dict[str, Any]],
+    *,
+    existing_candidate_names: list[str] | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    del existing_candidate_names  # Target resolution is intentionally deferred to the LLM resolver.
+    theme_indices: dict[str, list[int]] = {}
+    for index, ev in enumerate(events):
+        theme = _unmatched_theme_for_event(ev)
+        if theme:
+            theme_indices.setdefault(theme, []).append(index)
+    out: list[dict[str, Any]] = []
+    for theme, indices in sorted(theme_indices.items(), key=lambda item: (-len(item[1]), item[0])):
+        if len(indices) < 2:
+            continue
+        representative = [_compact_event(events[index]) for index in indices[:5]]
+        context_windows = [build_context_window(events, center_index=index, radius=2) for index in indices[:3]]
+        payload = {"theme": theme, "events": representative}
+        out.append({
+            "id": _stable_id("unmatched", payload),
+            "kind": "unmatched_improvement_candidate",
+            "source": "unmatched_evidence_cluster",
+            "theme": theme,
+            "count": len(indices),
+            "likely_targets": _targets(("skill", 0.8), ("memory", 0.1), ("scorer", 0.1)),
+            "representative_failures": representative,
+            "context_windows": context_windows,
+            "resolver_required": True,
+            "rationale": _redact_text(_theme_rationale(theme, len(indices)), max_chars=260),
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
 def build_cluster_evidence(findings: list[dict[str, Any]], *, candidate_names: list[str], limit: int = 10) -> list[dict[str, Any]]:
     clusters: list[dict[str, Any]] = []
     for finding in findings:
@@ -494,6 +600,10 @@ def build_evidence_pack(
     if cluster_evidence:
         evidence.extend(cluster_evidence)
         kind_counts["tool_error_cluster_evidence"] += len(cluster_evidence)
+    unmatched_improvement_evidence = build_unmatched_improvement_candidates(events, existing_candidate_names=candidate_names)
+    if unmatched_improvement_evidence:
+        evidence.extend(unmatched_improvement_evidence)
+        kind_counts["unmatched_improvement_candidate"] += len(unmatched_improvement_evidence)
     skill_inventory_evidence = collect_skill_inventory_candidates(curator_telemetry)
     memory_inventory_evidence = collect_memory_inventory_candidates(memory_paths)
     inventory_evidence = skill_inventory_evidence + memory_inventory_evidence
@@ -514,6 +624,8 @@ def build_evidence_pack(
             "ignored_count": len(ignored),
             "evidence_by_kind": dict(kind_counts),
             "cluster_evidence_count": len(cluster_evidence),
+            "unmatched_candidate_count": len(unmatched_improvement_evidence),
+            "unmatched_candidate_themes": [str(item.get("theme") or "") for item in unmatched_improvement_evidence if item.get("theme")],
             "inventory_evidence_count": len(inventory_evidence),
             "filtered_partial_event_count": filtered_partial_count,
             "reclassified_tool_result_count": reclassified_count,
