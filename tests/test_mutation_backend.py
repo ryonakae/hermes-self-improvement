@@ -133,6 +133,42 @@ def test_native_backend_executes_skill_tools_and_finalizer():
     assert result["tool_trace"] == result["used_tools"]
 
 
+def test_native_backend_sends_tool_results_without_tool_role_messages():
+    calls = []
+    responses = iter([
+        _tool_response("skill_view", {"name": "demo"}, call_id="call_view"),
+        _tool_response(
+            "submit_mutation_result",
+            {
+                "success": True,
+                "outcome": "stopped_uncertain_needs_review",
+                "changed_skills": [],
+                "created_skills": [],
+                "deleted_skills": [],
+                "verification_notes": ["read current skill"],
+                "rollback_hints": [],
+            },
+        ),
+    ])
+
+    def fake_llm(messages, **kwargs):
+        calls.append([dict(message) for message in messages])
+        return next(responses)
+
+    backend = NativeSkillToolEditorBackend(
+        tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {"success": True, "content": "demo"}, skill_manage_fn=lambda **_: {}),
+        llm_call=fake_llm,
+    )
+
+    result = backend.run("prompt", {"targets": {"primary_skill": "demo"}}, {})
+
+    assert result["success"] is True
+    assert len(calls) == 2
+    assert {message["role"] for message in calls[1]} <= {"system", "assistant", "user"}
+    assert not any(message["role"] == "tool" for message in calls[1])
+    assert any("Tool result for skill_view" in str(message.get("content")) for message in calls[1] if message["role"] == "user")
+
+
 def test_native_backend_non_mutating_finalizer_succeeds_without_changes():
     responses = iter([
         _tool_response("skill_view", {"name": "demo"}),

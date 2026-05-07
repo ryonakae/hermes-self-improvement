@@ -402,6 +402,13 @@ def _assistant_tool_call_message(call: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _tool_result_message(call: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "role": "user",
+        "content": "Tool result for " + str(call.get("name") or "unknown_tool") + " (" + str(call.get("id") or "unknown_call") + "):\n" + json.dumps(result, ensure_ascii=False, sort_keys=True),
+    }
+
+
 @dataclass
 class NativeSkillToolEditorBackend:
     tool_executor: SkillToolExecutor
@@ -483,7 +490,7 @@ class NativeSkillToolEditorBackend:
                     trace_entry["name"] = args.get("name")
                 actual_used.append(trace_entry)
                 messages.append(_assistant_tool_call_message(call))
-                messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False, sort_keys=True)})
+                messages.append(_tool_result_message(call, result))
         return {"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_iterations_exceeded"]}
 
 
