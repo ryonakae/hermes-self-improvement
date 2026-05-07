@@ -302,9 +302,16 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                         "decisions": [{"skill": "a", "decision": "run_editor", "editor_instructions": large_instruction}],
                     },
                     "planner_quality": {"attached_candidate_count": 1, "unmatched_evidence_count": 2, "selected_with_evidence": 1, "action_like_skips": 0, "hint_attached_evidence_count": 1, "hint_attached_candidate_count": 1, "cluster_evidence_count": 0, "attachments_by_match_kind": {"hint_tool_class": 1}, "editor_task_count": 1, "editor_prompt_chars": {"max": 500, "min": 500, "total": 500}},
-                    "decisions": [{"task": {"instructions": large_instruction}}],
+                    "decisions": [
+                        {"skill": "a", "decision": "run_editor_preview", "reason": "planner_run_editor_preview", "task": {"instructions": large_instruction}},
+                        {"skill": "b", "decision": "defer", "reason": "target_uncertain"},
+                        {"skill": "c", "decision": "skip", "reason": "one_off_noise"},
+                    ],
                 },
-                "memory": {"status": "completed", "changed": 0, "changed_memories": [], "decisions": [{"related_memory_lookup": {"status": "completed"}}]},
+                "memory": {"status": "completed", "changed": 0, "changed_memories": [], "decisions": [
+                    {"evidence_id": "m1", "decision": "accepted", "reason": "dry_run_would_execute_memory_tool", "related_memory_lookup": {"status": "completed"}},
+                    {"evidence_id": "m2", "decision": "rejected", "reason": "memory_sensitive_text", "related_memory_lookup": {"status": "skipped"}},
+                ]},
                 "scorer": {"status": "calibration_only", "changed": 0},
                 "evaluator": {"status": "calibration_only", "changed": 0},
             },
@@ -326,7 +333,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["full_payload"]["path"] == str(artifact)
     assert payload["evidence"]["views"] == {"skill": 2, "memory": 1, "scorer": 0, "evaluator": 0}
     assert payload["steps"]["proposals_considered"] == 4
-    assert payload["steps"]["skill"]["decision_count"] == 1
+    assert payload["steps"]["skill"]["decision_count"] == 3
     assert payload["steps"]["prompt_sources"]["planner"]["overlay_active"] is False
     assert payload["steps"]["prompt_sources"]["editor"]["overlay_active"] is True
     assert payload["steps"]["prompt_sources"]["editor"]["active_hash"] == "sha256:active"
@@ -338,6 +345,11 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["steps"]["skill_planner"]["quality"]["attachments_by_match_kind"] == {"hint_tool_class": 1}
     assert payload["steps"]["skill_planner"]["quality"]["editor_prompt_chars"]["max"] == 500
     assert payload["steps"]["memory"]["related_lookups"]["completed"] == 1
+    assert payload["action_summary"] == {"apply": 2, "defer": 1, "skip": 1, "block": 1}
+    assert payload["actionable"]["mutation_ready_count"] == 2
+    assert payload["actionable"]["blocked_count"] == 1
+    assert payload["actionable"]["deferred_count"] == 1
+    assert payload["actionable"]["skipped_count"] == 1
     assert "proposals_considered" not in payload
     assert large_instruction not in raw
     assert len(raw) < 6000

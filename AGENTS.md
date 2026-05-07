@@ -61,6 +61,8 @@ PY
 
 - Runtime hook 内で LLM call、GEPA optimizer、skill patch、memory edit、重い集計を動かさない。
 - 改善対象は `skill`, `memory`, `scorer`, `evaluator` だけ。
+- `improve` の semantic decision は `apply / defer / skip / block` に寄せる。内部互換の `run_editor` などは残してよいが、新しい apply mode、承認キュー、別 lane は増やさない。
+- Conversation-derived memory gap は改善対象。キーワードは window ranking にだけ使い、semantic gate にしない。
 - plugin 自身の README / AGENTS / config / plans / bundled skill、Hermes core、任意 docs/config は自己改善対象にしない。
 - skill mutation は `skill_manage` など公式 skill tools 経由だけ。direct filesystem fallback は使わない。
 - memory mutation は memory tool / provider-native memory tool 経由だけ。built-in memory file や provider DB を直接編集しない。
@@ -77,8 +79,11 @@ PY
 - `hermes_self_improvement/schemas.py`: plugin tool schema
 - `hermes_self_improvement/tool_handlers.py`: plugin tool handlers
 - `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry
-- `hermes_self_improvement/analysis.py`: event aggregation / evidence extraction
+- `hermes_self_improvement/evidence.py`: event aggregation / evidence extraction / context windows / unmatched improvement candidates
+- `hermes_self_improvement/target_resolver.py`: LLM target resolution for unmatched evidence
+- `hermes_self_improvement/conversation_memory.py`: conversation window ranking and memory gap candidates
 - `hermes_self_improvement/calibration.py`: scorer/evaluator calibration
+- `hermes_self_improvement/runtime_eval_cases.py`: runtime-private eval cases for episodes, unmatched observations, and improve run artifacts
 - `hermes_self_improvement/mutation_policy.py`: memory provider capability / strategy helpers
 - `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor
 - `skills/operations/`: bundled operational skill

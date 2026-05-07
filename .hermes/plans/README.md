@@ -5,7 +5,7 @@
 As of 2026-05-08, the current active implementation plan is:
 
 - `2026-05-08_003603-llm-target-resolve-and-conversation-memory-gaps.md`
-  - **Status:** active / planned.
+  - **Status:** implemented through context windows, unmatched candidates, LLM target resolution, conversation memory gap candidates, compact tool action buckets, and runtime eval case seeding; remaining follow-up is broader CLI text/report polish and runtime dogfood tuning.
   - Extends the existing `improve` flow with LLM target resolution, context-windowed unmatched evidence candidates, and conversation-derived memory gap candidates. Program code gathers compact context and enforces hard stops; LLMs judge fuzzy target resolution and `apply / defer / skip / block`. Auto-apply is intentionally less conservative for low-to-medium-risk skill patches, stale path/command fixes, and memory add/replace, while avoiding new commands, approval queues, apply-mode taxonomies, or separate lanes.
 
 The prior active implementation plan is:
@@ -64,7 +64,7 @@ The current implemented baseline is:
 - GEPA/DSPy are not live proposal scorers. They are used by `calibrate` to generate runtime-private overlay candidate sets and evaluator/scorer calibration artifacts.
 - Runtime-private overlay candidate sets treat `planner_overlay`, `editor_overlay`, and `evaluator_overlay` as one generation unit with per-target `changed|unchanged`.
 - Overlay candidate-set acceptance checks are intentionally thin: artifact readability, consistent generation metadata, no full replacement, addendum limits, active-before rollback metadata, and GEPA result mapping.
-- Agent-facing tool results expose only compact summaries and artifact paths. Full prompt text, GEPA logs, evidence, candidate payloads, and run payloads stay in runtime-private artifacts or explicit CLI `--json` output.
+- Agent-facing tool results expose only compact summaries and artifact paths. Full prompt text, GEPA logs, evidence, candidate payloads, and run payloads stay in runtime-private artifacts or explicit CLI `--json` output. `self_improvement_improve` includes semantic `action_summary` / `actionable` buckets for `apply / defer / skip / block`.
 - Legacy primary `plan / apply / rollback / outcome`, `--execute`, `--items`, and `self_improvement_record_outcome` are removed from the user-facing surface.
 - Historical apply artifact readers are removed from report/calibration paths; reports now summarize current runner artifacts, calibration ledgers, and explicit review outcomes only.
 

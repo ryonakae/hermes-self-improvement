@@ -69,6 +69,47 @@ def _related_lookup_counts(memory_step: dict[str, Any]) -> dict[str, int]:
     return counts
 
 
+def _semantic_action_from_decision(decision: dict[str, Any], *, kind: str) -> str:
+    raw = str(decision.get("decision") or "")
+    reason = str(decision.get("reason") or "")
+    if raw in {"run_editor_preview", "archive_skill_preview"}:
+        return "apply"
+    if raw == "accepted":
+        return "apply"
+    if raw == "defer":
+        return "defer"
+    if raw == "skip":
+        return "skip"
+    if raw == "rejected":
+        if kind == "memory" and reason.startswith("dry_run_would_execute"):
+            return "apply"
+        return "block"
+    if raw in {"blocked", "block"}:
+        return "block"
+    return "skip"
+
+
+def _action_summary_from_steps(step_decisions: dict[str, Any]) -> dict[str, int]:
+    counts = {"apply": 0, "defer": 0, "skip": 0, "block": 0}
+    for kind in ("skill", "memory"):
+        step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
+        for decision in step.get("decisions") or []:
+            if not isinstance(decision, dict):
+                continue
+            action = _semantic_action_from_decision(decision, kind=kind)
+            counts[action] = counts.get(action, 0) + 1
+    return counts
+
+
+def _actionable_summary(action_summary: dict[str, int]) -> dict[str, int]:
+    return {
+        "mutation_ready_count": int(action_summary.get("apply") or 0),
+        "deferred_count": int(action_summary.get("defer") or 0),
+        "skipped_count": int(action_summary.get("skip") or 0),
+        "blocked_count": int(action_summary.get("block") or 0),
+    }
+
+
 def _compact_step(name: str, step: Any) -> dict[str, Any]:
     data = step if isinstance(step, dict) else {}
     out = {
@@ -94,6 +135,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     autonomous_policy = result.get("autonomous_policy") if isinstance(result.get("autonomous_policy"), dict) else {}
+    action_summary = _action_summary_from_steps(step_decisions)
     artifact_path = result.get("artifact_path")
     return {
         "schema_name": "self_improvement_tool_result_summary",
@@ -104,6 +146,8 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "target_changed": bool(result.get("target_changed")),
         "artifact_path": artifact_path,
         "summary": result.get("summary") if isinstance(result.get("summary"), dict) else {},
+        "action_summary": action_summary,
+        "actionable": _actionable_summary(action_summary),
         "autonomous_policy": autonomous_policy,
         "curator_telemetry": {
             "available": bool(curator.get("available")),

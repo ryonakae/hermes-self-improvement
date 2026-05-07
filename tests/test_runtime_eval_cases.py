@@ -201,3 +201,42 @@ def test_overlay_eval_cases_ignore_sparse_unmatched_failure_cluster(tmp_path):
     })
 
     assert build_overlay_set_runtime_eval_cases(config=config, limit=100) == []
+
+
+def test_overlay_eval_cases_include_improve_run_unmatched_and_memory_gap_signals(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "runs" / "run-20260508.json", {
+        "schema_name": "self_improvement_run_result",
+        "schema_version": "1.0",
+        "run_id": "run-20260508",
+        "artifact_path": str(root / "runs" / "run-20260508.json"),
+        "evidence_pack": {
+            "summary": {
+                "unmatched_candidate_count": 2,
+                "unmatched_candidate_themes": ["patch_tool_workflow", "sandbox_permission_workflow"],
+                "conversation_memory_gap_candidate_count": 1,
+            }
+        },
+        "step_decisions": {
+            "skill": {
+                "target_resolutions": {"resolutions": []},
+                "planner_quality": {"unmatched_evidence_count": 12},
+            },
+            "memory": {
+                "decisions": [
+                    {"evidence_id": "m1", "decision": "accepted", "reason": "dry_run_would_execute_memory_tool", "changed": False}
+                ]
+            },
+        },
+    })
+
+    cases = build_overlay_set_runtime_eval_cases(config=config, limit=100)
+
+    case_types = {case["case_type"] for case in cases}
+    assert "planner_overlay_from_improve_unmatched_candidates" in case_types
+    assert "planner_overlay_from_conversation_memory_gap" in case_types
+    planner_case = next(case for case in cases if case["case_type"] == "planner_overlay_from_improve_unmatched_candidates")
+    assert planner_case["expected"]["decision"] in {"apply", "defer"}
+    memory_case = next(case for case in cases if case["case_type"] == "planner_overlay_from_conversation_memory_gap")
+    assert memory_case["expected"]["decision"] == "apply"
