@@ -2,7 +2,13 @@
 
 ## Current source of truth
 
-As of 2026-05-06, the current implementation and remaining-work source of truth is:
+As of 2026-05-07, the current active implementation plan is:
+
+- `2026-05-07_095543-llm-inventory-candidates.md`
+  - **Status:** active / planned.
+  - Extends the existing `improve` flow with LLM-judged skill and memory inventory candidates so self-improvement is not dominated by tool failures. Program code collects compact inventory groups and hard safety metadata; the existing planner/editor and memory tool path decide and auto-apply safe changes. This plan deliberately avoids a new command, approval queue, or separate “lane”.
+
+The latest completed implementation plan is:
 
 - `2026-05-06_090000-gepa-calibration-signal-window.md`
   - **Status:** implemented.
