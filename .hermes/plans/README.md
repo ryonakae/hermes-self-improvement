@@ -4,6 +4,10 @@
 
 As of 2026-05-08, the current active implementation plan is:
 
+- `2026-05-08_094800-memory-tool-runtime-and-capacity.md`
+  - **Status:** implemented.
+  - Fixes memory mutation execution so CLI/standalone runs use the official Hermes `memory` tool with a loaded `MemoryStore`; adds built-in memory capacity recovery through bounded `replace/remove` compaction before retrying `add`; and falls back to the active external memory provider tool only when built-in memory still cannot fit the entry. External provider handling is active-provider-specific, not Hindsight-specific.
+
 - `2026-05-08_003603-llm-target-resolve-and-conversation-memory-gaps.md`
   - **Status:** implemented through context windows, unmatched candidates, LLM target resolution, conversation memory gap candidates, compact tool action buckets, and runtime eval case seeding; remaining follow-up is broader CLI text/report polish and runtime dogfood tuning.
   - Extends the existing `improve` flow with LLM target resolution, context-windowed unmatched evidence candidates, and conversation-derived memory gap candidates. Program code gathers compact context and enforces hard stops; LLMs judge fuzzy target resolution and `apply / defer / skip / block`. Auto-apply is intentionally less conservative for low-to-medium-risk skill patches, stale path/command fixes, and memory add/replace, while avoiding new commands, approval queues, apply-mode taxonomies, or separate lanes.

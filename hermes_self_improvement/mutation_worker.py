@@ -14,10 +14,17 @@ def _load_skill_manage() -> Callable[..., str]:
 
 def _load_memory_tool() -> Callable[..., str]:
     try:
-        from tools.memory_tool import memory_tool  # type: ignore
+        from tools.memory_tool import MemoryStore, memory_tool  # type: ignore
     except Exception as exc:  # pragma: no cover - depends on Hermes runtime path
         raise RuntimeError(f"memory_tool_unavailable:{exc}") from exc
-    return memory_tool
+
+    store = MemoryStore()
+    store.load_from_disk()
+
+    def call_memory_tool(**kwargs: Any) -> str:
+        return memory_tool(**kwargs, store=store)
+
+    return call_memory_tool
 
 
 def _load_skill_archive() -> Callable[[str], Any]:
@@ -27,12 +34,40 @@ def _load_skill_archive() -> Callable[[str], Any]:
 
 
 def _load_provider_tool(tool_name: str) -> Callable[..., str]:
-    """Provider memory tools are exposed through Hermes runtime, not files.
+    """Load the active external memory provider tool through Hermes provider APIs."""
+    try:
+        from hermes_cli.config import cfg_get  # type: ignore
+        from plugins.memory import load_memory_provider  # type: ignore
+    except Exception as exc:  # pragma: no cover - depends on Hermes runtime path
+        raise RuntimeError(f"memory_provider_tool_unavailable:{tool_name}:{exc}") from exc
 
-    The standalone plugin cannot safely reach into provider internals. Runtime
-    integrations may inject a provider-tool callable; otherwise we fail closed.
-    """
-    raise RuntimeError(f"memory_provider_tool_unavailable:{tool_name}")
+    provider_name = str(cfg_get("memory.provider", "") or "").strip()
+    if not provider_name:
+        raise RuntimeError(f"memory_provider_tool_unavailable:{tool_name}:active_provider_missing")
+    provider = load_memory_provider(provider_name)
+    if provider is None:
+        raise RuntimeError(f"memory_provider_tool_unavailable:{tool_name}:provider_not_found:{provider_name}")
+    try:
+        available = provider.is_available()
+    except Exception as exc:
+        raise RuntimeError(f"memory_provider_tool_unavailable:{tool_name}:provider_unavailable:{exc}") from exc
+    if not available:
+        raise RuntimeError(f"memory_provider_tool_unavailable:{tool_name}:provider_unavailable:{provider_name}")
+    try:
+        provider.initialize("self-improvement", platform="self-improvement", agent_context="primary")
+    except TypeError:
+        provider.initialize("self-improvement")
+    schemas = provider.get_tool_schemas() or []
+    exposed_tools = {str(item.get("name") or "") for item in schemas if isinstance(item, dict)}
+    if tool_name not in exposed_tools:
+        raise RuntimeError(f"memory_provider_tool_unavailable:{tool_name}:tool_not_exposed_by:{provider_name}")
+
+    def call_provider_tool(*args: Any, **kwargs: Any) -> str:
+        if args and len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], dict):
+            return provider.handle_tool_call(args[0], args[1])
+        return provider.handle_tool_call(tool_name, kwargs)
+
+    return call_provider_tool
 
 
 _ALLOWED_ARGS_BY_ACTION = {

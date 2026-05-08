@@ -65,7 +65,7 @@ PY
 - Conversation-derived memory gap は改善対象。キーワードは window ranking にだけ使い、semantic gate にしない。
 - plugin 自身の README / AGENTS / config / plans / bundled skill、Hermes core、任意 docs/config は自己改善対象にしない。
 - skill mutation は `skill_manage` など公式 skill tools 経由だけ。direct filesystem fallback は使わない。
-- memory mutation は memory tool / provider-native memory tool 経由だけ。built-in memory file や provider DB を直接編集しない。
+- memory mutation は memory tool / provider-native memory tool 経由だけ。built-in memory file や provider DB を直接編集しない。CLI/standalone 実行でも Hermes 公式 `tools.memory_tool.MemoryStore` を読み込んで `memory_tool(..., store=store)` として実行する。built-in memory が満杯なら `current_entries` を使って統合・削除を検討し、`replace/remove` 後に `add` を再試行する。それでも満杯なら active external provider がある場合だけ provider tool に fallback する。Hindsight 固定にしない。
 - `improve` / `calibrate` は default mutation-capable。preview-only は `--dry-run`。
 - rollback は primary feature ではない。失敗は future evidence として correction する。
 - plugin の自己改善対象は target repo の commit を作らない。repo 内の実装・docs を手作業で変更した場合は、作業者の workflow で commit する。

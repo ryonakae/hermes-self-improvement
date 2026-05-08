@@ -141,11 +141,195 @@ def _memory_operation_from_evidence(item: dict[str, Any]) -> dict[str, Any] | No
     return None
 
 
-def _execute_memory_context(context: dict[str, Any], config: dict[str, Any] | None) -> dict[str, Any]:
+def _execute_memory_context(
+    context: dict[str, Any],
+    config: dict[str, Any] | None,
+    *,
+    operation: dict[str, Any] | None = None,
+    external_provider: str | None = None,
+) -> dict[str, Any]:
     cfg = config or {}
     if context.get("tool_name") == "memory":
-        return execute_memory_tool_operation(context.get("tool_args") or {}, memory_fn=cfg.get("_memory_tool_fn"))
+        return _execute_built_in_memory_context(
+            context,
+            cfg,
+            operation=operation,
+            external_provider=external_provider,
+        )
     return execute_memory_provider_tool_operation(context, provider_tool_fn=cfg.get("_memory_provider_tool_fn"))
+
+
+def _is_memory_capacity_error(result: dict[str, Any]) -> bool:
+    if result.get("success"):
+        return False
+    text = " ".join(str(result.get(key) or "") for key in ("error", "message", "usage"))
+    return "exceed the limit" in text or "Memory at" in text and "chars" in text
+
+
+def _normalize_capacity_operation(raw: dict[str, Any], *, target: str) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    action = str(raw.get("action") or raw.get("operation") or "").strip()
+    if action in {"delete", "memory_delete"}:
+        action = "remove"
+    if action == "memory_replace":
+        action = "replace"
+    if action not in {"remove", "replace"}:
+        return None
+    if str(raw.get("target") or target).strip() != target:
+        return None
+    old_text = str(raw.get("old_text") or "").strip()
+    if not old_text:
+        return None
+    op = {"action": action, "target": target, "old_text": old_text}
+    if action == "replace":
+        content = str(raw.get("content") or raw.get("new_content") or "").strip()
+        if not content:
+            return None
+        op["content"] = content
+    return op
+
+
+def _call_memory_capacity_planner_llm(*, failed_operation: dict[str, Any], failure_result: dict[str, Any], target: str, content: str, config: dict[str, Any]) -> list[dict[str, Any]]:
+    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
+    planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
+    provider = planner_config.get("provider") or "auto"
+    model = planner_config.get("model") or None
+    timeout = int(planner_config.get("timeout") or 60)
+    max_tokens = int(planner_config.get("max_tokens") or 1200)
+    current_entries = failure_result.get("current_entries") if isinstance(failure_result.get("current_entries"), list) else []
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are the Hermes memory capacity planner. The official built-in memory tool rejected an add because the target store is full. "
+                "Return JSON only: {\"operations\":[{\"action\":\"remove|replace\",\"target\":\"memory|user\",\"old_text\":str,\"content\":str}]}. "
+                "Use only exact old_text substrings from current_entries. Prefer consolidating or removing stale/duplicate/low-value entries. "
+                "Do not remove user preferences unless clearly obsolete. Keep replacement content compact. Return at most 3 operations."
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "target": target,
+                    "new_entry": content,
+                    "failed_operation": failed_operation,
+                    "failure": {"error": failure_result.get("error"), "usage": failure_result.get("usage")},
+                    "current_entries": current_entries,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                default=str,
+            ),
+        },
+    ]
+    from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+    from .scoring import _ensure_hermes_agent_on_path, _extract_json_object
+
+    _ensure_hermes_agent_on_path()
+    response = call_llm(task="memory", provider=provider, model=model, messages=messages, temperature=None, max_tokens=max_tokens, timeout=timeout)
+    payload = _extract_json_object(extract_content_or_reasoning(response))
+    operations = payload.get("operations") if isinstance(payload, dict) else None
+    return operations if isinstance(operations, list) else []
+
+
+def _capacity_compaction_operations(*, failed_operation: dict[str, Any] | None, failure_result: dict[str, Any], target: str, content: str, config: dict[str, Any]) -> list[dict[str, Any]]:
+    planner = config.get("_memory_capacity_planner_fn")
+    if callable(planner):
+        try:
+            raw = planner(
+                failed_operation=failed_operation or {},
+                failure_result=failure_result,
+                target=target,
+                content=content,
+                config=config,
+            )
+        except Exception:
+            raw = []
+    elif isinstance(config.get("model"), dict):
+        try:
+            raw = _call_memory_capacity_planner_llm(
+                failed_operation=failed_operation or {},
+                failure_result=failure_result,
+                target=target,
+                content=content,
+                config=config,
+            )
+        except Exception:
+            raw = []
+    else:
+        raw = []
+    items = raw if isinstance(raw, list) else []
+    normalized = []
+    for item in items[:3]:
+        op = _normalize_capacity_operation(item, target=target)
+        if op:
+            normalized.append(op)
+    return normalized
+
+
+def _execute_built_in_memory_context(
+    context: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    operation: dict[str, Any] | None,
+    external_provider: str | None,
+) -> dict[str, Any]:
+    args = context.get("tool_args") or {}
+    result = execute_memory_tool_operation(args, memory_fn=config.get("_memory_tool_fn"))
+    if result.get("success") or args.get("action") != "add" or not _is_memory_capacity_error(result):
+        if _is_memory_capacity_error(result):
+            result.setdefault("error", "memory_capacity_exceeded")
+        return result
+
+    target = str(args.get("target") or "memory")
+    content = str(args.get("content") or "")
+    recovery: dict[str, Any] = {"attempted": True, "compaction_changed": 0, "compaction_results": []}
+    for compaction in _capacity_compaction_operations(
+        failed_operation=operation,
+        failure_result=result,
+        target=target,
+        content=content,
+        config=config,
+    ):
+        compaction_result = execute_memory_tool_operation(compaction, memory_fn=config.get("_memory_tool_fn"))
+        recovery["compaction_results"].append({"operation": compaction, "result": compaction_result})
+        if compaction_result.get("success"):
+            recovery["compaction_changed"] += 1
+    if recovery["compaction_changed"]:
+        retry = execute_memory_tool_operation(args, memory_fn=config.get("_memory_tool_fn"))
+        retry["capacity_recovery"] = recovery
+        if retry.get("success"):
+            return retry
+        result = retry
+
+    if external_provider:
+        fallback_operation = {"operation": "memory_add", "target": "external_memory", "content": content}
+        fallback_context = build_memory_mutation_context(provider=external_provider, operation=fallback_operation)
+        if fallback_context.get("execution_enabled"):
+            fallback_result = execute_memory_provider_tool_operation(fallback_context, provider_tool_fn=config.get("_memory_provider_tool_fn"))
+            fallback_payload = {
+                "success": bool(fallback_result.get("success")),
+                "tool_name": "memory",
+                "tool_args": args,
+                "direct_fallback_used": False,
+                "error": None if fallback_result.get("success") else fallback_result.get("error") or "memory_capacity_exceeded",
+                "capacity_recovery": recovery,
+                "fallback_context": fallback_context,
+                "fallback_result": fallback_result,
+            }
+            return fallback_payload
+        recovery["fallback_reason"] = (fallback_context.get("reasons") or ["external_memory_provider_unavailable"])[0]
+    else:
+        recovery["fallback_reason"] = "external_memory_provider_missing"
+
+    return {
+        **result,
+        "success": False,
+        "error": "memory_capacity_exceeded",
+        "capacity_recovery": recovery,
+    }
 
 
 def _normalize_inventory_operation(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
@@ -536,7 +720,7 @@ def run_memory_improvement_step(
                 "related_memory_lookup": related_lookup,
             })
             continue
-        result = _execute_memory_context(context, config)
+        result = _execute_memory_context(context, config, operation=operation, external_provider=external_provider)
         did_change = bool(result.get("success"))
         changed += 1 if did_change else 0
         decisions.append({
@@ -600,7 +784,7 @@ def run_memory_improvement_step(
                 "related_memory_lookup": related_lookup,
             })
             continue
-        result = _execute_memory_context(context, config)
+        result = _execute_memory_context(context, config, operation=operation, external_provider=external_provider)
         did_change = bool(result.get("success"))
         changed += 1 if did_change else 0
         decisions.append({

@@ -34,7 +34,7 @@
       └──── 次の [1] Hermes の実行へ戻る
 ```
 
-`improve` は、この流れのうち証拠パック作成、改善方針の選択、スキル / メモリの改善、episode 記録を担います。Curator の主な役割はスキル保守ですが、このプラグインはスキルとメモリの両方を扱います。Curator に直接結びつかない失敗も、前後のイベント文脈を含む unmatched evidence candidate として扱い、LLM target resolver が既存 skill への割り当て可否を判断します。会話由来の memory gap も対象で、キーワードは候補 window の ranking にだけ使い、意味判断は前後文脈を見た LLM に寄せます。直近30日（設定値 `calibration.evidence.window_days`）の観測は、重複排除したうえで outcome scoring や GEPA 用の実行時評価ケースに使います。
+`improve` は、この流れのうち証拠パック作成、改善方針の選択、スキル / メモリの改善、episode 記録を担います。Curator の主な役割はスキル保守ですが、このプラグインはスキルとメモリの両方を扱います。Curator に直接結びつかない失敗も、前後のイベント文脈を含む unmatched evidence candidate として扱い、LLM target resolver が既存 skill への割り当て可否を判断します。会話由来の memory gap も対象で、キーワードは候補 window の ranking にだけ使い、意味判断は前後文脈を見た LLM に寄せます。メモリ変更は公式 `memory` tool / active external provider tool 経由だけで実行します。built-in memory が満杯のときは、まず `memory` tool のエラーに含まれる `current_entries` をもとに統合・削除候補を作って `replace/remove` → `add` を再試行し、それでも入らない場合だけ active external provider があれば provider tool に回します。直近30日（設定値 `calibration.evidence.window_days`）の観測は、重複排除したうえで outcome scoring や GEPA 用の実行時評価ケースに使います。
 
 `calibrate` は、`improve` の判断そのものを見直します。[DSPy](https://dspy.ai/) は LLM への指示や評価を Python プログラムとして扱うためのフレームワークで、[GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) は評価ケースを使って指示を改善する optimizer です。採用された overlay は `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/active-prompts.json` に保存され、次の `improve` で使われます。
 

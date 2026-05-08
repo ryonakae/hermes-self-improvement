@@ -88,6 +88,36 @@ def test_skill_manage_operation_executor_allows_only_known_actions():
     assert rejected["success"] is False
     assert rejected["error"] == "unsupported_skill_manage_action"
 
+def test_builtin_memory_loader_passes_loaded_store_to_official_memory_tool(monkeypatch):
+    import types
+
+    worker = importlib.import_module("hermes_self_improvement.mutation_worker")
+    calls = []
+
+    class FakeMemoryStore:
+        def __init__(self):
+            self.loaded = False
+
+        def load_from_disk(self):
+            self.loaded = True
+
+    def fake_memory_tool(**kwargs):
+        calls.append(kwargs)
+        return json.dumps({"success": True})
+
+    fake_module = types.ModuleType("tools.memory_tool")
+    fake_module.MemoryStore = FakeMemoryStore
+    fake_module.memory_tool = fake_memory_tool
+    monkeypatch.setitem(sys.modules, "tools.memory_tool", fake_module)
+
+    fn = worker._load_memory_tool()
+    result = json.loads(fn(action="add", target="memory", content="x"))
+
+    assert result["success"] is True
+    assert calls[0]["action"] == "add"
+    assert calls[0]["store"].loaded is True
+
+
 def test_memory_tool_operation_execute_fails_closed_without_direct_fallback():
     mod = load_plugin_module()
 
@@ -99,6 +129,43 @@ def test_memory_tool_operation_execute_fails_closed_without_direct_fallback():
     rejected = mod.execute_memory_tool_operation({"action": "remove", "target": "memory"}, memory_fn=lambda **kwargs: json.dumps({"success": True}))
     assert rejected["success"] is False
     assert rejected["error"] == "memory_remove_args_missing:old_text"
+
+def test_provider_tool_loader_uses_active_memory_provider_tool_surface(monkeypatch):
+    import types
+
+    worker = importlib.import_module("hermes_self_improvement.mutation_worker")
+    calls = []
+
+    class FakeProvider:
+        name = "hindsight"
+
+        def is_available(self):
+            return True
+
+        def initialize(self, session_id, **kwargs):
+            calls.append(("initialize", session_id, kwargs.get("platform")))
+
+        def get_tool_schemas(self):
+            return [{"name": "hindsight_retain", "parameters": {}}]
+
+        def handle_tool_call(self, tool_name, args, **kwargs):
+            calls.append(("handle", tool_name, args))
+            return json.dumps({"success": True})
+
+    fake_plugins = types.ModuleType("plugins.memory")
+    fake_plugins.load_memory_provider = lambda name: FakeProvider() if name == "hindsight" else None
+    fake_config = types.ModuleType("hermes_cli.config")
+    fake_config.cfg_get = lambda key, default=None: "hindsight" if key == "memory.provider" else default
+    monkeypatch.setitem(sys.modules, "plugins.memory", fake_plugins)
+    monkeypatch.setitem(sys.modules, "hermes_cli.config", fake_config)
+
+    fn = worker._load_provider_tool("hindsight_retain")
+    result = json.loads(fn(content="x"))
+
+    assert result["success"] is True
+    assert calls[0] == ("initialize", "self-improvement", "self-improvement")
+    assert calls[1] == ("handle", "hindsight_retain", {"content": "x"})
+
 
 def test_hindsight_retain_executor_accepts_only_provider_tool_surface():
     mod = load_plugin_module()
