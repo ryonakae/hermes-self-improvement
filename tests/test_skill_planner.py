@@ -3,7 +3,7 @@ from __future__ import annotations
 import hermes_self_improvement.planner as planner
 from hermes_self_improvement.planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
 from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
-from hermes_self_improvement.prompts import base_prompt_hash
+from hermes_self_improvement.prompts import base_prompt_hash, render_planner_messages
 
 
 def pack():
@@ -48,6 +48,20 @@ def test_build_skill_planner_digest_attaches_evidence_and_caps_previews():
     assert "abc123" not in preview
     assert by_name["unused-skill"]["attached_evidence_count"] == 0
     assert digest["unmatched_evidence"]["by_reason"]["skill_target_missing"] == 1
+
+
+def test_render_planner_messages_uses_markdown_context_not_digest_dump():
+    digest = build_skill_planner_digest(pack())
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert "# Self-improvement evidence" in user_content
+    assert "## Planner candidate briefs" in user_content
+    assert "# Candidate brief: demo-skill" in user_content
+    assert "not machine-control state" in user_content
+    assert "Return JSON only" not in rendered["messages"][0]["content"]
+    assert "Allowed planner decision vocabulary" in user_content
 
 
 def test_skill_planner_digest_attaches_inventory_candidate_to_all_group_targets():

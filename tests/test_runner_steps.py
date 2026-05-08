@@ -57,9 +57,11 @@ def test_build_skill_agent_task_uses_skills_only_constraints():
     assert task["desired_outcome"]
     assert "Do not duplicate guidance" in "\n".join(task["non_goals"])
     assert "You are the Hermes self-improvement skill editor." in task["instructions"]
-    assert "Target skill:" in task["instructions"]
-    assert "Planner decision:" in task["instructions"]
-    assert "Selected evidence:" in task["instructions"]
+    assert "# Candidate brief: demo-skill" in task["instructions"]
+    assert "Target skill:" not in task["instructions"]
+    assert "Planner decision:" not in task["instructions"]
+    assert "Selected evidence:" not in task["instructions"]
+    assert task["llm_brief_markdown"].startswith("# Candidate brief: demo-skill")
     assert "Hard stops:" in task["instructions"]
     assert "Call skill_view" in task["instructions"]
     joined = "\n".join(task["constraints"])
@@ -342,7 +344,8 @@ def test_skill_step_executes_only_mutable_local_skill_via_backend(tmp_path):
     assert result["changed_skills"] == ["demo-skill"]
     assert seen["task"]["targets"] == {"primary_skill": "demo-skill"}
     assert "You are the Hermes self-improvement skill editor." in seen["task"]["instructions"]
-    assert "Planner decision:" in seen["task"]["instructions"]
+    assert "Markdown brief:" in seen["task"]["instructions"]
+    assert "# Candidate brief: demo-skill" in seen["task"]["instructions"]
     assert "skill_manage" in seen["prompt"]
 
 

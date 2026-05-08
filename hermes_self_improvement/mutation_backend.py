@@ -74,12 +74,45 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     if changed and not result.get("verification_notes"):
         return {"success": False, "error": "mutation_agent_result_verification_notes_missing"}
     allowed_targets = set(result.get("_allowed_targets") or [])
+    expected_target = str(result.get("_expected_target") or "").strip()
+    task_kind = str(result.get("_task_kind") or "").strip()
     if allowed_targets:
         escaped = sorted(name for name in changed if name not in allowed_targets)
         if escaped:
             return {"success": False, "error": "mutation_agent_result_target_escape", "escaped_targets": escaped}
-    result.pop("_allowed_targets", None)
+    if task_kind == "skill_create" and expected_target:
+        created = {str(name) for name in result.get("created_skills") or []}
+        if expected_target not in created:
+            return {"success": False, "error": "mutation_agent_result_created_skill_missing"}
+        if not _tool_trace_has_skill_manage(result.get("used_tools") or [], action="create", name=expected_target):
+            return {"success": False, "error": "mutation_agent_result_create_tool_trace_missing"}
+    if task_kind == "skill_improve" and expected_target:
+        outcome = str(result.get("outcome") or "")
+        if outcome not in NON_MUTATING_AGENT_OUTCOMES:
+            changed_targets = {str(name) for name in result.get("changed_skills") or []}
+            if expected_target not in changed_targets:
+                return {"success": False, "error": "mutation_agent_result_changed_skill_missing"}
+            if not _tool_trace_has_skill_manage(result.get("used_tools") or [], action=None, name=expected_target):
+                return {"success": False, "error": "mutation_agent_result_change_tool_trace_missing"}
+    for key in ("_allowed_targets", "_expected_target", "_task_kind"):
+        result.pop(key, None)
     return result
+
+
+def _tool_trace_has_skill_manage(trace: list[Any], *, action: str | None, name: str) -> bool:
+    for item in trace:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("tool") or item.get("tool_name") or "") != "skill_manage":
+            continue
+        if action is not None and str(item.get("action") or "") != action:
+            continue
+        if str(item.get("name") or "") != name:
+            continue
+        if item.get("success") is False:
+            continue
+        return True
+    return False
 
 
 def _task_allowed_targets(task: dict[str, Any]) -> set[str]:
@@ -440,16 +473,30 @@ class NativeSkillToolEditorBackend:
         if not self.tool_executor.available():
             return {"success": False, "error": "mutation_agent_unavailable", "reasons": [self.tool_executor.unavailable_reason or "skill_tool_registry_unavailable"]}
         tools = native_editor_tool_schemas()
+        task_manifest = {
+            "task_kind": task.get("task_kind"),
+            "targets": task.get("targets"),
+            "constraints": task.get("constraints"),
+            "expected_outcome": task.get("expected_outcome"),
+            "evidence_ids": task.get("evidence_ids"),
+        }
+        markdown_brief = str(task.get("llm_brief_markdown") or "").strip()
+        user_context = "\n\n".join([
+            prompt,
+            "Task manifest summary:\n" + json.dumps(task_manifest, ensure_ascii=False, sort_keys=True),
+            "Markdown brief:\n" + (markdown_brief or "n/a"),
+        ])
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": (
                     "You are a constrained Hermes skill editor. Use only the provided skill tools. "
+                    "Read Markdown briefs as judgment context, not as a machine protocol. "
                     "Read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
                     "If the skill already covers the point, is stale, or is uncertain, do not mutate. Finish every run by calling submit_mutation_result."
                 ),
             },
-            {"role": "user", "content": prompt + "\n\nTask JSON:\n" + json.dumps(task, ensure_ascii=False, sort_keys=True)},
+            {"role": "user", "content": user_context},
         ]
         actual_used: list[dict[str, Any]] = []
         tool_calls = 0
@@ -477,6 +524,9 @@ class NativeSkillToolEditorBackend:
                     allowed_targets = _task_allowed_targets(task)
                     if allowed_targets:
                         final["_allowed_targets"] = sorted(allowed_targets)
+                    targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
+                    final["_task_kind"] = str(task.get("task_kind") or "")
+                    final["_expected_target"] = str(targets.get("new_skill") or targets.get("primary_skill") or "")
                     return validate_backend_success_result(final)
                 if tool not in ALLOWED_MUTATION_AGENT_TOOLS:
                     return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_MUTATION_AGENT_TOOLS)}

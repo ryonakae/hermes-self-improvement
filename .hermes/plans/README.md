@@ -4,11 +4,17 @@
 
 As of 2026-05-08, the current active implementation plan is:
 
+- `2026-05-08_235526-markdown-llm-handoffs.md`
+  - **Status:** active.
+  - Reworks self-improvement around LLM-centered Markdown context while keeping program-owned manifests, ids, paths, hashes, guards, capacity diagnostics, ledgers, eval cases, and tool results structured. The plan explicitly covers the non-Markdown work too: create-skill worker success validation by tool trace/post-state, memory-full recovery via compact/remove/swap/skill-placement/fallback, USER/MEMORY/Skill placement review, the existing `improve`/`calibrate` split, simple `apply / defer / skip / block` semantics, and Hermes-created local mutable skill boundaries. LLM-authored Markdown is context only and must not become a parsed control protocol.
+
+The latest completed implementation plan is:
+
 - `2026-05-08_165219-runtime-overlay-seed-and-prompt-kernel.md`
   - **Status:** implemented.
   - Kernelizes repo-managed planner/editor/evaluator base prompts and moves rich operating guidance into runtime-private prompt overlays initialized from repo-tracked Markdown default seeds. Default seeds are bootstrap/distribution assets; `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/active-prompts.json` remains the runtime source of truth after setup and DSPy/GEPA calibration. Overlay limits are unified at 150 lines and 12000 chars per role.
 
-The latest completed implementation plan is:
+Earlier completed implementation plans include:
 
 - `2026-05-08_155457-mutation-contract-and-memory-placement.md`
   - **Status:** implemented.

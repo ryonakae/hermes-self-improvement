@@ -4,6 +4,8 @@ import hashlib
 import json
 from typing import Any
 
+from .markdown_artifacts import render_candidate_markdown, render_evidence_markdown
+
 PROMPT_SCHEMA_VERSION = "1.0"
 
 SKILL_MEMORY_CLASSIFICATION_BLOCK = """Memory is factual “what” knowledge: compact key facts, user preferences, environment facts, project locations, stable corrections, sticky-note-sized facts injected every session.
@@ -13,18 +15,16 @@ Skills are procedural “how” knowledge: multi-step workflows, tool-specific i
 If it belongs on a sticky note, prefer memory. If it belongs in a reference document or repeatable recipe, prefer skill."""
 
 PLANNER_SYSTEM_PROMPT = (
-    "You are the Hermes self-improvement planner. Follow the output schema exactly. "
+    "You are the Hermes self-improvement planner. Read Markdown evidence as context, not as a machine protocol. "
     "Use only allowed decisions: run_editor, create_skill, skip, defer, memory_candidate, evaluator_candidate. "
     "Do not bypass mutation scope, allowed tool boundaries, hard safety checks, or secret handling. "
-    "Use runtime-private operating guidance when available. Return JSON only."
+    "Use runtime-private operating guidance when available."
 )
 
 PLANNER_USER_PREFIX = (
-    "Plan skill improvements from this digest. Output schema: "
-    "{\"decisions\":[{\"skill\":str,\"proposed_skill_name\":str,\"decision\":\"run_editor|create_skill|skip|defer|memory_candidate|evaluator_candidate\","
-    "\"priority\":\"low|medium|high\",\"risk\":\"low|medium|high\","
-    "\"observed_problem\":str,\"desired_outcome\":str,\"suggested_focus\":[str],\"non_goals\":[str],"
-    "\"evidence_ids\":[str],\"rationale\":str,\"reason\":str}]}\n\n"
+    "Read the Markdown context below. It is evidence and rationale context, not machine-control state.\n"
+    "Allowed planner decision vocabulary: run_editor, create_skill, skip, defer, memory_candidate, evaluator_candidate.\n"
+    "When you provide structured decisions, use the existing decisions array fields: skill/proposed_skill_name, decision, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n\n"
 )
 
 EDITOR_BASE_SECTIONS = [
@@ -150,7 +150,26 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
     addendum = _overlay_addendum(overlay)
     if addendum:
         system_prompt = f"{system_prompt}\n\nRuntime-private operating guidance:\n{addendum}"
-    user_content = PLANNER_USER_PREFIX + json.dumps(digest, ensure_ascii=False, sort_keys=True, default=str)
+    candidate_sections = []
+    for candidate in (digest.get("skill_candidates") or [])[:20]:
+        if isinstance(candidate, dict):
+            representative = candidate.get("representative_evidence") if isinstance(candidate.get("representative_evidence"), list) else []
+            evidence_by_id = {str(item.get("id") or ""): item for item in representative if isinstance(item, dict) and item.get("id")}
+            candidate_sections.append(render_candidate_markdown(candidate, evidence_by_id, max_evidence=4))
+    markdown_context = "\n".join([
+        render_evidence_markdown(digest, max_items=20),
+        "## Planner candidate briefs",
+        *(candidate_sections or ["- n/a\n"]),
+        "## Program-owned digest summary",
+        _format_json_section({
+            "schema_name": digest.get("schema_name"),
+            "schema_version": digest.get("schema_version"),
+            "available_skill_evidence_ids": digest.get("available_skill_evidence_ids"),
+            "constraints": digest.get("constraints"),
+            "filtered_skill_candidate_count_by_reason": digest.get("filtered_skill_candidate_count_by_reason"),
+        }),
+    ])
+    user_content = PLANNER_USER_PREFIX + markdown_context
     user_addendum = _overlay_addendum(overlay, key="user_addendum")
     if user_addendum:
         user_content = f"{user_content}\n\nRuntime-private user guidance:\n{user_addendum}"
@@ -168,6 +187,7 @@ def render_editor_instructions(
     planner_decision: dict[str, Any],
     evidence: list[dict[str, Any]],
     overlay: dict[str, Any] | None = None,
+    llm_brief_markdown: str | None = None,
 ) -> dict[str, Any]:
     sections = list(EDITOR_BASE_SECTIONS)
     addendum = _overlay_addendum(overlay)
@@ -178,17 +198,19 @@ def render_editor_instructions(
         sections.extend(["", "Runtime-private user guidance:", user_addendum])
     sections.extend([
         "",
-        "Target skill:",
-        f"- {skill_name}",
+        "Markdown brief:",
+        llm_brief_markdown or render_candidate_markdown(
+            {**candidate, "name": skill_name, "evidence_ids": [str(item.get("id") or "") for item in evidence if isinstance(item, dict) and item.get("id")]},
+            {str(item.get("id") or ""): item for item in evidence if isinstance(item, dict) and item.get("id")},
+        ),
         "",
-        "Candidate metadata:",
-        _format_json_section(candidate),
-        "",
-        "Planner decision:",
-        _format_json_section(planner_decision),
-        "",
-        "Selected evidence:",
-        _format_json_section(evidence),
+        "Program-owned task summary:",
+        _format_json_section({
+            "target_skill": skill_name,
+            "candidate_source": candidate.get("source") or candidate.get("candidate_source"),
+            "planner_decision": planner_decision.get("decision"),
+            "evidence_ids": [str(item.get("id") or "") for item in evidence if isinstance(item, dict) and item.get("id")],
+        }),
     ])
     sections.extend(EDITOR_ALLOWED_TOOLS_AND_STOPS)
     return {"instructions": "\n".join(sections), "prompt_source": _prompt_source("editor", overlay)}

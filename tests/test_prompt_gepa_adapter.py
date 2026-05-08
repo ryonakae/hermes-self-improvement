@@ -183,7 +183,8 @@ def test_optimize_overlay_candidate_set_calls_dspy_gepa_and_returns_candidate_ta
     assert FakeGEPA.calls
     assert FakeGEPA.calls[0]["kwargs"]["max_full_evals"] == 2
     assert len(FakeGEPA.calls[0]["trainset"]) == 3
-    assert FakeGEPA.calls[0]["trainset"][0]["inputs"] == ("evidence_json", "cases_json", "current_overlays_json")
+    assert FakeGEPA.calls[0]["trainset"][0]["inputs"] == ("evidence_markdown", "evidence_json", "cases_json", "current_overlays_json")
+    assert "# Calibration context" in FakeGEPA.calls[0]["trainset"][0]["evidence_markdown"]
 
 
 def test_optimize_overlay_candidate_set_keeps_candidate_when_data_or_budget_missing(tmp_path):

@@ -12,6 +12,7 @@ from .observer import _redact_text
 from .planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
 from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_editor_instructions
+from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
 from .target_resolver import build_target_resolution_digest, run_target_resolver
 
 
@@ -177,13 +178,15 @@ def _is_memory_capacity_error(result: dict[str, Any]) -> bool:
     if result.get("success"):
         return False
     text = " ".join(str(result.get(key) or "") for key in ("error", "message", "usage"))
-    return "exceed the limit" in text or "Memory at" in text and "chars" in text
+    return "memory_capacity_exceeded" in text or "exceed the limit" in text or "Memory at" in text and "chars" in text
 
 
 def _normalize_capacity_operation(raw: dict[str, Any], *, target: str) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
     action = str(raw.get("action") or raw.get("operation") or "").strip()
+    if action in {"move_to_skill", "skill_candidate", "create_skill_candidate"}:
+        return {k: v for k, v in raw.items() if k in {"action", "operation", "target", "name", "content", "reason", "evidence_id"}}
     if action in {"delete", "memory_delete"}:
         action = "remove"
     if action == "memory_replace":
@@ -299,7 +302,13 @@ def _execute_built_in_memory_context(
 
     target = str(args.get("target") or "memory")
     content = str(args.get("content") or "")
-    recovery: dict[str, Any] = {"attempted": True, "compaction_changed": 0, "compaction_results": []}
+    recovery: dict[str, Any] = {
+        "attempted": True,
+        "placement_options": ["compact_or_replace", "remove_or_swap", "move_to_skill", "external_provider_fallback"],
+        "compaction_changed": 0,
+        "compaction_results": [],
+        "skill_candidate_operations": [],
+    }
     for compaction in _capacity_compaction_operations(
         failed_operation=operation,
         failure_result=result,
@@ -307,6 +316,10 @@ def _execute_built_in_memory_context(
         content=content,
         config=config,
     ):
+        action = str(compaction.get("action") or compaction.get("operation") or "")
+        if action in {"move_to_skill", "skill_candidate", "create_skill_candidate"}:
+            recovery["skill_candidate_operations"].append(compaction)
+            continue
         compaction_result = execute_memory_tool_operation(compaction, memory_fn=config.get("_memory_tool_fn"))
         recovery["compaction_results"].append({"operation": compaction, "result": compaction_result})
         if compaction_result.get("success"):
@@ -453,11 +466,11 @@ def _call_memory_inventory_planner_llm(*, evidence: list[dict[str, Any]], config
             "role": "system",
             "content": (
                 "You are the Hermes self-improvement memory planner. Convert fuzzy memory inventory and placement evidence into concrete memory tool operations. "
-                "Return JSON only: {\"operations\":[{\"evidence_id\":str,\"operation\":\"add|replace|remove|move_user_to_memory|move_memory_to_user\",\"target\":\"memory|user\",\"old_text\":str,\"content\":str,\"reason\":str}]}. "
+                "Read Markdown placement context as judgment context, not a machine protocol. "
                 "Use replace/remove/move only with exact old_text from evidence. Skip unsafe, sensitive, or ambiguous cases by omitting them."
             ),
         },
-        {"role": "user", "content": json.dumps({"evidence": evidence}, ensure_ascii=False, sort_keys=True, default=str)},
+        {"role": "user", "content": render_memory_placement_markdown(evidence)},
     ]
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
     from .scoring import _ensure_hermes_agent_on_path, _extract_json_object
@@ -484,7 +497,11 @@ def _memory_inventory_operations(evidence: list[dict[str, Any]], config: dict[st
     if hinted_operations:
         return hinted_operations
     if callable(planner_fn):
-        raw = planner_fn(inventory_evidence, config=cfg)
+        placement_markdown = render_memory_placement_markdown(inventory_evidence)
+        try:
+            raw = planner_fn(inventory_evidence, config=cfg, placement_markdown=placement_markdown)
+        except TypeError:
+            raw = planner_fn(inventory_evidence, config=cfg)
         return raw if isinstance(raw, list) else []
     if isinstance(cfg.get("model"), dict):
         try:
@@ -539,6 +556,11 @@ def build_skill_agent_task(
     candidate_meta = candidate or {}
     planner_meta = planner_decision or {}
     compact_evidence = _compact_editor_evidence(evidence)
+    evidence_by_id = {str(item.get("id") or ""): item for item in compact_evidence if isinstance(item, dict) and item.get("id")}
+    llm_brief = render_candidate_markdown(
+        {**candidate_meta, "name": skill_name, "evidence_ids": [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]},
+        evidence_by_id,
+    )
     overlay = load_active_prompt_overlay(config or {}, role="editor", base_hash=base_prompt_hash("editor")) if config is not None else None
     rendered = render_editor_instructions(
         skill_name=skill_name,
@@ -546,6 +568,7 @@ def build_skill_agent_task(
         planner_decision=planner_meta,
         evidence=compact_evidence,
         overlay=overlay,
+        llm_brief_markdown=llm_brief,
     )
     instructions = rendered["instructions"]
     observed_problem = planner_meta.get("observed_problem") or planner_meta.get("change_intent") or planner_meta.get("rationale") or "Improve the target skill if current content confirms the attached evidence."
@@ -572,7 +595,9 @@ def build_skill_agent_task(
         "non_goals": non_goals,
         "confidence": planner_meta.get("confidence") or planner_meta.get("priority"),
         "evidence_ids": evidence_ids,
+        "omitted_evidence_count": max(0, len(evidence) - MAX_EDITOR_EVIDENCE_ITEMS),
         "instructions": instructions,
+        "llm_brief_markdown": llm_brief,
         "prompt_source": {"editor": rendered["prompt_source"]},
         "constraints": [
             "Use only skills_list, skill_view, skill_manage, submit_mutation_result.",
@@ -599,6 +624,11 @@ def build_skill_create_agent_task(
 ) -> dict[str, Any]:
     planner_meta = planner_decision or {}
     compact_evidence = _compact_editor_evidence(evidence)
+    evidence_ids = [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]
+    llm_brief = render_candidate_markdown(
+        {"name": skill_name, "source": "planner_create_skill", "state": "missing", "evidence_ids": evidence_ids, "risk": planner_meta.get("risk")},
+        {str(item.get("id") or ""): item for item in compact_evidence if isinstance(item, dict) and item.get("id")},
+    )
     observed_problem = planner_meta.get("observed_problem") or planner_meta.get("change_intent") or planner_meta.get("rationale") or planner_meta.get("reason") or "Create a missing reusable Hermes skill if evidence proves a durable workflow gap."
     desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("editor_instructions") or "A compact SKILL.md with trigger conditions, concrete steps, pitfalls, and verification notes."
     non_goals = planner_meta.get("non_goals") if isinstance(planner_meta.get("non_goals"), list) else []
@@ -608,7 +638,6 @@ def build_skill_create_agent_task(
             "Do not create a skill just to bypass immutability of built-in, hub-installed, plugin-bundled, or external-dir skills.",
             "Do not duplicate an existing Hermes-created skill.",
         ]
-    evidence_ids = [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]
     return {
         "type": "skill_agent_task",
         "task_kind": "skill_create",
@@ -620,7 +649,8 @@ def build_skill_create_agent_task(
         "non_goals": non_goals,
         "confidence": planner_meta.get("confidence") or planner_meta.get("priority"),
         "evidence_ids": evidence_ids,
-        "instructions": "Create a new Hermes skill only if the evidence describes a reusable procedural workflow. Use skill_manage(action=\"create\") with complete YAML frontmatter and compact durable guidance.",
+        "instructions": "Create a new Hermes skill only if the evidence describes a reusable procedural workflow. Use skill_manage(action=\"create\") with complete YAML frontmatter and compact durable guidance.\n\nMarkdown brief:\n" + llm_brief,
+        "llm_brief_markdown": llm_brief,
         "constraints": [
             "Use only skills_list, skill_view, skill_manage, submit_mutation_result.",
             "Do not use terminal/file/git/direct filesystem tools.",
@@ -848,6 +878,22 @@ def run_memory_improvement_step(
     decisions: list[dict[str, Any]] = []
     changed = 0
     evidence_by_id = {str(item.get("id") or ""): item for item in memory_evidence if isinstance(item, dict)}
+    seen_memory_operation_keys: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+    def _operation_conflict_reason(operation: dict[str, Any]) -> str | None:
+        operation_kind = str(operation.get("operation") or "")
+        if operation_kind not in {"memory_replace", "memory_remove"}:
+            return None
+        key = (operation_kind, str(operation.get("target") or ""), str(operation.get("old_text") or ""))
+        if not key[2]:
+            return None
+        previous = seen_memory_operation_keys.get(key)
+        if previous is None:
+            seen_memory_operation_keys[key] = operation
+            return None
+        if operation_kind == "memory_replace" and previous.get("content") != operation.get("content"):
+            return "memory_operation_conflicts_with_prior_operation"
+        return "memory_operation_duplicates_prior_operation"
 
     for raw_operation in _memory_inventory_operations(memory_evidence, config):
         evidence_id = str(raw_operation.get("evidence_id") or "")
@@ -859,6 +905,16 @@ def run_memory_improvement_step(
                 "reason": reject_reason or "memory_operation_invalid",
                 "changed": False,
                 "operation": raw_operation,
+            })
+            continue
+        conflict_reason = _operation_conflict_reason(operation)
+        if conflict_reason:
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "rejected",
+                "reason": conflict_reason,
+                "changed": False,
+                "operation": operation,
             })
             continue
         source_evidence = evidence_by_id.get(evidence_id, {"id": evidence_id})
@@ -955,6 +1011,16 @@ def run_memory_improvement_step(
                 "evidence_id": evidence_id,
                 "decision": "rejected",
                 "reason": operation.get("_reject_reason"),
+                "changed": False,
+                "operation": operation,
+            })
+            continue
+        conflict_reason = _operation_conflict_reason(operation)
+        if conflict_reason:
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "rejected",
+                "reason": conflict_reason,
                 "changed": False,
                 "operation": operation,
             })

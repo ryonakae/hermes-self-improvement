@@ -123,6 +123,21 @@ def test_memory_inventory_operation_hint_executes_without_llm_planner():
     assert calls == [{"action": "replace", "target": "memory", "old_text": "Hermes root is /opt/data", "content": "Hermes runtime root is ~/.hermes"}]
 
 
+def test_memory_inventory_planner_receives_markdown_placement_context():
+    seen = {}
+
+    def fake_planner(evidence, config=None, placement_markdown=None):
+        seen["placement_markdown"] = placement_markdown
+        return []
+
+    run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config={"_memory_inventory_planner_fn": fake_planner}, mutate=False)
+
+    assert "# Memory placement brief" in seen["placement_markdown"]
+    assert "## Placement options" in seen["placement_markdown"]
+    assert "## Compact first" in seen["placement_markdown"]
+    assert "## Move procedural knowledge to skill" in seen["placement_markdown"]
+
+
 def test_memory_inventory_move_user_to_memory_adds_before_removing_source():
     calls = []
 
@@ -168,3 +183,83 @@ def test_memory_inventory_move_dry_run_does_not_mutate():
     assert calls == []
     assert result["decisions"][0]["decision"] == "accepted"
     assert result["decisions"][0]["reason"] == "dry_run_would_execute_memory_tool"
+
+
+def test_memory_capacity_recovery_records_placement_options_and_uses_fallback_after_compaction():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        if args.get("action") == "add":
+            return {"success": False, "error": "memory_capacity_exceeded", "current_entries": [{"target": "memory", "content": "old duplicate"}]}
+        return {"success": True, "changed": True}
+
+    provider_calls = []
+
+    def fake_provider(tool_name, args):
+        provider_calls.append((tool_name, args))
+        return {"success": True, "id": "external-1"}
+
+    config = {
+        "_memory_inventory_planner_fn": lambda evidence, config=None: [{
+            "evidence_id": "mem-inv-1",
+            "operation": "add",
+            "target": "memory",
+            "content": "Durable fact that is worth keeping.",
+            "reason": "clear durable fact",
+        }],
+        "_memory_capacity_planner_fn": lambda **kwargs: [
+            {"action": "replace", "target": "memory", "old_text": "old duplicate", "content": "compact old duplicate"},
+            {"action": "remove", "target": "memory", "old_text": "obsolete low-value entry"},
+            {"action": "move_to_skill", "target": "skill", "content": "procedural guidance"},
+        ],
+        "_memory_tool_fn": fake_memory,
+        "_memory_provider_tool_fn": fake_provider,
+        "memory": {"provider": "hindsight"},
+    }
+
+    result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config=config, mutate=True)
+
+    assert result["changed"] == 1
+    capacity = result["decisions"][0]["result"]["capacity_recovery"]
+    assert capacity["attempted"] is True
+    assert capacity["placement_options"] == ["compact_or_replace", "remove_or_swap", "move_to_skill", "external_provider_fallback"]
+    assert capacity["skill_candidate_operations"] == [{"action": "move_to_skill", "target": "skill", "content": "procedural guidance"}]
+    assert calls[:3] == [
+        {"action": "add", "target": "memory", "content": "Durable fact that is worth keeping."},
+        {"action": "replace", "target": "memory", "old_text": "old duplicate", "content": "compact old duplicate"},
+        {"action": "remove", "target": "memory", "old_text": "obsolete low-value entry"},
+    ]
+    assert provider_calls == [("hindsight_retain", {"content": "Durable fact that is worth keeping.", "context": "self-improvement memory add", "tags": ["self-improvement", "memory-add"]})]
+
+
+def test_memory_inventory_rejects_conflicting_replaces_for_same_old_text_before_mutation():
+    calls = []
+    config = {
+        "_memory_inventory_planner_fn": lambda evidence, config=None: [
+            {
+                "evidence_id": "mem-inv-1",
+                "operation": "replace",
+                "target": "memory",
+                "old_text": "Hermes memory uses official tool.",
+                "content": "First replacement.",
+            },
+            {
+                "evidence_id": "mem-inv-2",
+                "operation": "replace",
+                "target": "memory",
+                "old_text": "Hermes memory uses official tool.",
+                "content": "Conflicting replacement.",
+            },
+        ],
+        "_memory_tool_fn": lambda **args: calls.append(args) or {"success": True, "changed": True},
+    }
+    evidence = [_inventory_evidence(), {**_inventory_evidence(), "id": "mem-inv-2"}]
+
+    result = run_memory_improvement_step(evidence_pack=_pack(evidence), config=config, mutate=True)
+
+    assert result["changed"] == 1
+    assert calls == [{"action": "replace", "target": "memory", "old_text": "Hermes memory uses official tool.", "content": "First replacement."}]
+    assert result["decisions"][0]["decision"] == "accepted"
+    assert result["decisions"][1]["decision"] == "rejected"
+    assert result["decisions"][1]["reason"] == "memory_operation_conflicts_with_prior_operation"

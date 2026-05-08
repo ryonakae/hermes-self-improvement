@@ -58,6 +58,69 @@ def test_backend_contract_requires_success_schema_fields():
     assert validate_backend_success_result(ok)["success"] is True
 
 
+def test_validate_create_skill_success_uses_tool_trace_not_natural_language_outcome():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "created safe-patch-usage skill with compact guidance",
+            "used_tools": [{"tool": "skill_manage", "action": "create", "name": "safe-patch-usage", "success": True}],
+            "changed_skills": [],
+            "created_skills": ["safe-patch-usage"],
+            "deleted_skills": [],
+            "verification_notes": ["post-validation confirmed safe-patch-usage"],
+            "rollback_hints": ["delete safe-patch-usage if wrong"],
+            "_task_kind": "skill_create",
+            "_expected_target": "safe-patch-usage",
+            "_allowed_targets": ["safe-patch-usage"],
+        }
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "created safe-patch-usage skill with compact guidance"
+
+
+def test_validate_create_skill_rejects_natural_language_outcome_without_created_skill_trace():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "created safe-patch-usage skill with compact guidance",
+            "used_tools": [{"tool": "skill_manage", "action": "patch", "name": "safe-patch-usage", "success": True}],
+            "changed_skills": [],
+            "created_skills": [],
+            "deleted_skills": [],
+            "verification_notes": ["claimed created"],
+            "rollback_hints": [],
+            "_task_kind": "skill_create",
+            "_expected_target": "safe-patch-usage",
+            "_allowed_targets": ["safe-patch-usage"],
+        }
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "mutation_agent_result_created_skill_missing"
+
+
+def test_validate_skill_improve_rejects_changed_outcome_without_target_change_trace():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "changed demo skill",
+            "used_tools": [{"tool": "skill_manage", "action": "patch", "name": "demo-skill", "success": True}],
+            "changed_skills": [],
+            "created_skills": [],
+            "deleted_skills": [],
+            "verification_notes": ["claimed patch"],
+            "rollback_hints": [],
+            "_task_kind": "skill_improve",
+            "_expected_target": "demo-skill",
+            "_allowed_targets": ["demo-skill"],
+        }
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "mutation_agent_result_changed_skill_missing"
+
+
 def test_backend_limits_are_fail_closed():
     limits = MutationBackendLimits(max_tool_calls=0, max_iterations=0, timeout_seconds=0)
     assert limits.check()["status"] == "failed"
@@ -96,6 +159,7 @@ def test_skill_tool_executor_redacts_large_outputs():
 
 
 def test_native_backend_executes_skill_tools_and_finalizer():
+    captured_messages = []
     responses = iter([
         _tool_response("skill_view", {"name": "demo"}, call_id="call_view"),
         _tool_response("skill_manage", {"action": "patch", "name": "demo", "old_string": "a", "new_string": "b"}, call_id="call_patch"),
@@ -119,10 +183,10 @@ def test_native_backend_executes_skill_tools_and_finalizer():
             skill_view_fn=lambda **kwargs: {"success": True, "content": "demo"},
             skill_manage_fn=lambda **kwargs: {"success": True},
         ),
-        llm_call=lambda messages, **kwargs: next(responses),
+        llm_call=lambda messages, **kwargs: captured_messages.append([dict(message) for message in messages]) or next(responses),
     )
 
-    result = backend.run("prompt", {"targets": {"primary_skill": "demo"}}, {})
+    result = backend.run("prompt", {"targets": {"primary_skill": "demo"}, "task_kind": "skill_improve", "llm_brief_markdown": "# Candidate brief: demo"}, {})
 
     assert result["success"] is True
     assert result["outcome"] == "applied"
@@ -131,6 +195,10 @@ def test_native_backend_executes_skill_tools_and_finalizer():
         {"tool": "skill_manage", "success": True, "action": "patch", "name": "demo"},
     ]
     assert result["tool_trace"] == result["used_tools"]
+    first_user_message = captured_messages[0][1]["content"]
+    assert "Markdown brief:" in first_user_message
+    assert "# Candidate brief: demo" in first_user_message
+    assert "Task JSON:" not in first_user_message
 
 
 def test_native_backend_sends_tool_results_without_tool_role_messages():

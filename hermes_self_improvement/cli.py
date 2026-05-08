@@ -1024,6 +1024,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- evidence strength: strong {strong_count}, medium {medium_count}, weak {weak_count}, weak-only selected {int(planner_quality.get('weak_only_selected_count') or 0)}",
         f"- editor prompts: tasks {int(planner_quality.get('editor_task_count') or 0)}, max chars {int(editor_prompt_chars.get('max') or 0)}",
         "Prompt sources:",
+        "- LLM context: Markdown briefs/reports; program control state: JSON manifests/run records/tool results",
         f"- planner: {planner_prompt.get('overlay_source') or ('runtime overlay' if planner_prompt.get('overlay_active') else 'base')} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
         f"- editor: {editor_prompt.get('overlay_source') or ('runtime overlay' if editor_prompt.get('overlay_active') else 'not rendered' if not editor_prompt else 'base')} hash {editor_prompt.get('overlay_hash') or editor_prompt.get('active_hash') or editor_prompt.get('base_hash') or 'n/a'}",
         "Skill improvements:",

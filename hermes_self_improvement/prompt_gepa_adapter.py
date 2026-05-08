@@ -14,6 +14,7 @@ from .observer import _sha256_text, _stable_json
 from .config import get_hermes_home
 from .prompt_overlays import prompt_overlay_root
 from .prompts import base_prompt_hash
+from .markdown_artifacts import render_calibration_context_markdown
 
 UTC = timezone.utc
 OVERLAY_TARGETS = ("planner_overlay", "editor_overlay", "evaluator_overlay")
@@ -149,6 +150,7 @@ def select_overlay_eval_cases(cases: list[dict[str, Any]], *, max_cases: int) ->
 
 
 def _examples_from_cases(cases: list[dict[str, Any]], *, evidence: dict[str, Any], dspy: Any) -> list[Any]:
+    evidence_markdown = render_calibration_context_markdown(evidence)
     evidence_json = _json_dumps(evidence)
     cases_json = _json_dumps(cases)
     current_overlays_json = _json_dumps({
@@ -159,11 +161,12 @@ def _examples_from_cases(cases: list[dict[str, Any]], *, evidence: dict[str, Any
     expected_json = _json_dumps({"targets": {target: {"change_status": "changed"} for target in OVERLAY_TARGETS}})
     return [
         dspy.Example(
+            evidence_markdown=evidence_markdown,
             evidence_json=evidence_json,
             cases_json=_json_dumps([case]),
             current_overlays_json=current_overlays_json,
             expected_candidate_set_json=expected_json,
-        ).with_inputs("evidence_json", "cases_json", "current_overlays_json")
+        ).with_inputs("evidence_markdown", "evidence_json", "cases_json", "current_overlays_json")
         for case in cases
     ]
 
@@ -188,7 +191,8 @@ def _candidate_metric(gold: Any, pred: Any, trace: Any = None, pred_name: Any = 
 
 def _build_overlay_program(dspy: Any, *, lm: Any | None = None) -> Any:
     class OverlayCandidateSignature(dspy.Signature):
-        evidence_json = dspy.InputField(desc="Compact calibration evidence summary as JSON.")
+        evidence_markdown = dspy.InputField(desc="Markdown-rendered calibration/run context for planner/editor/evaluator judgment.")
+        evidence_json = dspy.InputField(desc="Compact calibration evidence summary as program-owned JSON.")
         cases_json = dspy.InputField(desc="Overlay-set runtime eval cases as JSON array.")
         current_overlays_json = dspy.InputField(desc="Current planner/editor/evaluator overlay identities as JSON.")
         candidate_set_json = dspy.OutputField(
@@ -204,9 +208,10 @@ def _build_overlay_program(dspy: Any, *, lm: Any | None = None) -> Any:
             self.predict = dspy.Predict(OverlayCandidateSignature)
             self.lm = lm
 
-        def forward(self, *, evidence_json: str, cases_json: str, current_overlays_json: str) -> Any:
+        def forward(self, *, evidence_markdown: str, evidence_json: str, cases_json: str, current_overlays_json: str) -> Any:
             def run_predict():
                 return self.predict(
+                    evidence_markdown=evidence_markdown,
                     evidence_json=evidence_json,
                     cases_json=cases_json,
                     current_overlays_json=current_overlays_json,
@@ -293,6 +298,7 @@ def optimize_overlay_candidate_set(
     log_buffer = io.StringIO()
     with redirect_stdout(log_buffer), redirect_stderr(log_buffer):
         compiled = optimizer.compile(student, trainset=trainset, valset=valset)
+        evidence_markdown = render_calibration_context_markdown(evidence)
         evidence_json = _json_dumps(evidence)
         cases_json = _json_dumps(cases)
         current_overlays_json = _json_dumps({
@@ -300,7 +306,7 @@ def optimize_overlay_candidate_set(
             "editor_overlay": {"base_prompt_hash": base_prompt_hash("editor")},
             "evaluator_overlay": {"base_prompt_hash": base_prompt_hash("scorer")},
         })
-        prediction = compiled(evidence_json=evidence_json, cases_json=cases_json, current_overlays_json=current_overlays_json)
+        prediction = compiled(evidence_markdown=evidence_markdown, evidence_json=evidence_json, cases_json=cases_json, current_overlays_json=current_overlays_json)
     raw = _loads_object(_prediction_text(prediction, "candidate_set_json"))
     artifact = {
         "schema_name": "self_improvement_overlay_gepa_result",
