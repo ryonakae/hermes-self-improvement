@@ -4,7 +4,7 @@
 
 **Status:** Implemented through Task 8 in commits `6522a3d` and this follow-up: context-window builders, unmatched evidence candidates, LLM target resolver, conversation memory gap candidates, memory add/replace path integration, compact tool `action_summary` / `actionable` buckets, and runtime eval cases from improve run artifacts. Remaining follow-up is broader CLI/report text polish and dogfood prompt tuning.
 
-**Goal:** Make `improve` judge high-value unmatched evidence, resolve skill targets with LLM + context windows, and detect missing user/memory facts from conversation context so safe skill and memory improvements are applied automatically.
+**Goal:** Make `improve` planner high-value unmatched evidence, resolve skill targets with LLM + context windows, and detect missing user/memory facts from conversation context so safe skill and memory improvements are applied automatically.
 
 **Architecture:** Program code builds compact context windows and candidate groups; LLMs perform fuzzy extraction, target resolution, and apply/defer/skip/block judgment. Program code enforces only hard invariants and executes through existing bounded skill/memory mutation paths. `apply` remains a single mutation outcome with ledgers/artifacts always written; no `auto_apply_with_ledger`, `dry_run_only`, approval queue, or separate inventory lane.
 

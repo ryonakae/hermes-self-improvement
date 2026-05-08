@@ -1,16 +1,16 @@
-# Real Mutation Agent Backend and Judge Implementation Plan
+# Real Mutation Agent Backend and Planner Implementation Plan
 
-> **Status: completed / implemented with follow-up hardening as of 2026-04-30.** The real backend, runtime resolver readiness, tool trace verification, protocol hardening, merge judge readiness/failure semantics, smoke isolation, and memory rollback follow-up have landed. This file is historical; use `.hermes/plans/README.md` for current direction.
+> **Status: completed / implemented with follow-up hardening as of 2026-04-30.** The real backend, runtime resolver readiness, tool trace verification, protocol hardening, merge planner readiness/failure semantics, smoke isolation, and memory rollback follow-up have landed. This file is historical; use `.hermes/plans/README.md` for current direction.
 
 > **For Hermes:** Historical implementation record. Do not treat unchecked boxes below as remaining work unless a newer plan explicitly reopens an item.
 
 **Goal:** Make `hermes-self-improvement` execute semantic skill mutations in real Hermes runtime, not only with injected test backends, while preserving bounded tools, ledger-bound rollback, and fail-closed behavior.
 
-**Architecture:** Keep the current split: apply/ledger/rollback stay plugin-owned; semantic forward mutation is delegated to a bounded skills-only mutation backend; merge safety is judged by a Hermes auxiliary-model judge; memory rollback remains fail-closed unless store semantics are proven. The next implementation must remove accidental “works only in tests” gaps without adding broad terminal/file/git fallback.
+**Architecture:** Keep the current split: apply/ledger/rollback stay plugin-owned; semantic forward mutation is delegated to a bounded skills-only mutation backend; merge safety is evaluated by a Hermes auxiliary-model planner; memory rollback remains fail-closed unless store semantics are proven. The next implementation must remove accidental “works only in tests” gaps without adding broad terminal/file/git fallback.
 
 **Tech Stack:** Python plugin under `hermes_self_improvement/`, Hermes plugin tool registration, Hermes auxiliary model path via `agent.auxiliary_client.call_llm`, official tool-mediated skill operations via `skill_manage`, pytest, wrapper CLI `bin/hermes-self-improve`.
 
-**Model config convention:** Mutation agent model settings must follow the existing `model.llm` / `model.gepa` shape as `model.mutation`, not `mutation.model`. The `mutation.*` section is reserved for backend/runtime controls such as `backend`, `enabled`, `max_tool_calls`, and `max_iterations`. `model.mutation` owns `provider`, `model`, `base_url`, `api_key`, `timeout`, `max_tokens`, and `extra_body`. Merge judge should use `model.mutation` as well unless a later plan proves a separate `model.judge` is needed.
+**Model config convention:** Mutation agent model settings must follow the existing `model.llm` / `model.gepa` shape as `model.mutation`, not `mutation.model`. The `mutation.*` section is reserved for backend/runtime controls such as `backend`, `enabled`, `max_tool_calls`, and `max_iterations`. `model.mutation` owns `provider`, `model`, `base_url`, `api_key`, `timeout`, `max_tokens`, and `extra_body`. Merge planner should use `model.mutation` as well unless a later plan proves a separate `model.planner` is needed.
 
 ---
 
@@ -37,9 +37,9 @@ Implemented but only partially real:
 - `skill_agent_task` planning exists.
 - `MutationAgentRunner` exists.
 - `apply_engine` executes `skill_agent_task` only when config includes `_mutation_agent_backend`.
-- Tests inject fake `_mutation_agent_backend` and fake `_merge_judge`.
+- Tests inject fake `_mutation_agent_backend` and fake `_merge_planner`.
 - Without injected backend, real apply fails closed with `mutation_agent_unavailable`.
-- Default merge judge fails closed with `merge_judge_unavailable`.
+- Default merge planner fails closed with `merge_planner_unavailable`.
 - Memory rollback intentionally fails closed with `unsupported_pending_store_validation`.
 
 The implementation goal is **not** to make everything auto-apply. It is to make explicitly executed semantic mutation tasks actually runnable through a bounded real backend.
@@ -69,8 +69,8 @@ After this plan is implemented:
 1. `apply_plan(..., execute=True)` can execute `skill_agent_task` without test-only `_mutation_agent_backend`, when runtime has a safe backend.
 2. The real backend performs mutations through official skill tools only.
 3. Backend output is structured JSON and is verified exactly like the fake backend path.
-4. Merge tasks have a real auxiliary-model judge, not only injected `_merge_judge`.
-5. If the real backend or judge is unavailable, the item fails closed with a clear reason.
+4. Merge tasks have a real auxiliary-model planner, not only injected `_merge_planner`.
+5. If the real backend or planner is unavailable, the item fails closed with a clear reason.
 6. CLI/tool output makes unsupported vs failed vs executed states obvious.
 7. There is at least one safe smoke test path that proves a real local mutable skill can be improved and rolled back without touching production skills.
 8. Memory rollback remains explicitly documented as unsupported, unless a separate proof task establishes safe store validation.
@@ -84,7 +84,7 @@ Build this in small slices:
 1. **Runtime capability discovery** — detect whether the plugin is running inside a Hermes runtime that can provide tool-call execution.
 2. **Tool-call backend interface** — replace test-only backend expectations with a structured backend that can call `skills_list`, `skill_view`, `skill_manage`.
 3. **Real skill mutation agent** — use Hermes auxiliary model to produce a tool plan, execute only allowed skill tools, loop with strict limits, and return structured JSON.
-4. **Real merge judge** — use Hermes auxiliary model to judge merge completeness/safety with strict JSON parsing.
+4. **Real merge planner** — use Hermes auxiliary model to planner merge completeness/safety with strict JSON parsing.
 5. **Wire backend into config/application** — `apply_engine` obtains the backend from config/runtime rather than only `_mutation_agent_backend` tests.
 6. **Smoke tests and docs** — prove real behavior on temporary local skills, update docs/operations skill.
 7. **Keep memory rollback separate** — write a short follow-up plan or explicit non-goal; do not sneak in unsafe memory restore.
@@ -591,40 +591,40 @@ This task is allowed to conclude “blocked by missing Hermes runtime hook,” b
 
 ---
 
-## Task 6: Implement Real Merge Judge Through Hermes Auxiliary Model
+## Task 6: Implement Real Merge Planner Through Hermes Auxiliary Model
 
-**Objective:** Replace default `merge_judge_unavailable` with a real JSON-only auxiliary-model judge, while preserving fail-closed behavior.
+**Objective:** Replace default `merge_planner_unavailable` with a real JSON-only auxiliary-model planner, while preserving fail-closed behavior.
 
 **Files:**
 
 - Modify: `hermes_self_improvement/verification.py`
 - Modify: `hermes_self_improvement/config.py`
 - Test: `tests/test_skill_lifecycle_agent.py`
-- Test: create or extend `tests/test_merge_judge.py`
+- Test: create or extend `tests/test_merge_planner.py`
 
-**Step 1: Write failing judge tests**
+**Step 1: Write failing planner tests**
 
 Add tests:
 
 ```python
-def test_merge_judge_parses_auxiliary_json_pass(): ...
-def test_merge_judge_rejects_malformed_json(): ...
-def test_merge_judge_requires_safe_to_delete_source(): ...
-def test_merge_judge_fails_closed_on_llm_exception(): ...
-def test_merge_judge_uses_configured_mutation_model(): ...
+def test_merge_planner_parses_auxiliary_json_pass(): ...
+def test_merge_planner_rejects_malformed_json(): ...
+def test_merge_planner_requires_safe_to_delete_source(): ...
+def test_merge_planner_fails_closed_on_llm_exception(): ...
+def test_merge_planner_uses_configured_mutation_model(): ...
 ```
 
 Use injected fake LLM function. Do not call live model in unit tests.
 
-**Step 2: Implement judge class/function**
+**Step 2: Implement planner class/function**
 
 Suggested API:
 
 ```python
-def build_merge_judge(config: dict[str, Any] | None = None, llm_call: Callable[..., str] | None = None) -> Callable[..., dict[str, Any]]:
+def build_merge_planner(config: dict[str, Any] | None = None, llm_call: Callable[..., str] | None = None) -> Callable[..., dict[str, Any]]:
     ...
 
-def auxiliary_merge_judge(*, source_before, destination_before, destination_after, agent_result, config=None, llm_call=None) -> dict[str, Any]:
+def auxiliary_merge_planner(*, source_before, destination_before, destination_after, agent_result, config=None, llm_call=None) -> dict[str, Any]:
     ...
 ```
 
@@ -653,44 +653,44 @@ Failure if:
 
 Reuse helper patterns from `dspy_program.py` rather than inventing provider handling.
 
-Use `config["model"]["mutation"]` or add `config["model"]["judge"]` only if there is a real need. Prefer `model.mutation` to avoid config sprawl.
+Use `config["model"]["mutation"]` or add `config["model"]["planner"]` only if there is a real need. Prefer `model.mutation` to avoid config sprawl.
 
-Task name: `self_improvement_merge_judge`.
+Task name: `self_improvement_merge_planner`.
 
 **Step 4: Wire into lifecycle verification**
 
 In `apply_engine._run_lifecycle_skill_agent_mutation`, replace:
 
 ```python
-judge=config.get("_merge_judge") if callable(config.get("_merge_judge")) else None
+planner=config.get("_merge_planner") if callable(config.get("_merge_planner")) else None
 ```
 
 with:
 
 ```python
-judge = resolve_merge_judge(config)
+planner = resolve_merge_planner(config)
 ```
 
-where injected `_merge_judge` still wins for tests.
+where injected `_merge_planner` still wins for tests.
 
 **Step 5: Run tests**
 
 ```bash
-.venv/bin/python -m pytest tests/test_merge_judge.py tests/test_skill_lifecycle_agent.py -q
+.venv/bin/python -m pytest tests/test_merge_planner.py tests/test_skill_lifecycle_agent.py -q
 ```
 
 **Step 6: Commit**
 
 ```bash
-git add hermes_self_improvement/verification.py hermes_self_improvement/apply_engine.py hermes_self_improvement/config.py tests/test_merge_judge.py tests/test_skill_lifecycle_agent.py
-git commit -m "feat(self-improvement): add auxiliary merge judge"
+git add hermes_self_improvement/verification.py hermes_self_improvement/apply_engine.py hermes_self_improvement/config.py tests/test_merge_planner.py tests/test_skill_lifecycle_agent.py
+git commit -m "feat(self-improvement): add auxiliary merge planner"
 ```
 
 ---
 
 ## Task 7: Improve CLI/Tool Reporting for Real vs Unavailable Backend
 
-**Objective:** Make user-facing output honest. No more “implemented” ambiguity when backend or judge is unavailable.
+**Objective:** Make user-facing output honest. No more “implemented” ambiguity when backend or planner is unavailable.
 
 **Files:**
 
@@ -706,7 +706,7 @@ Add tests that assert status/report/apply output contains:
 - mutation backend configured backend
 - available/unavailable
 - unavailable reason
-- merge judge available/unavailable
+- merge planner available/unavailable
 - semantic apply failure reason is surfaced in summary
 
 Expected fields in machine JSON:
@@ -718,7 +718,7 @@ Expected fields in machine JSON:
     "available": false,
     "reason": "skill_tool_registry_unavailable"
   },
-  "merge_judge": {
+  "merge_planner": {
     "available": true,
     "source": "hermes_auxiliary"
   }
@@ -737,7 +737,7 @@ def mutation_backend_status(config: dict[str, Any] | None = None) -> dict[str, A
 Add helper in `verification.py`:
 
 ```python
-def merge_judge_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
+def merge_planner_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     ...
 ```
 
@@ -885,7 +885,7 @@ Expected:
 
 - py_compile passes
 - all tests pass
-- status reports backend/judge readiness honestly
+- status reports backend/planner readiness honestly
 
 **Step 2: Run optional smoke only if safe**
 
@@ -923,7 +923,7 @@ Report in Japanese, briefly:
 
 - commits pushed
 - backend status: real available / unavailable with reason
-- judge status
+- planner status
 - memory rollback status
 - test results
 
@@ -940,8 +940,8 @@ Before calling the implementation complete:
 - [ ] Disallowed tool request fails closed.
 - [ ] Tool-call / iteration limits fail closed.
 - [ ] `apply_engine` resolves backend without test-only config.
-- [ ] Merge judge uses Hermes auxiliary model or reports unavailable clearly.
-- [ ] Merge source deletion requires checklist + judge pass.
+- [ ] Merge planner uses Hermes auxiliary model or reports unavailable clearly.
+- [ ] Merge source deletion requires checklist + planner pass.
 - [ ] Rollback still uses `ledger_bound_restore`, not mutation agent.
 - [ ] Memory rollback is either safely implemented with proven store semantics or explicitly unsupported. For this plan, unsupported is acceptable.
 - [ ] Status/report output distinguishes implemented, unavailable, failed, and skipped.
@@ -965,9 +965,9 @@ Mitigation: Strict JSON parsing, allowed-tool validation before execution, max l
 
 Mitigation: Backend records actual tool calls. `used_tools` in final result should be merged/replaced with actual trace.
 
-### Risk: Merge judge overtrusts model
+### Risk: Merge planner overtrusts model
 
-Mitigation: Judge is only one gate. Keep existing deterministic checklist. Source deletion requires both checklist and judge.
+Mitigation: Planner is only one gate. Keep existing deterministic checklist. Source deletion requires both checklist and planner.
 
 ### Risk: Live smoke mutates production skills
 
@@ -986,9 +986,9 @@ Mitigation: Keep memory rollback fail-closed in this plan. Create a separate sto
 3. `feat(self-improvement): add auxiliary mutation backend loop`
 4. `feat(self-improvement): wire real mutation backend into apply`
 5. `feat(self-improvement): resolve runtime skill tools for mutation backend` or `docs(self-improvement): document missing runtime tool invocation hook`
-6. `feat(self-improvement): add auxiliary merge judge`
+6. `feat(self-improvement): add auxiliary merge planner`
 7. `feat(self-improvement): report mutation backend readiness`
 8. `test(self-improvement): add mutation backend smoke coverage`
 9. `docs(self-improvement): clarify memory rollback remains fail-closed`
 
-Do not squash these unless the implementation ends up much smaller than expected. The boundary between backend contract, tool executor, LLM loop, apply wiring, and judge should stay reviewable.
+Do not squash these unless the implementation ends up much smaller than expected. The boundary between backend contract, tool executor, LLM loop, apply wiring, and planner should stay reviewable.

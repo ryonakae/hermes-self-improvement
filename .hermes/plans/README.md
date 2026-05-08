@@ -10,13 +10,13 @@ As of 2026-05-08, the current active implementation plan is:
 
 - `2026-05-08_003603-llm-target-resolve-and-conversation-memory-gaps.md`
   - **Status:** implemented through context windows, unmatched candidates, LLM target resolution, conversation memory gap candidates, compact tool action buckets, and runtime eval case seeding; remaining follow-up is broader CLI text/report polish and runtime dogfood tuning.
-  - Extends the existing `improve` flow with LLM target resolution, context-windowed unmatched evidence candidates, and conversation-derived memory gap candidates. Program code gathers compact context and enforces hard stops; LLMs judge fuzzy target resolution and `apply / defer / skip / block`. Auto-apply is intentionally less conservative for low-to-medium-risk skill patches, stale path/command fixes, and memory add/replace, while avoiding new commands, approval queues, apply-mode taxonomies, or separate lanes.
+  - Extends the existing `improve` flow with LLM target resolution, context-windowed unmatched evidence candidates, and conversation-derived memory gap candidates. Program code gathers compact context and enforces hard stops; LLMs planner fuzzy target resolution and `apply / defer / skip / block`. Auto-apply is intentionally less conservative for low-to-medium-risk skill patches, stale path/command fixes, and memory add/replace, while avoiding new commands, approval queues, apply-mode taxonomies, or separate lanes.
 
 The prior active implementation plan is:
 
 - `2026-05-07_095543-llm-inventory-candidates.md`
   - **Status:** active / partially implemented / absorbed by the 2026-05-08 follow-up.
-  - Extends the existing `improve` flow with LLM-judged skill and memory inventory candidates so self-improvement is not dominated by tool failures. Program code collects compact inventory groups and hard safety metadata; the existing planner/editor and memory tool path decide and auto-apply safe changes. Continue its implemented inventory pieces, but use the 2026-05-08 plan for target resolution, conversation-derived memory gaps, and simplified apply semantics.
+  - Extends the existing `improve` flow with LLM-evaluated skill and memory inventory candidates so self-improvement is not dominated by tool failures. Program code collects compact inventory groups and hard safety metadata; the existing planner/editor and memory tool path decide and auto-apply safe changes. Continue its implemented inventory pieces, but use the 2026-05-08 plan for target resolution, conversation-derived memory gaps, and simplified apply semantics.
 
 The latest completed implementation plan is:
 
@@ -119,14 +119,14 @@ This keeps the active implementation surface small while preserving design histo
   - Established the current architecture: semantic forward mutation agent, bounded official tools, plugin-owned ledger-bound rollback, local-skill scope, and memory rollback safety boundaries.
   - Its checkboxes are historical; later commits and tests implemented the relevant work.
 
-- `archive/2026-04-30_003330-real-mutation-agent-and-judge.md`
+- `archive/2026-04-30_003330-real-mutation-agent-and-planner.md`
   - **Status:** completed / implemented with follow-up hardening.
-  - Made the real mutation backend and merge judge operational rather than test-injected only.
+  - Made the real mutation backend and merge planner operational rather than test-injected only.
   - Superseded by the detailed hardening plan for final implementation slices.
 
 - `archive/2026-04-30_080545-real-mutation-agent-hardening-detailed.md`
   - **Status:** completed.
-  - Closed runtime resolver readiness, actual tool trace recording/verification, protocol hardening, merge judge readiness/failure semantics, smoke isolation, and status/docs alignment.
+  - Closed runtime resolver readiness, actual tool trace recording/verification, protocol hardening, merge planner readiness/failure semantics, smoke isolation, and status/docs alignment.
 
 - `archive/2026-04-30_081449-memory-rollback-store-validation.md`
   - **Status:** completed with safe outcome: preview-only / execution blocked.

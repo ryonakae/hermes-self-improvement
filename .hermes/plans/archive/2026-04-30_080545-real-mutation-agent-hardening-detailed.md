@@ -1,12 +1,12 @@
 # Real Mutation Agent Hardening Detailed Implementation Plan
 
-> **Status: completed as of 2026-04-30.** All hardening slices landed: `status --json`, runtime skill tool resolver readiness, actual tool trace verification, auxiliary protocol hardening, merge judge status/failure clarity, smoke isolation, and memory rollback readiness/status alignment.
+> **Status: completed as of 2026-04-30.** All hardening slices landed: `status --json`, runtime skill tool resolver readiness, actual tool trace verification, auxiliary protocol hardening, merge planner status/failure clarity, smoke isolation, and memory rollback readiness/status alignment.
 
 > **For Hermes:** Historical implementation record. Do not restart this plan; create a new plan for new hardening work.
 
-**Goal:** Harden the current real mutation backend / merge judge implementation until it is not just present, but operationally trustworthy: runtime callable resolution is verified, output surfaces are consistent, tool traces are auditable, live smoke is isolated, and docs match actual behavior.
+**Goal:** Harden the current real mutation backend / merge planner implementation until it is not just present, but operationally trustworthy: runtime callable resolution is verified, output surfaces are consistent, tool traces are auditable, live smoke is isolated, and docs match actual behavior.
 
-**Architecture:** Keep the existing split. `apply_engine.py` owns apply/ledger/rollback orchestration. `mutation_backend.py` owns bounded skill tool execution and auxiliary-model tool loop. `verification.py` owns deterministic lifecycle checks plus auxiliary merge judge. Rollback remains ledger-bound deterministic restore; forward mutation remains skills-only via `skills_list`, `skill_view`, `skill_manage`.
+**Architecture:** Keep the existing split. `apply_engine.py` owns apply/ledger/rollback orchestration. `mutation_backend.py` owns bounded skill tool execution and auxiliary-model tool loop. `verification.py` owns deterministic lifecycle checks plus auxiliary merge planner. Rollback remains ledger-bound deterministic restore; forward mutation remains skills-only via `skills_list`, `skill_view`, `skill_manage`.
 
 **Current observed state:**
 
@@ -14,14 +14,14 @@
 - Recent commits already include:
   - `2428aaf feat(self-improvement): add auxiliary mutation backend loop`
   - `e857ba9 feat(self-improvement): wire mutation backend into apply`
-  - `7a8b30e feat(self-improvement): add auxiliary merge judge`
+  - `7a8b30e feat(self-improvement): add auxiliary merge planner`
   - `eae0e40 feat(self-improvement): report mutation backend readiness`
   - `ae58570 test(self-improvement): add mutation backend smoke coverage`
   - `425e84d docs(self-improvement): clarify mutation recovery readiness`
 - Targeted validation run:
   - `.venv/bin/python -m py_compile __init__.py hermes_self_improvement/*.py` passed.
-  - `.venv/bin/python -m pytest tests/test_mutation_backend.py tests/test_merge_judge.py tests/test_real_mutation_backend_smoke.py -q` → `22 passed, 1 skipped`.
-  - `bin/hermes-self-improve status` reports `mutation_backend.available=true` and `merge_judge.available=true`.
+  - `.venv/bin/python -m pytest tests/test_mutation_backend.py tests/test_merge_planner.py tests/test_real_mutation_backend_smoke.py -q` → `22 passed, 1 skipped`.
+  - `bin/hermes-self-improve status` reports `mutation_backend.available=true` and `merge_planner.available=true`.
   - `bin/hermes-self-improve status --json` currently fails because `status` prints JSON by default and has no `--json` flag.
 
 **Non-negotiable constraints:**
@@ -29,7 +29,7 @@
 - Do not modify Hermes core.
 - Do not add broad terminal/file/git/direct filesystem fallback to perform skill mutation.
 - Do not widen mutation-agent tools beyond exactly `skills_list`, `skill_view`, `skill_manage`.
-- Do not let merge judge alone authorize source deletion; deterministic checks must pass too.
+- Do not let merge planner alone authorize source deletion; deterministic checks must pass too.
 - Do not make memory rollback look supported. Built-in/external memory rollback remains fail-closed unless a separate store-validation proof is completed.
 - The separate memory rollback proof plan is `.hermes/plans/2026-04-30_081449-memory-rollback-store-validation.md`; execute it after the mutation backend hardening slices if we want to move beyond fail-closed documentation.
 - Do not expose item hash / target hash / approval artifact as user-facing mutation options.
@@ -54,7 +54,7 @@
    git status --short
    PY=${PYTHON:-.venv/bin/python}
    $PY -m py_compile __init__.py hermes_self_improvement/*.py
-   $PY -m pytest tests/test_mutation_backend.py tests/test_apply_engine.py tests/test_merge_judge.py tests/test_real_mutation_backend_smoke.py -q
+   $PY -m pytest tests/test_mutation_backend.py tests/test_apply_engine.py tests/test_merge_planner.py tests/test_real_mutation_backend_smoke.py -q
    bin/hermes-self-improve status
    ```
 
@@ -335,15 +335,15 @@ git push
 
 ---
 
-## Slice 5: Tighten Merge Judge Availability and Failure Semantics
+## Slice 5: Tighten Merge Planner Availability and Failure Semantics
 
-**Objective:** Make merge judge readiness and runtime failures honest. `merge_judge_status().available=true` should mean the auxiliary client import path exists, while execution failures remain explicit in apply results.
+**Objective:** Make merge planner readiness and runtime failures honest. `merge_planner_status().available=true` should mean the auxiliary client import path exists, while execution failures remain explicit in apply results.
 
 **Files:**
 
 - Modify: `hermes_self_improvement/verification.py`
 - Modify: `hermes_self_improvement/apply_engine.py` only if result surfacing needs adjustment
-- Test: `tests/test_merge_judge.py`
+- Test: `tests/test_merge_planner.py`
 - Test: `tests/test_skill_lifecycle_agent.py`
 
 **Step 1: Write failing tests**
@@ -351,30 +351,30 @@ git push
 Add tests:
 
 ```python
-def test_merge_judge_status_reports_model_config_source(): ...
-def test_merge_judge_failure_reasons_are_preserved_in_apply_result(): ...
-def test_merge_judge_rejects_passed_true_with_any_boolean_gate_false(): ...
-def test_merge_judge_truncates_large_snapshots_with_marker(): ...
+def test_merge_planner_status_reports_model_config_source(): ...
+def test_merge_planner_failure_reasons_are_preserved_in_apply_result(): ...
+def test_merge_planner_rejects_passed_true_with_any_boolean_gate_false(): ...
+def test_merge_planner_truncates_large_snapshots_with_marker(): ...
 ```
 
 **Step 2: Implement**
 
-- Include `model_source: "model.mutation"` in judge status.
-- Preserve `judge_result.reasons` in lifecycle failure result, not only `merge_judge_failed`.
+- Include `model_source: "model.mutation"` in planner status.
+- Preserve `planner_result.reasons` in lifecycle failure result, not only `merge_planner_failed`.
 - Keep `_compact_snapshot` truncation bounded and visible.
 
 **Step 3: Verify**
 
 ```bash
 PY=${PYTHON:-.venv/bin/python}
-$PY -m pytest tests/test_merge_judge.py tests/test_skill_lifecycle_agent.py -q
+$PY -m pytest tests/test_merge_planner.py tests/test_skill_lifecycle_agent.py -q
 ```
 
 **Step 4: Commit/push**
 
 ```bash
-git add hermes_self_improvement/verification.py hermes_self_improvement/apply_engine.py tests/test_merge_judge.py tests/test_skill_lifecycle_agent.py
-git commit -m "fix(self-improvement): clarify merge judge readiness and failures"
+git add hermes_self_improvement/verification.py hermes_self_improvement/apply_engine.py tests/test_merge_planner.py tests/test_skill_lifecycle_agent.py
+git commit -m "fix(self-improvement): clarify merge planner readiness and failures"
 git push
 ```
 
@@ -455,7 +455,7 @@ git push
 **Step 1: Search for stale wording**
 
 ```bash
-rg "fake|unavailable|merge_judge_unavailable|status --json|memory.*rollback|rollback.*memory|tool_trace_verified|real backend" README.md skills tests hermes_self_improvement
+rg "fake|unavailable|merge_planner_unavailable|status --json|memory.*rollback|rollback.*memory|tool_trace_verified|real backend" README.md skills tests hermes_self_improvement
 ```
 
 **Step 2: Update wording**
@@ -505,7 +505,7 @@ Expected:
 
 - py_compile passes
 - all tests pass
-- status JSON includes `mutation_backend` and `merge_judge`
+- status JSON includes `mutation_backend` and `merge_planner`
 - no status command mismatch (`status --json` passes if Slice 1 implemented)
 
 **Step 2: Plugin discovery validation**
@@ -576,7 +576,7 @@ Include only:
 - pushed commit list
 - final test result
 - backend readiness
-- merge judge readiness
+- merge planner readiness
 - live smoke run/skipped
 - memory rollback status
 
@@ -590,7 +590,7 @@ Include only:
 - [ ] Tool trace records actual calls and result statuses.
 - [ ] Apply verification checks tool trace against allowed targets and allowed tools.
 - [ ] Auxiliary loop rejects malformed step JSON, disallowed tools, invalid tool args, invalid final schema, and target escape.
-- [ ] Merge judge exposes availability/source honestly and preserves failure reasons.
+- [ ] Merge planner exposes availability/source honestly and preserves failure reasons.
 - [ ] Live smoke cannot touch production `~/.hermes/skills` by default.
 - [ ] Docs match actual implementation and do not overclaim memory rollback.
 - [ ] Dedicated memory rollback store-validation plan exists and is linked from this plan before implementation moves past fail-closed behavior.
@@ -606,8 +606,8 @@ Include only:
 2. `test(self-improvement): verify mutation skill tool resolver`
 3. `feat(self-improvement): verify mutation tool traces`
 4. `fix(self-improvement): harden mutation agent tool protocol`
-5. `fix(self-improvement): clarify merge judge readiness and failures`
+5. `fix(self-improvement): clarify merge planner readiness and failures`
 6. `test(self-improvement): harden mutation backend smoke isolation`
 7. `docs(self-improvement): align mutation backend runtime boundaries`
 
-Do not squash unless two adjacent slices end up changing the same tiny parser/doc area. Keep backend, trace verification, judge, smoke, and docs reviewable as separate commits.
+Do not squash unless two adjacent slices end up changing the same tiny parser/doc area. Keep backend, trace verification, planner, smoke, and docs reviewable as separate commits.

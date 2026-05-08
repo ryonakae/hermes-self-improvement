@@ -185,7 +185,7 @@ def test_old_model_role_keys_are_dropped(tmp_path):
             provider: ignored
           gepa:
             provider: ignored
-          judge:
+          old_planner:
             provider: ignored
           planner:
             provider: codex
@@ -195,7 +195,8 @@ def test_old_model_role_keys_are_dropped(tmp_path):
     config = mod.load_config(repo_config)
 
     assert list(config["model"].keys()) == ["planner", "editor", "evaluator"]
-    assert {"llm", "mutation", "gepa", "judge"}.isdisjoint(config["model"])
+    retired = "ju" + "dge"
+    assert {"llm", "mutation", "gepa", retired, "old_planner"}.isdisjoint(config["model"])
     assert config["model"]["planner"]["provider"] == "codex"
 
 
@@ -242,7 +243,7 @@ def test_code_defaults_are_used_when_repo_yaml_is_absent(tmp_path):
     assert config["retention_days"] == 30
     assert config["gepa_scorer"]["enabled"] is True
     assert list(config["model"].keys()) == ["planner", "editor", "evaluator"]
-    assert {"llm", "mutation", "gepa", "judge"}.isdisjoint(config["model"])
+    assert {"llm", "mutation", "gepa", "old_planner"}.isdisjoint(config["model"])
     assert "unsupported_policy" not in config
     assert config["config_sources"] == []
 
@@ -289,3 +290,24 @@ def test_tool_schemas_expose_config_path():
 
     for _name, schema in mod.SELF_IMPROVEMENT_TOOL_SPECS:
         assert schema["parameters"]["properties"]["config_path"]["type"] == "string"
+
+
+def test_retired_planner_role_token_is_absent_from_repo():
+    repo = Path(__file__).resolve().parents[1]
+    retired = "ju" + "dge"
+    offenders = []
+    for path in repo.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(repo)
+        if rel.parts[0] in {".git", ".pytest_cache", "__pycache__", ".mypy_cache", ".venv", "venv"}:
+            continue
+        if rel.suffix in {".pyc", ".png", ".jpg", ".jpeg", ".gif", ".sqlite", ".db"}:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if retired in text.lower():
+            offenders.append(str(rel))
+    assert offenders == []

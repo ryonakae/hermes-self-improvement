@@ -2,7 +2,7 @@
 
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
-**Goal:** `judge` terminologyを外部・内部ともに `planner` に寄せ、`improve --dry-run` が「どのskillがなぜ選ばれ、どう修正予定か」を表示できるようにする。実行構造は `analyzer/evidence builder -> global planner -> per-skill editor` にする。
+**Goal:** `planner` terminologyを外部・内部ともに `planner` に寄せ、`improve --dry-run` が「どのskillがなぜ選ばれ、どう修正予定か」を表示できるようにする。実行構造は `analyzer/evidence builder -> global planner -> per-skill editor` にする。
 
 **Architecture:** Analyzer は既存の evidence pack builder を維持する。新しい global planner は Curator candidate list、attached evidence、target resolution summary、ignored/rejected evidence summary を compact digest として受け取り、`run_editor / skip / human_review / memory_candidate / evaluator_candidate` の plan を返す。Dry-run は planner まで実行し editor は実行しない。Mutating run は planner が `run_editor` とした対象だけ editor に渡す。GEPA/DSPy は planner/editor prompt・rubric改善の `calibrate` 側に残す。
 
@@ -21,13 +21,13 @@
   - `run_skill_improvement_step()` still loops through every mutable Curator candidate and creates a per-skill editor task.
   - Dry-run currently creates task previews but does not run an LLM that globally chooses targets or produces planned edits.
 - User decision:
-  - Rename `judge` thesaurus to `planner` externally and internally where it describes this self-improvement decision layer.
+  - Rename `planner` thesaurus to `planner` externally and internally where it describes this self-improvement decision layer.
   - Use the simpler two-stage model: **global planner + individual editor**.
 
 ## Non-goals
 
 - Do not add a separate per-skill planner stage yet. Keep the simpler model.
-- Do not make GEPA a live `improve` judge/planner. GEPA remains `calibrate` / evaluator optimization.
+- Do not make GEPA a live `improve` planner/planner. GEPA remains `calibrate` / evaluator optimization.
 - Do not broaden mutation scope beyond local mutable skills and supported memory tools.
 - Do not reintroduce `plan/apply/rollback/outcome`, `--execute`, item selection, or approval surfaces.
 - Do not direct-edit skills/memory files; editor remains tool-mediated.
@@ -83,16 +83,16 @@ Use `planner` for the new global decision layer.
 Rename current user-facing or internal self-improvement decision terminology where it refers to this layer:
 
 ```text
-model.judge       -> model.planner
-merge_judge       -> merge_planner or merge/adjudication planner, if still applicable
-llm_scorer/judge  -> planner, where the function decides improvement tasks rather than scores report proposals
+model.planner       -> model.planner
+merge_planner       -> merge_planner or merge/adjudication planner, if still applicable
+llm_scorer/planner  -> planner, where the function decides improvement tasks rather than scores report proposals
 ```
 
 Important nuance:
 
-- Do not blindly replace all English word `judge` in historical archived plans.
+- Do not blindly replace all English word `planner` in historical archived plans.
 - Do rename active docs, config examples, CLI/status fields, tool outputs, tests, current code identifiers, and bundled operations skill wording.
-- For compatibility: the plugin is unreleased/local. Prefer current-only schema over aliases. Do not keep `model.judge` as a fallback unless implementation discovers live runtime config requires one; if required, make it a one-time local config update plan rather than a long-term alias.
+- For compatibility: the plugin is unreleased/local. Prefer current-only schema over aliases. Do not keep `model.planner` as a fallback unless implementation discovers live runtime config requires one; if required, make it a one-time local config update plan rather than a long-term alias.
 
 ---
 
@@ -194,13 +194,13 @@ Do not include secrets or raw full outputs. Use existing redaction helpers and c
 
 ```python
 assert list(config["model"].keys()) == ["planner", "editor", "evaluator"]
-assert "judge" not in config["model"]
+assert "planner" not in config["model"]
 ```
 
-2. Add status/tool output tests that active runtime/status fields expose planner wording, not judge wording, where applicable.
+2. Add status/tool output tests that active runtime/status fields expose planner wording, not planner wording, where applicable.
 3. Add strict source-search regression if current test style supports it:
-   - active source/docs should not contain `model.judge`.
-   - active user-facing docs should not say `judge LLM` for the improvement planning layer.
+   - active source/docs should not contain `model.planner`.
+   - active user-facing docs should not say `planner LLM` for the improvement planning layer.
 4. Run focused tests and confirm RED:
 
 ```bash
@@ -208,11 +208,11 @@ PY=${PYTHON:-.venv/bin/python}
 $PY -m pytest tests/test_config_precedence.py tests/test_plugin_tools.py tests/test_cli_surface.py tests/test_prompt_classification.py -q
 ```
 
-Expected failure: current code/docs still use `model.judge`, `merge_judge`, and judge wording.
+Expected failure: current code/docs still use `model.planner`, `merge_planner`, and planner wording.
 
 ---
 
-## Task 2: Rename current model role from `judge` to `planner`
+## Task 2: Rename current model role from `planner` to `planner`
 
 **Objective:** Make planner the canonical model role.
 
@@ -221,7 +221,7 @@ Expected failure: current code/docs still use `model.judge`, `merge_judge`, and 
 - `hermes_self_improvement/scoring.py`
 - `hermes_self_improvement/cli.py`
 - `hermes_self_improvement/tool_handlers.py`
-- `hermes_self_improvement/verification.py` if `merge_judge_status` is current, not historical
+- `hermes_self_improvement/verification.py` if `merge_planner_status` is current, not historical
 - `README.md`
 - `config.example.yaml`
 - `skills/operations/SKILL.md`
@@ -242,8 +242,8 @@ model:
 2. Update LLM routing in proposal scoring / future planner calls to read `model.planner`.
 3. Rename functions/fields where practical:
    - `_call_llm_scorer()` may become `_call_planner_scorer()` only if it remains a proposal report scorer.
-   - `merge_judge_status` should be renamed only if this is still an active current helper. If it is a legacy merge adjudicator name, inspect before changing.
-4. Remove `model.judge` fallback and tests unless a live local config migration is explicitly required.
+   - `merge_planner_status` should be renamed only if this is still an active current helper. If it is a legacy merge adjudicator name, inspect before changing.
+4. Remove `model.planner` fallback and tests unless a live local config migration is explicitly required.
 5. Update config/docs/examples to current-only names.
 
 **Verification:**
@@ -495,7 +495,7 @@ $PY -m pytest tests/test_cli_surface.py tests/test_plugin_tools.py -q
 
 **Updates:**
 
-1. Replace active `judge` wording with `planner`.
+1. Replace active `planner` wording with `planner`.
 2. Rename proposal/evaluator assets only if they are current runtime active assets for the planner. If renaming files is too broad, update content first and create a follow-up plan for file/path rename.
 3. Update calibration language:
 
@@ -564,7 +564,7 @@ git push
 
 If this slice becomes too large, split into two commits:
 
-1. `refactor: rename judge role to planner`
+1. `refactor: rename planner role to planner`
 2. `feat: add global planner before skill editor`
 
 Prefer split commits if terminology rename touches many files before functional planner wiring.
@@ -587,9 +587,9 @@ Mitigation: editor remains bounded by official skill tools and must stop on stal
 
 ### Risk: terminology rename breaks config unexpectedly
 
-Mitigation: plugin is local/unreleased; prefer current-only schema. Before implementation, inspect live `config.yaml` and update docs. If a live config still has `model.judge`, decide whether to migrate the local file explicitly in the implementation session rather than adding permanent aliases.
+Mitigation: plugin is local/unreleased; prefer current-only schema. Before implementation, inspect live `config.yaml` and update docs. If a live config still has `model.planner`, decide whether to migrate the local file explicitly in the implementation session rather than adding permanent aliases.
 
-### Risk: active evaluator assets still use proposal/judge terms
+### Risk: active evaluator assets still use proposal/planner terms
 
 Mitigation: update active docs/assets in the same slice where practical. If file/path rename is too large, keep file paths but update content and create a follow-up rename plan.
 

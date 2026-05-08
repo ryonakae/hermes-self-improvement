@@ -109,7 +109,7 @@ Keep historical artifact reader tests only where they prove `report` / `calibrat
 ### Slice 4: shrink partial legacy modules
 
 - Move or retain only `memory_rollback_status()` from `recovery_engine.py`; delete rollback planning/execution paths.
-- Move or retain only `merge_judge_status()` from `verification.py`; delete apply-phase merge verification paths.
+- Move or retain only `merge_planner_status()` from `verification.py`; delete apply-phase merge verification paths.
 - Keep `outcome_store.py` read/summarize/infer functions for calibration/report compatibility; remove writer-only legacy command support when no tests/runtime need it.
 - Keep `skill_snapshot.py` because current skill mutation safety uses it.
 

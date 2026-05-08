@@ -87,7 +87,7 @@ Keep these fixed unless a newer plan explicitly changes them:
 - `improve` does not run GEPA. GEPA/DSPy belongs to `calibrate`.
 - GEPA improves runtime-private overlay addenda, not repo-managed base prompts.
 - Planner/editor/evaluator overlays are one candidate set and one generation unit, with per-target `changed|unchanged`.
-- Plugin acceptance checks only verify artifact/overlay safety and consistency; they do not rejudge GEPA's quality decision with a parallel heavy evaluator.
+- Plugin acceptance checks only verify artifact/overlay safety and consistency; they do not replanner GEPA's quality decision with a parallel heavy evaluator.
 - Agent-facing tool results return compact summaries and artifact paths, not full nested payloads.
 - Full JSON/debug output remains available through CLI `--json` and runtime artifacts.
 - Do not reintroduce classifier/normalizer layers, legacy fallback surfaces, approval/apply/rollback primary surfaces, or direct filesystem mutation fallbacks.

@@ -4,9 +4,9 @@
 
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
-**Goal:** `improve` / `report` の primary proposal scoring から `gepa` / `compare` scorer を完全に外し、既定を `llm` にする。GEPA/DSPy は judge/editor prompt・rubric・evaluator を改善する `calibrate` 側の仕組みに限定する。
+**Goal:** `improve` / `report` の primary proposal scoring から `gepa` / `compare` scorer を完全に外し、既定を `llm` にする。GEPA/DSPy は planner/editor prompt・rubric・evaluator を改善する `calibrate` 側の仕組みに限定する。
 
-**Architecture:** Proposal scoring は `heuristic` と `llm` のみを残す。`llm` は `model.judge` と active evaluator/rubric を使う現在の judge path とし、`gepa` / `compare` は CLI/tool schema/slash/docs/tests から削除する。GEPA/DSPy の runtime config、adapter、optimizer、calibration tests は削除しない。削除対象は「proposal scorer としての GEPA / compare」だけ。
+**Architecture:** Proposal scoring は `heuristic` と `llm` のみを残す。`llm` は `model.planner` と active evaluator/rubric を使う現在の planner path とし、`gepa` / `compare` は CLI/tool schema/slash/docs/tests から削除する。GEPA/DSPy の runtime config、adapter、optimizer、calibration tests は削除しない。削除対象は「proposal scorer としての GEPA / compare」だけ。
 
 **Tech Stack:** Python, argparse, pytest, Hermes plugin tool schemas, bundled operations skill docs.
 
@@ -22,7 +22,7 @@
   - `compare` を primary から外す。
   - `gepa` / `compare` scorer は完全削除する。
 - Important boundary:
-  - GEPA/DSPy 自体は残す。役割は `calibrate` で judge/editor prompt・rubric・evaluator artifacts を改善すること。
+  - GEPA/DSPy 自体は残す。役割は `calibrate` で planner/editor prompt・rubric・evaluator artifacts を改善すること。
   - `gepa_adapter.py`, `dspy_program.py`, `calibration.py`, evaluator runtime assets, `gepa_scorer` config はこの計画では消さない。
   - Proposal digest 改善は後回し。この plan では scorer surface cleanup に集中する。
 
@@ -246,7 +246,7 @@ Expected: these tests will fail until updated/deleted in Task 4 because they des
 2. Add replacement tests in a new or existing scorer test file:
 
 ```python
-def test_score_proposals_llm_uses_judge_scorer_only(...):
+def test_score_proposals_llm_uses_planner_scorer_only(...):
     # fake llm_scorer_func returns scores
     # assert scorer == "llm-v0.1"
     # assert no gepa/compare fields are present
@@ -296,10 +296,10 @@ with current wording:
 2. Remove `_format_scorer_compare()` if it only supports deleted `compare-v0.1` report text.
 
 3. Update docs to say:
-   - `model.judge`: proposal/evidence judgment for `improve` / `report`
+   - `model.planner`: proposal/evidence judgment for `improve` / `report`
    - `model.editor`: skill/memory mutation agent prompts
    - `model.evaluator`: DSPy/GEPA calibration/optimization
-   - GEPA/DSPy is not run as a live judge/scorer during `improve` / `report`
+   - GEPA/DSPy is not run as a live planner/scorer during `improve` / `report`
 
 4. Strict-search and clean stale prose:
 
@@ -381,7 +381,7 @@ If `config.example.yaml` was not touched, omit it from `git add`. If docs outsid
 - **Risk: tests named `gepa_scorer` are ambiguous.** Some test files may cover evaluator/calibration assets and should remain. Delete or rewrite only tests that preserve `--scorer gepa` or `score_proposals_impl(... scorer="gepa")`.
 - **Risk: old artifacts contain `compare-v0.1`.** Do not mutate historical runtime artifacts. Strict searches should target repo source/tests/docs; runtime artifact content under `${HERMES_HOME}/self-improvement` may still contain old scorer strings.
 - **Risk: `report` default changing from compare to llm causes real LLM calls where previous tests expected no external call.** Existing tests should monkeypatch `_call_llm_scorer()` or choose `--scorer heuristic` for purely offline report tests.
-- **Tradeoff:** Keeping `heuristic` as an explicit scorer is useful for offline/smoke runs. It is not a judge replacement, just a cheap fallback.
+- **Tradeoff:** Keeping `heuristic` as an explicit scorer is useful for offline/smoke runs. It is not a planner replacement, just a cheap fallback.
 
 ## Acceptance criteria
 

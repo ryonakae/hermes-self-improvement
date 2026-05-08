@@ -58,7 +58,7 @@ The missing abstraction is a first-class `skill_archive` decision path.
    - Archived skills no longer appear as edit candidates.
 
 5. **Preprocessing preserves judgment material.**
-   - Programmatic preprocessing should reduce noise before the LLM, but it must not classify candidates into edit/archive/skip or become the real judge by silently dropping ambiguous or contradictory evidence.
+   - Programmatic preprocessing should reduce noise before the LLM, but it must not classify candidates into edit/archive/skip or become the real planner by silently dropping ambiguous or contradictory evidence.
    - Deterministic preprocessing should be high-recall and evidence-preserving: keep compact evidence snippets, match kinds, confidence, rejected/ambiguous reasons, and raw source pointers in artifacts.
    - The planner receives a compact digest plus enough representative evidence to make the decision itself. Preprocessing must not pre-decide edit vs archive vs skip except for hard invariant failures.
    - Hard filters are only for invariant violations such as pinned, already archived, non-local provenance, bundled/plugin/external skill, or unresolved target identity.

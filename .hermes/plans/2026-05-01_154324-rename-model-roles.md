@@ -2,9 +2,9 @@
 
 > **For Hermes:** Implement directly in TDD slices. Do not preserve compatibility for old unreleased model keys.
 
-**Goal:** Rename `model.llm`, `model.mutation`, and `model.gepa` to role-based `model.judge`, `model.editor`, and `model.evaluator`, in that order, and remove old names from runtime code, config examples, docs, tests, and local config.
+**Goal:** Rename `model.llm`, `model.mutation`, and `model.gepa` to role-based `model.planner`, `model.editor`, and `model.evaluator`, in that order, and remove old names from runtime code, config examples, docs, tests, and local config.
 
-**Architecture:** The plugin should expose model routing by responsibility rather than implementation technology. `judge` scores/evaluates evidence and proposals, `editor` powers skill/memory mutation agents, and `evaluator` powers DSPy/GEPA scorer/evaluator optimization. No aliasing or fallback for old names should remain because this plugin is still local/unreleased and the current cleanup policy is current-schema-only.
+**Architecture:** The plugin should expose model routing by responsibility rather than implementation technology. `planner` scores/evaluates evidence and proposals, `editor` powers skill/memory mutation agents, and `evaluator` powers DSPy/GEPA scorer/evaluator optimization. No aliasing or fallback for old names should remain because this plugin is still local/unreleased and the current cleanup policy is current-schema-only.
 
 **Tech Stack:** Python, YAML config, pytest, Hermes auxiliary client, DSPy/GEPA adapter.
 
@@ -14,7 +14,7 @@
 
 | Old key | New key | Responsibility |
 | --- | --- | --- |
-| `model.llm` | `model.judge` | LLM proposal/evidence scoring, risk/recommendation judgment, compare scorer LLM side |
+| `model.llm` | `model.planner` | LLM proposal/evidence scoring, risk/recommendation judgment, compare scorer LLM side |
 | `model.mutation` | `model.editor` | Mutation agent / skill-memory editor model used by `mutation_backend` |
 | `model.gepa` | `model.evaluator` | DSPy/GEPA scoring/evaluation/optimization model |
 
@@ -22,7 +22,7 @@ Canonical YAML order:
 
 ```yaml
 model:
-  judge:
+  planner:
     provider: codex
     model: gpt-5.4-mini
   editor:
@@ -48,12 +48,12 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
 
 **Steps:**
 1. In `tests/test_config_precedence.py`, update YAML fixtures and assertions:
-   - `model.llm` -> `model.judge`
+   - `model.llm` -> `model.planner`
    - `model.mutation` -> `model.editor`
    - `model.gepa` -> `model.evaluator`
-   - assert default `list(config["model"].keys()) == ["judge", "editor", "evaluator"]` or equivalent order-preserving check.
+   - assert default `list(config["model"].keys()) == ["planner", "editor", "evaluator"]` or equivalent order-preserving check.
    - assert old role keys are absent from normalized config.
-2. In `tests/test_llm_scorer.py`, update injected config checks to `config["model"]["judge"]`.
+2. In `tests/test_llm_scorer.py`, update injected config checks to `config["model"]["planner"]`.
 3. In `tests/test_gepa_optimizer.py`, update expected redacted config summary from `model.gepa` to `model.evaluator`.
 4. Run expected RED:
    ```bash
@@ -65,7 +65,7 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
 
 ## Task 2: Rename code defaults and config normalization
 
-**Objective:** `_default_config()` and normalized runtime config expose only `judge`, `editor`, `evaluator`.
+**Objective:** `_default_config()` and normalized runtime config expose only `planner`, `editor`, `evaluator`.
 
 **Files:**
 - Modify: `hermes_self_improvement/config.py`
@@ -74,7 +74,7 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
 1. Change `_default_config()["model"]` order to:
    ```python
    "model": {
-       "judge": {... timeout 60, max_tokens 1800 ...},
+       "planner": {... timeout 60, max_tokens 1800 ...},
        "editor": {... timeout 45, max_tokens 1000 ...},
        "evaluator": {... timeout 120, max_tokens 1800 ...},
    }
@@ -90,9 +90,9 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
 
 ---
 
-## Task 3: Rename judge model usage in scoring
+## Task 3: Rename planner model usage in scoring
 
-**Objective:** LLM proposal scoring uses `model.judge` and no old variable names leak into docs/artifacts.
+**Objective:** LLM proposal scoring uses `model.planner` and no old variable names leak into docs/artifacts.
 
 **Files:**
 - Modify: `hermes_self_improvement/scoring.py`
@@ -100,12 +100,12 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
 
 **Steps:**
 1. Rename local helper variables where useful:
-   - `llm_config` -> `judge_config`
+   - `llm_config` -> `planner_config`
    - keep function names like `_call_llm_scorer` only if they describe the scorer implementation, but avoid model key references to `llm`.
 2. In `_call_llm_scorer()`, read:
    ```python
    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-   judge_config = model_config.get("judge") if isinstance(model_config.get("judge"), dict) else {}
+   planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
    ```
 3. Preserve behavior: provider defaults to `auto`, model empty becomes `None`, timeout `60`, max_tokens `1800`.
 4. Run:
@@ -123,17 +123,17 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
 - Modify: `hermes_self_improvement/mutation_backend.py`
 - Modify: `hermes_self_improvement/verification.py`
 - Modify: `tests/test_mutation_backend.py`
-- Modify: `tests/test_merge_judge.py`
+- Modify: `tests/test_merge_planner.py`
 
 **Steps:**
 1. Rename `_model_mutation_config()` to `_model_editor_config()`.
 2. In `MutationBackendLimits.from_config()`, read `model.editor` for timeout-related defaults.
 3. In `_call_hermes_auxiliary()`, pass `model.editor` config to `call_llm()`.
-4. In `verification.merge_judge_status()`, change `model_source` from `model.mutation` to `model.editor`.
+4. In `verification.merge_planner_status()`, change `model_source` from `model.mutation` to `model.editor`.
 5. Update tests to expect `model.editor`.
 6. Run:
    ```bash
-   python -m pytest tests/test_mutation_backend.py tests/test_merge_judge.py tests/test_runner_steps.py -q
+   python -m pytest tests/test_mutation_backend.py tests/test_merge_planner.py tests/test_runner_steps.py -q
    ```
 
 ---
@@ -164,7 +164,7 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
 
 ## Task 6: Update YAML examples, local config, docs, and bundled skill references
 
-**Objective:** Human-facing config and docs show only `judge`, `editor`, `evaluator` in that order.
+**Objective:** Human-facing config and docs show only `planner`, `editor`, `evaluator` in that order.
 
 **Files:**
 - Modify: `config.example.yaml`
@@ -178,7 +178,7 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
 1. In `config.example.yaml`, update optional model example to:
    ```yaml
    # model:
-   #   judge:
+   #   planner:
    #     provider: openrouter
    #     model: anthropic/claude-sonnet-4
    #   editor:
@@ -191,7 +191,7 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
 2. In local `config.yaml`, update active config to:
    ```yaml
    model:
-     judge:
+     planner:
        provider: codex
        model: gpt-5.4-mini
      editor:
@@ -202,7 +202,7 @@ Do not keep `llm`, `mutation`, or `gepa` under `model` as accepted aliases.
        model: gpt-5.4-mini
    ```
 3. Update README/config docs to describe responsibilities:
-   - `judge`: proposal/evidence judgment
+   - `planner`: proposal/evidence judgment
    - `editor`: mutation agent/editor
    - `evaluator`: DSPy/GEPA evaluator/scorer calibration
 4. Do not add migration notes that preserve old names. A short “current model roles” description is enough.

@@ -30,11 +30,11 @@
 3. **The plugin verifies agent results.**
    - Agent self-report is not authoritative.
    - The plugin checks target existence, scope, hashes, frontmatter validity, source deletion, destination content, declared operations, and allowed-tool usage.
-   - Merge verification uses both checklist validation and an LLM judge.
+   - Merge verification uses both checklist validation and an LLM planner.
 
 4. **Rename/merge source deletion is immediate in final state, but verify-before-delete internally.**
    - Phase 1 mutation agent creates/updates/copies content and returns `ready_to_delete_source: true`.
-   - Plugin runs checklist + LLM judge before source deletion.
+   - Plugin runs checklist + LLM planner before source deletion.
    - Commit phase deletes the old/source skill after verification.
    - Final user-visible state is simple: rename means old gone/new exists; merge means source gone/destination integrated.
 
@@ -182,7 +182,7 @@ git commit -m "docs(self-improvement): define mutation agent recovery architectu
   },
   "verification_contract": {
     "checklist_required": true,
-    "llm_judge_required": false
+    "llm_planner_required": false
   }
 }
 ```
@@ -201,9 +201,9 @@ git commit -m "docs(self-improvement): define mutation agent recovery architectu
    - Expect mutation type `skill_agent_task`, `task_kind: skill_rename`.
    - Expect status `needs_review` / approval-required, not unattended.
 
-2. `test_build_apply_plan_plans_skill_merge_as_agent_task_with_llm_judge_contract`
+2. `test_build_apply_plan_plans_skill_merge_as_agent_task_with_llm_planner_contract`
    - Proposal with source/destination.
-   - Expect `verification_contract.llm_judge_required is True`.
+   - Expect `verification_contract.llm_planner_required is True`.
 
 3. `test_skill_agent_task_refuses_non_mutable_skill_targets`
    - Hub/built-in/external/plugin-bundled targets must not become executable.
@@ -526,7 +526,7 @@ git commit -m "feat(self-improvement): execute semantic skill mutation tasks"
    - merge: integrate source into destination, copy/merge supporting files, do not delete source.
 3. Plugin verification:
    - checklist verification.
-   - LLM judge for merge.
+   - LLM planner for merge.
 4. Commit delete:
    - If verification passes, plugin performs source deletion.
    - This commit delete can use `skill_manage delete` or recovery-engine-controlled deletion with ledger binding; choose the simpler safe path and document it. Prefer `skill_manage delete` for forward commit because it is still forward mutation and official tool-mediated.
@@ -535,7 +535,7 @@ git commit -m "feat(self-improvement): execute semantic skill mutation tasks"
    - destination/new exists;
    - hashes recorded.
 6. Ledger finalization:
-   - include snapshots, agent result, verification, judge result, commit delete result.
+   - include snapshots, agent result, verification, planner result, commit delete result.
 
 **Checklist verification:**
 
@@ -559,7 +559,7 @@ Merge:
 - `removed_as_duplicate`, `conflicts_resolved`, `supporting_files_moved` present as lists.
 - supporting files declared by agent exist.
 
-LLM judge for merge:
+LLM planner for merge:
 
 Inputs:
 
@@ -567,7 +567,7 @@ Inputs:
 - destination before and after.
 - agent `merged_points`, duplicates, conflicts.
 
-Judge should output structured JSON:
+Planner should output structured JSON:
 
 ```json
 {
@@ -580,15 +580,15 @@ Judge should output structured JSON:
 }
 ```
 
-Fail closed on malformed judge output or negative result.
+Fail closed on malformed planner output or negative result.
 
 **Tests:**
 
 1. Rename phase 1 success + verification + commit delete yields old gone/new exists.
 2. Rename fails if new frontmatter name is wrong.
 3. Rename does not delete old if verification fails.
-4. Merge phase 1 success + checklist + judge pass deletes source.
-5. Merge judge fail leaves source intact and marks item failed/needs_review.
+4. Merge phase 1 success + checklist + planner pass deletes source.
+5. Merge planner fail leaves source intact and marks item failed/needs_review.
 6. Merge rejects empty `merged_points`.
 7. Merge rejects unsupported/disallowed tool use in agent result.
 8. Rollback after rename restores old and removes new via recovery engine.
@@ -789,7 +789,7 @@ git commit -m "refactor(self-improvement): isolate legacy skill mutation paths"
 1. Create skill via semantic mutation agent, rollback deletes it.
 2. Improve skill via semantic mutation agent, rollback restores before snapshot.
 3. Rename skill via two-phase agent + plugin verification + commit delete, rollback restores old/removes new.
-4. Merge skill via two-phase agent + checklist + LLM judge + commit delete, rollback restores source and destination.
+4. Merge skill via two-phase agent + checklist + LLM planner + commit delete, rollback restores source and destination.
 5. Built-in memory rollback behavior matches chosen implementation/unsupported state.
 6. External provider direct rollback is rejected.
 
@@ -842,10 +842,10 @@ These are implementation details, not design blockers:
    - Since it is forward mutation, prefer `skill_manage delete`.
    - Recovery engine should be rollback-only.
 
-4. **How to run LLM judge?**
+4. **How to run LLM planner?**
    - Prefer existing Hermes auxiliary model path.
    - Do not invent plugin-specific API keys.
-   - Fail closed on unavailable judge for merge execution.
+   - Fail closed on unavailable planner for merge execution.
 
 5. **What to do with existing `skill_manage_patch` low-risk path?**
    - Keep short-term for compatibility.

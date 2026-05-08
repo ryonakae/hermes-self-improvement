@@ -310,7 +310,7 @@ In `build_skill_planner_digest()`:
 
 In `PLANNER_SYSTEM_PROMPT` / `PLANNER_USER_PREFIX`, add minimal wording:
 
-- Inventory candidates are LLM-judged cleanup suggestions, not conclusions.
+- Inventory candidates are LLM-evaluated cleanup suggestions, not conclusions.
 - Prefer auto-applicable `run_editor` for local safe patches.
 - Use `archive_skill` only for explicit obsolete/superseded/archive evidence and hard checks.
 - Do not use `defer` merely because the signal is fuzzy; defer only when target/action is unclear or unsafe.
@@ -694,7 +694,7 @@ git commit -m "docs: plan LLM inventory self-improvement"
 - `improve` still has one primary flow; no new user-facing command or approval queue.
 - Daily self-improvement evidence is no longer dominated only by tool failures when skill/memory inventory issues exist.
 - Skill inventory candidates reach the existing skill planner/editor path.
-- Memory inventory candidates reach an LLM-judged memory operation path and then existing memory tool execution.
+- Memory inventory candidates reach an LLM-evaluated memory operation path and then existing memory tool execution.
 - Auto-apply is the default for safe, bounded changes.
 - Hard safety checks stop only dangerous or unsupported changes.
 - Agent-facing outputs stay compact.

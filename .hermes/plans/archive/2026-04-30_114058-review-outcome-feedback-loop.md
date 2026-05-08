@@ -17,7 +17,7 @@
 - `.hermes/plans/README.md` says there are no active unfinished implementation plans.
 - `bin/hermes-self-improve status --json` reports:
   - `mutation_backend.available=true`
-  - `merge_judge.available=true`
+  - `merge_planner.available=true`
   - `memory_rollback.supported=false`, `execution=blocked`, preview-only modes.
 - `calibration.collect_calibration_evidence()` currently counts:
   - scorer disagreements in apply plans

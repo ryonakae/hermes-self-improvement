@@ -730,7 +730,7 @@ Current files to classify:
   - `2026-04-28_012243-dspy-gepa-integration.md`
   - `2026-04-29_175500-tool-mediated-skill-memory-mutation.md`
   - `2026-04-29_232451-semantic-mutation-agent-and-ledger-bound-restore.md`
-  - `2026-04-30_003330-real-mutation-agent-and-judge.md`
+  - `2026-04-30_003330-real-mutation-agent-and-planner.md`
   - `2026-04-30_080545-real-mutation-agent-hardening-detailed.md`
   - `2026-04-30_081449-memory-rollback-store-validation.md`
   - `2026-04-29_003219-self-improvement-runtime-home.md`

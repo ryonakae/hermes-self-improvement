@@ -329,7 +329,7 @@ def _proposal_for_explicit_candidate(finding: dict[str, Any]) -> dict[str, Any] 
             "risk": "medium" if planner_decided else "high",
             "confidence": finding.get("confidence") or "medium",
             "title": finding.get("title") or f"Evaluate {action} lifecycle candidate",
-            "reason": finding.get("reason") or f"Explicit {action} candidate should be judged by the planner.",
+            "reason": finding.get("reason") or f"Explicit {action} candidate should be evaluated by the planner.",
             "evidence_kind": kind,
             "target_path": str(target_path),
             "before_hash": finding.get("before_hash"),

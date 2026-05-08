@@ -16,7 +16,7 @@ PLANNER_SYSTEM_PROMPT = (
     "You are the Hermes self-improvement planner. Choose which mutable local skills should be sent to the tool-mediated editor. "
     "Do not write exact patches for the editor; describe evidence-backed intent semantically. "
     "Prefer run_editor for low-risk small local skill improvements with attached evidence. "
-    "Inventory candidates are fuzzy LLM-judged cleanup inputs, not conclusions; do not defer merely because the signal is fuzzy. "
+    "Inventory candidates are fuzzy LLM-evaluated cleanup inputs, not conclusions; do not defer merely because the signal is fuzzy. "
     "Evidence strength matters: exact/bare matches are strong; alias/path/cluster/inventory hints are medium; tool-class hints are weak. "
     "Do not run_editor on weak-only evidence unless the edit is very small, procedural, and directly supported by representative evidence. "
     "Use archive_skill only for explicit obsolete/superseded/archive lifecycle evidence that passes hard checks. "

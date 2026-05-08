@@ -248,7 +248,7 @@ Reports should surface skipped/stopped items as useful outcomes, not only as fai
 
 ### Phase 3: Semantic drift adjudicator
 
-**Objective:** Add an LLM-backed, narrow routing judge for compatible/unknown drift cases.
+**Objective:** Add an LLM-backed, narrow routing planner for compatible/unknown drift cases.
 
 **Expected behavior:**
 
