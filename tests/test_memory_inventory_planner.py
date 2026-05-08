@@ -99,3 +99,25 @@ def test_memory_inventory_rejects_unknown_target():
     assert result["changed"] == 0
     assert result["decisions"][0]["decision"] == "rejected"
     assert result["decisions"][0]["reason"] == "memory_target_invalid"
+
+
+def test_memory_inventory_operation_hint_executes_without_llm_planner():
+    calls = []
+    evidence = _inventory_evidence()
+    evidence["target_resolution_hint"] = {
+        "resolution_kind": "memory_candidate",
+        "suggested_action": "apply",
+        "memory_operation_hint": {
+            "operation": "memory_replace",
+            "target": "memory",
+            "old_text": "Hermes root is /opt/data",
+            "content": "Hermes runtime root is ~/.hermes",
+            "reason": "replace stale runtime root fact",
+        },
+    }
+    config = {"_memory_tool_fn": lambda **args: calls.append(args) or {"success": True, "changed": True}}
+
+    result = run_memory_improvement_step(evidence_pack=_pack([evidence]), config=config, mutate=True)
+
+    assert result["changed"] == 1
+    assert calls == [{"action": "replace", "target": "memory", "old_text": "Hermes root is /opt/data", "content": "Hermes runtime root is ~/.hermes"}]

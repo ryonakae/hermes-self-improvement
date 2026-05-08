@@ -862,6 +862,38 @@ def _format_count_map(counts: dict[str, Any]) -> str:
     return ", ".join(parts) if parts else "none"
 
 
+def _top_count_map(counts: dict[str, int], *, limit: int = 3) -> dict[str, int]:
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit])
+
+
+def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[str]:
+    buckets = {
+        "defer_unresolved": {},
+        "create_new_skill": {},
+        "memory_candidate": {},
+        "skip_noise": {},
+    }
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        signals = item.get("target_fit_signals") if isinstance(item.get("target_fit_signals"), dict) else {}
+        rec = str(signals.get("recommendation") or "")
+        if rec not in buckets:
+            continue
+        theme = str(item.get("theme") or ((item.get("coverage") or {}).get("gap_kind") if isinstance(item.get("coverage"), dict) else "") or item.get("kind") or "unknown")
+        buckets[rec][theme] = buckets[rec].get(theme, 0) + 1
+    lines = []
+    if buckets["defer_unresolved"]:
+        lines.append(f"- deferred themes: {_format_count_map(_top_count_map(buckets['defer_unresolved']))}")
+    if buckets["create_new_skill"]:
+        lines.append(f"- create-skill leaning: {_format_count_map(_top_count_map(buckets['create_new_skill']))}")
+    if buckets["memory_candidate"]:
+        lines.append(f"- memory leaning: {_format_count_map(_top_count_map(buckets['memory_candidate']))}")
+    if buckets["skip_noise"]:
+        lines.append(f"- skip-noise leaning: {_format_count_map(_top_count_map(buckets['skip_noise']))}")
+    return lines
+
+
 def _render_improve_summary(result: dict[str, Any]) -> str:
     summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
     step_decisions = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
@@ -889,7 +921,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     inventory_memory_health = inventory_health.get("memory") if isinstance(inventory_health.get("memory"), dict) else {}
     target_resolution_digest = result.get("target_resolution_digest") if isinstance(result.get("target_resolution_digest"), dict) else skill_step.get("target_resolution_digest") if isinstance(skill_step.get("target_resolution_digest"), dict) else {}
     target_recommendations: dict[str, int] = {}
-    for item in target_resolution_digest.get("candidates") or []:
+    target_resolution_candidates = [item for item in (target_resolution_digest.get("candidates") or []) if isinstance(item, dict)]
+    for item in target_resolution_candidates:
         if not isinstance(item, dict):
             continue
         signals = item.get("target_fit_signals") if isinstance(item.get("target_fit_signals"), dict) else {}
@@ -986,6 +1019,10 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Evidence/proposals:",
         f"- considered {int(decision_summary.get('total') or 0)} proposal signals",
     ]
+    target_resolution_lines = _target_resolution_summary_lines(target_resolution_candidates)
+    if target_resolution_lines:
+        insert_at = lines.index("Action summary:")
+        lines[insert_at:insert_at] = target_resolution_lines
     if editor_stop_counts:
         lines.append("- editor stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(editor_stop_counts.items())))
     if selected_preview:

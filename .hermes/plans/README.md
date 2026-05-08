@@ -4,6 +4,12 @@
 
 As of 2026-05-08, the current active implementation plan is:
 
+- `2026-05-08_125700-defer-explain-and-small-safe-promotion.md`
+  - **Status:** implemented.
+  - Follow-up after `94d6e23`. Makes dry-run resolution more actionable while keeping implementation deliberately simple: explains `defer_unresolved` by theme, adds small promotion/negative hints, clarifies the existing five resolver choices, promotes clear stale memory pairs into the existing memory mutation planning path, and dogfoods with one dry-run artifact. No new command, queue, lane, apply mode, planner, scoring subsystem, or separate inventory subsystem.
+
+The latest completed implementation plan is:
+
 - `2026-05-08_110727-inventory-evidence-and-target-resolver-quality.md`
   - **Status:** implemented.
   - Follow-up after memory-gap reconciliation and skill target filtering. Upgrades inventory work into knowledge inventory / coverage evidence: inventory health snapshots, memory duplicate/stale-pair evidence, Hermes-created stale singleton skill evidence, repeated workflow coverage gaps, create-skill affordances, resolver 5-class normalization, target-fit/negative-fit signals, and dry-run `Knowledge inventory` / `Coverage gaps` / `Target resolution` summaries. Keeps the existing `improve` loop, official skill/memory tools, simple action semantics, and Hermes-created local mutable skill boundary.

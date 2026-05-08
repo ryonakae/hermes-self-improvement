@@ -106,6 +106,19 @@ def test_collect_knowledge_coverage_candidates_emits_repeated_workflow_gap():
     assert items[0]["target_resolution_hint"]["resolution_kind"] == "create_new_skill"
 
 
+def test_coverage_candidate_marks_create_skill_promotion_hints():
+    items = collect_knowledge_coverage_candidates([
+        {"id": "u1", "kind": "unmatched_improvement_candidate", "theme": "sandbox_permission_workflow", "count": 5, "rationale": "Repeated sandbox failures"}
+    ], skill_candidates=[], existing_memory_entries=[])
+
+    hints = items[0]["target_resolution_hint"]["promotion_hints"]
+    assert hints == {
+        "recurring": True,
+        "has_workflow_boundary": True,
+        "no_existing_skill_fit": True,
+    }
+
+
 def test_build_evidence_pack_includes_knowledge_coverage_candidates_for_unmatched_workflows():
     now = datetime.now(timezone.utc)
     events = [

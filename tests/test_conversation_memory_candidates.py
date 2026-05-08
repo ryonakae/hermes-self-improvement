@@ -4,6 +4,7 @@ from hermes_self_improvement.conversation_memory import (
     make_conversation_memory_gap_candidate,
     normalize_memory_gap_payload,
     reconcile_memory_gap_payload_with_existing_memories,
+    run_memory_gap_extractor,
 )
 
 
@@ -155,3 +156,13 @@ def test_reconcile_memory_gap_payload_defers_add_that_claims_existing_relation_w
     candidate = out["candidates"][0]
     assert candidate["action"] == "defer"
     assert candidate["defer_reason"] == "add_claims_existing_memory_without_old_text"
+
+
+def test_memory_gap_extractor_returns_empty_candidates_on_llm_parse_failure():
+    def broken_extractor(**_kwargs):
+        raise ValueError("bad llm json")
+
+    out = run_memory_gap_extractor({"windows": []}, config={"_memory_gap_extractor_func": broken_extractor})
+
+    assert out["candidates"] == []
+    assert out["extractor_error"] == "bad llm json"

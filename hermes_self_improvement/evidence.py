@@ -192,6 +192,7 @@ def make_memory_inventory_candidate(
     rationale: str,
     hints: list[str] | None = None,
     risk: str = "medium",
+    target_resolution_hint: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     clean_entries = []
     for entry in entries[:8]:
@@ -211,7 +212,7 @@ def make_memory_inventory_candidate(
         "entries": clean_entries,
         "hints": _clean_list(hints, max_items=6, max_chars=180),
     }
-    return {
+    candidate = {
         "id": candidate_id or _stable_id("memory_inv", inventory),
         "kind": "memory_inventory_candidate",
         "source": "inventory",
@@ -220,6 +221,9 @@ def make_memory_inventory_candidate(
         "rationale": _redact_text(rationale, max_chars=300),
         "risk": risk if risk in {"low", "medium", "high"} else "medium",
     }
+    if isinstance(target_resolution_hint, dict):
+        candidate["target_resolution_hint"] = target_resolution_hint
+    return candidate
 
 
 def _is_successful_skill_usage(ev: dict[str, Any]) -> bool:
@@ -435,6 +439,11 @@ def make_knowledge_coverage_candidate(
         "allow_create_skill": resolution_kind == "create_new_skill",
     }
     if resolution_kind == "create_new_skill":
+        hint["promotion_hints"] = {
+            "recurring": int(evidence_count) >= 2,
+            "has_workflow_boundary": bool(str(workflow_boundary or "").strip()),
+            "no_existing_skill_fit": True,
+        }
         hint["create_skill_affordance"] = {
             "workflow_boundary": coverage["workflow_boundary"],
             "not_memory_because": coverage.get("not_memory_because"),
@@ -690,6 +699,43 @@ def _memory_inventory_relation(left: str, right: str) -> str | None:
     return None
 
 
+def _uncertain_memory_text(text: str) -> bool:
+    lowered = str(text or "").lower()
+    return any(marker in lowered for marker in (" may ", " might ", " maybe ", "possibly", "probably", "uncertain", "draft", "todo", "temporary"))
+
+
+def _stale_memory_pair_action_hint(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    base = {"resolution_kind": "memory_candidate"}
+    if len(entries) != 2:
+        return {**base, "suggested_action": "defer", "reason": "ambiguous_stale_pair"}
+    old_entry, current_entry = entries[0], entries[1]
+    old_text = str(old_entry.get("old_text") or "").strip()
+    current_text = str(current_entry.get("old_text") or "").strip()
+    target = str(old_entry.get("target") or "memory")
+    if target != str(current_entry.get("target") or "memory"):
+        return {**base, "suggested_action": "defer", "reason": "mixed_memory_targets"}
+    if _looks_secret(old_text) or _looks_secret(current_text) or _uncertain_memory_text(old_text) or _uncertain_memory_text(current_text):
+        return {**base, "suggested_action": "defer", "reason": "ambiguous_stale_pair"}
+    old_subject = _memory_tokens(old_text) - _memory_value_tokens(old_text)
+    current_subject = _memory_tokens(current_text) - _memory_value_tokens(current_text)
+    subject_overlap = old_subject & current_subject
+    subject_overlap_ratio = len(subject_overlap) / max(len(old_subject | current_subject), 1)
+    if len(subject_overlap) < 2 or subject_overlap_ratio < 0.45:
+        return {**base, "suggested_action": "defer", "reason": "weak_subject_match"}
+    return {
+        **base,
+        "suggested_action": "apply",
+        "reason": "clear_stale_memory_pair",
+        "memory_operation_hint": {
+            "operation": "memory_replace",
+            "target": target,
+            "old_text": _redact_text(old_text, max_chars=500),
+            "content": _redact_text(current_text, max_chars=500),
+            "reason": "replace stale memory fact with current memory fact",
+        },
+    }
+
+
 def _memory_inventory_group_counts(inventory_evidence: list[dict[str, Any]]) -> dict[str, int]:
     counts = {"exact_duplicate_group_count": 0, "near_duplicate_group_count": 0, "stale_pair_count": 0}
     for item in inventory_evidence:
@@ -761,12 +807,14 @@ def collect_memory_inventory_candidates(memory_paths: dict[str, Any] | None, *, 
         hints = ["old_text must be specific for replace/remove", "skip if current fact cannot be determined safely"]
         if group_kind == "stale_fact_pair":
             hints.insert(0, "planner should consider replace/remove for stale fact pairs")
+        target_resolution_hint = _stale_memory_pair_action_hint(group) if group_kind == "stale_fact_pair" else None
         out.append(make_memory_inventory_candidate(
             group_kind=group_kind,
             entries=group,
             rationale="Memory entries appear duplicated, stale, or semantically overlapping; LLM should decide replace/remove/add through memory tool only.",
             hints=hints,
             risk="medium",
+            target_resolution_hint=target_resolution_hint,
         ))
     return [item for item in out if (item.get("inventory") or {}).get("entries")]
 

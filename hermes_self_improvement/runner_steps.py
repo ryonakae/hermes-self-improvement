@@ -405,6 +405,14 @@ def _memory_inventory_operations(evidence: list[dict[str, Any]], config: dict[st
     inventory_evidence = [item for item in evidence if isinstance(item, dict) and item.get("kind") == "memory_inventory_candidate"]
     if not inventory_evidence:
         return []
+    hinted_operations: list[dict[str, Any]] = []
+    for item in inventory_evidence:
+        hint = item.get("target_resolution_hint") if isinstance(item.get("target_resolution_hint"), dict) else {}
+        operation_hint = hint.get("memory_operation_hint") if hint.get("suggested_action") == "apply" and isinstance(hint.get("memory_operation_hint"), dict) else None
+        if operation_hint:
+            hinted_operations.append({"evidence_id": item.get("id"), **operation_hint})
+    if hinted_operations:
+        return hinted_operations
     if callable(planner_fn):
         raw = planner_fn(inventory_evidence, config=cfg)
         return raw if isinstance(raw, list) else []

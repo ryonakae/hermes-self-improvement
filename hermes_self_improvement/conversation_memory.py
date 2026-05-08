@@ -276,9 +276,15 @@ def run_memory_gap_extractor(digest: dict[str, Any], *, config: dict[str, Any] |
     cfg = config or {}
     extractor_func = cfg.get("_memory_gap_extractor_func") if isinstance(cfg, dict) else None
     if callable(extractor_func):
-        payload = extractor_func(digest=digest, config=cfg)
+        try:
+            payload = extractor_func(digest=digest, config=cfg)
+        except Exception as exc:
+            return {"candidates": [], "extractor_error": _redact_text(str(exc), max_chars=240)}
     elif isinstance(cfg.get("model"), dict):
-        payload = _call_memory_gap_llm(digest=digest, config=cfg)
+        try:
+            payload = _call_memory_gap_llm(digest=digest, config=cfg)
+        except Exception as exc:
+            return {"candidates": [], "extractor_error": _redact_text(str(exc), max_chars=240)}
     else:
         payload = {"candidates": []}
     return normalize_memory_gap_payload(payload)

@@ -101,8 +101,15 @@ def _target_fit_signals(item: dict[str, Any], skill_candidates: list[dict[str, A
     negative: list[str] = []
     theme = str(item.get("theme") or "")
     theme_tokens = {token for token in theme.replace("_", "-").split("-") if token}
+    count = int(item.get("count") or ((item.get("coverage") or {}).get("evidence_count") if isinstance(item.get("coverage"), dict) else 0) or 0)
+    coverage = item.get("coverage") if isinstance(item.get("coverage"), dict) else {}
+    workflow_boundary = str(coverage.get("workflow_boundary") or "").strip()
+    if count <= 1:
+        negative.append("low_recurrence")
     if item.get("kind") in {"unmatched_improvement_candidate", "tool_error_cluster_evidence"}:
         negative.append("generic_tool_failure")
+        if count > 1 and not workflow_boundary:
+            negative.append("missing_workflow_boundary")
     for skill in skill_candidates:
         name = str(skill.get("name") or "").lower()
         desc = str(skill.get("description") or skill.get("summary") or "").lower()
@@ -113,7 +120,12 @@ def _target_fit_signals(item: dict[str, Any], skill_candidates: list[dict[str, A
             positive.append("name_theme_overlap")
     if len(skill_candidates) == 1 and not positive and item.get("kind") in {"unmatched_improvement_candidate", "tool_error_cluster_evidence"}:
         negative.append("single_visible_target")
-    recommendation = "attach_existing_skill" if positive and "single_visible_target" not in negative else "defer_unresolved" if negative else "defer_unresolved"
+    if "low_recurrence" in negative:
+        recommendation = "skip_noise"
+    elif positive and "single_visible_target" not in negative:
+        recommendation = "attach_existing_skill"
+    else:
+        recommendation = "defer_unresolved"
     return {
         "positive": sorted(set(positive)),
         "negative": sorted(set(negative)),
@@ -168,6 +180,22 @@ def build_target_resolution_digest(
     }
 
 
+def build_target_resolver_prompt(digest: dict[str, Any]) -> str:
+    return (
+        "You are resolving Hermes self-improvement targets. Return JSON only: "
+        "{\"resolutions\":[{\"candidate_id\":str,"
+        "\"resolution_kind\":\"attach_existing_skill|create_new_skill|memory_candidate|defer_unresolved|skip_noise\","
+        "\"target_kind\":\"skill|memory|none\",\"target\":str,"
+        "\"confidence\":\"low|medium|high\",\"suggested_action\":\"apply|defer|skip|block\",\"reason\":str}]}. "
+        "Use the five choices simply: attach_existing_skill only for a listed skill with positive fit; "
+        "create_new_skill for recurring procedural workflow with boundary and no existing skill fit; "
+        "memory_candidate for durable facts, preferences, or environment details; "
+        "defer_unresolved for useful evidence with unclear target; "
+        "skip_noise for one-off, transient, or already-handled noise.\n\n"
+        + json.dumps(digest, ensure_ascii=False, sort_keys=True)
+    )
+
+
 def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
     resolver_config = model_config.get("target_resolver") if isinstance(model_config.get("target_resolver"), dict) else {}
@@ -175,16 +203,7 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
     model = resolver_config.get("model") or None
     timeout = _coerce_int(resolver_config.get("timeout"), default=60)
     max_tokens = _coerce_int(resolver_config.get("max_tokens"), default=1800)
-    prompt = (
-        "You are resolving Hermes self-improvement targets. Return JSON only: "
-        "{\"resolutions\":[{\"candidate_id\":str,"
-        "\"resolution_kind\":\"attach_existing_skill|create_new_skill|memory_candidate|defer_unresolved|skip_noise\","
-        "\"target_kind\":\"skill|memory|none\",\"target\":str,"
-        "\"confidence\":\"low|medium|high\",\"suggested_action\":\"apply|defer|skip|block\",\"reason\":str}]}. "
-        "Use only listed skill targets for attach_existing_skill. Use create_new_skill only when the candidate has a durable procedural boundary and no listed skill fits. "
-        "Use memory_candidate for durable facts/preferences, defer_unresolved when evidence is useful but target is unclear, and skip_noise for one-off/noisy observations.\n\n"
-        + json.dumps(digest, ensure_ascii=False, sort_keys=True)
-    )
+    prompt = build_target_resolver_prompt(digest)
     _ensure_hermes_agent_on_path()
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
 

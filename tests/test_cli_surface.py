@@ -433,6 +433,28 @@ def test_improve_summary_reads_nested_skill_target_resolution_digest():
     assert "- recommendations: attach_existing_skill 1, defer_unresolved 1" in text
 
 
+def test_improve_summary_lists_deferred_target_resolution_themes():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {},
+        "step_decisions": {"skill": {"target_resolution_digest": {"candidates": [
+            {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "defer_unresolved"}},
+            {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "defer_unresolved"}},
+            {"theme": "sandbox_permission_workflow", "target_fit_signals": {"recommendation": "create_new_skill"}},
+            {"theme": "stale_fact_pair", "target_fit_signals": {"recommendation": "memory_candidate"}},
+            {"theme": "one_off_terminal_failure", "target_fit_signals": {"recommendation": "skip_noise"}},
+        ]}}},
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "- recommendations: create_new_skill 1, defer_unresolved 2, memory_candidate 1, skip_noise 1" in text
+    assert "- deferred themes: timeout_workflow 2" in text
+    assert "- create-skill leaning: sandbox_permission_workflow 1" in text
+    assert "- memory leaning: stale_fact_pair 1" in text
+    assert "- skip-noise leaning: one_off_terminal_failure 1" in text
+
+
 def test_status_summary_is_human_readable_not_json():
     cli = load_cli_module()
     text = cli._render_status_summary({

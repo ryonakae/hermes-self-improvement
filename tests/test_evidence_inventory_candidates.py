@@ -162,6 +162,47 @@ def test_collect_memory_inventory_candidates_marks_stale_current_fact_pairs(tmp_
     assert any("replace" in hint or "stale" in hint for hint in item["inventory"]["hints"])
 
 
+def test_clear_stale_memory_pair_has_apply_leaning_memory_candidate_hint(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    memory.write_text("Hermes runtime root is /opt/data.\n§\nHermes runtime root is ~/.hermes.\n", encoding="utf-8")
+
+    item = collect_memory_inventory_candidates(memory_paths={"memory": memory})[0]
+
+    hint = item["target_resolution_hint"]
+    assert item["inventory"]["group_kind"] == "stale_fact_pair"
+    assert hint["resolution_kind"] == "memory_candidate"
+    assert hint["suggested_action"] == "apply"
+    assert hint["memory_operation_hint"]["operation"] == "memory_replace"
+    assert hint["memory_operation_hint"]["old_text"] == "Hermes runtime root is /opt/data."
+    assert hint["memory_operation_hint"]["content"] == "Hermes runtime root is ~/.hermes."
+
+
+def test_ambiguous_stale_memory_pair_stays_deferred(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    memory.write_text("Project X may use path /var/alpha.\n§\nProject X may use path /opt/beta.\n", encoding="utf-8")
+
+    item = collect_memory_inventory_candidates(memory_paths={"memory": memory})[0]
+
+    assert item["inventory"]["group_kind"] == "stale_fact_pair"
+    assert item["target_resolution_hint"]["resolution_kind"] == "memory_candidate"
+    assert item["target_resolution_hint"]["suggested_action"] == "defer"
+
+
+def test_related_but_distinct_memory_pair_stays_deferred(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    memory.write_text(
+        "live context は `~/.hermes/live-contexts/{current,weather,bluesky,swarm,switchbot,agents-summary,purchases}.md` と `index.json`。source時系列は新しい順。\n"
+        "§\n"
+        "Gmail purchase live context は read-only `gmail-purchase-observer`。aggregator は `purchases.md`。確定購入+サブスク、retention/backfill 30日。\n",
+        encoding="utf-8",
+    )
+
+    item = collect_memory_inventory_candidates(memory_paths={"memory": memory})[0]
+
+    assert item["inventory"]["group_kind"] == "stale_fact_pair"
+    assert item["target_resolution_hint"]["suggested_action"] == "defer"
+
+
 def test_build_evidence_pack_includes_memory_inventory_candidates(tmp_path):
     since = datetime(2026, 5, 7, 0, 0, tzinfo=timezone.utc)
     until = datetime(2026, 5, 7, 1, 0, tzinfo=timezone.utc)

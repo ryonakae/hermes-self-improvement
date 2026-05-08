@@ -1,6 +1,6 @@
 from hermes_self_improvement.evidence import make_knowledge_coverage_candidate
 from hermes_self_improvement.planner import build_skill_planner_digest
-from hermes_self_improvement.target_resolver import build_target_resolution_digest, normalize_target_resolver_payload
+from hermes_self_improvement.target_resolver import build_target_resolution_digest, build_target_resolver_prompt, normalize_target_resolver_payload
 
 
 def test_normalize_target_resolver_payload_keeps_known_mutable_targets():
@@ -182,3 +182,36 @@ def test_target_resolution_digest_marks_name_overlap_as_positive_fit():
     signals = digest["candidates"][0]["target_fit_signals"]
     assert "name_theme_overlap" in signals["positive"]
     assert signals["recommendation"] == "attach_existing_skill"
+
+
+def test_target_fit_signals_mark_low_recurrence_as_skip_leaning():
+    pack = {"evidence": [{"id": "u1", "kind": "unmatched_improvement_candidate", "theme": "terminal_preflight_workflow", "count": 1}]}
+
+    digest = build_target_resolution_digest(pack, skill_candidates=[])
+
+    signals = digest["candidates"][0]["target_fit_signals"]
+    assert "low_recurrence" in signals["negative"]
+    assert signals["recommendation"] == "skip_noise"
+
+
+def test_target_resolver_prompt_keeps_simple_five_choice_guidance():
+    prompt = build_target_resolver_prompt({"candidates": [], "skill_targets": []})
+
+    assert "attach_existing_skill" in prompt
+    assert "create_new_skill" in prompt
+    assert "memory_candidate" in prompt
+    assert "defer_unresolved" in prompt
+    assert "skip_noise" in prompt
+    assert "approval" not in prompt.lower()
+    assert "lane" not in prompt.lower()
+    assert "queue" not in prompt.lower()
+
+
+def test_target_fit_signals_keep_generic_repeated_failure_deferred_without_boundary():
+    pack = {"evidence": [{"id": "u1", "kind": "unmatched_improvement_candidate", "theme": "timeout_workflow", "count": 5}]}
+
+    digest = build_target_resolution_digest(pack, skill_candidates=[])
+
+    signals = digest["candidates"][0]["target_fit_signals"]
+    assert "missing_workflow_boundary" in signals["negative"]
+    assert signals["recommendation"] == "defer_unresolved"
