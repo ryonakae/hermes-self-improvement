@@ -16,7 +16,7 @@ The prior active implementation plan is:
 
 - `2026-05-07_095543-llm-inventory-candidates.md`
   - **Status:** active / partially implemented / absorbed by the 2026-05-08 follow-up.
-  - Extends the existing `improve` flow with LLM-evaluated skill and memory inventory candidates so self-improvement is not dominated by tool failures. Program code collects compact inventory groups and hard safety metadata; the existing planner/editor and memory tool path decide and auto-apply safe changes. Continue its implemented inventory pieces, but use the 2026-05-08 plan for target resolution, conversation-derived memory gaps, and simplified apply semantics.
+  - Extends the existing `improve` flow with LLM-evaluated skill and memory inventory candidates so self-improvement is not dominated by tool failures. Program code collects compact inventory groups and hard safety metadata; the existing planner/editor and memory tool path decide and auto-apply safe changes. Skill patch/archive targets remain limited to Hermes-created local mutable skills; built-in, hub-installed, plugin-bundled, and external-dir skills stay out of scope. If observations show a missing durable workflow and no existing Hermes-created skill fits, the planner may create a new skill through `skill_manage(action="create")`. Continue its implemented inventory pieces, but use the 2026-05-08 plan for target resolution, conversation-derived memory gaps, and simplified apply semantics.
 
 The latest completed implementation plan is:
 

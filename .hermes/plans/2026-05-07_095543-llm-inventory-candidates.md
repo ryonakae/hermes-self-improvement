@@ -28,6 +28,7 @@ In scope:
 - Add compact skill inventory candidates to the existing `improve` evidence pack.
 - Add compact memory inventory candidates to the existing `improve` evidence pack.
 - Let the existing LLM planner/editor decide fuzzy skill cleanup.
+- Allow new Hermes-created skill creation when observations show a reusable workflow is missing and no existing Hermes-created skill is the right target.
 - Add a small LLM memory planner/editor path only if needed to convert fuzzy memory inventory candidates into concrete `memory` tool operations.
 - Auto-apply by default when mutation is enabled and hard safety checks pass.
 - Keep detailed candidate groups in artifacts; keep CLI/tool summaries compact.
@@ -47,8 +48,9 @@ Default posture: auto-apply safe changes; defer only when hard boundaries fail.
 
 Auto-apply allowed after LLM decision and hard checks:
 
-- Local mutable active/stale agent-created skill patch.
-- Local mutable obsolete/superseded skill archive when successor/reference checks pass.
+- Local mutable active/stale Hermes-created skill patch.
+- Local mutable obsolete/superseded Hermes-created skill archive when successor/reference checks pass.
+- New Hermes-created skill creation through `skill_manage(action="create")` when the observation is a durable reusable workflow, no existing Hermes-created skill is an appropriate target, and the proposed skill is compact and non-overlapping.
 - Skill bridge thinning, stale path/command correction, old implementation step update, small pitfall/verification update.
 - Built-in memory replace/remove/add through the `memory` tool when target and old text are specific.
 - External memory correction through provider-native tool when supported.
@@ -56,7 +58,9 @@ Auto-apply allowed after LLM decision and hard checks:
 Hard stops:
 
 - Pinned, archived, plugin-bundled, hub-installed, external-dir, built-in, or ambiguous-provenance skill.
+- Any patch/archive against skills not created by Hermes, even if they are locally installed and readable.
 - Skill delete/rename/merge as destructive operations. Prefer patching canonical/bridge content or archive only when Curator-style archive is valid.
+- New skill creation when the observation is a one-off, duplicates an existing Hermes-created skill, belongs in memory, or would mainly document a built-in/hub skill instead of a reusable local workflow.
 - Memory entry contains secret/credential/PII-like content.
 - Memory remove/replace lacks a specific `old_text` or target store.
 - Candidate cannot name a concrete target.
@@ -200,7 +204,8 @@ Expected: fail.
 Add `collect_skill_inventory_candidates(curator_telemetry, *, limit=20)`:
 
 - Input: Curator telemetry candidates only.
-- Filter: `mutable == True`, not pinned, state in `active|stale`, provenance/source not bundled/hub/external.
+- Filter: `mutable == True`, not pinned, state in `active|stale`, provenance/source indicates Hermes-created local skill only.
+- Exclude built-in, hub-installed, plugin-bundled, external-dir, and ambiguous-provenance skills from patch/archive targets even if they appear in search or loaded skill context.
 - Group heuristics are intentionally shallow:
   - same normalized prefix before `-old`, `-legacy`, `-plugin`, `-operations`, `-development`
   - same first two hyphen tokens when descriptions overlap
@@ -333,6 +338,109 @@ Expected: pass.
 ```bash
 git add hermes_self_improvement/planner.py hermes_self_improvement/prompts.py tests/test_planner.py
 git commit -m "feat: plan skill cleanup from inventory evidence"
+```
+
+---
+
+## Task 3.5: Allow planner-directed new skill creation
+
+**Objective:** Let `improve` create a new Hermes-created skill when observations show a durable reusable workflow and no existing Hermes-created skill is a safe target.
+
+**Files:**
+
+- Modify: `hermes_self_improvement/planner.py`
+- Modify: `hermes_self_improvement/prompts.py`
+- Modify: `hermes_self_improvement/mutation_worker.py` or the native skill-tool editor harness entrypoint
+- Test: `tests/test_skill_creation_planner.py` or nearby skill planner/editor tests
+
+**Step 1: Write failing tests**
+
+Add tests for planner normalization and execution routing:
+
+```python
+def test_planner_allows_create_skill_for_missing_reusable_workflow():
+    decision = normalize_skill_planner_decision({
+        "decision": "create_skill",
+        "proposed_skill_name": "patch-tool-workflow",
+        "evidence_ids": ["unmatched-patch-workflow"],
+        "reason": "recurring patch failures are not covered by an existing Hermes-created skill",
+    }, allowed_evidence_ids={"unmatched-patch-workflow"})
+
+    assert decision["decision"] == "create_skill"
+    assert decision["proposed_skill_name"] == "patch-tool-workflow"
+
+
+def test_create_skill_rejected_when_existing_hermes_skill_is_targetable():
+    # Existing Hermes-created candidate with attached evidence should force run_editor/archive/skip,
+    # not duplicate skill creation.
+    decision = normalize_skill_planner_decision({
+        "decision": "create_skill",
+        "proposed_skill_name": "patch-tool-workflow",
+        "evidence_ids": ["inv-1"],
+    }, existing_hermes_skill_names={"file-workflow"})
+
+    assert decision["decision"] in {"skip", "defer"}
+```
+
+Add hard-stop tests:
+
+- built-in/hub/plugin/external skills are never patched or archived.
+- new skill creation is rejected when the proposed content is memory-like rather than procedural.
+- new skill creation is rejected when the evidence is a one-off and not a repeated/durable workflow.
+- dry-run previews `skill_create` without calling `skill_manage`.
+
+**Step 2: Run tests and verify failure**
+
+```bash
+$PY -m pytest tests/test_skill_creation_planner.py tests/test_skill_planner.py -q
+```
+
+Expected: fail until `create_skill` is normalized and routed.
+
+**Step 3: Extend planner schema/prompt**
+
+Allow a planner decision such as:
+
+```json
+{
+  "decision": "create_skill",
+  "proposed_skill_name": "short-kebab-name",
+  "evidence_ids": ["..."],
+  "reason": "why this is a reusable workflow and not memory",
+  "non_goals": ["do not patch built-in or hub skills"]
+}
+```
+
+Prompt rules:
+
+- Prefer patch/archive of an existing Hermes-created skill when one is a good target.
+- Use `create_skill` only when the workflow is durable, recurring, procedural, and not already covered by a Hermes-created skill.
+- Do not create skills to work around the rule that built-in/hub/plugin/external skills are immutable targets.
+- Do not create skills for user facts, environment facts, one-off bugs, secrets, or temporary project state.
+
+**Step 4: Route creation through official skill tools**
+
+In the editor harness, execute creation only through `skill_manage(action="create")`:
+
+- Generate a complete `SKILL.md` with YAML frontmatter.
+- Place it in the configured Hermes-created/custom skill root used by `skill_manage`.
+- Keep content compact: trigger conditions, steps, pitfalls, verification.
+- Record the result as a skill mutation episode with `operation: skill_create`.
+- No direct filesystem fallback.
+
+**Step 5: Verify tests**
+
+```bash
+$PY -m pytest tests/test_skill_creation_planner.py tests/test_skill_planner.py tests/test_mutation_backend.py -q
+```
+
+Expected: pass.
+
+**Step 6: Commit**
+
+```bash
+git add hermes_self_improvement/planner.py hermes_self_improvement/prompts.py hermes_self_improvement/mutation_worker.py tests/test_skill_creation_planner.py
+git commit -m "feat: create missing workflow skills from evidence"
 ```
 
 ---
@@ -694,6 +802,7 @@ git commit -m "docs: plan LLM inventory self-improvement"
 - `improve` still has one primary flow; no new user-facing command or approval queue.
 - Daily self-improvement evidence is no longer dominated only by tool failures when skill/memory inventory issues exist.
 - Skill inventory candidates reach the existing skill planner/editor path.
+- New skill creation is allowed only for missing durable workflows, through `skill_manage(action="create")`, and never as a way to mutate built-in, hub-installed, plugin-bundled, or external-dir skills.
 - Memory inventory candidates reach an LLM-evaluated memory operation path and then existing memory tool execution.
 - Auto-apply is the default for safe, bounded changes.
 - Hard safety checks stop only dangerous or unsupported changes.
