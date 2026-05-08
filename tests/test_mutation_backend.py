@@ -239,7 +239,12 @@ def test_native_backend_stops_after_max_iterations():
         limits=MutationBackendLimits(max_tool_calls=10, max_iterations=1),
     )
 
-    assert backend.run("prompt", {}, {})["error"] == "mutation_agent_limits_exceeded"
+    result = backend.run("prompt", {}, {})
+
+    assert result["error"] == "mutation_agent_limits_exceeded"
+    assert result["tool_call_count"] == 1
+    assert result["tool_call_counts_by_name"] == {"skill_view": 1}
+    assert result["last_tool"] == "skill_view"
 
 
 def test_native_backend_requires_submit_result_tool_call():

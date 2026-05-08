@@ -191,6 +191,8 @@ def parse_mutation_agent_result(raw: dict[str, Any] | str) -> dict[str, Any]:
     if not parsed.get("success"):
         return parsed
     outcome = str(parsed.get("outcome") or "applied")
+    if outcome == "changed":
+        outcome = "applied"
     if outcome != "applied" and outcome not in NON_MUTATING_AGENT_OUTCOMES:
         return {"success": False, "error": "mutation_agent_result_invalid_outcome", "outcome": outcome}
     parsed["outcome"] = outcome

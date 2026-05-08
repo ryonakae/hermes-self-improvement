@@ -933,6 +933,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     inventory_count = int(evidence_summary.get("inventory_evidence_count") or 0)
     skill_inventory_count = int(evidence_by_kind.get("skill_inventory_candidate") or 0)
     memory_inventory_count = int(evidence_by_kind.get("memory_inventory_candidate") or 0)
+    memory_placement_count = int(evidence_by_kind.get("memory_placement_candidate") or 0)
     strong_count = int(evidence_strength_counts.get("strong") or 0)
     medium_count = int(evidence_strength_counts.get("medium") or 0)
     weak_count = int(evidence_strength_counts.get("weak") or 0)
@@ -972,9 +973,29 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
             status = str(lookup.get("status") or "")
             if status in lookup_counts:
                 lookup_counts[status] += 1
+    execution_changed = int(summary.get("skill_changes") or 0) + int(summary.get("memory_changes") or 0)
+    execution_valid_noop = 0
+    execution_rejected = 0
+    rejected_reason_counts: dict[str, int] = {}
+    for decision in list(skill_decisions) + list(memory_step.get("decisions") or []):
+        if not isinstance(decision, dict):
+            continue
+        if decision.get("decision") == "accepted" and not decision.get("changed"):
+            execution_valid_noop += 1
+            continue
+        if decision.get("decision") != "rejected":
+            continue
+        execution_rejected += 1
+        result_payload = decision.get("result") if isinstance(decision.get("result"), dict) else {}
+        reason = str(result_payload.get("error") or decision.get("reason") or "")
+        if reason and len(reason) <= 80 and " " not in reason:
+            rejected_reason_counts[reason] = rejected_reason_counts.get(reason, 0) + 1
     title = "Self-improvement dry run" if result.get("dry_run") else "Self-improvement result"
     calibration = result.get("calibration") if isinstance(result.get("calibration"), dict) else {}
     runtime_eval_cases = calibration.get("runtime_eval_cases") if isinstance(calibration.get("runtime_eval_cases"), dict) else {}
+    inventory_parts = f"skill {skill_inventory_count}, memory {memory_inventory_count}"
+    if memory_placement_count:
+        inventory_parts += f", placement {memory_placement_count}"
     lines = [
         title,
         "",
@@ -983,7 +1004,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- skill candidates: {int(curator.get('candidate_count') or 0)}",
         f"- rejected: {int(curator.get('rejected_count') or 0)}",
         "Hook evidence:",
-        f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}, inventory: {inventory_count} (skill {skill_inventory_count}, memory {memory_inventory_count})",
+        f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}, inventory: {inventory_count} ({inventory_parts})",
         "Knowledge inventory:",
         f"- skills visible to LLM: {int(inventory_skill_health.get('llm_visible_count') or 0)}/{int(inventory_skill_health.get('raw_count') or 0)}, filtered: {_format_count_map(inventory_skill_health.get('filtered_by_reason') if isinstance(inventory_skill_health.get('filtered_by_reason'), dict) else {})}",
         f"- memory entries: {int(inventory_memory_health.get('entry_count') or 0)}, duplicates: exact {int(inventory_memory_health.get('exact_duplicate_group_count') or 0)}, near {int(inventory_memory_health.get('near_duplicate_group_count') or 0)}, stale pairs {int(inventory_memory_health.get('stale_pair_count') or 0)}",
@@ -1023,6 +1044,16 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     if target_resolution_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = target_resolution_lines
+    if not result.get("dry_run"):
+        insert_at = lines.index("Skill planner:")
+        executed_lines = [
+            "Executed:",
+            f"- changed: {execution_changed}, valid no-op: {execution_valid_noop}, rejected: {execution_rejected}",
+        ]
+        if rejected_reason_counts:
+            executed_lines.append("Rejected reasons:")
+            executed_lines.extend(f"- {reason}: {count}" for reason, count in sorted(rejected_reason_counts.items()))
+        lines[insert_at:insert_at] = executed_lines
     if editor_stop_counts:
         lines.append("- editor stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(editor_stop_counts.items())))
     if selected_preview:

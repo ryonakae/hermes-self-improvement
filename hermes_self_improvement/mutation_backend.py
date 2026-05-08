@@ -93,6 +93,13 @@ def _task_allowed_targets(task: dict[str, Any]) -> set[str]:
 
 
 def _with_last_safe_step(error: dict[str, Any], actual_used: list[dict[str, Any]]) -> dict[str, Any]:
+    error.setdefault("tool_call_count", len(actual_used))
+    counts: dict[str, int] = {}
+    for entry in actual_used:
+        tool = str(entry.get("tool") or "")
+        if tool:
+            counts[tool] = counts.get(tool, 0) + 1
+    error.setdefault("tool_call_counts_by_name", counts)
     if actual_used:
         last = actual_used[-1]
         error.setdefault("last_tool", last.get("tool"))
@@ -478,7 +485,7 @@ class NativeSkillToolEditorBackend:
                     return _with_last_safe_step(args_error, actual_used)
                 tool_calls += 1
                 if tool_calls > self.limits.max_tool_calls:
-                    return {"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_tool_calls_exceeded"]}
+                    return _with_last_safe_step({"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_tool_calls_exceeded"]}, actual_used)
                 result = self.tool_executor.call(tool, args)
                 trace_entry = {
                     "tool": tool,
@@ -491,7 +498,7 @@ class NativeSkillToolEditorBackend:
                 actual_used.append(trace_entry)
                 messages.append(_assistant_tool_call_message(call))
                 messages.append(_tool_result_message(call, result))
-        return {"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_iterations_exceeded"]}
+        return _with_last_safe_step({"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_iterations_exceeded"]}, actual_used)
 
 
 @dataclass

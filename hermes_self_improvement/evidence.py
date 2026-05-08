@@ -776,6 +776,55 @@ def build_inventory_health_snapshot(
     }
 
 
+MEMORY_PLACEMENT_BOUNDARY = (
+    "USER=user preferences, communication style, expectations, and personal profile; "
+    "MEMORY=agent notes, environment facts, project conventions, and stable things learned; "
+    "Skill=procedural how-to, multi-step workflows, reusable recipes, tool instructions, pitfalls, and verification steps."
+)
+
+
+def collect_memory_placement_candidates(memory_paths: dict[str, Any] | None, *, limit: int = 40) -> list[dict[str, Any]]:
+    if not isinstance(memory_paths, dict) or not {"memory", "user"}.issubset(set(memory_paths)):
+        return []
+    entries = _memory_entries(memory_paths)
+    out: list[dict[str, Any]] = []
+    for entry in entries[:limit]:
+        old_text = str(entry.get("old_text") or "").strip()
+        current_store = str(entry.get("target") or "").strip()
+        if current_store not in {"memory", "user"} or not old_text:
+            continue
+        inventory = {
+            "group_kind": "placement_review",
+            "current_store": current_store,
+            "old_text": _redact_text(old_text, max_chars=500),
+            "summary": _redact_text(str(entry.get("summary") or old_text), max_chars=240),
+            "official_boundary": MEMORY_PLACEMENT_BOUNDARY,
+            "allowed_recommendations": [
+                "keep",
+                "move_user_to_memory",
+                "move_memory_to_user",
+                "merge_with_existing",
+                "convert_to_skill_update",
+                "convert_to_new_skill",
+                "skip_noise",
+            ],
+            "hints": [
+                "LLM decides USER vs MEMORY vs Skill placement",
+                "program only enforces hard stops and official tool execution",
+                "move requires exact old_text and add-before-remove execution",
+            ],
+        }
+        out.append({
+            "id": _stable_id("memory_place", inventory),
+            "kind": "memory_placement_candidate",
+            "source": "inventory",
+            "likely_targets": _targets(("memory", 0.7), ("skill", 0.3)),
+            "inventory": inventory,
+            "risk": "medium",
+        })
+    return out
+
+
 def collect_memory_inventory_candidates(memory_paths: dict[str, Any] | None, *, limit: int = 20) -> list[dict[str, Any]]:
     if not isinstance(memory_paths, dict):
         return []
@@ -872,13 +921,16 @@ def build_evidence_pack(
     skill_inventory_evidence = collect_skill_inventory_candidates(curator_telemetry)
     memory_entries = _memory_entries(memory_paths or {}) if isinstance(memory_paths, dict) else []
     memory_inventory_evidence = collect_memory_inventory_candidates(memory_paths)
-    inventory_evidence = skill_inventory_evidence + memory_inventory_evidence
+    memory_placement_evidence = collect_memory_placement_candidates(memory_paths)
+    inventory_evidence = skill_inventory_evidence + memory_inventory_evidence + memory_placement_evidence
     if inventory_evidence:
         evidence.extend(inventory_evidence)
         if skill_inventory_evidence:
             kind_counts["skill_inventory_candidate"] += len(skill_inventory_evidence)
         if memory_inventory_evidence:
             kind_counts["memory_inventory_candidate"] += len(memory_inventory_evidence)
+        if memory_placement_evidence:
+            kind_counts["memory_placement_candidate"] += len(memory_placement_evidence)
     views = _views_for_evidence(evidence)
     inventory_health = build_inventory_health_snapshot(
         raw_skill_candidates=raw_skill_candidates,

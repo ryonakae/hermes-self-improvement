@@ -115,6 +115,14 @@ def _memory_operation_from_evidence(item: dict[str, Any]) -> dict[str, Any] | No
             op["target"] = target
         return op
 
+    def rejected_raw_tool_output(content: Any) -> dict[str, Any]:
+        return enriched({
+            "operation": "memory_add",
+            "content": str(content or ""),
+            "reason": "memory_payload_not_fact",
+            "_reject_reason": "memory_payload_not_fact",
+        })
+
     for key in ("memory_operation", "operation"):
         value = item.get(key)
         if isinstance(value, dict):
@@ -134,9 +142,15 @@ def _memory_operation_from_evidence(item: dict[str, Any]) -> dict[str, Any] | No
             operation["operation"] = op_text
             return enriched(operation)
         if preview.get("content") and tool_name:
+            if tool_name in {"terminal", "search_files", "read_file", "patch"}:
+                return rejected_raw_tool_output(preview.get("content"))
             return enriched({"operation": "memory_add", "content": preview.get("content")})
+        if preview.get("output") and tool_name in {"terminal", "search_files", "read_file", "patch"}:
+            return rejected_raw_tool_output(preview.get("output"))
     preview_text = str(event.get("result_preview") or event.get("message") or "").strip()
     if preview_text:
+        if tool_name in {"terminal", "search_files", "read_file", "patch"}:
+            return rejected_raw_tool_output(preview_text)
         return enriched({"operation": "memory_add", "content": preview_text, "reason": "memory_evidence"})
     return None
 
@@ -336,9 +350,31 @@ def _normalize_inventory_operation(raw: dict[str, Any]) -> tuple[dict[str, Any] 
     if not isinstance(raw, dict):
         return None, "memory_operation_invalid"
     target = str(raw.get("target") or "").strip()
+    op_name = str(raw.get("operation") or raw.get("action") or "").strip()
+    move_map = {
+        "move_user_to_memory": ("user", "memory"),
+        "move_memory_to_user": ("memory", "user"),
+    }
+    if op_name in move_map:
+        source, target_store = move_map[op_name]
+        old_text = str(raw.get("old_text") or "").strip()
+        content = str(raw.get("content") or raw.get("current_claim") or old_text).strip()
+        if not old_text:
+            return None, "memory_old_text_missing"
+        if not content:
+            return None, "memory_content_missing"
+        if _looks_sensitive_memory_text(old_text) or _looks_sensitive_memory_text(content):
+            return None, "memory_sensitive_text"
+        return {
+            "operation": "memory_move",
+            "source": source,
+            "target": target_store,
+            "old_text": _redact_text(old_text, max_chars=500),
+            "content": _redact_text(content, max_chars=500),
+            "reason": _redact_text(str(raw.get("reason") or "memory_placement_candidate"), max_chars=240),
+        }, None
     if target not in {"memory", "user"}:
         return None, "memory_target_invalid"
-    op_name = str(raw.get("operation") or raw.get("action") or "").strip()
     op_map = {
         "add": "memory_add",
         "memory_add": "memory_add",
@@ -371,6 +407,40 @@ def _normalize_inventory_operation(raw: dict[str, Any]) -> tuple[dict[str, Any] 
     return normalized, None
 
 
+def _memory_tool_operation_for_store(*, operation: str, target: str, content: str | None = None, old_text: str | None = None, reason: str | None = None) -> dict[str, Any]:
+    op = {"operation": operation, "target": target}
+    if content:
+        op["content"] = content
+    if old_text:
+        op["old_text"] = old_text
+    if reason:
+        op["reason"] = reason
+    return op
+
+
+def _execute_memory_move_operation(operation: dict[str, Any], config: dict[str, Any] | None, external_provider: str | None) -> dict[str, Any]:
+    source = str(operation.get("source") or "")
+    target = str(operation.get("target") or "")
+    content = str(operation.get("content") or "")
+    old_text = str(operation.get("old_text") or "")
+    reason = str(operation.get("reason") or "memory_move")
+    add_operation = _memory_tool_operation_for_store(operation="memory_add", target=target, content=content, reason=reason)
+    add_context = build_memory_mutation_context(provider=external_provider, operation=add_operation)
+    if not add_context.get("execution_enabled"):
+        return {"success": False, "error": "memory_move_add_not_executable", "add_context": add_context}
+    add_result = _execute_memory_context(add_context, config, operation=add_operation, external_provider=external_provider)
+    if not add_result.get("success"):
+        return {"success": False, "error": add_result.get("error") or "memory_move_add_failed", "add_result": add_result, "add_context": add_context}
+    remove_operation = _memory_tool_operation_for_store(operation="memory_delete", target=source, old_text=old_text, reason=reason)
+    remove_context = build_memory_mutation_context(provider=external_provider, operation=remove_operation)
+    if not remove_context.get("execution_enabled"):
+        return {"success": False, "error": "memory_move_remove_not_executable", "add_result": add_result, "remove_context": remove_context}
+    remove_result = _execute_memory_context(remove_context, config, operation=remove_operation, external_provider=external_provider)
+    if not remove_result.get("success"):
+        return {"success": False, "error": remove_result.get("error") or "memory_move_remove_failed", "add_result": add_result, "remove_result": remove_result}
+    return {"success": True, "changed": True, "add_result": add_result, "remove_result": remove_result}
+
+
 def _call_memory_inventory_planner_llm(*, evidence: list[dict[str, Any]], config: dict[str, Any]) -> list[dict[str, Any]]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
     planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
@@ -382,9 +452,9 @@ def _call_memory_inventory_planner_llm(*, evidence: list[dict[str, Any]], config
         {
             "role": "system",
             "content": (
-                "You are the Hermes self-improvement memory planner. Convert fuzzy memory inventory evidence into concrete memory tool operations. "
-                "Return JSON only: {\"operations\":[{\"evidence_id\":str,\"operation\":\"add|replace|remove\",\"target\":\"memory|user\",\"old_text\":str,\"content\":str,\"reason\":str}]}. "
-                "Use replace/remove only with exact old_text from evidence. Skip unsafe, sensitive, or ambiguous cases by omitting them."
+                "You are the Hermes self-improvement memory planner. Convert fuzzy memory inventory and placement evidence into concrete memory tool operations. "
+                "Return JSON only: {\"operations\":[{\"evidence_id\":str,\"operation\":\"add|replace|remove|move_user_to_memory|move_memory_to_user\",\"target\":\"memory|user\",\"old_text\":str,\"content\":str,\"reason\":str}]}. "
+                "Use replace/remove/move only with exact old_text from evidence. Skip unsafe, sensitive, or ambiguous cases by omitting them."
             ),
         },
         {"role": "user", "content": json.dumps({"evidence": evidence}, ensure_ascii=False, sort_keys=True, default=str)},
@@ -402,7 +472,7 @@ def _call_memory_inventory_planner_llm(*, evidence: list[dict[str, Any]], config
 def _memory_inventory_operations(evidence: list[dict[str, Any]], config: dict[str, Any] | None) -> list[dict[str, Any]]:
     cfg = config or {}
     planner_fn = cfg.get("_memory_inventory_planner_fn") if isinstance(cfg, dict) else None
-    inventory_evidence = [item for item in evidence if isinstance(item, dict) and item.get("kind") == "memory_inventory_candidate"]
+    inventory_evidence = [item for item in evidence if isinstance(item, dict) and item.get("kind") in {"memory_inventory_candidate", "memory_placement_candidate"}]
     if not inventory_evidence:
         return []
     hinted_operations: list[dict[str, Any]] = []
@@ -792,6 +862,30 @@ def run_memory_improvement_step(
             })
             continue
         source_evidence = evidence_by_id.get(evidence_id, {"id": evidence_id})
+        if operation.get("operation") == "memory_move":
+            if not mutate:
+                decisions.append({
+                    "evidence_id": evidence_id,
+                    "decision": "accepted",
+                    "reason": "dry_run_would_execute_memory_tool",
+                    "changed": False,
+                    "operation": operation,
+                    "related_memory_lookup": {"provider": "built-in", "status": "skipped", "reason": "memory_move_preview"},
+                })
+                continue
+            result = _execute_memory_move_operation(operation, config, external_provider)
+            did_change = bool(result.get("success"))
+            changed += 1 if did_change else 0
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "accepted" if did_change else "rejected",
+                "reason": result.get("error") or "memory_move_completed",
+                "changed": did_change,
+                "operation": operation,
+                "result": result,
+                "related_memory_lookup": {"provider": "built-in", "status": "skipped", "reason": "memory_move"},
+            })
+            continue
         context = build_memory_mutation_context(provider=external_provider, operation=operation)
         related_lookup = build_related_memory_lookup_context(
             provider=external_provider,
@@ -854,6 +948,15 @@ def run_memory_improvement_step(
                 "decision": "rejected",
                 "reason": "memory_operation_missing",
                 "changed": False,
+            })
+            continue
+        if operation.get("_reject_reason"):
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "rejected",
+                "reason": operation.get("_reject_reason"),
+                "changed": False,
+                "operation": operation,
             })
             continue
         context = build_memory_mutation_context(provider=external_provider, operation=operation)

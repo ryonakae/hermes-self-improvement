@@ -4,11 +4,17 @@
 
 As of 2026-05-08, the current active implementation plan is:
 
+- `2026-05-08_155457-mutation-contract-and-memory-placement.md`
+  - **Status:** implemented.
+  - Follow-up after mutating dogfood run `run-20260508T045936Z.json`. Keeps implementation deliberately simple: normalizes mutation worker `changed` outcome aliases, records compact limit diagnostics, rejects raw tool output as memory content, makes mutating summaries show planned vs executed outcomes, and adds LLM-decided USER/MEMORY/Skill placement review as ordinary inventory evidence in the existing `improve` loop. Clear USER↔MEMORY moves execute add-before-remove through the official memory tool. No new command, queue, lane, apply mode, planner, scoring subsystem, or separate inventory subsystem.
+
+The latest completed implementation plan is:
+
 - `2026-05-08_125700-defer-explain-and-small-safe-promotion.md`
   - **Status:** implemented.
   - Follow-up after `94d6e23`. Makes dry-run resolution more actionable while keeping implementation deliberately simple: explains `defer_unresolved` by theme, adds small promotion/negative hints, clarifies the existing five resolver choices, promotes clear stale memory pairs into the existing memory mutation planning path, and dogfoods with one dry-run artifact. No new command, queue, lane, apply mode, planner, scoring subsystem, or separate inventory subsystem.
 
-The latest completed implementation plan is:
+The previous completed implementation plan is:
 
 - `2026-05-08_110727-inventory-evidence-and-target-resolver-quality.md`
   - **Status:** implemented.

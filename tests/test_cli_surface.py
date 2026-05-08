@@ -404,6 +404,10 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "- recommendations: attach_existing_skill 1, defer_unresolved 1" in text
     assert "Action summary:" in text
     assert "- Would apply: 2, Deferred: 1, Skipped: 1, Blocked: 1" in text
+    assert "Executed:" in text
+    assert "- changed: 3, valid no-op: 0, rejected: 3" in text
+    assert "Rejected reasons:" in text
+    assert "- submit_result_missing: 2" in text
     assert "related lookups: completed 1" in text
     assert "private eval cases: 3 written" in text
     assert "- planner: runtime overlay hash sha256:planner-overlay" in text
@@ -453,6 +457,21 @@ def test_improve_summary_lists_deferred_target_resolution_themes():
     assert "- create-skill leaning: sandbox_permission_workflow 1" in text
     assert "- memory leaning: stale_fact_pair 1" in text
     assert "- skip-noise leaning: one_off_terminal_failure 1" in text
+
+
+def test_improve_summary_shows_memory_placement_inventory_count():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {},
+        "step_decisions": {},
+        "evidence_pack": {"summary": {
+            "inventory_evidence_count": 27,
+            "evidence_by_kind": {"memory_inventory_candidate": 1, "memory_placement_candidate": 26},
+        }},
+    })
+
+    assert "inventory: 27 (skill 0, memory 1, placement 26)" in text
 
 
 def test_status_summary_is_human_readable_not_json():

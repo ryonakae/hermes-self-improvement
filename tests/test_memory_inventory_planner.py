@@ -121,3 +121,50 @@ def test_memory_inventory_operation_hint_executes_without_llm_planner():
 
     assert result["changed"] == 1
     assert calls == [{"action": "replace", "target": "memory", "old_text": "Hermes root is /opt/data", "content": "Hermes runtime root is ~/.hermes"}]
+
+
+def test_memory_inventory_move_user_to_memory_adds_before_removing_source():
+    calls = []
+
+    def fake_memory_success(**args):
+        calls.append(args)
+        return {"success": True, "changed": True}
+
+    config = {
+        "_memory_inventory_planner_fn": lambda evidence, config=None: [{
+            "evidence_id": "mem-inv-1",
+            "operation": "move_user_to_memory",
+            "old_text": "Hermes runtime root is ~/.hermes.",
+            "content": "Hermes runtime root is ~/.hermes.",
+            "reason": "environment fact belongs in MEMORY",
+        }],
+        "_memory_tool_fn": fake_memory_success,
+    }
+
+    result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config=config, mutate=True)
+
+    assert result["changed"] == 1
+    assert calls == [
+        {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."},
+        {"action": "remove", "target": "user", "old_text": "Hermes runtime root is ~/.hermes."},
+    ]
+    assert result["decisions"][0]["operation"]["operation"] == "memory_move"
+
+
+def test_memory_inventory_move_dry_run_does_not_mutate():
+    calls = []
+    config = {
+        "_memory_inventory_planner_fn": lambda evidence, config=None: [{
+            "evidence_id": "mem-inv-1",
+            "operation": "move_memory_to_user",
+            "old_text": "User prefers concise replies.",
+            "content": "User prefers concise replies.",
+        }],
+        "_memory_tool_fn": lambda **args: calls.append(args) or {"success": True},
+    }
+
+    result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config=config, mutate=False)
+
+    assert calls == []
+    assert result["decisions"][0]["decision"] == "accepted"
+    assert result["decisions"][0]["reason"] == "dry_run_would_execute_memory_tool"

@@ -543,6 +543,26 @@ def test_memory_step_missing_target_does_not_default_to_hindsight():
     assert decision["context"]["tool_name"] is None
 
 
+def test_memory_step_rejects_raw_tool_output_as_memory_payload():
+    event = {
+        "event": "post_tool_call",
+        "tool_name": "terminal",
+        "status": "success",
+        "result_preview": json.dumps({"output": "{\"matches\": [{\"path\": \"run.json\", \"content\": \"debug output\"}]}"}),
+    }
+    pack = {
+        "evidence": [{"id": "mem1", "kind": "memory_evidence", "event": event, "likely_targets": [{"target": "memory", "weight": 0.8}]}],
+        "views": {"skill": [], "memory": ["mem1"], "scorer": [], "evaluator": []},
+    }
+
+    result = run_memory_improvement_step(evidence_pack=pack, config={"memory": {"provider": "hindsight"}}, mutate=False)
+
+    decision = result["decisions"][0]
+    assert decision["decision"] == "rejected"
+    assert decision["reason"] == "memory_payload_not_fact"
+    assert decision["operation"]["tool_name"] == "terminal"
+
+
 def test_memory_step_extracts_external_target_from_provider_tool_evidence():
     event = {
         "event": "post_tool_call",

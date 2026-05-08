@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from hermes_self_improvement.evidence import (
     build_evidence_pack,
     collect_memory_inventory_candidates,
+    collect_memory_placement_candidates,
     collect_skill_inventory_candidates,
     make_memory_inventory_candidate,
     make_skill_inventory_candidate,
@@ -239,3 +240,35 @@ def test_build_evidence_pack_includes_inventory_health_snapshot_for_skills_and_m
     assert health["memory"]["exact_duplicate_group_count"] == 0
     assert pack["summary"]["inventory_health"]["memory"]["entry_count"] == 2
     assert "Hermes runtime root" not in json.dumps(health, ensure_ascii=False)
+
+
+def test_collect_memory_placement_candidates_passes_user_memory_skill_boundary_to_llm(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    user = tmp_path / "USER.md"
+    memory.write_text("User prefers concise Japanese replies.\n", encoding="utf-8")
+    user.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
+
+    items = collect_memory_placement_candidates({"memory": memory, "user": user})
+
+    assert len(items) == 2
+    first = items[0]
+    assert first["kind"] == "memory_placement_candidate"
+    assert first["inventory"]["current_store"] in {"memory", "user"}
+    assert "USER=user preferences" in first["inventory"]["official_boundary"]
+    assert "Skill=procedural" in first["inventory"]["official_boundary"]
+    assert "old_text" in first["inventory"]
+    assert "full_content" not in json.dumps(items)
+
+
+def test_build_evidence_pack_includes_memory_placement_candidates_when_both_stores_exist(tmp_path):
+    since = datetime(2026, 5, 7, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 5, 7, 1, 0, tzinfo=timezone.utc)
+    memory = tmp_path / "MEMORY.md"
+    user = tmp_path / "USER.md"
+    memory.write_text("User prefers concise Japanese replies.\n", encoding="utf-8")
+    user.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
+
+    pack = build_evidence_pack([], since, until, memory_paths={"memory": memory, "user": user})
+
+    assert pack["summary"]["evidence_by_kind"]["memory_placement_candidate"] == 2
+    assert any(item["kind"] == "memory_placement_candidate" for item in pack["evidence"])

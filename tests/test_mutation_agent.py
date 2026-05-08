@@ -105,6 +105,19 @@ def test_runner_parses_structured_result_and_rejects_text_or_invalid_schema():
     assert parsed["success"] is True
 
 
+def test_parse_mutation_agent_result_accepts_changed_as_applied_alias_only_with_full_contract():
+    payload = success_result()
+    payload["outcome"] = "changed"
+
+    parsed = parse_mutation_agent_result(payload)
+
+    assert parsed["success"] is True
+    assert parsed["outcome"] == "applied"
+
+    incomplete = {"success": True, "outcome": "changed"}
+    assert parse_mutation_agent_result(incomplete)["error"] == "mutation_agent_result_used_tools_missing"
+
+
 def test_runner_rejects_self_reported_disallowed_tools(tmp_path):
     root = tmp_path / "skills"
     write_skill(root)
