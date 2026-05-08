@@ -460,24 +460,53 @@ def _normalize_skill_group_key(name: str) -> str:
     return "-".join(tokens[:3] if len(tokens) >= 3 else tokens[:2]) or str(name or "").lower()
 
 
-def _skill_inventory_candidate_allowed(item: dict[str, Any]) -> bool:
-    if not isinstance(item, dict) or not item.get("name"):
-        return False
+IMMUTABLE_SKILL_PROVENANCE = {"external", "external-dir", "hub", "hub-installed", "builtin", "built-in", "plugin", "plugin-bundled", "bundled"}
+HERMES_CREATED_SKILL_PROVENANCE = {"agent_created", "curator_agent_created", "hermes_created", "local_agent_created", "curator"}
+
+
+def skill_candidate_filter_reason(item: dict[str, Any]) -> str | None:
+    if not isinstance(item, dict) or not str(item.get("name") or "").strip():
+        return "missing_name"
     if item.get("pinned"):
-        return False
+        return "pinned"
     if item.get("mutable") is False:
-        return False
+        return "non_mutable"
     state = str(item.get("state") or "active")
     if state not in {"active", "stale"}:
-        return False
-    provenance = str(item.get("provenance") or item.get("source") or "")
-    return provenance not in {"external", "hub", "builtin", "built-in", "plugin", "plugin-bundled", "bundled"}
+        return f"state_{state or 'unknown'}"
+    provenance = str(item.get("provenance") or "").strip()
+    source = str(item.get("source") or "").strip()
+    marker = provenance or source
+    if marker in IMMUTABLE_SKILL_PROVENANCE:
+        return marker
+    if marker and marker not in HERMES_CREATED_SKILL_PROVENANCE:
+        return "ambiguous_provenance"
+    return None
+
+
+def filter_llm_skill_candidates(candidates: list[Any]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    kept: list[dict[str, Any]] = []
+    filtered: Counter[str] = Counter()
+    for item in candidates:
+        if not isinstance(item, dict):
+            filtered["not_object"] += 1
+            continue
+        reason = skill_candidate_filter_reason(item)
+        if reason:
+            filtered[reason] += 1
+            continue
+        kept.append(item)
+    return kept, dict(filtered)
+
+
+def _skill_inventory_candidate_allowed(item: dict[str, Any]) -> bool:
+    return skill_candidate_filter_reason(item) is None
 
 
 def collect_skill_inventory_candidates(curator_telemetry: dict[str, Any] | None, *, limit: int = 20) -> list[dict[str, Any]]:
     if not isinstance(curator_telemetry, dict):
         return []
-    candidates = [item for item in curator_telemetry.get("candidates") or [] if isinstance(item, dict) and _skill_inventory_candidate_allowed(item)]
+    candidates, _filtered = filter_llm_skill_candidates(curator_telemetry.get("candidates") or [])
     groups: dict[str, list[dict[str, Any]]] = {}
     for item in candidates:
         groups.setdefault(_normalize_skill_group_key(str(item.get("name") or "")), []).append(item)
@@ -593,7 +622,8 @@ def build_evidence_pack(
         kind_counts[kind] += 1
 
     views = _views_for_evidence(evidence)
-    skill_candidates = curator_telemetry.get("candidates") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("candidates"), list) else []
+    raw_skill_candidates = curator_telemetry.get("candidates") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("candidates"), list) else []
+    skill_candidates, filtered_skill_candidate_count_by_reason = filter_llm_skill_candidates(raw_skill_candidates)
     rejected_skill_candidates = curator_telemetry.get("rejected") if isinstance(curator_telemetry, dict) and isinstance(curator_telemetry.get("rejected"), list) else []
     candidate_names = [str(item.get("name") or "") for item in skill_candidates if isinstance(item, dict) and item.get("name")]
     cluster_evidence = build_cluster_evidence(_cluster_findings_from_events(events), candidate_names=candidate_names)
@@ -627,6 +657,7 @@ def build_evidence_pack(
             "unmatched_candidate_count": len(unmatched_improvement_evidence),
             "unmatched_candidate_themes": [str(item.get("theme") or "") for item in unmatched_improvement_evidence if item.get("theme")],
             "inventory_evidence_count": len(inventory_evidence),
+            "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
             "filtered_partial_event_count": filtered_partial_count,
             "reclassified_tool_result_count": reclassified_count,
         },

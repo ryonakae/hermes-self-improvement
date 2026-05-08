@@ -20,13 +20,14 @@ PLANNER_SYSTEM_PROMPT = (
     "Evidence strength matters: exact/bare matches are strong; alias/path/cluster/inventory hints are medium; tool-class hints are weak. "
     "Do not run_editor on weak-only evidence unless the edit is very small, procedural, and directly supported by representative evidence. "
     "Use archive_skill only for explicit obsolete/superseded/archive lifecycle evidence that passes hard checks. "
+    "Use create_skill only for durable recurring procedural workflows when no existing Hermes-created mutable skill is an appropriate target; never use it to work around immutable built-in/hub/plugin/external skills. "
     "Use defer only for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
     "Return JSON only."
 )
 
 PLANNER_USER_PREFIX = (
     "Plan skill improvements from this digest. Output schema: "
-    "{\"decisions\":[{\"skill\":str,\"decision\":\"run_editor|skip|defer|memory_candidate|evaluator_candidate\","
+    "{\"decisions\":[{\"skill\":str,\"proposed_skill_name\":str,\"decision\":\"run_editor|create_skill|skip|defer|memory_candidate|evaluator_candidate\","
     "\"priority\":\"low|medium|high\",\"risk\":\"low|medium|high\","
     "\"observed_problem\":str,\"desired_outcome\":str,\"suggested_focus\":[str],\"non_goals\":[str],"
     "\"evidence_ids\":[str],\"rationale\":str,\"reason\":str}]}\n\n"

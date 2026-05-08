@@ -512,6 +512,53 @@ def build_skill_agent_task(
     }
 
 
+def build_skill_create_agent_task(
+    *,
+    skill_name: str,
+    evidence: list[dict[str, Any]],
+    planner_decision: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    planner_meta = planner_decision or {}
+    compact_evidence = _compact_editor_evidence(evidence)
+    observed_problem = planner_meta.get("observed_problem") or planner_meta.get("change_intent") or planner_meta.get("rationale") or planner_meta.get("reason") or "Create a missing reusable Hermes skill if evidence proves a durable workflow gap."
+    desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("editor_instructions") or "A compact SKILL.md with trigger conditions, concrete steps, pitfalls, and verification notes."
+    non_goals = planner_meta.get("non_goals") if isinstance(planner_meta.get("non_goals"), list) else []
+    if not non_goals:
+        non_goals = [
+            "Do not create a skill for one-off project state or user facts that belong in memory.",
+            "Do not create a skill just to bypass immutability of built-in, hub-installed, plugin-bundled, or external-dir skills.",
+            "Do not duplicate an existing Hermes-created skill.",
+        ]
+    evidence_ids = [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]
+    return {
+        "type": "skill_agent_task",
+        "task_kind": "skill_create",
+        "targets": {"new_skill": skill_name},
+        "candidate": {"name": skill_name, "state": "missing", "source": "planner_create_skill"},
+        "observed_problem": observed_problem,
+        "desired_outcome": desired_outcome,
+        "suggested_focus": planner_meta.get("suggested_focus") if isinstance(planner_meta.get("suggested_focus"), list) else [],
+        "non_goals": non_goals,
+        "confidence": planner_meta.get("confidence") or planner_meta.get("priority"),
+        "evidence_ids": evidence_ids,
+        "instructions": "Create a new Hermes skill only if the evidence describes a reusable procedural workflow. Use skill_manage(action=\"create\") with complete YAML frontmatter and compact durable guidance.",
+        "constraints": [
+            "Use only skills_list, skill_view, skill_manage, submit_mutation_result.",
+            "Do not use terminal/file/git/direct filesystem tools.",
+            "Create only a new Hermes-managed skill through skill_manage(action=\"create\").",
+            "Do not mutate plugin-bundled, hub-installed, external-dir, built-in, or Hermes core files.",
+            "Do not edit README, AGENTS, config, repo docs, or arbitrary files outside skill lifecycle tools.",
+        ],
+        "expected_outcome": {
+            "target_exists": False,
+            "artifact_decision_required": True,
+            "created_only_if_reusable_procedural_workflow": True,
+        },
+        "verification_contract": {"checklist_required": True, "llm_verifier_required": False},
+    }
+
+
 def run_skill_improvement_step(
     *,
     evidence_pack: dict[str, Any],
@@ -520,7 +567,17 @@ def run_skill_improvement_step(
 ) -> dict[str, Any]:
     candidates = evidence_pack.get("skill_candidates") if isinstance(evidence_pack.get("skill_candidates"), list) else []
     candidate_by_name = {str(item.get("name") or ""): item for item in candidates if isinstance(item, dict) and str(item.get("name") or "")}
-    if not candidate_by_name:
+    views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
+    skill_ids = [str(item) for item in views.get("skill", [])]
+    if not candidate_by_name and not skill_ids:
+        return {
+            "status": "no_skill_candidates",
+            "changed": 0,
+            "changed_skills": [],
+            "decisions": [],
+        }
+    model_cfg = (config or {}).get("model") if isinstance((config or {}).get("model"), dict) else {}
+    if not candidate_by_name and not callable((config or {}).get("_skill_planner_func")) and not isinstance(model_cfg.get("planner"), dict):
         return {
             "status": "no_skill_candidates",
             "changed": 0,
@@ -563,7 +620,43 @@ def run_skill_improvement_step(
     for planner_decision in planner.get("decisions") or []:
         if not isinstance(planner_decision, dict):
             continue
-        skill_name = str(planner_decision.get("skill") or "")
+        skill_name = str(planner_decision.get("skill") or planner_decision.get("proposed_skill_name") or "")
+        decision_kind = str(planner_decision.get("decision") or "skip")
+        if decision_kind == "create_skill":
+            evidence_ids = [str(item) for item in planner_decision.get("evidence_ids") or []]
+            attached_evidence = [evidence_by_id[item] for item in evidence_ids if item in evidence_by_id]
+            base_decision = {
+                "skill": skill_name,
+                "candidate_source": "planner_create_skill",
+                "candidate_state": "missing",
+                "evidence_ids": evidence_ids,
+                "planner_decision": planner_decision,
+                "change_intent": planner_decision.get("change_intent"),
+                "editor_instructions": planner_decision.get("editor_instructions"),
+                "rationale": planner_decision.get("rationale"),
+            }
+            task = build_skill_create_agent_task(skill_name=skill_name, evidence=attached_evidence, planner_decision=planner_decision, config=config)
+            if not mutate:
+                decisions.append({
+                    **base_decision,
+                    "decision": "create_skill_preview",
+                    "reason": "planner_create_skill_preview",
+                    "changed": False,
+                    "task": task,
+                })
+                continue
+            result = run_skill_agent_task(task, config=config, backend=backend)
+            changed = bool(result.get("success") and result.get("created_skills"))
+            if changed:
+                changed_skills.extend(str(name) for name in (result.get("created_skills") or []))
+            decisions.append({
+                **base_decision,
+                "decision": "accepted" if result.get("success") else "rejected",
+                "reason": result.get("reason") or result.get("error") or result.get("outcome") or "skill_create_agent_completed",
+                "changed": changed,
+                "result": result,
+            })
+            continue
         candidate = candidate_by_name.get(skill_name)
         if not candidate:
             continue
@@ -641,6 +734,7 @@ def run_skill_improvement_step(
         changed = bool(result.get("success") and (result.get("changed_skills") or result.get("created_skills") or result.get("deleted_skills")))
         if changed:
             changed_skills.extend(str(name) for name in (result.get("changed_skills") or []))
+            changed_skills.extend(str(name) for name in (result.get("created_skills") or []))
         decisions.append({
             **base_decision,
             "decision": "accepted" if result.get("success") else "rejected",

@@ -120,6 +120,64 @@ def test_skill_step_dry_run_records_planner_editor_preview_without_mutating():
     assert result["decisions"][0]["task"]["targets"]["primary_skill"] == "demo-skill"
 
 
+def test_skill_step_dry_run_records_create_skill_preview_without_existing_candidates():
+    pack = evidence_pack_for(None, candidates=[])
+
+    def fake_planner(*, digest, config):
+        return {
+            "decisions": [
+                {
+                    "decision": "create_skill",
+                    "proposed_skill_name": "patch-tool-workflow",
+                    "evidence_ids": ["ev1"],
+                    "reason": "missing reusable workflow skill",
+                    "risk": "low",
+                }
+            ]
+        }
+
+    result = run_skill_improvement_step(evidence_pack=pack, config={"_skill_planner_func": fake_planner}, mutate=False)
+
+    assert result["status"] == "completed"
+    decision = result["decisions"][0]
+    assert decision["decision"] == "create_skill_preview"
+    assert decision["skill"] == "patch-tool-workflow"
+    assert decision["task"]["task_kind"] == "skill_create"
+    assert decision["task"]["targets"] == {"new_skill": "patch-tool-workflow"}
+
+
+def test_skill_step_executes_create_skill_through_skill_agent_when_mutating():
+    pack = evidence_pack_for(None, candidates=[])
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low"}]}
+
+    class FakeBackend:
+        def run(self, prompt, task, config):
+            assert task["task_kind"] == "skill_create"
+            assert task["targets"] == {"new_skill": "patch-tool-workflow"}
+            return {
+                "success": True,
+                "outcome": "applied",
+                "used_tools": [{"tool": "skill_manage", "action": "create", "name": "patch-tool-workflow"}],
+                "changed_skills": [],
+                "created_skills": ["patch-tool-workflow"],
+                "deleted_skills": [],
+                "verification_notes": ["created through skill_manage"],
+                "rollback_hints": [],
+            }
+
+    result = run_skill_improvement_step(
+        evidence_pack=pack,
+        config={"_skill_planner_func": fake_planner, "_mutation_agent_backend": FakeBackend()},
+        mutate=True,
+    )
+
+    assert result["changed"] == 1
+    assert result["changed_skills"] == ["patch-tool-workflow"]
+    assert result["decisions"][0]["decision"] == "accepted"
+
+
 def test_skill_step_dry_run_records_archive_preview_without_mutating():
     def fake_planner(*, digest, config):
         return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}

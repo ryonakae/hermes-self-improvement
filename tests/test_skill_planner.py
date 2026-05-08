@@ -104,6 +104,72 @@ def test_planner_allows_run_editor_with_inventory_evidence():
     assert result["decisions"][0]["evidence_ids"] == ["inv-1"]
 
 
+def test_skill_planner_digest_filters_immutable_candidates_before_llm_input():
+    pack_data = {
+        "summary": {"event_count": 0, "evidence_count": 0, "ignored_count": 0},
+        "views": {"skill": [], "memory": [], "scorer": [], "evaluator": []},
+        "evidence": [],
+        "skill_candidates": [
+            {"name": "hermes-made", "mutable": True, "state": "active", "provenance": "curator_agent_created"},
+            {"name": "builtin-skill", "mutable": True, "state": "active", "provenance": "builtin"},
+            {"name": "hub-skill", "mutable": True, "state": "active", "provenance": "hub"},
+            {"name": "plugin-skill", "mutable": True, "state": "active", "provenance": "plugin-bundled"},
+        ],
+    }
+
+    digest = build_skill_planner_digest(pack_data)
+
+    assert [item["name"] for item in digest["skill_candidates"]] == ["hermes-made"]
+    assert digest["filtered_skill_candidate_count_by_reason"] == {
+        "builtin": 1,
+        "hub": 1,
+        "plugin-bundled": 1,
+    }
+
+
+def test_planner_allows_create_skill_for_missing_reusable_workflow():
+    def fake_planner(*, digest, config):
+        assert "ev2" in digest["available_skill_evidence_ids"]
+        return {
+            "decisions": [
+                {
+                    "decision": "create_skill",
+                    "proposed_skill_name": "patch-tool-workflow",
+                    "evidence_ids": ["ev2"],
+                    "reason": "recurring patch failures are not covered by an existing Hermes-created skill",
+                    "risk": "low",
+                }
+            ]
+        }
+
+    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    decision = result["decisions"][0]
+
+    assert decision["decision"] == "create_skill"
+    assert decision["proposed_skill_name"] == "patch-tool-workflow"
+    assert decision["evidence_ids"] == ["ev2"]
+
+
+def test_planner_rejects_create_skill_when_existing_hermes_skill_matches_name():
+    def fake_planner(*, digest, config):
+        return {
+            "decisions": [
+                {
+                    "decision": "create_skill",
+                    "proposed_skill_name": "demo-skill",
+                    "evidence_ids": ["ev2"],
+                    "reason": "duplicate existing skill",
+                }
+            ]
+        }
+
+    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    decision = result["decisions"][0]
+
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "create_skill_duplicate_existing_skill"
+
+
 def test_run_skill_planner_uses_injected_planner_and_normalizes_decisions():
     calls = []
 
@@ -376,12 +442,15 @@ def test_skill_planner_blocks_archive_on_hard_invariants_only():
     result = run_skill_planner(build_skill_planner_digest(pack_data), config={"_skill_planner_func": fake_planner})
     by_skill = {item["skill"]: item for item in result["decisions"]}
 
-    assert by_skill["pinned-skill"]["reason"] == "archive_blocked_by_pinned"
-    assert by_skill["external-skill"]["reason"] == "archive_blocked_by_provenance"
+    assert "pinned-skill" not in by_skill
+    assert "external-skill" not in by_skill
     assert by_skill["referenced-skill"]["reason"] == "archive_blocked_by_active_reference"
-    digest_by_name = {item["name"]: item for item in build_skill_planner_digest(pack_data)["skill_candidates"]}
+    digest = build_skill_planner_digest(pack_data)
+    digest_by_name = {item["name"]: item for item in digest["skill_candidates"]}
+    assert set(digest_by_name) == {"referenced-skill"}
     assert digest_by_name["referenced-skill"]["active_reference_count"] == 1
     assert digest_by_name["referenced-skill"]["blocking_references"] == []
+    assert digest["filtered_skill_candidate_count_by_reason"] == {"pinned": 1, "external": 1}
     assert all(item["decision"] == "skip" for item in by_skill.values())
 
 

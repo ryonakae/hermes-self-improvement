@@ -26,6 +26,7 @@ TARGET_KINDS = {
 DECISIONS = {
     "run_editor",
     "archive_skill",
+    "create_skill",
     "skip",
     "defer",
     "memory_candidate",
@@ -34,6 +35,7 @@ DECISIONS = {
 ACTIONS = {
     "skill_patch",
     "skill_archive",
+    "skill_create",
     "memory_add",
     "memory_replace",
     "prompt_overlay_promote",

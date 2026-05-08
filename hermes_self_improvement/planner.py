@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 from .autonomous_loop import normalize_autonomous_decision
+from .evidence import filter_llm_skill_candidates
 from .observer import _redact_text
 from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 from .target_hints import extract_target_hints
@@ -159,6 +160,7 @@ def _summary_counts(decisions: list[dict[str, Any]], candidate_count: int) -> di
         "candidate_count": candidate_count,
         "selected_for_editor": sum(1 for item in decisions if item.get("decision") == "run_editor"),
         "archive_candidates": sum(1 for item in decisions if item.get("decision") == "archive_skill"),
+        "create_skill_candidates": sum(1 for item in decisions if item.get("decision") == "create_skill"),
         "skipped": sum(1 for item in decisions if item.get("decision") == "skip"),
         "deferred": sum(1 for item in decisions if item.get("decision") == "defer"),
         "memory_candidates": sum(1 for item in decisions if item.get("decision") == "memory_candidate"),
@@ -170,7 +172,8 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
     skill_ids = [str(item) for item in views.get("skill", [])]
     skill_evidence = _evidence_by_ids(evidence_pack, skill_ids)
-    candidates = evidence_pack.get("skill_candidates") if isinstance(evidence_pack.get("skill_candidates"), list) else []
+    raw_candidates = evidence_pack.get("skill_candidates") if isinstance(evidence_pack.get("skill_candidates"), list) else []
+    candidates, filtered_skill_candidate_count_by_reason = filter_llm_skill_candidates(raw_candidates)
     candidate_by_name = {
         str(item.get("name") or ""): item
         for item in candidates
@@ -323,7 +326,9 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
             "evidence_count": int(summary.get("evidence_count") or 0),
             "ignored_count": int(summary.get("ignored_count") or 0),
         },
+        "available_skill_evidence_ids": skill_ids,
         "skill_candidates": candidate_rows,
+        "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
         "unmatched_evidence": {"count": len(unmatched), "by_reason": by_reason, "examples": unmatched[:10]},
         "constraints": {
             "mutable_targets_only": True,
@@ -387,6 +392,38 @@ def _planner_result(
     if error:
         result["error"] = _redacted_preview(error, max_chars=240)
     return result
+
+
+def _normalize_create_skill_decision(
+    raw: dict[str, Any],
+    *,
+    candidate_names: set[str],
+    available_evidence_ids: set[str],
+) -> dict[str, Any] | None:
+    proposed = str(raw.get("proposed_skill_name") or raw.get("skill") or "").strip()
+    if not proposed:
+        return {"skill": "", "decision": "skip", "reason": "create_skill_name_missing", "evidence_ids": []}
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]", proposed):
+        return {"skill": proposed, "decision": "skip", "reason": "create_skill_name_invalid", "evidence_ids": []}
+    if proposed in candidate_names:
+        return {"skill": proposed, "decision": "skip", "reason": "create_skill_duplicate_existing_skill", "evidence_ids": []}
+    evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item) in available_evidence_ids]
+    if not evidence_ids:
+        return {"skill": proposed, "decision": "skip", "reason": "create_skill_without_attached_evidence", "evidence_ids": []}
+    normalized = {
+        "skill": proposed,
+        "proposed_skill_name": proposed,
+        "decision": "create_skill",
+        "evidence_ids": evidence_ids,
+        "priority": str(raw.get("priority") or "medium") if str(raw.get("priority") or "medium") in ALLOWED_PRIORITIES else "medium",
+        "risk": str(raw.get("risk") or "medium") if str(raw.get("risk") or "medium") in ALLOWED_RISKS else "medium",
+    }
+    for key, max_chars in (("reason", 240), ("rationale", 600), ("change_intent", 280), ("editor_instructions", 900)):
+        if raw.get(key) is not None:
+            normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
+    if isinstance(raw.get("non_goals"), list):
+        normalized["non_goals"] = [_redacted_preview(item, max_chars=220) for item in raw["non_goals"][:6]]
+    return normalized
 
 
 def _normalize_decision(
@@ -498,18 +535,22 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         for item in candidate_rows
         if item.get("name")
     }
+    available_evidence_ids = {str(item) for item in (digest.get("available_skill_evidence_ids") or []) if str(item)}
     decisions: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw in raw_decisions:
         if not isinstance(raw, dict):
             continue
-        item = _normalize_decision(
-            raw,
-            candidate_names=candidate_names,
-            evidence_by_candidate=evidence_by_candidate,
-            archive_markers_by_candidate=archive_markers_by_candidate,
-            candidate_by_name=candidate_by_name,
-        )
+        if str(raw.get("decision") or "") == "create_skill":
+            item = _normalize_create_skill_decision(raw, candidate_names=candidate_names, available_evidence_ids=available_evidence_ids)
+        else:
+            item = _normalize_decision(
+                raw,
+                candidate_names=candidate_names,
+                evidence_by_candidate=evidence_by_candidate,
+                archive_markers_by_candidate=archive_markers_by_candidate,
+                candidate_by_name=candidate_by_name,
+            )
         if not item:
             continue
         decisions.append(item)

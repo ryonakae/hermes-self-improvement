@@ -96,6 +96,33 @@ def test_evidence_pack_carries_curator_skill_candidates_separately():
     assert pack["summary"]["evidence_count"] == 1
 
 
+def test_evidence_pack_filters_immutable_skills_from_llm_facing_candidates():
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    telemetry = {
+        "available": True,
+        "source": "curator",
+        "candidates": [
+            {"name": "hermes-made", "state": "active", "mutable": True, "provenance": "curator_agent_created"},
+            {"name": "builtin-skill", "state": "active", "mutable": True, "provenance": "builtin"},
+            {"name": "hub-skill", "state": "active", "mutable": True, "provenance": "hub"},
+            {"name": "plugin-skill", "state": "active", "mutable": True, "provenance": "plugin-bundled"},
+            {"name": "external-skill", "state": "active", "mutable": True, "provenance": "external"},
+            {"name": "pinned-skill", "state": "active", "mutable": True, "pinned": True, "provenance": "curator_agent_created"},
+        ],
+    }
+
+    pack = build_evidence_pack([], since, until, curator_telemetry=telemetry)
+
+    assert [item["name"] for item in pack["skill_candidates"]] == ["hermes-made"]
+    assert pack["summary"]["filtered_skill_candidate_count_by_reason"] == {
+        "builtin": 1,
+        "hub": 1,
+        "plugin-bundled": 1,
+        "external": 1,
+        "pinned": 1,
+    }
+
 
 def test_evidence_pack_adds_compact_cluster_evidence_for_repeated_tool_failures():
     since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
