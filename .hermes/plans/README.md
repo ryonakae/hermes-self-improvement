@@ -4,11 +4,15 @@
 
 As of 2026-05-08, the current active implementation plan is:
 
+- `2026-05-08_165219-runtime-overlay-seed-and-prompt-kernel.md`
+  - **Status:** implemented.
+  - Kernelizes repo-managed planner/editor/evaluator base prompts and moves rich operating guidance into runtime-private prompt overlays initialized from repo-tracked Markdown default seeds. Default seeds are bootstrap/distribution assets; `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/active-prompts.json` remains the runtime source of truth after setup and DSPy/GEPA calibration. Overlay limits are unified at 150 lines and 12000 chars per role.
+
+The latest completed implementation plan is:
+
 - `2026-05-08_155457-mutation-contract-and-memory-placement.md`
   - **Status:** implemented.
   - Follow-up after mutating dogfood run `run-20260508T045936Z.json`. Keeps implementation deliberately simple: normalizes mutation worker `changed` outcome aliases, records compact limit diagnostics, rejects raw tool output as memory content, makes mutating summaries show planned vs executed outcomes, and adds LLM-decided USER/MEMORY/Skill placement review as ordinary inventory evidence in the existing `improve` loop. Clear USER↔MEMORY moves execute add-before-remove through the official memory tool. No new command, queue, lane, apply mode, planner, scoring subsystem, or separate inventory subsystem.
-
-The latest completed implementation plan is:
 
 - `2026-05-08_125700-defer-explain-and-small-safe-promotion.md`
   - **Status:** implemented.

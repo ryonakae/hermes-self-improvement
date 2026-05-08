@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from .observer import _event_path, _self_improvement_root, _sha256_text
+from .prompt_overlays import active_prompts_path, load_active_prompt_overlay, materialize_default_prompt_overlays
+from .prompts import base_prompt_hash
 
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -59,6 +61,9 @@ def runtime_layout(config: dict[str, Any]) -> dict[str, Path]:
         "evaluator_candidates": evaluator / "candidates",
         "runtime_eval_cases": evaluator / "runtime-eval-cases",
         "planner_editor_runtime_eval_cases": evaluator / "runtime-eval-cases" / "planner-editor",
+        "active_prompt_overlays": active_prompts_path(config),
+        "prompt_candidates": evaluator / "prompt-candidates",
+        "prompt_candidate_sets": evaluator / "prompt-candidate-sets",
         "cache": root / "cache",
         "dspy_cache": root / "cache" / "dspy",
     }
@@ -78,6 +83,8 @@ def _required_dirs(layout: dict[str, Path]) -> list[Path]:
         layout["evaluator_programs"],
         layout["evaluator_candidates"],
         layout["runtime_eval_cases"],
+        layout["prompt_candidates"],
+        layout["prompt_candidate_sets"],
         layout["cache"],
         layout["dspy_cache"],
     ]
@@ -165,13 +172,39 @@ def _read_json_object(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _active_prompt_status(config: dict[str, Any], layout: dict[str, Path]) -> dict[str, Any]:
+    roles: dict[str, Any] = {}
+    ready = True
+    sources: dict[str, int] = {}
+    for role in ("planner", "editor", "scorer"):
+        overlay = load_active_prompt_overlay(config, role=role, base_hash=base_prompt_hash(role))
+        if overlay is None:
+            roles[role] = {"status": "missing"}
+            ready = False
+            continue
+        source = str(overlay.get("overlay_source") or overlay.get("source") or "unknown")
+        sources[source] = sources.get(source, 0) + 1
+        roles[role] = {
+            "status": "ready",
+            "source": source,
+            "candidate_hash": overlay.get("candidate_hash"),
+            "overlay_generation_id": overlay.get("overlay_generation_id"),
+        }
+    return {
+        "status": "ready" if ready else "missing",
+        "path": str(layout["active_prompt_overlays"]),
+        "roles": roles,
+        "sources": sources,
+    }
+
+
 def check_runtime_setup(config: dict[str, Any]) -> dict[str, Any]:
     layout = runtime_layout(config)
     required_dirs = _required_dirs(layout)
     missing_dirs = [str(path) for path in required_dirs if not path.is_dir()]
     missing_files = [
         str(path)
-        for path in (layout["events"], layout["install"], layout["active_evaluator"], layout["default_evaluator"], layout["default_rubric"], layout["default_eval_cases"])
+        for path in (layout["events"], layout["install"], layout["active_evaluator"], layout["active_prompt_overlays"], layout["default_evaluator"], layout["default_rubric"], layout["default_eval_cases"])
         if not path.exists()
     ]
     active_pointer = _read_json_object(layout["active_evaluator"]) if layout["active_evaluator"].exists() else None
@@ -184,7 +217,9 @@ def check_runtime_setup(config: dict[str, Any]) -> dict[str, Any]:
     changed_defaults = [key for key, value in hashes.items() if value is not None and source_hashes.get(key) is not None and value != source_hashes[key]]
     active_ready = isinstance(active_pointer, dict) and active_pointer.get("schema_name") == "self_improvement_active_evaluator_pointer"
     defaults_ready = not any(hashes.get(key) is None for key in DEFAULT_EVALUATOR_FILES) and not changed_defaults
-    initialized = not missing_dirs and not missing_files and active_ready and defaults_ready and isinstance(install, dict)
+    active_prompts = _active_prompt_status(config, layout)
+    prompt_ready = active_prompts.get("status") == "ready"
+    initialized = not missing_dirs and not missing_files and active_ready and defaults_ready and prompt_ready and isinstance(install, dict)
     reasons: list[str] = []
     if missing_dirs:
         reasons.append("missing_directories")
@@ -196,6 +231,8 @@ def check_runtime_setup(config: dict[str, Any]) -> dict[str, Any]:
         reasons.append("default_assets_changed")
     if layout["install"].exists() and not isinstance(install, dict):
         reasons.append("install_metadata_invalid")
+    if layout["active_prompt_overlays"].exists() and not prompt_ready:
+        reasons.append("active_prompt_overlays_invalid")
     return {
         "schema_name": "self_improvement_runtime_setup_status",
         "schema_version": "1.0",
@@ -216,6 +253,7 @@ def check_runtime_setup(config: dict[str, Any]) -> dict[str, Any]:
             "source_hashes": source_hashes,
             "changed": changed_defaults,
         },
+        "active_prompt_overlays": active_prompts,
         "install_metadata": {
             "status": "ready" if isinstance(install, dict) else "missing" if not layout["install"].exists() else "invalid",
             "path": str(layout["install"]),
@@ -255,6 +293,7 @@ def run_setup(config: dict[str, Any], *, check: bool = False, reset: bool = Fals
         layout["active_evaluator"].write_text(_json_dumps(_build_active_pointer(layout)), encoding="utf-8")
         active_written = True
 
+    prompt_overlay_result = materialize_default_prompt_overlays(config, force=bool(reset))
     install = _write_install_metadata(layout, reset=reset, copied_defaults=copied_defaults)
     status = check_runtime_setup(config)
     return {
@@ -264,8 +303,10 @@ def run_setup(config: dict[str, Any], *, check: bool = False, reset: bool = Fals
         "created_or_updated": {
             "default_assets": copied_defaults,
             "active_evaluator": active_written,
+            "prompt_overlays": prompt_overlay_result.get("status") == "materialized",
             "install_metadata": True,
             "event_log": True,
         },
         "install": install,
+        "prompt_overlays": prompt_overlay_result,
     }

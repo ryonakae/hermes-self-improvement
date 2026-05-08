@@ -791,10 +791,12 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
     if setup:
         active = setup.get("active_evaluator") if isinstance(setup.get("active_evaluator"), dict) else {}
         defaults = setup.get("default_assets") if isinstance(setup.get("default_assets"), dict) else {}
+        active_prompts = setup.get("active_prompt_overlays") if isinstance(setup.get("active_prompt_overlays"), dict) else {}
         lines.extend([
             "Runtime setup:",
             f"- initialized: {'yes' if setup.get('initialized') else 'no'}",
             f"- active evaluator: {active.get('status') or 'unknown'}",
+            f"- prompt overlays: {active_prompts.get('status') or 'unknown'} ({_format_count_map(active_prompts.get('sources') if isinstance(active_prompts.get('sources'), dict) else {})})",
             f"- default assets: {defaults.get('status') or 'unknown'}",
         ])
         if not setup.get("initialized"):
@@ -1022,8 +1024,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- evidence strength: strong {strong_count}, medium {medium_count}, weak {weak_count}, weak-only selected {int(planner_quality.get('weak_only_selected_count') or 0)}",
         f"- editor prompts: tasks {int(planner_quality.get('editor_task_count') or 0)}, max chars {int(editor_prompt_chars.get('max') or 0)}",
         "Prompt sources:",
-        f"- planner: {'runtime overlay' if planner_prompt.get('overlay_active') else 'base'} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
-        f"- editor: {'runtime overlay' if editor_prompt.get('overlay_active') else 'base'} hash {editor_prompt.get('overlay_hash') or editor_prompt.get('active_hash') or editor_prompt.get('base_hash') or 'unknown'}",
+        f"- planner: {planner_prompt.get('overlay_source') or ('runtime overlay' if planner_prompt.get('overlay_active') else 'base')} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
+        f"- editor: {editor_prompt.get('overlay_source') or ('runtime overlay' if editor_prompt.get('overlay_active') else 'not rendered' if not editor_prompt else 'base')} hash {editor_prompt.get('overlay_hash') or editor_prompt.get('active_hash') or editor_prompt.get('base_hash') or 'n/a'}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Skill lifecycle:",
@@ -1082,6 +1084,7 @@ def _confirm_setup_reset(*, config: dict[str, Any], assume_yes: bool = False) ->
 def _render_setup_summary(payload: dict[str, Any]) -> str:
     active = payload.get("active_evaluator") if isinstance(payload.get("active_evaluator"), dict) else {}
     defaults = payload.get("default_assets") if isinstance(payload.get("default_assets"), dict) else {}
+    active_prompts = payload.get("active_prompt_overlays") if isinstance(payload.get("active_prompt_overlays"), dict) else {}
     event_log = payload.get("event_log") if isinstance(payload.get("event_log"), dict) else {}
     dspy_cache = payload.get("dspy_cache") if isinstance(payload.get("dspy_cache"), dict) else {}
     title = f"{PLUGIN_NAME} setup check" if payload.get("operation") == "check" else f"{PLUGIN_NAME} setup"
@@ -1095,6 +1098,7 @@ def _render_setup_summary(payload: dict[str, Any]) -> str:
         "Evaluator:",
         f"- active pointer: {active.get('path') or 'unknown'}",
         f"- active evaluator: {active.get('status') or 'unknown'}",
+        f"- prompt overlays: {active_prompts.get('status') or 'unknown'} ({_format_count_map(active_prompts.get('sources') if isinstance(active_prompts.get('sources'), dict) else {})})",
         f"- default assets: {defaults.get('status') or 'unknown'}",
         "Readiness:",
         f"- writable: {'yes' if payload.get('writable') else 'no'}",

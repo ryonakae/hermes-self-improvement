@@ -9,10 +9,15 @@ from .config import get_hermes_home
 from .observer import _redact_text, _sha256_text, _stable_json
 
 ALLOWED_PROMPT_ROLES = {"planner", "editor", "scorer"}
-MAX_ADDENDUM_CHARS = 4000
+DEFAULT_PROMPT_SEED_ROLES = ("planner", "editor", "scorer")
+MAX_ADDENDUM_LINES = 150
+MAX_ADDENDUM_CHARS = 12000
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
+PACKAGE_DIR = Path(__file__).resolve().parent
+PLUGIN_DIR = PACKAGE_DIR.parent
+DEFAULT_PROMPT_SEED_DIR = PLUGIN_DIR / "defaults" / "prompt-overlays"
 
 
 def _runtime_root(config: dict[str, Any] | None = None) -> Path:
@@ -59,6 +64,12 @@ def _validate_role(role: str) -> None:
         raise ValueError(f"unknown_prompt_role:{role}")
 
 
+def _line_count(value: str) -> int:
+    if not value:
+        return 0
+    return len(value.splitlines())
+
+
 def _validate_prompt_content(candidate_prompt: dict[str, Any]) -> None:
     for key in ("system_addendum", "user_addendum"):
         value = candidate_prompt.get(key)
@@ -66,6 +77,8 @@ def _validate_prompt_content(candidate_prompt: dict[str, Any]) -> None:
             continue
         if not isinstance(value, str):
             raise ValueError(f"invalid_prompt_field:{key}")
+        if _line_count(value) > MAX_ADDENDUM_LINES:
+            raise ValueError(f"prompt_content_too_many_lines:{key}")
         if len(value) > MAX_ADDENDUM_CHARS:
             raise ValueError(f"prompt_content_too_large:{key}")
         if _redact_text(value, max_chars=len(value) + 20) != value:
@@ -178,6 +191,77 @@ def load_active_prompt_overlay(config: dict[str, Any] | None, *, role: str, base
     if isinstance(generation_id, str) and generation_id.strip():
         candidate["overlay_generation_id"] = generation_id.strip()
     return candidate
+
+
+def default_prompt_seed_path(role: str) -> Path:
+    _validate_role(role)
+    filename = "evaluator.md" if role == "scorer" else f"{role}.md"
+    return DEFAULT_PROMPT_SEED_DIR / filename
+
+
+def _active_overlay_ready(config: dict[str, Any], *, role: str) -> bool:
+    try:
+        from .prompts import base_prompt_hash
+
+        return load_active_prompt_overlay(config, role=role, base_hash=base_prompt_hash(role)) is not None
+    except Exception:
+        return False
+
+
+def _active_overlay_roles_ready(config: dict[str, Any]) -> bool:
+    return all(_active_overlay_ready(config, role=role) for role in DEFAULT_PROMPT_SEED_ROLES)
+
+
+def materialize_default_prompt_overlays(config: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
+    from .prompts import base_prompt_hash
+
+    if not force and _active_overlay_roles_ready(config):
+        return {
+            "status": "already_active",
+            "roles": {role: {"active": True, "source": "existing"} for role in DEFAULT_PROMPT_SEED_ROLES},
+            "active_prompts_path": str(active_prompts_path(config)),
+        }
+
+    candidate_set_id = "default-seed-" + datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    roles: dict[str, Any] = {}
+    for role in DEFAULT_PROMPT_SEED_ROLES:
+        seed_path = default_prompt_seed_path(role)
+        if not seed_path.exists():
+            raise FileNotFoundError(f"default_prompt_seed_missing:{seed_path}")
+        seed_text = seed_path.read_text(encoding="utf-8").strip()
+        candidate = {
+            "role": role,
+            "base_prompt_hash": base_prompt_hash(role),
+            "candidate_prompt": {"system_addendum": seed_text, "replacement": None},
+            "source": "default_seed",
+            "overlay_source": "default_seed",
+            "seed_path": str(seed_path),
+            "candidate_set_id": candidate_set_id,
+            "rationale": "Repo default seed materialized into runtime-private prompt overlay.",
+        }
+        candidate_path = write_prompt_candidate(config, role=role, candidate=candidate)
+        promote_prompt_candidate(
+            config,
+            role=role,
+            candidate_path=candidate_path,
+            regression={"status": "passed", "source": "default_seed", "candidate_set_id": candidate_set_id},
+        )
+        roles[role] = {"active": True, "source": "default_seed", "candidate_path": str(candidate_path), "seed_path": str(seed_path)}
+
+    pointer_path = active_prompts_path(config)
+    pointer = _load_json(pointer_path) or {"schema_name": "self_improvement_active_prompt_overlays", "schema_version": "1.0", "roles": {}}
+    pointer["overlay_generation_id"] = candidate_set_id
+    generations = pointer.get("overlay_generations") if isinstance(pointer.get("overlay_generations"), list) else []
+    generations.append({
+        "overlay_generation_id": candidate_set_id,
+        "source": "default_seed",
+        "roles": sorted(roles),
+        "created_at": datetime.now(UTC).isoformat(),
+    })
+    pointer["overlay_generations"] = generations[-20:]
+    pointer["updated_at"] = datetime.now(UTC).isoformat()
+    pointer_path.write_text(json.dumps(pointer, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return {"status": "materialized", "overlay_generation_id": candidate_set_id, "roles": roles, "active_prompts_path": str(pointer_path)}
 
 
 def promote_overlay_candidate_set(config: dict[str, Any], *, candidate_set: dict[str, Any], evaluation: dict[str, Any]) -> dict[str, Any]:

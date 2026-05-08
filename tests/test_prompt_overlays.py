@@ -112,3 +112,79 @@ def test_overlay_candidate_set_promotion_updates_changed_targets_and_generation(
     assert loaded["candidate_prompt"]["system_addendum"] == "Use stricter evidence checks."
     pointer = active_prompts_path(cfg).read_text(encoding="utf-8")
     assert "overlay-set-001" in pointer
+
+
+def test_prompt_overlay_accepts_unified_line_and_char_limits(tmp_path):
+    cfg = config(tmp_path)
+    text = "\n".join(f"line {index}" for index in range(150))
+
+    candidate_path = write_prompt_candidate(
+        cfg,
+        role="planner",
+        candidate={
+            "role": "planner",
+            "base_prompt_hash": base_prompt_hash("planner"),
+            "candidate_prompt": {"system_addendum": text, "user_addendum": text},
+        },
+    )
+
+    assert candidate_path.exists()
+
+
+def test_prompt_overlay_rejects_addendum_over_line_limit(tmp_path):
+    cfg = config(tmp_path)
+    text = "\n".join(f"line {index}" for index in range(151))
+
+    try:
+        write_prompt_candidate(
+            cfg,
+            role="planner",
+            candidate={
+                "role": "planner",
+                "base_prompt_hash": base_prompt_hash("planner"),
+                "candidate_prompt": {"system_addendum": text},
+            },
+        )
+    except ValueError as exc:
+        assert "prompt_content_too_many_lines:system_addendum" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("over-line-limit prompt content was accepted")
+
+
+def test_prompt_overlay_rejects_each_addendum_over_line_limit(tmp_path):
+    cfg = config(tmp_path)
+    text = "\n".join(f"line {index}" for index in range(151))
+
+    try:
+        write_prompt_candidate(
+            cfg,
+            role="editor",
+            candidate={
+                "role": "editor",
+                "base_prompt_hash": base_prompt_hash("editor"),
+                "candidate_prompt": {"system_addendum": "ok", "user_addendum": text},
+            },
+        )
+    except ValueError as exc:
+        assert "prompt_content_too_many_lines:user_addendum" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("over-line-limit user addendum was accepted")
+
+
+def test_prompt_overlay_rejects_single_line_over_char_limit(tmp_path):
+    cfg = config(tmp_path)
+
+    try:
+        write_prompt_candidate(
+            cfg,
+            role="planner",
+            candidate={
+                "role": "planner",
+                "base_prompt_hash": base_prompt_hash("planner"),
+                "candidate_prompt": {"system_addendum": "x" * 12001},
+            },
+        )
+    except ValueError as exc:
+        assert "prompt_content_too_large:system_addendum" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("over-char-limit prompt content was accepted")

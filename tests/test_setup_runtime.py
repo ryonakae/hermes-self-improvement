@@ -47,6 +47,8 @@ def test_setup_creates_evaluator_runtime_layout_and_seed_files(tmp_path):
         "evaluator/programs",
         "evaluator/candidates",
         "evaluator/runtime-eval-cases",
+        "evaluator/prompt-candidates",
+        "evaluator/prompt-candidate-sets",
         "cache/dspy",
     ]
     for rel in expected_dirs:
@@ -55,6 +57,7 @@ def test_setup_creates_evaluator_runtime_layout_and_seed_files(tmp_path):
         "state/events.jsonl",
         "state/install.json",
         "evaluator/active.json",
+        "evaluator/active-prompts.json",
         "evaluator/defaults/proposal-evaluator.json",
         "evaluator/defaults/proposal-rubric.json",
         "evaluator/defaults/proposal-cases.jsonl",
@@ -66,6 +69,9 @@ def test_setup_creates_evaluator_runtime_layout_and_seed_files(tmp_path):
     assert pointer["mode"] == "dspy_program_eval"
     assert pointer["compiled_program_path"] is None
     assert "/evaluator/defaults/" in pointer["evaluator_path"]
+    active_prompts = json.loads((root / "evaluator/active-prompts.json").read_text(encoding="utf-8"))
+    assert set(active_prompts["roles"]) == {"planner", "editor", "scorer"}
+    assert result["active_prompt_overlays"]["status"] == "ready"
 
 
 def test_setup_is_idempotent_and_preserves_existing_active_evaluator(tmp_path):
@@ -81,6 +87,7 @@ def test_setup_is_idempotent_and_preserves_existing_active_evaluator(tmp_path):
 
     assert result["initialized"] is True
     assert result["created_or_updated"]["active_evaluator"] is False
+    assert result["created_or_updated"]["prompt_overlays"] is False
     assert json.loads(active.read_text(encoding="utf-8"))["custom"] is True
 
 
@@ -98,6 +105,8 @@ def test_setup_reset_removes_stale_files_and_reseeds(tmp_path):
     assert result["reset"] is True
     assert stale.exists() is False
     assert (root / "evaluator" / "active.json").exists()
+    assert (root / "evaluator" / "active-prompts.json").exists()
+    assert result["created_or_updated"]["prompt_overlays"] is True
     assert (root / "gepa").exists() is False
 
 

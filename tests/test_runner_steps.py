@@ -101,8 +101,9 @@ def test_build_skill_agent_task_uses_active_editor_prompt_overlay(tmp_path):
     assert task["prompt_source"]["editor"]["overlay_active"] is True
 
 
-def test_skill_step_dry_run_records_planner_editor_preview_without_mutating():
-    result = run_skill_improvement_step(evidence_pack=evidence_pack_for("demo-skill"), config={}, mutate=False)
+def test_skill_step_dry_run_records_planner_editor_preview_without_mutating(tmp_path):
+    cfg = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = run_skill_improvement_step(evidence_pack=evidence_pack_for("demo-skill"), config=cfg, mutate=False)
 
     assert result["status"] == "completed"
     assert result["changed"] == 0

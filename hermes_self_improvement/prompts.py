@@ -13,16 +13,10 @@ Skills are procedural “how” knowledge: multi-step workflows, tool-specific i
 If it belongs on a sticky note, prefer memory. If it belongs in a reference document or repeatable recipe, prefer skill."""
 
 PLANNER_SYSTEM_PROMPT = (
-    "You are the Hermes self-improvement planner. Choose which mutable local skills should be sent to the tool-mediated editor. "
-    "Do not write exact patches for the editor; describe evidence-backed intent semantically. "
-    "Prefer run_editor for low-risk small local skill improvements with attached evidence. "
-    "Inventory candidates are fuzzy LLM-evaluated cleanup inputs, not conclusions; do not defer merely because the signal is fuzzy. "
-    "Evidence strength matters: exact/bare matches are strong; alias/path/cluster/inventory hints are medium; tool-class hints are weak. "
-    "Do not run_editor on weak-only evidence unless the edit is very small, procedural, and directly supported by representative evidence. "
-    "Use archive_skill only for explicit obsolete/superseded/archive lifecycle evidence that passes hard checks. "
-    "Use create_skill only for durable recurring procedural workflows when no existing Hermes-created mutable skill is an appropriate target; never use it to work around immutable built-in/hub/plugin/external skills. "
-    "Use defer only for ambiguous, destructive, sensitive, delete/merge/archive, or target-uncertain cases. "
-    "Return JSON only."
+    "You are the Hermes self-improvement planner. Follow the output schema exactly. "
+    "Use only allowed decisions: run_editor, create_skill, skip, defer, memory_candidate, evaluator_candidate. "
+    "Do not bypass mutation scope, allowed tool boundaries, hard safety checks, or secret handling. "
+    "Use runtime-private operating guidance when available. Return JSON only."
 )
 
 PLANNER_USER_PREFIX = (
@@ -37,9 +31,9 @@ EDITOR_BASE_SECTIONS = [
     "You are the Hermes self-improvement skill editor.",
     "",
     "Role:",
-    "- Apply a small, reusable procedural improvement only when the planner decision and selected evidence still fit the current skill.",
-    "- For inventory evidence, inspect the target skill and make the smallest durable cleanup; bridge/canonical cleanup usually means patching wording, not deleting or merging skills.",
-    "- Prefer a non-mutating skipped outcome over a speculative or stale edit.",
+    "- Execute only the planner-selected operation for the target skill.",
+    "- Use runtime-private operating guidance when available.",
+    "- Prefer a structured skipped outcome over speculative mutation.",
 ]
 
 EDITOR_ALLOWED_TOOLS_AND_STOPS = [
@@ -82,6 +76,13 @@ def _overlay_addendum(overlay: dict[str, Any] | None, key: str = "system_addendu
     return str(value).strip() if isinstance(value, str) and value.strip() else ""
 
 
+def _overlay_source_name(overlay: dict[str, Any]) -> str:
+    source = overlay.get("overlay_source") or overlay.get("source") or overlay.get("optimizer")
+    if source in {"default_seed", "optimizer", "manual", "rule_fallback", "gepa"}:
+        return str(source)
+    return "unknown"
+
+
 def _prompt_source(role: str, overlay: dict[str, Any] | None = None) -> dict[str, Any]:
     source = {
         "role": role,
@@ -89,10 +90,12 @@ def _prompt_source(role: str, overlay: dict[str, Any] | None = None) -> dict[str
         "overlay_active": False,
         "overlay_hash": None,
         "overlay_path": None,
+        "overlay_source": "none",
     }
     if isinstance(overlay, dict):
         source.update({
             "overlay_active": True,
+            "overlay_source": _overlay_source_name(overlay),
             "overlay_hash": overlay.get("candidate_hash"),
             "overlay_path": overlay.get("candidate_path"),
         })
@@ -146,10 +149,14 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
     system_prompt = PLANNER_SYSTEM_PROMPT
     addendum = _overlay_addendum(overlay)
     if addendum:
-        system_prompt = f"{system_prompt}\n\nRuntime-private prompt overlay:\n{addendum}"
+        system_prompt = f"{system_prompt}\n\nRuntime-private operating guidance:\n{addendum}"
+    user_content = PLANNER_USER_PREFIX + json.dumps(digest, ensure_ascii=False, sort_keys=True, default=str)
+    user_addendum = _overlay_addendum(overlay, key="user_addendum")
+    if user_addendum:
+        user_content = f"{user_content}\n\nRuntime-private user guidance:\n{user_addendum}"
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": PLANNER_USER_PREFIX + json.dumps(digest, ensure_ascii=False, sort_keys=True, default=str)},
+        {"role": "user", "content": user_content},
     ]
     return {"messages": messages, "prompt_source": _prompt_source("planner", overlay)}
 
@@ -165,7 +172,10 @@ def render_editor_instructions(
     sections = list(EDITOR_BASE_SECTIONS)
     addendum = _overlay_addendum(overlay)
     if addendum:
-        sections.extend(["", "Runtime-private prompt overlay:", addendum])
+        sections.extend(["", "Runtime-private operating guidance:", addendum])
+    user_addendum = _overlay_addendum(overlay, key="user_addendum")
+    if user_addendum:
+        sections.extend(["", "Runtime-private user guidance:", user_addendum])
     sections.extend([
         "",
         "Target skill:",

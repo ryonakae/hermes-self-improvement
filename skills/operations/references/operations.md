@@ -17,7 +17,7 @@ bin/hermes-self-improve calibrate --dry-run
 
 Semantics:
 
-- `setup` creates `${HERMES_HOME:-~/.hermes}/self-improvement` runtime directories, default evaluator assets, `evaluator/active.json`, and prompt-overlay runtime state paths such as `evaluator/active-prompts.json`. It does not call LLMs, GEPA, skill mutation, or memory mutation.
+- `setup` creates `${HERMES_HOME:-~/.hermes}/self-improvement` runtime directories, default evaluator assets, `evaluator/active.json`, and prompt-overlay runtime state paths such as `evaluator/active-prompts.json`. If no valid active prompt overlay exists for the current base prompt hashes, it materializes repo seed Markdown from `defaults/prompt-overlays/` into runtime-private overlay candidates. It does not call LLMs, GEPA, skill mutation, or memory mutation.
 - `setup --check` is read-only.
 - `setup --reset` is destructive for the runtime directory only. It asks for y/N confirmation on an interactive terminal and fails non-interactively unless `--yes` is passed.
 - `improve` is mutation-capable by default, but internal runner gates still decide whether anything changes.

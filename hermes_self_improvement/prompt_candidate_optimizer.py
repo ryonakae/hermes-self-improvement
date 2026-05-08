@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .observer import _redact_text, _sha256_text, _stable_json
-from .prompt_overlays import MAX_ADDENDUM_CHARS, prompt_overlay_root, write_prompt_candidate
+from .prompt_overlays import MAX_ADDENDUM_CHARS, MAX_ADDENDUM_LINES, prompt_overlay_root, write_prompt_candidate
 from .prompts import base_prompt_hash
 from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_planner_editor_runtime_eval_cases
 
@@ -79,6 +79,8 @@ def validate_prompt_overlay_candidate(candidate: dict[str, Any], *, role: str, m
             continue
         if not isinstance(value, str):
             raise ValueError(f"invalid_prompt_field:{key}")
+        if len(value.splitlines()) > MAX_ADDENDUM_LINES:
+            raise ValueError(f"prompt_content_too_many_lines:{key}")
         if len(value) > max_text_chars:
             raise ValueError(f"prompt_content_too_large:{key}")
         if _redact_text(value, max_chars=len(value) + 20) != value:
