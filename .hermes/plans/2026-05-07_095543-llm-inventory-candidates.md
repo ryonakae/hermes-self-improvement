@@ -58,6 +58,7 @@ Auto-apply allowed after LLM decision and hard checks:
 Hard stops:
 
 - Pinned, archived, plugin-bundled, hub-installed, external-dir, built-in, or ambiguous-provenance skill.
+- Skills outside the Hermes-created mutable set should not be included in planner/editor candidate lists at all; record only compact filtered counts/reasons in artifacts when useful.
 - Any patch/archive against skills not created by Hermes, even if they are locally installed and readable.
 - Skill delete/rename/merge as destructive operations. Prefer patching canonical/bridge content or archive only when Curator-style archive is valid.
 - New skill creation when the observation is a one-off, duplicates an existing Hermes-created skill, belongs in memory, or would mainly document a built-in/hub skill instead of a reusable local workflow.
@@ -204,8 +205,9 @@ Expected: fail.
 Add `collect_skill_inventory_candidates(curator_telemetry, *, limit=20)`:
 
 - Input: Curator telemetry candidates only.
-- Filter: `mutable == True`, not pinned, state in `active|stale`, provenance/source indicates Hermes-created local skill only.
-- Exclude built-in, hub-installed, plugin-bundled, external-dir, and ambiguous-provenance skills from patch/archive targets even if they appear in search or loaded skill context.
+- Filter before building any LLM-facing candidate list: `mutable == True`, not pinned, state in `active|stale`, provenance/source indicates Hermes-created local skill only.
+- Exclude built-in, hub-installed, plugin-bundled, external-dir, and ambiguous-provenance skills from patch/archive targets and from planner/editor candidate rows entirely, even if they appear in search or loaded skill context.
+- Keep only compact filtered counts/reasons in runtime artifacts, e.g. `filtered_skill_candidate_count_by_reason`, so audits can see why candidates disappeared without spending planner tokens.
 - Group heuristics are intentionally shallow:
   - same normalized prefix before `-old`, `-legacy`, `-plugin`, `-operations`, `-development`
   - same first two hyphen tokens when descriptions overlap
@@ -382,9 +384,11 @@ def test_create_skill_rejected_when_existing_hermes_skill_is_targetable():
     assert decision["decision"] in {"skip", "defer"}
 ```
 
-Add hard-stop tests:
+Add hard-stop and token-budget tests:
 
 - built-in/hub/plugin/external skills are never patched or archived.
+- built-in/hub/plugin/external skills are not present in planner/editor candidate rows.
+- filtered-out skills appear only as aggregate counts/reasons in artifacts, not as full candidate rows.
 - new skill creation is rejected when the proposed content is memory-like rather than procedural.
 - new skill creation is rejected when the evidence is a one-off and not a repeated/durable workflow.
 - dry-run previews `skill_create` without calling `skill_manage`.
