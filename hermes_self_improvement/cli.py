@@ -20,6 +20,7 @@ from .conversation_memory import (
     build_conversation_memory_windows,
     build_memory_gap_digest,
     make_conversation_memory_gap_candidate,
+    reconcile_memory_gap_payload_with_existing_memories,
     run_memory_gap_extractor,
 )
 from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
@@ -45,6 +46,31 @@ def _builtin_memory_paths(config: dict[str, Any]) -> dict[str, Path]:
         return {str(target): Path(str(path)).expanduser() for target, path in cfg_paths.items() if str(target) in {"memory", "user"}}
     home = get_hermes_home()
     return {"memory": home / "memories" / "MEMORY.md", "user": home / "memories" / "USER.md"}
+
+
+def _load_builtin_memory_entries(memory_paths: dict[str, Path], *, limit: int = 80) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    for target in ("memory", "user"):
+        path = memory_paths.get(target)
+        if not path or not path.exists():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        chunks = [chunk.strip() for chunk in text.replace("\r\n", "\n").split("§")]
+        for chunk in chunks:
+            if not chunk:
+                continue
+            lines = [line.strip() for line in chunk.splitlines() if line.strip() and not line.strip().startswith("#")]
+            if not lines:
+                continue
+            entry_text = " ".join(lines)
+            if entry_text:
+                entries.append({"target": target, "text": entry_text})
+            if len(entries) >= limit:
+                return entries
+    return entries
 
 
 def _load_gepa_adapter_module(name: str = "hermes_self_improvement_gepa_adapter_cli") -> Any:
@@ -611,9 +637,13 @@ def run_improve(
         curator_telemetry=curator_telemetry,
         memory_paths=_builtin_memory_paths(config),
     )
+    existing_memories = _load_builtin_memory_entries(_builtin_memory_paths(config))
     conversation_windows = build_conversation_memory_windows(events)
-    memory_gap_digest = build_memory_gap_digest(conversation_windows, existing_memories=[], recent_candidates=[])
-    memory_gap_payload = run_memory_gap_extractor(memory_gap_digest, config=config)
+    memory_gap_digest = build_memory_gap_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
+    memory_gap_payload = reconcile_memory_gap_payload_with_existing_memories(
+        run_memory_gap_extractor(memory_gap_digest, config=config),
+        existing_memories=existing_memories,
+    )
     memory_gap_evidence = []
     for candidate in memory_gap_payload.get("candidates") or []:
         if not isinstance(candidate, dict) or candidate.get("action") not in {"add", "replace"}:
@@ -665,6 +695,15 @@ def run_improve(
     decisions_summary = _summarize_runner_decisions(proposals)
     skill_step = run_skill_improvement_step(evidence_pack=evidence_pack, config=config, mutate=mutate)
     memory_step = run_memory_improvement_step(evidence_pack=evidence_pack, config=config, mutate=mutate)
+    step_decisions_payload = {
+        "summary": decisions_summary,
+        "proposals_considered": proposals,
+        "skill": skill_step,
+        "memory": memory_step,
+        "scorer": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
+        "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
+    }
+    action_summary = _action_summary_from_result({}, step_decisions_payload)
     run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
     result_payload = {
         "schema_name": "self_improvement_run_result",
@@ -690,13 +729,13 @@ def run_improve(
             "active_skill_references": evidence_pack.get("active_skill_references"),
             "curator_telemetry_summary": evidence_pack.get("curator_telemetry_summary"),
         },
-        "step_decisions": {
-            "summary": decisions_summary,
-            "proposals_considered": proposals,
-            "skill": skill_step,
-            "memory": memory_step,
-            "scorer": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
-            "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
+        "step_decisions": step_decisions_payload,
+        "action_summary": action_summary,
+        "actionable": {
+            "mutation_ready_count": int(action_summary.get("apply") or 0),
+            "deferred_count": int(action_summary.get("defer") or 0),
+            "skipped_count": int(action_summary.get("skip") or 0),
+            "blocked_count": int(action_summary.get("block") or 0),
         },
         "prompt_sources": skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {},
         "skill_changes": skill_step.get("changed_skills") or [],
@@ -781,6 +820,43 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _semantic_action_from_runner_decision(decision: dict[str, Any], *, kind: str) -> str:
+    raw = str(decision.get("decision") or "").strip()
+    reason = str(decision.get("reason") or "").strip()
+    if raw in {"accepted", "create_skill_preview", "archive_skill_preview"}:
+        return "apply"
+    if raw in {"defer", "deferred"} or reason.startswith("target_uncertain"):
+        return "defer"
+    if raw in {"skip", "skipped"}:
+        return "skip"
+    if raw == "rejected":
+        result = decision.get("result") if isinstance(decision.get("result"), dict) else {}
+        outcome = str(result.get("outcome") or "")
+        if outcome.startswith("skipped"):
+            return "skip"
+        if kind == "memory" and reason.startswith("dry_run_would_execute"):
+            return "apply"
+        return "block"
+    if raw in {"blocked", "block"}:
+        return "block"
+    return "skip"
+
+
+def _action_summary_from_result(result: dict[str, Any], step_decisions: dict[str, Any]) -> dict[str, int]:
+    provided = result.get("action_summary") if isinstance(result.get("action_summary"), dict) else {}
+    counts = {"apply": int(provided.get("apply") or 0), "defer": int(provided.get("defer") or 0), "skip": int(provided.get("skip") or 0), "block": int(provided.get("block") or 0)}
+    if any(counts.values()):
+        return counts
+    for kind in ("skill", "memory"):
+        step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
+        for item in step.get("decisions") or []:
+            if not isinstance(item, dict):
+                continue
+            action = _semantic_action_from_runner_decision(item, kind=kind)
+            counts[action] = counts.get(action, 0) + 1
+    return counts
+
+
 def _render_improve_summary(result: dict[str, Any]) -> str:
     summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
     step_decisions = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
@@ -803,6 +879,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     editor_prompt = prompt_sources.get("editor") if isinstance(prompt_sources.get("editor"), dict) else {}
     evidence_strength_counts = planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {}
     evidence_by_kind = evidence_summary.get("evidence_by_kind") if isinstance(evidence_summary.get("evidence_by_kind"), dict) else {}
+    action_summary = _action_summary_from_result(result, step_decisions)
     inventory_count = int(evidence_summary.get("inventory_evidence_count") or 0)
     skill_inventory_count = int(evidence_by_kind.get("skill_inventory_candidate") or 0)
     memory_inventory_count = int(evidence_by_kind.get("memory_inventory_candidate") or 0)
@@ -857,6 +934,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- rejected: {int(curator.get('rejected_count') or 0)}",
         "Hook evidence:",
         f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}, inventory: {inventory_count} (skill {skill_inventory_count}, memory {memory_inventory_count})",
+        "Action summary:",
+        f"- Would apply: {int(action_summary.get('apply') or 0)}, Deferred: {int(action_summary.get('defer') or 0)}, Skipped: {int(action_summary.get('skip') or 0)}, Blocked: {int(action_summary.get('block') or 0)}",
         "Skill planner:",
         f"- source: {planner.get('planner_source') or 'unknown'}, status: {planner.get('status') or skill_step.get('status') or 'unknown'}",
         f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for editor: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}",

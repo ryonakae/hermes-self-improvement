@@ -3,6 +3,7 @@ from hermes_self_improvement.conversation_memory import (
     build_conversation_memory_windows,
     make_conversation_memory_gap_candidate,
     normalize_memory_gap_payload,
+    reconcile_memory_gap_payload_with_existing_memories,
 )
 
 
@@ -99,3 +100,58 @@ def test_conversation_memory_gap_add_applies_with_memory_tool():
         "target": "user",
         "content": "Ryo prefers simple apply/defer/skip/block decisions for self-improvement.",
     }]
+
+
+def test_reconcile_memory_gap_payload_skips_near_duplicate_add():
+    payload = {"candidates": [{
+        "candidate_id": "m1",
+        "target": "memory",
+        "action": "add",
+        "candidate_fact": "Hermes runtime root is ~/.hermes.",
+        "confidence": "high",
+    }]}
+
+    out = reconcile_memory_gap_payload_with_existing_memories(
+        payload,
+        existing_memories=[{"target": "memory", "text": "Hermes runtime root is ~/.hermes."}],
+    )
+
+    assert out["candidates"][0]["action"] == "skip"
+    assert out["candidates"][0]["relation_to_existing"] == "duplicate_existing_memory"
+
+
+def test_reconcile_memory_gap_payload_replaces_related_stale_memory_instead_of_adding():
+    payload = {"candidates": [{
+        "candidate_id": "m1",
+        "target": "memory",
+        "action": "add",
+        "candidate_fact": "Hermes runtime root is ~/.hermes.",
+        "confidence": "high",
+    }]}
+
+    out = reconcile_memory_gap_payload_with_existing_memories(
+        payload,
+        existing_memories=[{"target": "memory", "text": "Hermes runtime root is /opt/data."}],
+    )
+
+    candidate = out["candidates"][0]
+    assert candidate["action"] == "replace"
+    assert candidate["old_text"] == "Hermes runtime root is /opt/data."
+    assert candidate["relation_to_existing"] == "updates_existing_memory"
+
+
+def test_reconcile_memory_gap_payload_defers_add_that_claims_existing_relation_without_old_text():
+    payload = {"candidates": [{
+        "candidate_id": "m1",
+        "target": "memory",
+        "action": "add",
+        "candidate_fact": "Hermes TUI footer keeps compact metadata inline.",
+        "confidence": "high",
+        "relation_to_existing": "extends existing herm-tui footer guidance",
+    }]}
+
+    out = reconcile_memory_gap_payload_with_existing_memories(payload, existing_memories=[])
+
+    candidate = out["candidates"][0]
+    assert candidate["action"] == "defer"
+    assert candidate["defer_reason"] == "add_claims_existing_memory_without_old_text"

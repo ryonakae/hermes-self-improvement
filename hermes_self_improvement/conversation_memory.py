@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+from difflib import SequenceMatcher
 from typing import Any
 
 from .evidence import build_context_window
@@ -89,6 +91,91 @@ def normalize_memory_gap_payload(payload: Any) -> dict[str, Any]:
     return {"candidates": candidates}
 
 
+def _memory_entry_text(entry: Any) -> str:
+    if isinstance(entry, dict):
+        return str(entry.get("text") or entry.get("content") or entry.get("old_text") or entry.get("summary") or "")
+    return str(entry or "")
+
+
+def _memory_entry_target(entry: Any) -> str:
+    if isinstance(entry, dict):
+        target = str(entry.get("target") or entry.get("store") or "").strip()
+        if target in ALLOWED_TARGETS:
+            return target
+    return ""
+
+
+def _memory_tokens(text: str) -> list[str]:
+    lowered = str(text or "").lower()
+    tokens = re.findall(r"[a-z0-9_./~:-]+|[ぁ-んァ-ン一-龥]+", lowered)
+    stop = {"is", "the", "a", "an", "to", "for", "of", "and", "or", "in", "on", "は", "が", "を", "に", "で", "と"}
+    return [token.strip(".。 ,、") for token in tokens if token.strip(".。 ,、") and token not in stop]
+
+
+def _memory_similarity(left: str, right: str) -> float:
+    left_norm = " ".join(_memory_tokens(left))
+    right_norm = " ".join(_memory_tokens(right))
+    if not left_norm or not right_norm:
+        return 0.0
+    left_tokens = set(left_norm.split())
+    right_tokens = set(right_norm.split())
+    overlap = len(left_tokens & right_tokens) / max(1, min(len(left_tokens), len(right_tokens)))
+    ratio = SequenceMatcher(None, left_norm, right_norm).ratio()
+    return max(overlap, ratio)
+
+
+def _memory_topic_overlap(left: str, right: str) -> bool:
+    left_tokens = _memory_tokens(left)
+    right_tokens = set(_memory_tokens(right))
+    if not left_tokens or not right_tokens:
+        return False
+    anchors = [token for token in left_tokens[:5] if len(token) > 2]
+    return len([token for token in anchors if token in right_tokens]) >= 2
+
+
+def reconcile_memory_gap_payload_with_existing_memories(payload: Any, *, existing_memories: list[Any] | None = None) -> dict[str, Any]:
+    normalized = normalize_memory_gap_payload(payload)
+    memories = existing_memories or []
+    missing_relations = {"", "missing", "new", "new_memory", "no_existing", "no_existing_memory"}
+    for candidate in normalized.get("candidates") or []:
+        if candidate.get("action") != "add":
+            continue
+        relation = str(candidate.get("relation_to_existing") or "").strip().lower().replace(" ", "_")
+        if relation not in missing_relations and not candidate.get("old_text"):
+            candidate["action"] = "defer"
+            candidate["defer_reason"] = "add_claims_existing_memory_without_old_text"
+            candidate["reason"] = "Candidate claims it refines or extends existing memory but did not identify old_text."
+            continue
+        fact = str(candidate.get("candidate_fact") or "")
+        target = str(candidate.get("target") or "")
+        best_entry: Any | None = None
+        best_text = ""
+        best_score = 0.0
+        for entry in memories:
+            entry_target = _memory_entry_target(entry)
+            if entry_target and entry_target != target:
+                continue
+            text = _memory_entry_text(entry)
+            score = _memory_similarity(fact, text)
+            if score > best_score:
+                best_entry = entry
+                best_text = text
+                best_score = score
+        if best_entry is None:
+            continue
+        if best_score >= 0.92:
+            candidate["action"] = "skip"
+            candidate["relation_to_existing"] = "duplicate_existing_memory"
+            candidate["reason"] = "Candidate is already covered by existing memory."
+            continue
+        if best_score >= 0.55 and _memory_topic_overlap(fact, best_text):
+            candidate["action"] = "replace"
+            candidate["old_text"] = _redact_text(best_text, max_chars=260)
+            candidate["relation_to_existing"] = "updates_existing_memory"
+            candidate["reason"] = "Candidate appears to update a related existing memory."
+    return normalized
+
+
 def make_conversation_memory_gap_candidate(
     *,
     candidate_id: str | None = None,
@@ -135,14 +222,23 @@ def make_conversation_memory_gap_candidate(
 def build_memory_gap_digest(
     windows: list[dict[str, Any]],
     *,
-    existing_memories: list[str] | None = None,
+    existing_memories: list[Any] | None = None,
     recent_candidates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    compact_memories: list[Any] = []
+    for item in (existing_memories or [])[:80]:
+        if isinstance(item, dict):
+            compact_memories.append({
+                "target": _memory_entry_target(item) or str(item.get("target") or "memory"),
+                "text": _redact_text(_memory_entry_text(item), max_chars=240),
+            })
+        else:
+            compact_memories.append(_redact_text(str(item), max_chars=240))
     return {
         "schema_name": "self_improvement_memory_gap_digest",
         "schema_version": "1.0",
         "windows": windows[:40],
-        "existing_memories": [_redact_text(str(item), max_chars=240) for item in (existing_memories or [])[:40]],
+        "existing_memories": compact_memories,
         "recent_candidates": recent_candidates or [],
     }
 

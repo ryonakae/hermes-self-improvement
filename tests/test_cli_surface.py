@@ -199,7 +199,9 @@ def test_improve_dry_run_summary_prints_next_actions(monkeypatch, tmp_path, caps
     out = capsys.readouterr().out
     assert "Self-improvement dry run" in out
     assert "Next actions:" in out
-    assert "apply" not in out
+    assert "Action summary:" in out
+    assert "Would apply" in out
+    assert "apply-low-risk" not in out
     assert "--execute" not in out
     assert "proposals_considered" not in out
     assert "step_decisions" not in out
@@ -233,6 +235,62 @@ def test_builtin_memory_paths_use_profile_memory_dir(monkeypatch, tmp_path):
         "memory": hermes_home / "memories" / "MEMORY.md",
         "user": hermes_home / "memories" / "USER.md",
     }
+
+
+def test_load_builtin_memory_entries_splits_compact_memory_files(tmp_path):
+    cli = load_cli_module()
+    memory_path = tmp_path / "MEMORY.md"
+    user_path = tmp_path / "USER.md"
+    memory_path.write_text("Hermes runtime root is ~/.hermes.\n§\nTemporary task progress should not be saved.\n", encoding="utf-8")
+    user_path.write_text("User prefers short progress updates.\n", encoding="utf-8")
+
+    entries = cli._load_builtin_memory_entries({"memory": memory_path, "user": user_path})
+
+    assert entries == [
+        {"target": "memory", "text": "Hermes runtime root is ~/.hermes."},
+        {"target": "memory", "text": "Temporary task progress should not be saved."},
+        {"target": "user", "text": "User prefers short progress updates."},
+    ]
+
+
+
+def test_run_improve_reconciles_memory_gap_adds_against_existing_memories(monkeypatch, tmp_path):
+    cli = load_cli_module()
+    memory_path = tmp_path / "MEMORY.md"
+    user_path = tmp_path / "USER.md"
+    memory_path.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
+    user_path.write_text("", encoding="utf-8")
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "memory_inventory_paths": {"memory": str(memory_path), "user": str(user_path)}}
+    captured = {}
+
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [{"event": "post_llm_call", "session_id": "s1", "user_message_preview": "Hermes root reminder"}])
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "skipped", "changed": 0, "changed_skills": [], "decisions": []})
+
+    def fake_extractor(digest, *, config=None):
+        captured["digest"] = digest
+        return {"candidates": [{
+            "candidate_id": "m1",
+            "target": "memory",
+            "action": "add",
+            "candidate_fact": "Hermes runtime root is ~/.hermes.",
+            "confidence": "high",
+        }]}
+
+    def fake_memory_step(**kwargs):
+        captured["memory_evidence"] = kwargs["evidence_pack"].get("evidence") or []
+        return {"status": "no_memory_evidence", "changed": 0, "changed_memories": [], "decisions": []}
+
+    monkeypatch.setattr(cli, "run_memory_gap_extractor", fake_extractor)
+    monkeypatch.setattr(cli, "run_memory_improvement_step", fake_memory_step)
+
+    result = cli.run_improve(config=config, dry_run=True)
+
+    assert captured["digest"]["existing_memories"] == [{"target": "memory", "text": "Hermes runtime root is ~/.hermes."}]
+    assert result["evidence_pack"]["summary"]["conversation_memory_gap_candidate_count"] == 0
+    assert not [item for item in captured["memory_evidence"] if item.get("kind") == "conversation_memory_gap_candidate"]
 
 
 
@@ -289,6 +347,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     text = cli._render_improve_summary({
         "dry_run": False,
         "summary": {"skill_changes": 2, "memory_changes": 1, "scorer_evaluator_changed": False},
+        "action_summary": {"apply": 2, "defer": 1, "skip": 1, "block": 1},
         "calibration": {"current_status": "updated", "runtime_eval_cases": {"count": 3, "status": "written"}},
         "step_decisions": {
             "summary": {"total": 4},
@@ -325,6 +384,8 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "- skill candidates: 3" in text
     assert "Hook evidence:" in text
     assert "inventory: 2 (skill 1, memory 1)" in text
+    assert "Action summary:" in text
+    assert "- Would apply: 2, Deferred: 1, Skipped: 1, Blocked: 1" in text
     assert "related lookups: completed 1" in text
     assert "private eval cases: 3 written" in text
     assert "- planner: runtime overlay hash sha256:planner-overlay" in text
