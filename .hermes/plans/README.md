@@ -4,6 +4,10 @@
 
 As of 2026-05-08, the current active implementation plan is:
 
+- `2026-05-08_110727-inventory-evidence-and-target-resolver-quality.md`
+  - **Status:** implemented.
+  - Follow-up after memory-gap reconciliation and skill target filtering. Upgrades inventory work into knowledge inventory / coverage evidence: inventory health snapshots, memory duplicate/stale-pair evidence, Hermes-created stale singleton skill evidence, repeated workflow coverage gaps, create-skill affordances, resolver 5-class normalization, target-fit/negative-fit signals, and dry-run `Knowledge inventory` / `Coverage gaps` / `Target resolution` summaries. Keeps the existing `improve` loop, official skill/memory tools, simple action semantics, and Hermes-created local mutable skill boundary.
+
 - `2026-05-08_094800-memory-tool-runtime-and-capacity.md`
   - **Status:** implemented.
   - Fixes memory mutation execution so CLI/standalone runs use the official Hermes `memory` tool with a loaded `MemoryStore`; adds built-in memory capacity recovery through bounded `replace/remove` compaction before retrying `add`; and falls back to the active external memory provider tool only when built-in memory still cannot fit the entry. External provider handling is active-provider-specific, not Hindsight-specific.

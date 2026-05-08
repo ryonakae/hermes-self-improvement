@@ -857,6 +857,11 @@ def _action_summary_from_result(result: dict[str, Any], step_decisions: dict[str
     return counts
 
 
+def _format_count_map(counts: dict[str, Any]) -> str:
+    parts = [f"{key} {int(value)}" for key, value in sorted(counts.items()) if int(value or 0)]
+    return ", ".join(parts) if parts else "none"
+
+
 def _render_improve_summary(result: dict[str, Any]) -> str:
     summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
     step_decisions = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
@@ -879,6 +884,18 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     editor_prompt = prompt_sources.get("editor") if isinstance(prompt_sources.get("editor"), dict) else {}
     evidence_strength_counts = planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {}
     evidence_by_kind = evidence_summary.get("evidence_by_kind") if isinstance(evidence_summary.get("evidence_by_kind"), dict) else {}
+    inventory_health = evidence_summary.get("inventory_health") if isinstance(evidence_summary.get("inventory_health"), dict) else {}
+    inventory_skill_health = inventory_health.get("skill_candidates") if isinstance(inventory_health.get("skill_candidates"), dict) else {}
+    inventory_memory_health = inventory_health.get("memory") if isinstance(inventory_health.get("memory"), dict) else {}
+    target_resolution_digest = result.get("target_resolution_digest") if isinstance(result.get("target_resolution_digest"), dict) else skill_step.get("target_resolution_digest") if isinstance(skill_step.get("target_resolution_digest"), dict) else {}
+    target_recommendations: dict[str, int] = {}
+    for item in target_resolution_digest.get("candidates") or []:
+        if not isinstance(item, dict):
+            continue
+        signals = item.get("target_fit_signals") if isinstance(item.get("target_fit_signals"), dict) else {}
+        rec = str(signals.get("recommendation") or "")
+        if rec:
+            target_recommendations[rec] = target_recommendations.get(rec, 0) + 1
     action_summary = _action_summary_from_result(result, step_decisions)
     inventory_count = int(evidence_summary.get("inventory_evidence_count") or 0)
     skill_inventory_count = int(evidence_by_kind.get("skill_inventory_candidate") or 0)
@@ -934,6 +951,13 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- rejected: {int(curator.get('rejected_count') or 0)}",
         "Hook evidence:",
         f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}, inventory: {inventory_count} (skill {skill_inventory_count}, memory {memory_inventory_count})",
+        "Knowledge inventory:",
+        f"- skills visible to LLM: {int(inventory_skill_health.get('llm_visible_count') or 0)}/{int(inventory_skill_health.get('raw_count') or 0)}, filtered: {_format_count_map(inventory_skill_health.get('filtered_by_reason') if isinstance(inventory_skill_health.get('filtered_by_reason'), dict) else {})}",
+        f"- memory entries: {int(inventory_memory_health.get('entry_count') or 0)}, duplicates: exact {int(inventory_memory_health.get('exact_duplicate_group_count') or 0)}, near {int(inventory_memory_health.get('near_duplicate_group_count') or 0)}, stale pairs {int(inventory_memory_health.get('stale_pair_count') or 0)}",
+        "Coverage gaps:",
+        f"- candidates: {int(evidence_summary.get('coverage_candidate_count') or 0)}",
+        "Target resolution:",
+        f"- recommendations: {_format_count_map(target_recommendations)}",
         "Action summary:",
         f"- Would apply: {int(action_summary.get('apply') or 0)}, Deferred: {int(action_summary.get('defer') or 0)}, Skipped: {int(action_summary.get('skip') or 0)}, Blocked: {int(action_summary.get('block') or 0)}",
         "Skill planner:",

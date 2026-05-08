@@ -363,7 +363,18 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
             "memory": {"decisions": [{"related_memory_lookup": {"status": "completed"}}]},
         },
         "curator_telemetry": {"available": True, "candidate_count": 3, "rejected_count": 2},
-        "evidence_pack": {"summary": {"evidence_count": 5, "ignored_count": 1, "inventory_evidence_count": 2, "evidence_by_kind": {"skill_inventory_candidate": 1, "memory_inventory_candidate": 1}}},
+        "evidence_pack": {"summary": {
+            "evidence_count": 5,
+            "ignored_count": 1,
+            "inventory_evidence_count": 2,
+            "coverage_candidate_count": 3,
+            "evidence_by_kind": {"skill_inventory_candidate": 1, "memory_inventory_candidate": 1, "knowledge_coverage_candidate": 3},
+            "inventory_health": {
+                "skill_candidates": {"raw_count": 5, "llm_visible_count": 2, "filtered_by_reason": {"non_mutable": 2, "pinned": 1}},
+                "memory": {"entry_count": 7, "near_duplicate_group_count": 1, "exact_duplicate_group_count": 1, "stale_pair_count": 1},
+            },
+        }},
+        "target_resolution_digest": {"candidates": [{"target_fit_signals": {"recommendation": "defer_unresolved"}}, {"target_fit_signals": {"recommendation": "attach_existing_skill"}}]},
         "artifact_path": "/tmp/run.json",
         "prompt_sources": {
             "planner": {"overlay_active": True, "overlay_hash": "sha256:planner-overlay", "base_hash": "sha256:planner-base"},
@@ -384,6 +395,13 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "- skill candidates: 3" in text
     assert "Hook evidence:" in text
     assert "inventory: 2 (skill 1, memory 1)" in text
+    assert "Knowledge inventory:" in text
+    assert "- skills visible to LLM: 2/5, filtered: non_mutable 2, pinned 1" in text
+    assert "- memory entries: 7, duplicates: exact 1, near 1, stale pairs 1" in text
+    assert "Coverage gaps:" in text
+    assert "- candidates: 3" in text
+    assert "Target resolution:" in text
+    assert "- recommendations: attach_existing_skill 1, defer_unresolved 1" in text
     assert "Action summary:" in text
     assert "- Would apply: 2, Deferred: 1, Skipped: 1, Blocked: 1" in text
     assert "related lookups: completed 1" in text
@@ -393,6 +411,26 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "human review" not in text.lower()
     assert "Artifact: /tmp/run.json" in text
     assert "ledger" not in text.lower()
+
+
+def test_improve_summary_reads_nested_skill_target_resolution_digest():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {},
+        "step_decisions": {
+            "skill": {
+                "target_resolution_digest": {"candidates": [
+                    {"target_fit_signals": {"recommendation": "defer_unresolved"}},
+                    {"target_fit_signals": {"recommendation": "attach_existing_skill"}},
+                ]},
+            }
+        },
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Target resolution:" in text
+    assert "- recommendations: attach_existing_skill 1, defer_unresolved 1" in text
 
 
 def test_status_summary_is_human_readable_not_json():

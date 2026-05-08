@@ -1,4 +1,8 @@
-from hermes_self_improvement.evidence import build_evidence_pack, build_unmatched_improvement_candidates
+from hermes_self_improvement.evidence import (
+    build_evidence_pack,
+    build_unmatched_improvement_candidates,
+    collect_knowledge_coverage_candidates,
+)
 from datetime import datetime, timezone
 
 
@@ -83,3 +87,33 @@ def test_build_evidence_pack_includes_unmatched_candidate_summary():
     assert pack["summary"]["unmatched_candidate_count"] >= 1
     assert "patch_tool_workflow" in pack["summary"]["unmatched_candidate_themes"]
     assert any(item["kind"] == "unmatched_improvement_candidate" for item in pack["evidence"])
+
+
+def test_collect_knowledge_coverage_candidates_emits_repeated_workflow_gap():
+    evidence = [{
+        "id": "u1",
+        "kind": "unmatched_improvement_candidate",
+        "theme": "sandbox_permission_workflow",
+        "count": 5,
+        "rationale": "Repeated sandbox permission failures",
+    }]
+
+    items = collect_knowledge_coverage_candidates(evidence, skill_candidates=[], existing_memory_entries=[])
+
+    assert items
+    assert items[0]["kind"] == "knowledge_coverage_candidate"
+    assert items[0]["coverage"]["gap_kind"] == "recurring_workflow_without_skill"
+    assert items[0]["target_resolution_hint"]["resolution_kind"] == "create_new_skill"
+
+
+def test_build_evidence_pack_includes_knowledge_coverage_candidates_for_unmatched_workflows():
+    now = datetime.now(timezone.utc)
+    events = [
+        {"event": "post_tool_call", "session_id": "s1", "tool_name": "terminal", "status": "error", "error_kind": "permission_denied", "result_preview": "Operation not permitted: ps"},
+        {"event": "post_tool_call", "session_id": "s1", "tool_name": "execute_code", "status": "warning", "error_kind": "permission_denied", "result_preview": "mkdir: Operation not permitted"},
+    ]
+
+    pack = build_evidence_pack(events, now, now, curator_telemetry={"candidates": []})
+
+    assert pack["summary"]["coverage_candidate_count"] >= 1
+    assert any(item["kind"] == "knowledge_coverage_candidate" for item in pack["evidence"])

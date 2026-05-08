@@ -117,6 +117,16 @@ def _stable_id(prefix: str, payload: Any) -> str:
     return f"{prefix}_{_sha256_text(basis)[:12]}"
 
 
+def _slug_seed(text: str, *, max_tokens: int = 5) -> str:
+    tokens = []
+    for token in "".join(ch.lower() if ch.isalnum() else " " for ch in str(text or "")).split():
+        if token and token not in tokens:
+            tokens.append(token)
+        if len(tokens) >= max_tokens:
+            break
+    return "-".join(tokens) or "workflow"
+
+
 def _clean_list(values: list[Any] | tuple[Any, ...] | None, *, max_items: int = 8, max_chars: int = 180) -> list[str]:
     out: list[str] = []
     for value in values or []:
@@ -401,6 +411,79 @@ def build_unmatched_improvement_candidates(
     return out
 
 
+def make_knowledge_coverage_candidate(
+    *,
+    gap_kind: str,
+    evidence_ids: list[str],
+    evidence_count: int,
+    workflow_boundary: str,
+    resolution_kind: str,
+    rationale: str,
+) -> dict[str, Any]:
+    coverage = {
+        "gap_kind": _redact_text(gap_kind, max_chars=80),
+        "evidence_count": int(evidence_count),
+        "representative_evidence_ids": _clean_list(evidence_ids, max_items=8, max_chars=80),
+        "workflow_boundary": _redact_text(workflow_boundary, max_chars=180),
+    }
+    if resolution_kind == "create_new_skill":
+        coverage["not_memory_because"] = "procedural recurring workflow"
+        coverage["not_existing_skill_because"] = "no Hermes-created local mutable skill matches this boundary"
+    hint = {
+        "resolution_kind": resolution_kind,
+        "requires_existing_target": resolution_kind == "attach_existing_skill",
+        "allow_create_skill": resolution_kind == "create_new_skill",
+    }
+    if resolution_kind == "create_new_skill":
+        hint["create_skill_affordance"] = {
+            "workflow_boundary": coverage["workflow_boundary"],
+            "not_memory_because": coverage.get("not_memory_because"),
+            "not_existing_skill_because": coverage.get("not_existing_skill_because"),
+            "evidence_count": int(evidence_count),
+            "representative_evidence_ids": coverage["representative_evidence_ids"],
+            "candidate_skill_name_seed": _slug_seed(workflow_boundary),
+            "disallowed_if": ["one_off", "belongs_in_memory", "duplicates_existing_skill", "would_patch_builtin_or_hub_skill"],
+        }
+    return {
+        "id": _stable_id("coverage", {"gap_kind": gap_kind, "ids": evidence_ids, "boundary": workflow_boundary}),
+        "kind": "knowledge_coverage_candidate",
+        "source": "knowledge_coverage",
+        "likely_targets": _targets(("skill", 0.8), ("memory", 0.2)) if resolution_kind == "create_new_skill" else _targets(("memory", 0.8), ("skill", 0.2)),
+        "coverage": coverage,
+        "target_resolution_hint": hint,
+        "rationale": _redact_text(rationale, max_chars=260),
+    }
+
+
+def collect_knowledge_coverage_candidates(
+    evidence: list[dict[str, Any]],
+    *,
+    skill_candidates: list[dict[str, Any]] | None = None,
+    existing_memory_entries: list[dict[str, Any]] | None = None,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    del existing_memory_entries
+    skill_names = {str(item.get("name") or "") for item in (skill_candidates or []) if isinstance(item, dict)}
+    out: list[dict[str, Any]] = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        if item.get("kind") == "unmatched_improvement_candidate" and int(item.get("count") or 0) >= 2:
+            theme = str(item.get("theme") or "recurring_workflow")
+            if theme not in skill_names:
+                out.append(make_knowledge_coverage_candidate(
+                    gap_kind="recurring_workflow_without_skill",
+                    evidence_ids=[str(item.get("id") or "")],
+                    evidence_count=int(item.get("count") or 1),
+                    workflow_boundary=theme.replace("_", " "),
+                    resolution_kind="create_new_skill",
+                    rationale=str(item.get("rationale") or "Recurring procedural workflow lacks a clear existing skill target."),
+                ))
+        if len(out) >= limit:
+            break
+    return out
+
+
 def build_cluster_evidence(findings: list[dict[str, Any]], *, candidate_names: list[str], limit: int = 10) -> list[dict[str, Any]]:
     clusters: list[dict[str, Any]] = []
     for finding in findings:
@@ -511,10 +594,12 @@ def collect_skill_inventory_candidates(curator_telemetry: dict[str, Any] | None,
     for item in candidates:
         groups.setdefault(_normalize_skill_group_key(str(item.get("name") or "")), []).append(item)
     out: list[dict[str, Any]] = []
+    grouped_names: set[str] = set()
     for _key, group in sorted(groups.items(), key=lambda entry: (-len(entry[1]), entry[0])):
         if len(group) < 2:
             continue
         names = [str(item.get("name") or "") for item in group]
+        grouped_names.update(names)
         stale_count = sum(1 for item in group if str(item.get("state") or "") == "stale")
         group_kind = "possible_stale_skill" if stale_count else "similar_skills"
         out.append(make_skill_inventory_candidate(
@@ -527,6 +612,22 @@ def collect_skill_inventory_candidates(curator_telemetry: dict[str, Any] | None,
         ))
         if len(out) >= limit:
             break
+    for item in candidates:
+        if len(out) >= limit:
+            break
+        name = str(item.get("name") or "")
+        if not name or name in grouped_names:
+            continue
+        if str(item.get("state") or "") != "stale":
+            continue
+        out.append(make_skill_inventory_candidate(
+            group_kind="stale_singleton_skill",
+            target_names=[name],
+            rationale="A stale Hermes-created mutable skill may need archive, refresh, or skip after planner review.",
+            hints=["planner may choose archive_skill, run_editor, or skip", "do not archive if active references or successor checks fail"],
+            risk="medium",
+            skills=[item],
+        ))
     return out
 
 
@@ -540,17 +641,93 @@ def _memory_entries(memory_paths: dict[str, Any]) -> list[dict[str, Any]]:
             text = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        for line in text.splitlines():
-            stripped = line.strip().lstrip("- ").strip()
-            if not stripped or stripped.startswith("#") or _looks_secret(stripped):
+        if "§" in text:
+            chunks = [chunk.strip() for chunk in text.replace("\r\n", "\n").split("§")]
+        else:
+            chunks = [line.strip() for line in text.replace("\r\n", "\n").splitlines()]
+        for chunk in chunks:
+            lines = []
+            for line in chunk.splitlines():
+                stripped = line.strip().lstrip("- ").strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                lines.append(stripped)
+            if not lines:
                 continue
-            entries.append({"target": target, "old_text": stripped, "summary": stripped, "hash": _sha256_text(stripped)[:12]})
+            entry_text = " ".join(lines)
+            if _looks_secret(entry_text):
+                continue
+            entries.append({"target": target, "old_text": entry_text, "summary": entry_text, "hash": _sha256_text(entry_text)[:12]})
     return entries
 
 
 def _memory_tokens(text: str) -> set[str]:
     normalized = "".join(ch.lower() if ch.isalnum() else " " for ch in text)
     return {token for token in normalized.split() if len(token) >= 3}
+
+
+def _memory_value_tokens(text: str) -> set[str]:
+    tokens = _memory_tokens(text)
+    return {token for token in tokens if "/" in token or "~" in token or "." in token or token.startswith(("opt", "var", "usr")) or token in {"data", "hermes"}}
+
+
+def _memory_inventory_relation(left: str, right: str) -> str | None:
+    if left == right:
+        return "semantic_duplicate"
+    left_tokens = _memory_tokens(left)
+    right_tokens = _memory_tokens(right)
+    if not left_tokens or not right_tokens:
+        return None
+    overlap = len(left_tokens & right_tokens) / max(len(left_tokens | right_tokens), 1)
+    prefix_overlap = len(set(list(left_tokens)[:4]) & right_tokens)
+    value_changed = bool(_memory_value_tokens(left) ^ _memory_value_tokens(right))
+    if value_changed and (overlap >= 0.45 or len(left_tokens & right_tokens) >= 3):
+        return "stale_fact_pair"
+    if overlap >= 0.25:
+        return "near_duplicate"
+    if prefix_overlap >= 2:
+        return "near_duplicate"
+    return None
+
+
+def _memory_inventory_group_counts(inventory_evidence: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {"exact_duplicate_group_count": 0, "near_duplicate_group_count": 0, "stale_pair_count": 0}
+    for item in inventory_evidence:
+        if not isinstance(item, dict):
+            continue
+        inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
+        kind = str(inventory.get("group_kind") or "")
+        if kind == "semantic_duplicate":
+            counts["exact_duplicate_group_count"] += 1
+        elif kind == "near_duplicate":
+            counts["near_duplicate_group_count"] += 1
+        elif kind == "stale_fact_pair":
+            counts["stale_pair_count"] += 1
+    return counts
+
+
+def build_inventory_health_snapshot(
+    *,
+    raw_skill_candidates: list[Any],
+    filtered_skill_candidate_count_by_reason: dict[str, int],
+    skill_candidates: list[dict[str, Any]],
+    memory_entries: list[dict[str, Any]],
+    inventory_evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    memory_inventory = [item for item in inventory_evidence if isinstance(item, dict) and item.get("kind") == "memory_inventory_candidate"]
+    memory_counts = _memory_inventory_group_counts(memory_inventory)
+    return {
+        "skill_candidates": {
+            "raw_count": len(raw_skill_candidates),
+            "llm_visible_count": len(skill_candidates),
+            "filtered_by_reason": dict(filtered_skill_candidate_count_by_reason),
+        },
+        "memory": {
+            "entry_count": len(memory_entries),
+            **memory_counts,
+        },
+        "inventory_evidence_count": len(inventory_evidence),
+    }
 
 
 def collect_memory_inventory_candidates(memory_paths: dict[str, Any] | None, *, limit: int = 20) -> list[dict[str, Any]]:
@@ -563,30 +740,32 @@ def collect_memory_inventory_candidates(memory_paths: dict[str, Any] | None, *, 
         if index in used:
             continue
         group = [entry]
-        tokens = _memory_tokens(str(entry.get("old_text") or ""))
+        relation_counts: Counter[str] = Counter()
         for other_index in range(index + 1, len(entries)):
             if other_index in used:
                 continue
             other = entries[other_index]
-            other_tokens = _memory_tokens(str(other.get("old_text") or ""))
-            if not tokens or not other_tokens:
-                continue
-            overlap = len(tokens & other_tokens) / max(len(tokens | other_tokens), 1)
-            exact = str(entry.get("old_text")) == str(other.get("old_text"))
-            if exact or overlap >= 0.25:
+            relation = _memory_inventory_relation(str(entry.get("old_text") or ""), str(other.get("old_text") or ""))
+            if relation:
                 group.append(other)
+                relation_counts[relation] += 1
                 used.add(other_index)
         if len(group) >= 2:
             used.add(index)
-            groups.append(group)
+            group_kind = "stale_fact_pair" if relation_counts.get("stale_fact_pair") else "semantic_duplicate" if relation_counts.get("semantic_duplicate") and len(relation_counts) == 1 else "near_duplicate"
+            groups.append({"kind": group_kind, "entries": group})
     out: list[dict[str, Any]] = []
-    for group in groups[:limit]:
-        exact = len({item.get("old_text") for item in group}) == 1
+    for group_info in groups[:limit]:
+        group = group_info["entries"]
+        group_kind = str(group_info["kind"])
+        hints = ["old_text must be specific for replace/remove", "skip if current fact cannot be determined safely"]
+        if group_kind == "stale_fact_pair":
+            hints.insert(0, "planner should consider replace/remove for stale fact pairs")
         out.append(make_memory_inventory_candidate(
-            group_kind="semantic_duplicate" if exact else "near_duplicate",
+            group_kind=group_kind,
             entries=group,
-            rationale="Memory entries appear duplicated or semantically overlapping; LLM should decide replace/remove/add through memory tool only.",
-            hints=["old_text must be specific for replace/remove", "skip if current fact cannot be determined safely"],
+            rationale="Memory entries appear duplicated, stale, or semantically overlapping; LLM should decide replace/remove/add through memory tool only.",
+            hints=hints,
             risk="medium",
         ))
     return [item for item in out if (item.get("inventory") or {}).get("entries")]
@@ -634,7 +813,16 @@ def build_evidence_pack(
     if unmatched_improvement_evidence:
         evidence.extend(unmatched_improvement_evidence)
         kind_counts["unmatched_improvement_candidate"] += len(unmatched_improvement_evidence)
+    coverage_evidence = collect_knowledge_coverage_candidates(
+        unmatched_improvement_evidence,
+        skill_candidates=skill_candidates,
+        existing_memory_entries=_memory_entries(memory_paths or {}) if isinstance(memory_paths, dict) else [],
+    )
+    if coverage_evidence:
+        evidence.extend(coverage_evidence)
+        kind_counts["knowledge_coverage_candidate"] += len(coverage_evidence)
     skill_inventory_evidence = collect_skill_inventory_candidates(curator_telemetry)
+    memory_entries = _memory_entries(memory_paths or {}) if isinstance(memory_paths, dict) else []
     memory_inventory_evidence = collect_memory_inventory_candidates(memory_paths)
     inventory_evidence = skill_inventory_evidence + memory_inventory_evidence
     if inventory_evidence:
@@ -644,6 +832,13 @@ def build_evidence_pack(
         if memory_inventory_evidence:
             kind_counts["memory_inventory_candidate"] += len(memory_inventory_evidence)
     views = _views_for_evidence(evidence)
+    inventory_health = build_inventory_health_snapshot(
+        raw_skill_candidates=raw_skill_candidates,
+        filtered_skill_candidate_count_by_reason=filtered_skill_candidate_count_by_reason,
+        skill_candidates=skill_candidates,
+        memory_entries=memory_entries,
+        inventory_evidence=inventory_evidence,
+    )
     return {
         "schema_name": SCHEMA_NAME,
         "schema_version": SCHEMA_VERSION,
@@ -656,7 +851,9 @@ def build_evidence_pack(
             "cluster_evidence_count": len(cluster_evidence),
             "unmatched_candidate_count": len(unmatched_improvement_evidence),
             "unmatched_candidate_themes": [str(item.get("theme") or "") for item in unmatched_improvement_evidence if item.get("theme")],
+            "coverage_candidate_count": len(coverage_evidence),
             "inventory_evidence_count": len(inventory_evidence),
+            "inventory_health": inventory_health,
             "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
             "filtered_partial_event_count": filtered_partial_count,
             "reclassified_tool_result_count": reclassified_count,
@@ -664,6 +861,7 @@ def build_evidence_pack(
         "evidence": evidence,
         "views": views,
         "skill_candidates": skill_candidates,
+        "inventory_health": inventory_health,
         "rejected_skill_candidates": rejected_skill_candidates,
         "curator_telemetry_summary": _curator_summary(curator_telemetry),
         "ignored": ignored,

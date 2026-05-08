@@ -75,6 +75,34 @@ def test_collect_skill_inventory_candidates_skips_non_mutable_and_pinned():
     assert collect_skill_inventory_candidates(curator) == []
 
 
+def test_collect_skill_inventory_candidates_emits_stale_singleton_candidate():
+    curator = {"candidates": [{
+        "name": "old-local-workflow",
+        "mutable": True,
+        "state": "stale",
+        "provenance": "agent_created",
+        "description": "Old local workflow notes",
+        "usage": {"last_used_days": 180, "view_count": 0},
+    }]}
+
+    items = collect_skill_inventory_candidates(curator)
+
+    assert items
+    assert items[0]["inventory"]["group_kind"] == "stale_singleton_skill"
+    assert items[0]["inventory"]["target_names"] == ["old-local-workflow"]
+
+
+def test_collect_skill_inventory_candidates_does_not_emit_external_stale_singleton():
+    curator = {"candidates": [{
+        "name": "external-skill",
+        "mutable": True,
+        "state": "stale",
+        "provenance": "external",
+    }]}
+
+    assert collect_skill_inventory_candidates(curator) == []
+
+
 def test_build_evidence_pack_includes_skill_inventory_candidates():
     since = datetime(2026, 5, 7, 0, 0, tzinfo=timezone.utc)
     until = datetime(2026, 5, 7, 1, 0, tzinfo=timezone.utc)
@@ -113,6 +141,27 @@ def test_collect_memory_inventory_candidates_redacts_and_limits_entries(tmp_path
     assert items == [] or "secret-value" not in json.dumps(items)
 
 
+def test_collect_memory_inventory_candidates_splits_section_separator_entries(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    memory.write_text("Hermes runtime root is ~/.hermes.\n§\nHermes root is /opt/data.\n", encoding="utf-8")
+
+    items = collect_memory_inventory_candidates(memory_paths={"memory": memory})
+
+    assert items
+    assert items[0]["inventory"]["group_kind"] in {"near_duplicate", "stale_fact_pair"}
+    assert len(items[0]["inventory"]["entries"]) == 2
+
+
+def test_collect_memory_inventory_candidates_marks_stale_current_fact_pairs(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    memory.write_text("Hermes runtime root is /opt/data.\n§\nHermes runtime root is ~/.hermes.\n", encoding="utf-8")
+
+    item = collect_memory_inventory_candidates(memory_paths={"memory": memory})[0]
+
+    assert item["inventory"]["group_kind"] == "stale_fact_pair"
+    assert any("replace" in hint or "stale" in hint for hint in item["inventory"]["hints"])
+
+
 def test_build_evidence_pack_includes_memory_inventory_candidates(tmp_path):
     since = datetime(2026, 5, 7, 0, 0, tzinfo=timezone.utc)
     until = datetime(2026, 5, 7, 1, 0, tzinfo=timezone.utc)
@@ -124,3 +173,28 @@ def test_build_evidence_pack_includes_memory_inventory_candidates(tmp_path):
     assert pack["summary"]["evidence_by_kind"]["memory_inventory_candidate"] == 1
     assert pack["summary"]["inventory_evidence_count"] == 1
     assert pack["evidence"][0]["id"] in pack["views"]["memory"]
+
+
+def test_build_evidence_pack_includes_inventory_health_snapshot_for_skills_and_memory(tmp_path):
+    since = datetime(2026, 5, 7, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 5, 7, 1, 0, tzinfo=timezone.utc)
+    memory = tmp_path / "MEMORY.md"
+    user = tmp_path / "USER.md"
+    memory.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
+    user.write_text("User prefers concise Japanese replies.\n", encoding="utf-8")
+    curator = {"available": True, "candidates": [
+        {"name": "local-a", "mutable": True, "state": "active", "provenance": "agent_created"},
+        {"name": "builtin", "mutable": False, "state": "active", "provenance": "builtin"},
+    ], "summary": {"candidate_count": 2}}
+
+    pack = build_evidence_pack([], since, until, curator_telemetry=curator, memory_paths={"memory": memory, "user": user})
+
+    health = pack["inventory_health"]
+    assert health["skill_candidates"]["raw_count"] == 2
+    assert health["skill_candidates"]["llm_visible_count"] == 1
+    assert health["skill_candidates"]["filtered_by_reason"]["non_mutable"] == 1
+    assert health["memory"]["entry_count"] == 2
+    assert health["memory"]["near_duplicate_group_count"] == 0
+    assert health["memory"]["exact_duplicate_group_count"] == 0
+    assert pack["summary"]["inventory_health"]["memory"]["entry_count"] == 2
+    assert "Hermes runtime root" not in json.dumps(health, ensure_ascii=False)

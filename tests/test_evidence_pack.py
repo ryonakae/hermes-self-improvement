@@ -93,7 +93,8 @@ def test_evidence_pack_carries_curator_skill_candidates_separately():
         "rejected_by_reason": {"pinned": 1, "archived": 1},
     }
     assert any(item["ignored_reason"] == "curator_redundant" for item in pack["ignored"])
-    assert pack["summary"]["evidence_count"] == 1
+    assert pack["summary"]["evidence_by_kind"]["tool_failure_evidence"] == 1
+    assert pack["summary"]["evidence_by_kind"]["skill_inventory_candidate"] == 1
 
 
 def test_evidence_pack_filters_immutable_skills_from_llm_facing_candidates():
