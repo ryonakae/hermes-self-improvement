@@ -183,6 +183,7 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     match_meta: dict[str, dict[str, str]] = {}
     evidence_resolution: dict[str, list[dict[str, Any]]] = {name: [] for name in candidate_by_name}
     unmatched: list[dict[str, Any]] = []
+    unresolved_observations: list[dict[str, Any]] = []
     by_reason: dict[str, int] = {}
     resolver_resolutions: dict[str, list[dict[str, Any]]] = {}
     raw_target_resolutions = evidence_pack.get("target_resolutions") if isinstance(evidence_pack.get("target_resolutions"), dict) else {}
@@ -206,10 +207,37 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
         evidence_resolution[matched_name].append(clean_meta)
         match_meta[matched_name] = {key: value for key, value in clean_meta.items() if key != "evidence_id"}
 
+    def record_unresolved(item: dict[str, Any], resolution: dict[str, Any]) -> None:
+        evidence_id = str(item.get("id") or resolution.get("candidate_id") or "")
+        if not evidence_id:
+            return
+        if any(row.get("evidence_id") == evidence_id for row in unresolved_observations):
+            return
+        coverage = item.get("coverage") if isinstance(item.get("coverage"), dict) else {}
+        row = {
+            "evidence_id": evidence_id,
+            "kind": item.get("kind"),
+            "theme": item.get("theme") or coverage.get("gap_kind"),
+            "count": item.get("count") or coverage.get("evidence_count"),
+            "unresolved_reason": resolution.get("unresolved_reason") or "unclear_target",
+            "suggested_boundary": resolution.get("suggested_boundary") or coverage.get("workflow_boundary"),
+            "confidence": resolution.get("confidence") or "medium",
+            "reason": resolution.get("reason"),
+            "representative_failures": item.get("representative_failures") if isinstance(item.get("representative_failures"), list) else [],
+            "context_windows": item.get("context_windows") if isinstance(item.get("context_windows"), list) else [],
+            "example": _representative_evidence(item),
+        }
+        unresolved_observations.append({key: value for key, value in row.items() if value not in (None, "", [], {})})
+
     for item in skill_evidence:
         evidence_id = str(item.get("id") or "")
         resolved_any = False
         for resolution in resolver_resolutions.get(evidence_id, []):
+            resolution_kind = str(resolution.get("resolution_kind") or "")
+            if resolution_kind == "unresolved":
+                record_unresolved(item, resolution)
+                resolved_any = True
+                continue
             if str(resolution.get("target_kind") or "skill") != "skill":
                 continue
             if str(resolution.get("decision_hint") or "") == "block":
@@ -328,6 +356,7 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
         },
         "available_skill_evidence_ids": skill_ids,
         "skill_candidates": candidate_rows,
+        "unresolved_observations": unresolved_observations[:20],
         "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
         "unmatched_evidence": {"count": len(unmatched), "by_reason": by_reason, "examples": unmatched[:10]},
         "constraints": {

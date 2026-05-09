@@ -404,6 +404,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "- recommendations: attach_existing_skill 1, defer_unresolved 1" in text
     assert "Action summary:" in text
     assert "- Would apply: 2, Deferred: 1, Skipped: 1, Blocked: 1" in text
+    assert "Would apply details:" in text
     assert "Executed:" in text
     assert "- changed: 3, valid no-op: 0, rejected: 3" in text
     assert "Rejected reasons:" in text
@@ -445,16 +446,16 @@ def test_improve_summary_lists_deferred_target_resolution_themes():
         "step_decisions": {"skill": {"target_resolution_digest": {"candidates": [
             {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "defer_unresolved"}},
             {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "defer_unresolved"}},
-            {"theme": "sandbox_permission_workflow", "target_fit_signals": {"recommendation": "create_new_skill"}},
+            {"theme": "sandbox_permission_workflow", "target_fit_signals": {"recommendation": "unresolved"}},
             {"theme": "stale_fact_pair", "target_fit_signals": {"recommendation": "memory_candidate"}},
             {"theme": "one_off_terminal_failure", "target_fit_signals": {"recommendation": "skip_noise"}},
         ]}}},
         "evidence_pack": {"summary": {}},
     })
 
-    assert "- recommendations: create_new_skill 1, defer_unresolved 2, memory_candidate 1, skip_noise 1" in text
-    assert "- deferred themes: timeout_workflow 2" in text
-    assert "- create-skill leaning: sandbox_permission_workflow 1" in text
+    assert "- recommendations: defer_unresolved 2, memory_candidate 1, skip_noise 1, unresolved 1" in text
+    assert "- unresolved themes: timeout_workflow 2" in text
+    assert "- no existing skill fit: sandbox_permission_workflow 1" in text
     assert "- memory leaning: stale_fact_pair 1" in text
     assert "- skip-noise leaning: one_off_terminal_failure 1" in text
 

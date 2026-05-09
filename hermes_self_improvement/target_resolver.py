@@ -8,7 +8,11 @@ from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_ob
 
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
 ALLOWED_DECISIONS = {"apply", "defer", "skip", "block"}
-ALLOWED_RESOLUTION_KINDS = {"attach_existing_skill", "create_new_skill", "memory_candidate", "defer_unresolved", "skip_noise"}
+ALLOWED_RESOLUTION_KINDS = {"attach_existing_skill", "memory_candidate", "unresolved", "skip_noise"}
+LEGACY_RESOLUTION_KIND_ALIASES = {
+    "create_new_skill": "unresolved",
+    "defer_unresolved": "unresolved",
+}
 
 
 def _default_resolution_kind(target_kind: str, target: str, decision_hint: str) -> str:
@@ -18,9 +22,7 @@ def _default_resolution_kind(target_kind: str, target: str, decision_hint: str) 
         return "memory_candidate"
     if target_kind == "skill" and target:
         return "attach_existing_skill"
-    if decision_hint == "defer":
-        return "defer_unresolved"
-    return "defer_unresolved"
+    return "unresolved"
 
 
 def _skill_target_block_reason(target: str, known_skill_targets: dict[str, dict[str, Any]]) -> str | None:
@@ -62,18 +64,26 @@ def normalize_target_resolver_payload(
         if decision_hint not in ALLOWED_DECISIONS:
             decision_hint = "defer"
         resolution_kind = str(raw.get("resolution_kind") or _default_resolution_kind(target_kind, target, decision_hint)).strip()
+        legacy_resolution_kind = resolution_kind
+        resolution_kind = LEGACY_RESOLUTION_KIND_ALIASES.get(resolution_kind, resolution_kind)
         if resolution_kind not in ALLOWED_RESOLUTION_KINDS:
             resolution_kind = _default_resolution_kind(target_kind, target, decision_hint)
-        if resolution_kind == "create_new_skill":
-            target_kind = "skill"
-            decision_hint = decision_hint if decision_hint in {"apply", "defer", "block"} else "defer"
-        elif resolution_kind == "memory_candidate":
+        if resolution_kind == "memory_candidate":
             target_kind = "memory"
             target = target or "memory"
-        elif resolution_kind in {"defer_unresolved", "skip_noise"}:
+        elif resolution_kind in {"unresolved", "skip_noise"}:
+            unresolved_reason = str(raw.get("unresolved_reason") or "").strip()
+            if not unresolved_reason:
+                unresolved_reason = "no_existing_skill_fit" if legacy_resolution_kind == "create_new_skill" else "unclear_target"
+            suggested_boundary = str(raw.get("suggested_boundary") or "").strip()
+            if not suggested_boundary and legacy_resolution_kind == "create_new_skill" and target:
+                suggested_boundary = target
             target_kind = "none"
             target = ""
             decision_hint = "skip" if resolution_kind == "skip_noise" else "defer"
+        else:
+            unresolved_reason = ""
+            suggested_boundary = ""
         normalized = {
             "candidate_id": candidate_id,
             "resolution_kind": resolution_kind,
@@ -84,6 +94,10 @@ def normalize_target_resolver_payload(
         }
         if raw.get("reason") is not None:
             normalized["reason"] = _redact_text(str(raw.get("reason")), max_chars=240)
+        if resolution_kind == "unresolved":
+            normalized["unresolved_reason"] = unresolved_reason or "unclear_target"
+            if suggested_boundary:
+                normalized["suggested_boundary"] = _redact_text(suggested_boundary, max_chars=120)
         if target_kind == "skill" and resolution_kind == "attach_existing_skill":
             block_reason = _skill_target_block_reason(target, known_skill_targets)
             if block_reason:
@@ -145,7 +159,7 @@ def build_target_resolution_digest(
         if not isinstance(item, dict):
             continue
         kind = str(item.get("kind") or "")
-        if kind not in {"unmatched_improvement_candidate", "tool_error_cluster_evidence", "conversation_memory_gap_candidate", "knowledge_coverage_candidate"}:
+        if kind not in {"unmatched_improvement_candidate", "tool_error_cluster_evidence", "conversation_memory_gap_candidate", "knowledge_coverage_candidate", "diagnostic_signal"}:
             continue
         row = {
             "id": str(item.get("id") or ""),
@@ -182,16 +196,18 @@ def build_target_resolution_digest(
 
 def build_target_resolver_prompt(digest: dict[str, Any]) -> str:
     return (
-        "You are resolving Hermes self-improvement targets. Return JSON only: "
+        "You are resolving Hermes self-improvement observation targets. Return JSON only: "
         "{\"resolutions\":[{\"candidate_id\":str,"
-        "\"resolution_kind\":\"attach_existing_skill|create_new_skill|memory_candidate|defer_unresolved|skip_noise\","
+        "\"resolution_kind\":\"attach_existing_skill|memory_candidate|unresolved|skip_noise\","
         "\"target_kind\":\"skill|memory|none\",\"target\":str,"
-        "\"confidence\":\"low|medium|high\",\"suggested_action\":\"apply|defer|skip|block\",\"reason\":str}]}. "
-        "Use the five choices simply: attach_existing_skill only for a listed skill with positive fit; "
-        "create_new_skill for recurring procedural workflow with boundary and no existing skill fit; "
-        "memory_candidate for durable facts, preferences, or environment details; "
-        "defer_unresolved for useful evidence with unclear target; "
-        "skip_noise for one-off, transient, or already-handled noise.\n\n"
+        "\"confidence\":\"low|medium|high\",\"suggested_action\":\"apply|defer|skip|block\","
+        "\"unresolved_reason\":\"no_existing_skill_fit|unclear_target|insufficient_context|out_of_scope\","
+        "\"suggested_boundary\":str,\"reason\":str}]}. "
+        "Your job is attachment only: attach_existing_skill only for a listed mutable skill with positive fit; "
+        "memory_candidate only for durable facts, preferences, or environment details; "
+        "unresolved when evidence may be useful but has no existing skill fit or needs planner judgment; "
+        "skip_noise for one-off, transient, or already-handled noise. "
+        "Do not decide skill creation, editing, archive, or execution actions; the planner owns mutation decisions.\n\n"
         + json.dumps(digest, ensure_ascii=False, sort_keys=True)
     )
 

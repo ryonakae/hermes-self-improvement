@@ -43,6 +43,8 @@ Side effects: official constrained tools only, followed by deterministic validat
 - Do not create a separate shelf/inventory lane. Skill/memory inventory, placement review, and coverage gaps are evidence inside the existing `improve` loop.
 - Skill mutation targets stay limited to Hermes-created local mutable skills. Built-in, hub-installed, plugin-bundled, external-dir, Hermes core, arbitrary docs/config remain out of scope.
 - New skill creation is allowed only when observations show a durable reusable workflow gap and no existing Hermes-created mutable skill fits.
+- Target resolver must not decide that a new skill should be created. Its job is to link observations to existing skills/memory when possible, or mark them as unresolved/no-existing-skill-fit for the planner. The planner owns the decision to update an existing skill, create a new skill, route to memory, defer, skip, or block.
+- `report` and `improve` should connect through diagnostic signals, not through report-authored mutation decisions. `improve --from-report <artifact>` may use report diagnostics as reference/focus context, but resolver/planner must still make fresh target/action decisions and must not execute report proposals directly.
 - Memory mutation should be less conservative for add/replace/move when evidence is clear, but secrets, private content, temporary progress, and weakly evidenced one-off facts remain blocked/deferred.
 - If built-in memory is full, try compaction/replace first; if still full, consider removal/swap of lower-value old memory; if the content is procedural, route it to skill patch/create evidence; only then use active external provider fallback when appropriate.
 - USER→MEMORY and MEMORY→USER moves should remain add-before-remove unless a newer proof establishes a safer atomic path.
@@ -57,6 +59,7 @@ Side effects: official constrained tools only, followed by deterministic validat
 - Do not remove program-owned JSON artifacts that are used for manifests, ledgers, eval cases, reports, capacity diagnostics, or deterministic validation.
 - Do not treat capacity recovery as a blind cleanup job. It is a placement decision: compress, remove/swap, move to skill, or fallback based on value and evidence.
 - Do not accept natural-language `outcome` text as proof of mutation success. It is audit text only.
+- Do not treat `improve --from-report` as replay or approval. Report diagnostics can focus planning, but they are not executable decisions and must not bypass resolver/planner/target guards.
 
 ## Desired end state
 
@@ -64,11 +67,28 @@ The flow should look like this:
 
 ```text
 program observation collector
-  -> run manifest / evidence objects / candidates / safety metadata
+  -> run manifest / evidence objects / candidates / diagnostic signals / safety metadata
   -> evidence.md / candidate briefs rendered for LLMs
 
+report command
+  -> reads the same observations and diagnostic signals
+  -> writes human-facing diagnosis and compact report artifacts
+  -> does not author executable mutation decisions
+
+improve --from-report <report-artifact>
+  -> reads report diagnostic signals as reference/focus context only
+  -> merges them into evidence pack as diagnostic_signal evidence
+  -> still runs resolver/planner normally for target/action decisions
+
+target resolver LLM
+  -> reads observation evidence plus existing mutable skill inventory
+  -> attaches evidence to existing skills when there is a positive fit
+  -> marks unmatched observations as unresolved/no-existing-skill-fit with rationale and fit signals
+  -> does not decide create-skill, patch, archive, or execute actions
+
 planner LLM
-  -> reads Markdown evidence + candidate briefs
+  -> reads Markdown evidence + candidate briefs + resolver attachments/unresolved observations
+  -> decides whether to update an existing skill, create a new skill, route to memory, defer, skip, or block
   -> writes planner_notes.md or planner_decisions.md for humans/editor context
   -> may still be normalized to program decisions through a constrained decision tool/object path, not by parsing Markdown
 
@@ -105,6 +125,284 @@ new durable fact / workflow gap / stale placement evidence
 `create_skill` should be treated as a normal `improve` capability, not an exception path. It is valid when a repeated procedural gap exists and no mutable local skill is a good fit. It must still be executed only through `skill_manage(action="create")`, and success must be proven by `created_skills` / tool trace / post-validation, not by a natural-language outcome string.
 
 ## Implementation slices
+
+### Slice 0A: Re-scope target resolver as attachment only
+
+**Objective:** Prevent the resolver from over-proposing new skills. It should connect observations to existing mutable skills or memory when there is a clear fit, otherwise pass unresolved/no-existing-skill-fit evidence to the planner. The planner remains responsible for deciding whether to update an existing skill or create a new skill.
+
+**Files:**
+- Modify: `hermes_self_improvement/target_resolver.py`
+- Modify: `hermes_self_improvement/planner.py`
+- Modify: `hermes_self_improvement/prompts.py`
+- Test: `tests/test_target_resolver.py`
+- Test: `tests/test_skill_planner.py`
+- Optional: `tests/test_cli_surface.py` if summary wording changes
+
+**Step 1: Add resolver role-boundary tests**
+
+Cover:
+
+- resolver normalization no longer emits authoritative `create_new_skill` decisions.
+- existing resolver payloads with legacy `resolution_kind="create_new_skill"` are downgraded to unresolved/no-existing-skill-fit compatibility records, not planner actions.
+- resolver may include compact fields such as `unresolved_reason="no_existing_skill_fit"`, `suggested_boundary`, `target_fit_signals`, `confidence`, and `reason`.
+- resolver may attach to an existing listed skill only when that skill is mutable and has positive fit.
+- resolver may mark `memory_candidate` only for durable fact/preference/environment-like evidence; it still must not perform memory mutation decisions.
+
+**Step 2: Update resolver prompt and schema**
+
+Replace the resolver choices with attachment-oriented choices. Prefer a compact set such as:
+
+```text
+attach_existing_skill
+memory_candidate
+unresolved
+skip_noise
+```
+
+Use a reason field for unresolved cases:
+
+```text
+no_existing_skill_fit
+unclear_target
+insufficient_context
+out_of_scope
+```
+
+Do not ask the resolver to choose `create_new_skill`, `run_editor`, `archive_skill`, or any mutation action.
+
+**Step 3: Pass unresolved observations to planner as first-class evidence**
+
+`build_skill_planner_digest(...)` should include resolver output in a form the planner can reason about:
+
+```json
+{
+  "unresolved_observations": [
+    {
+      "evidence_id": "...",
+      "theme": "patch_tool_workflow",
+      "unresolved_reason": "no_existing_skill_fit",
+      "suggested_boundary": "patch tool workflow",
+      "count": 36,
+      "representative_failures": [...],
+      "context_windows": [...]
+    }
+  ]
+}
+```
+
+Planner prompt wording should say:
+
+```text
+The resolver only attaches observations to existing targets or marks them unresolved. You own the mutation decision. If unresolved evidence shows a repeated reusable workflow with no existing mutable skill fit, you may decide create_skill; otherwise update an existing skill, route to memory, defer, skip, or block.
+```
+
+**Step 3b: Add planner create-skill decision tests**
+
+Cover:
+
+- high-confidence unresolved/no-existing-skill-fit evidence with repeated procedural failures can become a planner `create_skill` decision.
+- the same unresolved evidence does **not** become `create_skill` when recurrence is weak, evidence is one-off, the content is a durable fact better suited to memory, or an existing mutable skill has a positive fit.
+- planner decisions include enough editor context for skill creation: proposed skill name, evidence ids, change intent, why existing skills do not fit, and why the content is procedural.
+- resolver output alone is not treated as an executable decision; the planner decision is the first place where `create_skill` appears.
+
+**Step 4: Verify**
+
+```bash
+PY=${PYTHON:-.venv/bin/python}
+$PY -m pytest tests/test_target_resolver.py tests/test_skill_planner.py -q
+```
+
+Expected: PASS after implementation. Run full suite before dogfood.
+
+---
+
+### Slice 0B: Replay a dry-run artifact for mutating execution
+
+**Objective:** Make dry-run a real preview of the exact candidate set that can later be executed, not a separate run that rebuilds evidence and may make different LLM decisions.
+
+**Files:**
+- Modify: `hermes_self_improvement/cli.py`
+- Modify: `hermes_self_improvement/runner_steps.py` if orchestration needs a helper
+- Modify: run artifact schema helpers if present
+- Test: `tests/test_cli_surface.py`
+- Test: `tests/test_runner_steps.py` or a focused replay test file
+
+**Step 1: Add replay regression tests**
+
+Cover:
+
+- `improve --dry-run` artifact contains the program-owned inputs needed for replay: evidence pack path/hash, resolver output, planner digest/decisions, memory decisions, prompt source metadata, dry-run flag, and safety metadata.
+- a mutating replay command such as `improve --from-run <run-json>` or `improve --replay-run <run-json>` executes the stored eligible decisions instead of rebuilding evidence/resolver/planner decisions from fresh observations.
+- replay fails closed if the source run was not dry-run, if hashes/paths are missing, if target provenance has drifted, or if the artifact is from an incompatible schema version.
+- replay re-runs hard safety validation and post-validation; it does not blindly trust the dry-run artifact.
+- replay does not introduce a new approval queue, lane, or apply mode. It is just an execution mode for the existing `improve` artifact.
+
+**Step 2: Add CLI surface**
+
+Preferred simple interface:
+
+```bash
+bin/hermes-self-improve improve --dry-run
+bin/hermes-self-improve improve --from-run /path/to/run.json
+```
+
+`--from-run` should be valid only for `improve`, not `report` or `calibrate`.
+
+**Step 3: Implement replay loading**
+
+Keep this minimal:
+
+- load run JSON
+- verify `dry_run: true`
+- verify schema/version fields
+- verify the artifact has stored decisions and evidence references
+- re-run deterministic target guards before mutation
+- execute only decisions that were mutation-ready in the artifact
+- write a new mutating run artifact that references `source_dry_run_artifact`
+
+Do not re-call resolver/planner during replay unless a hard validation failure requires `defer` with a clear reason.
+
+**Step 4: Verify**
+
+```bash
+PY=${PYTHON:-.venv/bin/python}
+$PY -m pytest tests/test_cli_surface.py tests/test_runner_steps.py -q
+```
+
+Expected: PASS. Full suite before dogfood.
+
+---
+
+### Slice 0C: Improve dry-run summary readability
+
+**Objective:** Make Slack/CLI dry-run output explain what would happen without opening the run JSON for every check.
+
+**Files:**
+- Modify: `hermes_self_improvement/cli.py`
+- Modify: `hermes_self_improvement/tool_handlers.py` if agent-facing tool summaries share formatting
+- Test: `tests/test_cli_surface.py`
+- Test: plugin tool summary tests if present
+
+**Step 1: Add summary tests**
+
+Cover compact sections like:
+
+```text
+Would apply:
+- memory_replace: <short target/reason>
+- skill_create: <proposed name> from unresolved/no_existing_skill_fit
+
+Deferred:
+- no_existing_skill_fit: patch_tool_workflow; planner needs create/update decision
+- unclear_target: ...
+
+Blocked:
+- memory_operation_missing: 31
+- unsafe_target: ...
+```
+
+Requirements:
+
+- cap list lengths and show omitted counts.
+- do not dump raw evidence windows or large Markdown.
+- group by user-facing `Would apply / Deferred / Skipped / Blocked` buckets.
+- include reason codes and short human labels for the top few items.
+- preserve compact output for Slack/tool responses.
+
+**Step 2: Implement compact formatting helpers**
+
+Add a helper that reads existing `step_decisions` / `action_summary` and formats only the top items. Keep full details in artifacts.
+
+**Step 3: Verify**
+
+```bash
+PY=${PYTHON:-.venv/bin/python}
+$PY -m pytest tests/test_cli_surface.py tests/test_plugin_tools.py -q
+```
+
+Expected: PASS. Full suite before dogfood.
+
+---
+
+### Slice 0D: Use report artifacts as diagnostic context for improve
+
+**Objective:** Add `improve --from-report <report-artifact>` so report diagnostics can focus a new improve planning run, while keeping report as reference-only input rather than an executable proposal source.
+
+**Files:**
+- Modify: `hermes_self_improvement/cli.py`
+- Modify: `hermes_self_improvement/evidence.py` or a new small diagnostic-signal helper if report signal construction is currently embedded in report code
+- Modify: report artifact writer/parser if needed
+- Modify: `hermes_self_improvement/runner_steps.py` only if improve orchestration needs explicit report context plumbing
+- Test: `tests/test_cli_surface.py`
+- Test: report/evidence tests if present, or add a focused `tests/test_report_improve_connection.py`
+
+**Step 1: Add report artifact / diagnostic signal tests**
+
+Cover:
+
+- report JSON artifacts expose compact `diagnostic_signals` with `kind`, `theme`, `severity`, `count`, `trend` if available, `evidence_refs`, `summary`, and `suggested_attention`.
+- report Markdown remains human/LLM-facing context only and is not parsed for control state.
+- diagnostic signals do not contain mutation decisions such as `create_skill`, `run_editor`, `memory_replace`, or `archive_skill`.
+
+Example signal:
+
+```json
+{
+  "kind": "diagnostic_signal",
+  "theme": "patch_tool_workflow",
+  "severity": "medium",
+  "count": 36,
+  "evidence_refs": ["..."],
+  "summary": "patch argument and old_string failures are recurring",
+  "suggested_attention": "planner_should_consider_workflow_gap"
+}
+```
+
+**Step 2: Add `improve --from-report` CLI tests**
+
+Cover:
+
+- `improve --dry-run --from-report <report.json>` loads report diagnostics and adds them to the evidence pack as `kind="diagnostic_signal"` or a clearly named report-signal evidence kind.
+- resolver and planner still run normally; report diagnostics only affect context/focus.
+- if report contains legacy proposal-like fields, they are normalized to diagnostic signals or ignored; they are never executed directly.
+- stale, incompatible, missing, or malformed report artifacts fail closed with a clear reason.
+- `--from-report` can be combined with `--dry-run`, and the resulting run artifact records `source_report_artifact`, `source_report_hash`, and signal counts.
+- `--from-report` is distinct from `--from-run`: it replans; it does not replay decisions.
+
+**Step 3: Implement shared diagnostic signal builder**
+
+Prefer a shared builder over `improve` reading the latest report by convention:
+
+```text
+observations -> build_diagnostic_signals(...) -> diagnostic_signals
+report       -> displays/writes diagnostic_signals
+improve      -> includes diagnostic_signals in evidence pack, optionally seeded from --from-report
+```
+
+`--from-report` may read a report artifact when explicitly provided, but normal `improve` should not depend on a report having been generated.
+
+**Step 4: Wire planner/resolver context**
+
+Diagnostic signals should flow like other evidence:
+
+```text
+diagnostic_signal
+  -> resolver attaches to existing skill/memory or marks unresolved/no_existing_skill_fit
+  -> planner decides update/create/memory/defer/skip/block
+```
+
+The planner prompt should explicitly say report diagnostics are attention signals, not instructions.
+
+**Step 5: Verify**
+
+```bash
+PY=${PYTHON:-.venv/bin/python}
+$PY -m pytest tests/test_cli_surface.py tests/test_report_improve_connection.py tests/test_target_resolver.py tests/test_skill_planner.py -q
+```
+
+Adjust test filenames to the actual suite. Full suite before dogfood.
+
+---
 
 ### Slice 0: Lock the non-Markdown requirements as regression tests
 
@@ -628,16 +926,20 @@ Mitigation: keep JSON eval cases and candidate-set metadata. Add Markdown contex
 ## Files likely to change
 
 - `hermes_self_improvement/markdown_artifacts.py` — new Markdown renderer layer.
+- `hermes_self_improvement/target_resolver.py` — resolver prompt/normalization for attaching observations to existing skills/memory or marking unresolved; it must not decide new skill creation.
+- `hermes_self_improvement/planner.py` — planner call plumbing if Markdown context is passed through prompt rendering, plus unresolved/no-existing-skill-fit evidence in planner digest so planner owns create-skill decisions.
 - `hermes_self_improvement/prompts.py` — planner/editor prompt wording and rendered context.
-- `hermes_self_improvement/planner.py` — planner call plumbing if Markdown context is passed through prompt rendering.
 - `hermes_self_improvement/runner_steps.py` — editor task construction, memory capacity context, summaries.
 - `hermes_self_improvement/mutation_backend.py` — editor prompt composition and result validation against task/tool trace.
 - `hermes_self_improvement/mutation_policy.py` — only if memory placement/capacity policy helpers need small refactor.
 - `hermes_self_improvement/calibration.py` — calibration context rendering.
 - `hermes_self_improvement/prompt_gepa_adapter.py` — GEPA input descriptions/context fields.
-- `hermes_self_improvement/cli.py` — compact summary paths/labels.
+- `hermes_self_improvement/cli.py` — compact summary paths/labels, dry-run artifact replay CLI option, and explicit `improve --from-report` report-context input.
+- `hermes_self_improvement/tool_handlers.py` — shared compact dry-run summary formatting if agent-facing tool output uses the same buckets.
+- `hermes_self_improvement/evidence.py` or a small diagnostic-signal helper — shared report/improve diagnostic signal construction.
+- Report artifact writer/parser modules if diagnostics are not currently saved as structured JSON.
 - `tests/test_markdown_artifacts.py` — new renderer tests.
-- Existing tests under `tests/test_skill_planner.py`, `tests/test_runner_steps.py`, `tests/test_memory_inventory_planner.py`, calibration/GEPA tests, mutation backend tests.
+- Existing tests under `tests/test_skill_planner.py`, `tests/test_target_resolver.py`, `tests/test_cli_surface.py`, `tests/test_plugin_tools.py`, `tests/test_runner_steps.py`, `tests/test_memory_inventory_planner.py`, report/evidence connection tests, calibration/GEPA tests, mutation backend tests.
 
 ## Validation checklist
 
@@ -654,8 +956,9 @@ bin/hermes-self-improve status
 Dogfood after tests pass:
 
 ```bash
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve improve
+bin/hermes-self-improve report --since-hours 24 --json
+bin/hermes-self-improve improve --dry-run --from-report /path/to/report.json
+bin/hermes-self-improve improve --from-run /path/to/dry-run.json
 bin/hermes-self-improve calibrate --dry-run
 ```
 
@@ -665,13 +968,17 @@ Do not promote calibrate candidate sets in this plan unless Ryo explicitly asks 
 
 Use small commits by slice:
 
-1. `test: capture self-improvement placement regressions`
-2. `feat: add markdown self-improvement renderers`
-3. `feat: render planner context as markdown`
-4. `feat: use markdown briefs for editor tasks`
-5. `fix: validate mutation results by tool evidence`
-6. `feat: render memory placement context as markdown`
-7. `feat: render calibration context as markdown`
-8. `docs: record llm-centered self-improvement handoff plan` or combine docs with the last code slice if small
+1. `test: capture resolver role-boundary regressions`
+2. `feat: replay dry-run improvement artifacts`
+3. `feat: summarize dry-run actions by bucket`
+4. `feat: use report diagnostics as improve context`
+5. `test: capture self-improvement placement regressions`
+6. `feat: add markdown self-improvement renderers`
+7. `feat: render planner context as markdown`
+8. `feat: use markdown briefs for editor tasks`
+9. `fix: validate mutation results by tool evidence`
+10. `feat: render memory placement context as markdown`
+11. `feat: render calibration context as markdown`
+12. `docs: record llm-centered self-improvement handoff plan` or combine docs with the last code slice if small
 
 If a slice produces a meaningful passing state, commit and push before continuing.

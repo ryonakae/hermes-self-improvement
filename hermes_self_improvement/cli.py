@@ -24,11 +24,19 @@ from .conversation_memory import (
     run_memory_gap_extractor,
 )
 from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
+from .diagnostic_signals import build_diagnostic_signals, normalize_report_diagnostic_signals
 from .evidence import build_evidence_pack, write_evidence_pack
 from .episodes import record_run_episodes
-from .mutation_backend import mutation_backend_status
+from .mutation_backend import build_mutation_backend, mutation_backend_status
+from .mutation_agent import run_skill_agent_task
 from .next_actions import render_next_actions
-from .runner_steps import run_memory_improvement_step, run_skill_improvement_step
+from .runner_steps import (
+    _execute_memory_context,
+    _execute_memory_move_operation,
+    _external_memory_provider,
+    run_memory_improvement_step,
+    run_skill_improvement_step,
+)
 from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
 from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
 from .recovery_engine import memory_rollback_status
@@ -411,21 +419,33 @@ def run_pipeline(
         llm_scorer_func=_call_llm_scorer,
     )
     operational_reports = _build_operational_report_payloads(config)
+    diagnostic_signals = build_diagnostic_signals(proposals=scored, findings=result.findings)
     report = render_report(result, scored, operational_reports=operational_reports)
     out = {
         "summary": result.summary,
         "findings": result.findings,
         "proposals": scored,
+        "diagnostic_signals": diagnostic_signals,
         "operational_reports": operational_reports,
         "report": report,
     }
     if write_report:
         report_dir = _report_dir(config)
         report_dir.mkdir(parents=True, exist_ok=True)
-        date_name = until.astimezone().strftime("%Y-%m-%d.md")
+        date_stem = until.astimezone().strftime("%Y-%m-%d")
+        date_name = f"{date_stem}.md"
+        report_json = {key: value for key, value in out.items() if key != "report"}
+        json_text = json.dumps(report_json, ensure_ascii=False, indent=2, sort_keys=True, default=str)
         (report_dir / date_name).write_text(report, encoding="utf-8")
         (report_dir / "latest.md").write_text(report, encoding="utf-8")
-        out["report_paths"] = [str(report_dir / date_name), str(report_dir / "latest.md")]
+        (report_dir / f"{date_stem}.json").write_text(json_text, encoding="utf-8")
+        (report_dir / "latest.json").write_text(json_text, encoding="utf-8")
+        out["report_paths"] = [
+            str(report_dir / date_name),
+            str(report_dir / "latest.md"),
+            str(report_dir / f"{date_stem}.json"),
+            str(report_dir / "latest.json"),
+        ]
     return out
 
 
@@ -458,6 +478,67 @@ def _summarize_runner_decisions(proposals: list[dict[str, Any]]) -> dict[str, in
         else:
             summary["out_of_scope"] += 1
     return summary
+
+
+def _load_report_context(path: str | None) -> dict[str, Any] | None:
+    if not path:
+        return None
+    report_path = Path(path).expanduser()
+    if not report_path.exists() or not report_path.is_file():
+        raise SystemExit(f"report artifact not found: {report_path}")
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise SystemExit(f"report artifact must be JSON: {report_path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise SystemExit("report artifact must be a JSON object")
+    signals = normalize_report_diagnostic_signals(payload)
+    return {
+        "artifact_path": str(report_path),
+        "artifact_hash": _sha256_text(report_path.read_text(encoding="utf-8")),
+        "diagnostic_signal_count": len(signals),
+        "diagnostic_signals": signals,
+    }
+
+
+def _attach_diagnostic_signals_to_evidence_pack(evidence_pack: dict[str, Any], signals: list[dict[str, Any]]) -> dict[str, Any]:
+    evidence = list(evidence_pack.get("evidence") or []) if isinstance(evidence_pack.get("evidence"), list) else []
+    signal_evidence = []
+    for index, signal in enumerate(signals):
+        if not isinstance(signal, dict):
+            continue
+        item = {
+            "id": str(signal.get("id") or f"report-signal-{index + 1}"),
+            "kind": "diagnostic_signal",
+            "theme": signal.get("theme"),
+            "count": signal.get("count"),
+            "severity": signal.get("severity"),
+            "rationale": signal.get("summary"),
+            "summary": signal.get("summary"),
+            "suggested_attention": signal.get("suggested_attention"),
+            "evidence_refs": signal.get("evidence_refs") if isinstance(signal.get("evidence_refs"), list) else [],
+            "likely_targets": [{"target": "skill", "weight": 0.6}],
+            "source": "report",
+        }
+        signal_evidence.append({key: value for key, value in item.items() if value not in (None, "", [], {})})
+    if not signal_evidence:
+        return evidence_pack
+    views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
+    skill_view = [*(views.get("skill") or []), *[item["id"] for item in signal_evidence if item.get("id")]]
+    summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
+    evidence_by_kind = summary.get("evidence_by_kind") if isinstance(summary.get("evidence_by_kind"), dict) else {}
+    evidence_by_kind = {**evidence_by_kind, "diagnostic_signal": int(evidence_by_kind.get("diagnostic_signal") or 0) + len(signal_evidence)}
+    return {
+        **evidence_pack,
+        "evidence": [*evidence, *signal_evidence],
+        "views": {**views, "skill": skill_view},
+        "summary": {
+            **summary,
+            "evidence_count": int(summary.get("evidence_count") or 0) + len(signal_evidence),
+            "report_diagnostic_signal_count": len(signal_evidence),
+            "evidence_by_kind": evidence_by_kind,
+        },
+    }
 
 
 def _add_config_argument(parser: argparse.ArgumentParser) -> None:
@@ -611,6 +692,7 @@ def run_improve(
     since_hours: int = 24,
     dry_run: bool = False,
     scorer: str = "llm",
+    from_report: str | None = None,
 ) -> dict[str, Any]:
     """Run the self-improvement loop.
 
@@ -637,6 +719,11 @@ def run_improve(
         curator_telemetry=curator_telemetry,
         memory_paths=_builtin_memory_paths(config),
     )
+    source_report_context = _load_report_context(from_report) if from_report else None
+    if source_report_context:
+        report_signals = source_report_context.get("diagnostic_signals") if isinstance(source_report_context.get("diagnostic_signals"), list) else []
+        if report_signals:
+            evidence_pack = _attach_diagnostic_signals_to_evidence_pack(evidence_pack, report_signals)
     existing_memories = _load_builtin_memory_entries(_builtin_memory_paths(config))
     conversation_windows = build_conversation_memory_windows(events)
     memory_gap_digest = build_memory_gap_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
@@ -729,6 +816,7 @@ def run_improve(
             "active_skill_references": evidence_pack.get("active_skill_references"),
             "curator_telemetry_summary": evidence_pack.get("curator_telemetry_summary"),
         },
+        **({"source_report": source_report_context} if source_report_context else {}),
         "step_decisions": step_decisions_payload,
         "action_summary": action_summary,
         "actionable": {
@@ -755,10 +843,99 @@ def run_improve(
         result_payload["next_actions"] = [
             {
                 "kind": "run_mutating_improve",
-                "command": "bin/hermes-self-improve improve",
-                "description": "Run self-improvement with mutation enabled by default.",
+                "command": f"bin/hermes-self-improve improve --from-run {artifact_path}",
+                "description": "Run self-improvement with mutation enabled for this dry-run artifact after rechecking hard guards.",
             }
         ]
+    _write_run_artifact(result_payload, config)
+    return result_payload
+
+
+def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[str, Any]:
+    source_path = Path(source_run_path).expanduser()
+    if not source_path.exists() or not source_path.is_file():
+        raise SystemExit(f"dry-run artifact not found: {source_path}")
+    source_text = source_path.read_text(encoding="utf-8")
+    source = json.loads(source_text)
+    if not isinstance(source, dict):
+        raise SystemExit("dry-run artifact must be a JSON object")
+    if not source.get("dry_run"):
+        raise SystemExit("--from-run requires an improve dry-run artifact")
+    steps = source.get("step_decisions") if isinstance(source.get("step_decisions"), dict) else {}
+    backend = build_mutation_backend(config)
+    external_provider = _external_memory_provider(config)
+
+    skill_source = steps.get("skill") if isinstance(steps.get("skill"), dict) else {}
+    skill_decisions = []
+    changed_skills: list[str] = []
+    for decision in skill_source.get("decisions") or []:
+        if not isinstance(decision, dict):
+            continue
+        kind = str(decision.get("decision") or "")
+        if kind not in {"run_editor_preview", "create_skill_preview"}:
+            skill_decisions.append({**decision, "decision": "rejected", "reason": "replay_not_mutation_ready", "changed": False})
+            continue
+        task = decision.get("task") if isinstance(decision.get("task"), dict) else None
+        if not task:
+            skill_decisions.append({**decision, "decision": "rejected", "reason": "replay_task_missing", "changed": False})
+            continue
+        result = run_skill_agent_task(task, config=config, backend=backend)
+        changed = bool(result.get("success") and (result.get("changed_skills") or result.get("created_skills") or result.get("deleted_skills")))
+        if changed:
+            changed_skills.extend(str(name) for name in (result.get("changed_skills") or []))
+            changed_skills.extend(str(name) for name in (result.get("created_skills") or []))
+        skill_decisions.append({**decision, "decision": "accepted" if result.get("success") else "rejected", "reason": result.get("reason") or result.get("error") or "skill_replay_completed", "changed": changed, "result": result})
+
+    memory_source = steps.get("memory") if isinstance(steps.get("memory"), dict) else {}
+    memory_decisions = []
+    changed_memory_ids: list[str] = []
+    for decision in memory_source.get("decisions") or []:
+        if not isinstance(decision, dict):
+            continue
+        if decision.get("decision") != "accepted" or decision.get("reason") != "dry_run_would_execute_memory_tool":
+            memory_decisions.append({**decision, "decision": "rejected", "reason": "replay_not_mutation_ready", "changed": False})
+            continue
+        operation = decision.get("operation") if isinstance(decision.get("operation"), dict) else {}
+        if operation.get("operation") == "memory_move":
+            result = _execute_memory_move_operation(operation, config, external_provider)
+        else:
+            context = decision.get("context") if isinstance(decision.get("context"), dict) else {}
+            result = _execute_memory_context(context, config, operation=operation, external_provider=external_provider)
+        changed = bool(result.get("success"))
+        if changed:
+            changed_memory_ids.append(str(decision.get("evidence_id") or "memory"))
+        memory_decisions.append({**decision, "decision": "accepted" if changed else "rejected", "reason": result.get("error") or "memory_replay_completed", "changed": changed, "result": result})
+
+    step_decisions_payload = {
+        **steps,
+        "skill": {**skill_source, "changed": len(set(changed_skills)), "changed_skills": sorted(set(changed_skills)), "decisions": skill_decisions},
+        "memory": {**memory_source, "changed": len(changed_memory_ids), "changed_memories": changed_memory_ids, "decisions": memory_decisions},
+    }
+    action_summary = _action_summary_from_result({}, step_decisions_payload)
+    run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
+    result_payload = {
+        **source,
+        "run_id": run_id,
+        "dry_run": False,
+        "execute": True,
+        "source_dry_run_artifact": str(source_path),
+        "source_dry_run_hash": _sha256_text(source_text),
+        "step_decisions": step_decisions_payload,
+        "action_summary": action_summary,
+        "skill_changes": sorted(set(changed_skills)),
+        "memory_changes": changed_memory_ids,
+        "summary": {
+            **(source.get("summary") if isinstance(source.get("summary"), dict) else {}),
+            "skill_changes": len(set(changed_skills)),
+            "memory_changes": len(changed_memory_ids),
+            "dry_run": False,
+        },
+        "next_actions": [],
+    }
+    artifact_path = _write_run_artifact(result_payload, config)
+    result_payload["artifact_path"] = str(artifact_path)
+    episode_summary = record_run_episodes(config=config, run_result=result_payload)
+    result_payload["episodes"] = episode_summary
     _write_run_artifact(result_payload, config)
     return result_payload
 
@@ -864,6 +1041,44 @@ def _format_count_map(counts: dict[str, Any]) -> str:
     return ", ".join(parts) if parts else "none"
 
 
+def _describe_decision_item(item: dict[str, Any], *, kind: str) -> str:
+    if kind == "skill":
+        target = item.get("skill") or item.get("candidate_source") or "skill"
+        detail = item.get("change_intent") or item.get("rationale") or item.get("reason") or item.get("decision") or "planned"
+        detail_text = str(detail)
+        if len(detail_text) > 80 or detail_text.count(" ") > 5:
+            detail_text = str(item.get("decision") or "planned")
+        return f"{target}: {detail_text}"
+    operation = item.get("operation") if isinstance(item.get("operation"), dict) else {}
+    target = operation.get("target") or item.get("evidence_id") or "memory"
+    op = operation.get("operation") or item.get("reason") or item.get("decision") or "memory"
+    return f"{op}: {target}"
+
+
+def _action_bucket_lines(step_decisions: dict[str, Any], *, limit: int = 3) -> list[str]:
+    buckets: dict[str, list[str]] = {"apply": [], "defer": [], "skip": [], "block": []}
+    for kind in ("skill", "memory"):
+        step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
+        for item in step.get("decisions") or []:
+            if not isinstance(item, dict):
+                continue
+            action = _semantic_action_from_runner_decision(item, kind=kind)
+            buckets.setdefault(action, []).append(_describe_decision_item(item, kind=kind))
+    labels = {"apply": "Would apply", "defer": "Deferred", "skip": "Skipped", "block": "Blocked"}
+    lines: list[str] = []
+    for bucket in ("apply", "defer", "skip", "block"):
+        items = buckets.get(bucket) or []
+        if not items:
+            continue
+        lines.append(f"{labels[bucket]} details:")
+        for item in items[:limit]:
+            lines.append(f"- {item}")
+        omitted = len(items) - limit
+        if omitted > 0:
+            lines.append(f"- ... {omitted} more")
+    return lines
+
+
 def _top_count_map(counts: dict[str, int], *, limit: int = 3) -> dict[str, int]:
     return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit])
 
@@ -871,7 +1086,7 @@ def _top_count_map(counts: dict[str, int], *, limit: int = 3) -> dict[str, int]:
 def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[str]:
     buckets = {
         "defer_unresolved": {},
-        "create_new_skill": {},
+        "unresolved": {},
         "memory_candidate": {},
         "skip_noise": {},
     }
@@ -880,15 +1095,17 @@ def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[s
             continue
         signals = item.get("target_fit_signals") if isinstance(item.get("target_fit_signals"), dict) else {}
         rec = str(signals.get("recommendation") or "")
+        if rec == "create_new_skill":
+            rec = "unresolved"
         if rec not in buckets:
             continue
         theme = str(item.get("theme") or ((item.get("coverage") or {}).get("gap_kind") if isinstance(item.get("coverage"), dict) else "") or item.get("kind") or "unknown")
         buckets[rec][theme] = buckets[rec].get(theme, 0) + 1
     lines = []
     if buckets["defer_unresolved"]:
-        lines.append(f"- deferred themes: {_format_count_map(_top_count_map(buckets['defer_unresolved']))}")
-    if buckets["create_new_skill"]:
-        lines.append(f"- create-skill leaning: {_format_count_map(_top_count_map(buckets['create_new_skill']))}")
+        lines.append(f"- unresolved themes: {_format_count_map(_top_count_map(buckets['defer_unresolved']))}")
+    if buckets["unresolved"]:
+        lines.append(f"- no existing skill fit: {_format_count_map(_top_count_map(buckets['unresolved']))}")
     if buckets["memory_candidate"]:
         lines.append(f"- memory leaning: {_format_count_map(_top_count_map(buckets['memory_candidate']))}")
     if buckets["skip_noise"]:
@@ -902,6 +1119,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     decision_summary = step_decisions.get("summary") if isinstance(step_decisions.get("summary"), dict) else {}
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
     evidence_pack = result.get("evidence_pack") if isinstance(result.get("evidence_pack"), dict) else {}
+    source_report = result.get("source_report") if isinstance(result.get("source_report"), dict) else {}
     evidence_summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
     skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
     planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
@@ -929,6 +1147,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
             continue
         signals = item.get("target_fit_signals") if isinstance(item.get("target_fit_signals"), dict) else {}
         rec = str(signals.get("recommendation") or "")
+        if rec == "create_new_skill":
+            rec = "unresolved"
         if rec:
             target_recommendations[rec] = target_recommendations.get(rec, 0) + 1
     action_summary = _action_summary_from_result(result, step_decisions)
@@ -1043,10 +1263,19 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Evidence/proposals:",
         f"- considered {int(decision_summary.get('total') or 0)} proposal signals",
     ]
+    if source_report:
+        lines.extend([
+            "Report context:",
+            f"- reference-only: {source_report.get('artifact_path')}, signals {int(source_report.get('diagnostic_signal_count') or 0)}",
+        ])
     target_resolution_lines = _target_resolution_summary_lines(target_resolution_candidates)
+    action_bucket_lines = _action_bucket_lines(step_decisions)
     if target_resolution_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = target_resolution_lines
+    if action_bucket_lines:
+        insert_at = lines.index("Skill planner:")
+        lines[insert_at:insert_at] = action_bucket_lines
     if not result.get("dry_run"):
         insert_at = lines.index("Skill planner:")
         executed_lines = [
@@ -1121,6 +1350,8 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_improve.add_argument("--since-hours", type=int, default=24)
     p_improve.add_argument("--scorer", choices=["heuristic", "llm"], default="llm")
     p_improve.add_argument("--dry-run", action="store_true", help="Preview without mutation")
+    p_improve.add_argument("--from-report", default=None, help="Use a report JSON artifact as reference-only diagnostic context")
+    p_improve.add_argument("--from-run", default=None, help="Execute a previous dry-run artifact instead of replanning")
     p_improve.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_improve)
     p_improve.set_defaults(func=_handle_cli)
@@ -1172,12 +1403,23 @@ def _handle_cli(args: argparse.Namespace) -> None:
         return
 
     if cmd == "improve":
-        payload = run_improve(
-            config=config,
-            since_hours=int(getattr(args, "since_hours", 24)),
-            dry_run=bool(getattr(args, "dry_run", False)),
-            scorer=str(getattr(args, "scorer", "llm")),
-        )
+        from_run = getattr(args, "from_run", None)
+        if from_run and bool(getattr(args, "dry_run", False)):
+            raise SystemExit("--from-run cannot be combined with --dry-run")
+        if from_run and getattr(args, "from_report", None):
+            raise SystemExit("--from-run cannot be combined with --from-report")
+        if from_run:
+            payload = run_replay_improve(config=config, source_run_path=str(from_run))
+        else:
+            improve_kwargs: dict[str, Any] = {
+                "config": config,
+                "since_hours": int(getattr(args, "since_hours", 24)),
+                "dry_run": bool(getattr(args, "dry_run", False)),
+                "scorer": str(getattr(args, "scorer", "llm")),
+            }
+            if getattr(args, "from_report", None):
+                improve_kwargs["from_report"] = getattr(args, "from_report")
+            payload = run_improve(**improve_kwargs)
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
         else:
