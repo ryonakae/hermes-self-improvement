@@ -69,6 +69,30 @@ def _format_json_section(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str, indent=2)
 
 
+def _clip(value: Any, *, max_chars: int = 220) -> str:
+    text = str(value or "")
+    return text if len(text) <= max_chars else text[:max_chars] + f"...<truncated {len(text) - max_chars} chars>"
+
+
+def _render_knowledge_maintenance_section(digest: dict[str, Any]) -> str:
+    maintenance = digest.get("knowledge_maintenance") if isinstance(digest.get("knowledge_maintenance"), dict) else {}
+    candidates = [item for item in maintenance.get("maintenance_candidates") or [] if isinstance(item, dict)]
+    if not candidates:
+        return "## Knowledge maintenance candidates\n- n/a\n"
+    lines = [
+        "## Knowledge maintenance candidates",
+        "These are unresolved procedural workflow gaps. For every item in this section, return one explicit decision: create_skill, patch_skill, merge_skills, archive_skill, skip, or defer. Do not answer only for existing skill_candidates when maintenance candidates are present. If no editable skill fits and evidence_count is recurring/durable, create_skill is allowed unless it duplicates a reference skill or violates hard boundaries.",
+    ]
+    for item in candidates[:20]:
+        affordance = item.get("maintenance_affordance") if isinstance(item.get("maintenance_affordance"), dict) else {}
+        lines.extend([
+            f"- evidence_id={item.get('evidence_id')}; boundary={_clip(affordance.get('workflow_boundary') or item.get('theme'), max_chars=140)}; count={item.get('count')}; create_skill_name_seed={_clip(affordance.get('create_skill_name_seed'), max_chars=120)}; possible_actions={_clip(affordance.get('possible_actions'), max_chars=220)}",
+        ])
+    if len(candidates) > 20:
+        lines.append(f"- omitted maintenance candidates: {len(candidates) - 20}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _overlay_addendum(overlay: dict[str, Any] | None, key: str = "system_addendum") -> str:
     if not isinstance(overlay, dict):
         return ""
@@ -159,6 +183,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
             candidate_sections.append(render_candidate_markdown(candidate, evidence_by_id, max_evidence=4))
     markdown_context = "\n".join([
         render_evidence_markdown(digest, max_items=20),
+        _render_knowledge_maintenance_section(digest),
         "## Planner candidate briefs",
         *(candidate_sections or ["- n/a\n"]),
         "## Program-owned digest summary",

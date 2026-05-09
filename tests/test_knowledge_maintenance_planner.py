@@ -1,5 +1,6 @@
 from hermes_self_improvement.evidence import make_knowledge_coverage_candidate
 from hermes_self_improvement.planner import build_skill_planner_digest, run_skill_planner
+from hermes_self_improvement.prompts import render_planner_messages
 from hermes_self_improvement.runner_steps import run_skill_improvement_step
 
 
@@ -39,6 +40,34 @@ def test_planner_digest_exposes_knowledge_maintenance_inventory_without_mutating
     assert maintenance["reference_skills"][0]["mutation_allowed"] is False
     assert maintenance["maintenance_candidates"][0]["maintenance_affordance"]["workflow_boundary"] == "patch tool workflow"
     assert {row["name"] for row in digest["skill_candidates"]} == {"local-patch-workflow"}
+
+
+
+def test_planner_prompt_exposes_knowledge_maintenance_candidates():
+    candidate = make_knowledge_coverage_candidate(
+        gap_kind="recurring_workflow_without_skill",
+        evidence_ids=["unmatched_patch"],
+        evidence_count=30,
+        workflow_boundary="patch tool workflow",
+        resolution_kind="unresolved",
+        rationale="Repeated patch failures lack a suitable local skill.",
+    )
+    pack = {
+        "summary": {"event_count": 30, "evidence_count": 1, "ignored_count": 0},
+        "views": {"skill": [candidate["id"]]},
+        "evidence": [candidate],
+        "skill_candidates": [{"name": "unrelated-skill", "mutable": True, "state": "active", "provenance": "agent_created"}],
+    }
+
+    rendered = render_planner_messages(digest=build_skill_planner_digest(pack))
+    user_content = rendered["messages"][1]["content"]
+
+    assert "## Knowledge maintenance candidates" in user_content
+    assert "For every item in this section" in user_content
+    assert "patch tool workflow" in user_content
+    assert "patch-tool-workflow" in user_content
+    assert candidate["id"] in user_content
+    assert "create_skill" in user_content
 
 
 def test_planner_normalizes_patch_and_merge_maintenance_decisions():

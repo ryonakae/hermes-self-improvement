@@ -50,6 +50,25 @@ def test_render_candidate_markdown_caps_evidence_and_marks_context_only():
     assert "not machine-control state" in text
 
 
+
+def test_render_candidate_markdown_includes_coverage_boundary_and_rationale():
+    candidate = {"name": "patch-tool-workflow", "evidence_ids": ["coverage_1"], "source": "planner_create_skill"}
+    evidence_by_id = {
+        "coverage_1": {
+            "id": "coverage_1",
+            "kind": "knowledge_coverage_candidate",
+            "rationale": "Observed 32 patch failures that likely need reusable patch/tool-editing workflow guidance.",
+            "coverage": {"workflow_boundary": "patch tool workflow", "evidence_count": 32},
+        }
+    }
+
+    text = render_candidate_markdown(candidate, evidence_by_id)
+
+    assert "patch tool workflow" in text
+    assert "Observed 32 patch failures" in text
+    assert "count=32" in text
+
+
 def test_render_planner_and_tool_result_markdown_are_human_context():
     planner_text = render_planner_markdown({"decisions": [{"skill": "demo", "decision": "run_editor", "reason": "clear evidence"}]})
     result_text = render_tool_result_markdown({"success": True, "created_skills": ["demo"], "outcome": "created demo skill"})

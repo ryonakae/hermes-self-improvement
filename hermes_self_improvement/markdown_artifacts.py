@@ -37,13 +37,18 @@ def _artifact_caveat() -> str:
 
 def _evidence_line(item: dict[str, Any]) -> str:
     event = item.get("event") if isinstance(item.get("event"), dict) else {}
-    preview = item.get("summary") or item.get("reason") or event.get("result_preview") or event.get("message") or ""
+    coverage = item.get("coverage") if isinstance(item.get("coverage"), dict) else {}
+    preview = item.get("summary") or item.get("reason") or item.get("rationale") or event.get("result_preview") or event.get("message") or ""
     fields = [
         f"id={_redact(item.get('id'), max_chars=80)}",
         f"kind={_redact(item.get('kind'), max_chars=80)}",
     ]
     if item.get("theme"):
         fields.append(f"theme={_redact(item.get('theme'), max_chars=80)}")
+    if coverage.get("workflow_boundary"):
+        fields.append(f"boundary={_redact(coverage.get('workflow_boundary'), max_chars=120)}")
+    if coverage.get("evidence_count") is not None:
+        fields.append(f"count={_redact(coverage.get('evidence_count'), max_chars=40)}")
     if event.get("tool_name") or item.get("tool_name"):
         fields.append(f"tool={_redact(event.get('tool_name') or item.get('tool_name'), max_chars=80)}")
     if preview:
