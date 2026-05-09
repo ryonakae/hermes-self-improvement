@@ -184,12 +184,16 @@ def reconcile_memory_gap_payload_with_existing_memories(payload: Any, *, existin
         if best_score >= 0.92:
             candidate["action"] = "skip"
             candidate["relation_to_existing"] = "duplicate_existing_memory"
+            candidate["skip_reason"] = "memory_duplicate_existing"
+            candidate["matched_existing_text"] = _redact_text(best_text, max_chars=260)
             candidate["reason"] = "Candidate is already covered by existing memory."
             continue
         if best_score >= 0.50 and _memory_topic_overlap(fact, best_text):
             if not _memory_has_conflicting_specifics(fact, best_text):
                 candidate["action"] = "skip"
                 candidate["relation_to_existing"] = "duplicate_existing_memory"
+                candidate["skip_reason"] = "memory_duplicate_existing"
+                candidate["matched_existing_text"] = _redact_text(best_text, max_chars=260)
                 candidate["reason"] = "Candidate is already covered by existing memory."
                 continue
             candidate["action"] = "replace"

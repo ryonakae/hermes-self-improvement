@@ -88,16 +88,21 @@ def test_memory_inventory_without_operation_is_deferred_not_blocked():
     assert result["decisions"] == [{
         "evidence_id": "mem-inv-1",
         "decision": "defer",
-        "reason": "memory_inventory_not_mutation_ready",
+        "reason": "memory_inventory_needs_planner",
+        "suggested_route": "memory_planner",
         "changed": False,
     }]
 
 
-def test_memory_placement_without_operation_is_skipped_not_blocked():
+def test_memory_placement_without_operation_is_deferred_for_routing():
     evidence = {
         "id": "memory-place-1",
         "kind": "memory_placement_candidate",
-        "placement": {"target": "memory", "reason": "already diagnostic context only"},
+        "placement": {
+            "target": "memory",
+            "reason": "already diagnostic context only",
+            "allowed_recommendations": ["keep", "convert_to_skill_update", "skip_noise"],
+        },
     }
 
     result = run_memory_improvement_step(evidence_pack=_pack([evidence]), config={}, mutate=False)
@@ -105,10 +110,57 @@ def test_memory_placement_without_operation_is_skipped_not_blocked():
     assert result["changed"] == 0
     assert result["decisions"] == [{
         "evidence_id": "memory-place-1",
-        "decision": "skip",
-        "reason": "memory_observation_not_mutation_ready",
+        "decision": "defer",
+        "reason": "memory_placement_needs_routing",
+        "suggested_route": "memory_planner",
         "changed": False,
     }]
+
+
+def test_memory_step_routes_workflow_candidates_to_skill_not_memory():
+    evidence = {
+        "id": "coverage-patch",
+        "kind": "knowledge_coverage_candidate",
+        "source": "knowledge_coverage",
+        "summary": "Observed 35 patch failures that likely need reusable patch/tool-editing workflow guidance.",
+        "target_resolution_hint": {
+            "resolution_kind": "unresolved",
+            "maintenance_affordance": {
+                "workflow_boundary": "patch tool workflow",
+                "possible_actions": ["patch_existing_skill", "create_skill"],
+            },
+        },
+    }
+
+    result = run_memory_improvement_step(evidence_pack=_pack([evidence]), config={}, mutate=False)
+
+    assert result["changed"] == 0
+    assert result["decisions"] == [{
+        "evidence_id": "coverage-patch",
+        "decision": "skip",
+        "reason": "not_memory_workflow_to_skill",
+        "suggested_route": "skill",
+        "workflow_boundary": "patch tool workflow",
+        "changed": False,
+    }]
+
+
+def test_raw_execute_code_output_is_diagnostic_skip_not_block():
+    evidence = {
+        "id": "raw-exec",
+        "kind": "memory_evidence",
+        "event": {
+            "tool_name": "execute_code",
+            "result_preview": '{"status": "success", "output": "action_summary {\'apply\': 4}"}',
+        },
+    }
+
+    result = run_memory_improvement_step(evidence_pack=_pack([evidence]), config={}, mutate=False)
+
+    assert result["changed"] == 0
+    assert result["decisions"][0]["decision"] == "skip"
+    assert result["decisions"][0]["reason"] == "not_memory_raw_tool_output"
+    assert result["decisions"][0]["suggested_route"] == "diagnostic"
 
 
 def test_memory_inventory_rejects_secret_old_text():

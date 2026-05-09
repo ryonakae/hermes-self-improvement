@@ -432,6 +432,57 @@ def _memory_tool_operation_for_store(*, operation: str, target: str, content: st
     return op
 
 
+def _workflow_boundary_from_memory_evidence(item: dict[str, Any]) -> str:
+    hint = item.get("target_resolution_hint") if isinstance(item.get("target_resolution_hint"), dict) else {}
+    affordance = hint.get("maintenance_affordance") if isinstance(hint.get("maintenance_affordance"), dict) else {}
+    boundary = str(affordance.get("workflow_boundary") or item.get("workflow_boundary") or item.get("theme") or "").strip()
+    if boundary:
+        return boundary.replace("_", " ")
+    summary = str(item.get("summary") or item.get("rationale") or "").lower()
+    if "patch" in summary:
+        return "patch tool workflow"
+    if "timeout" in summary:
+        return "timeout workflow"
+    if "permission" in summary or "sandbox" in summary or "safehouse" in summary:
+        return "sandbox permission workflow"
+    return ""
+
+
+def _memory_non_operation_route(item: dict[str, Any]) -> dict[str, Any]:
+    kind = str(item.get("kind") or "")
+    if kind == "memory_inventory_candidate":
+        return {
+            "decision": "defer",
+            "reason": "memory_inventory_needs_planner",
+            "suggested_route": "memory_planner",
+            "changed": False,
+        }
+    if kind == "memory_placement_candidate":
+        return {
+            "decision": "defer",
+            "reason": "memory_placement_needs_routing",
+            "suggested_route": "memory_planner",
+            "changed": False,
+        }
+    if kind in {"knowledge_coverage_candidate", "unmatched_improvement_candidate"}:
+        boundary = _workflow_boundary_from_memory_evidence(item)
+        route = {
+            "decision": "skip",
+            "reason": "not_memory_workflow_to_skill",
+            "suggested_route": "skill",
+            "changed": False,
+        }
+        if boundary:
+            route["workflow_boundary"] = boundary
+        return route
+    return {
+        "decision": "skip",
+        "reason": "not_memory_diagnostic_only",
+        "suggested_route": "diagnostic",
+        "changed": False,
+    }
+
+
 def _execute_memory_move_operation(operation: dict[str, Any], config: dict[str, Any] | None, external_provider: str | None) -> dict[str, Any]:
     source = str(operation.get("source") or "")
     target = str(operation.get("target") or "")
@@ -993,28 +1044,23 @@ def run_memory_improvement_step(
         evidence_id = str(item.get("id") or "")
         if item.get("kind") == "memory_inventory_candidate":
             if not any(decision.get("evidence_id") == evidence_id for decision in decisions):
-                decisions.append({
-                    "evidence_id": evidence_id,
-                    "decision": "defer",
-                    "reason": "memory_inventory_not_mutation_ready",
-                    "changed": False,
-                })
+                decisions.append({"evidence_id": evidence_id, **_memory_non_operation_route(item)})
             continue
         operation = _memory_operation_from_evidence(item)
         if not operation:
-            no_operation_decision = "skip" if item.get("kind") in {
-                "knowledge_coverage_candidate",
-                "memory_placement_candidate",
-                "unmatched_improvement_candidate",
-            } else "defer"
-            decisions.append({
-                "evidence_id": evidence_id,
-                "decision": no_operation_decision,
-                "reason": "memory_observation_not_mutation_ready",
-                "changed": False,
-            })
+            decisions.append({"evidence_id": evidence_id, **_memory_non_operation_route(item)})
             continue
         if operation.get("_reject_reason"):
+            if operation.get("_reject_reason") == "memory_payload_not_fact":
+                decisions.append({
+                    "evidence_id": evidence_id,
+                    "decision": "skip",
+                    "reason": "not_memory_raw_tool_output",
+                    "suggested_route": "diagnostic",
+                    "changed": False,
+                    "operation": operation,
+                })
+                continue
             decisions.append({
                 "evidence_id": evidence_id,
                 "decision": "rejected",

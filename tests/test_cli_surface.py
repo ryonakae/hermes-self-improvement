@@ -498,6 +498,27 @@ def test_improve_summary_shows_unresolved_maintenance_candidates_from_digest():
     assert "- unresolved: patch tool workflow 1, timeout workflow 1" in text
 
 
+def test_improve_summary_shows_memory_placement_routing():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {},
+        "step_decisions": {"memory": {"decisions": [
+            {"decision": "skip", "reason": "not_memory_workflow_to_skill", "workflow_boundary": "patch tool workflow", "suggested_route": "skill"},
+            {"decision": "skip", "reason": "not_memory_raw_tool_output", "suggested_route": "diagnostic"},
+            {"decision": "defer", "reason": "memory_inventory_needs_planner", "suggested_route": "memory_planner"},
+            {"decision": "skip", "reason": "memory_duplicate_existing", "suggested_route": "none"},
+        ]}},
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Memory placement:" in text
+    assert "- duplicate existing memory: 1" in text
+    assert "- routed to skill maintenance: patch tool workflow 1" in text
+    assert "- diagnostic only: raw tool output 1" in text
+    assert "- needs memory planner: 1" in text
+
+
 def test_improve_summary_shows_memory_placement_inventory_count():
     cli = load_cli_module()
     text = cli._render_improve_summary({

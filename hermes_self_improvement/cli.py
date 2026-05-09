@@ -1128,6 +1128,39 @@ def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], mainte
     return lines
 
 
+def _memory_placement_summary_lines(decisions: list[dict[str, Any]]) -> list[str]:
+    duplicate_count = 0
+    diagnostic_count = 0
+    needs_planner_count = 0
+    workflow_counts: dict[str, int] = {}
+    for item in decisions:
+        if not isinstance(item, dict):
+            continue
+        reason = str(item.get("reason") or "")
+        if reason == "memory_duplicate_existing" or item.get("skip_reason") == "memory_duplicate_existing":
+            duplicate_count += 1
+        elif reason in {"not_memory_raw_tool_output", "not_memory_diagnostic_only"} or item.get("suggested_route") == "diagnostic":
+            diagnostic_count += 1
+        elif reason in {"memory_inventory_needs_planner", "memory_placement_needs_routing"} or item.get("suggested_route") == "memory_planner":
+            needs_planner_count += 1
+        elif reason == "not_memory_workflow_to_skill" or item.get("suggested_route") == "skill":
+            boundary = str(item.get("workflow_boundary") or "workflow" or "workflow").strip()
+            workflow_counts[boundary] = workflow_counts.get(boundary, 0) + 1
+    lines: list[str] = []
+    if not any([duplicate_count, diagnostic_count, needs_planner_count, workflow_counts]):
+        return lines
+    lines.append("Memory placement:")
+    if duplicate_count:
+        lines.append(f"- duplicate existing memory: {duplicate_count}")
+    if workflow_counts:
+        lines.append(f"- routed to skill maintenance: {_format_count_map(_top_count_map(workflow_counts))}")
+    if diagnostic_count:
+        lines.append(f"- diagnostic only: raw tool output {diagnostic_count}")
+    if needs_planner_count:
+        lines.append(f"- needs memory planner: {needs_planner_count}")
+    return lines
+
+
 def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[str]:
     buckets = {
         "unresolved": {},
@@ -1311,6 +1344,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     target_resolution_lines = _target_resolution_summary_lines(target_resolution_candidates)
     maintenance_candidates = [item for item in (knowledge_maintenance.get("maintenance_candidates") or []) if isinstance(item, dict)]
     maintenance_lines = _knowledge_maintenance_summary_lines(planner_decisions, maintenance_candidates)
+    memory_placement_lines = _memory_placement_summary_lines(memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [])
     action_bucket_lines = _action_bucket_lines(step_decisions)
     if target_resolution_lines:
         insert_at = lines.index("Action summary:")
@@ -1318,6 +1352,9 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     if maintenance_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = maintenance_lines
+    if memory_placement_lines:
+        insert_at = lines.index("Action summary:")
+        lines[insert_at:insert_at] = memory_placement_lines
     if action_bucket_lines:
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = action_bucket_lines

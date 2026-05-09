@@ -139,6 +139,8 @@ def test_reconcile_memory_gap_payload_skips_semantic_duplicate_browser_guidance(
     candidate = out["candidates"][0]
     assert candidate["action"] == "skip"
     assert candidate["relation_to_existing"] == "duplicate_existing_memory"
+    assert candidate["skip_reason"] == "memory_duplicate_existing"
+    assert candidate["matched_existing_text"].startswith("Hermes browser はデフォルト")
 
 
 def test_reconcile_memory_gap_payload_replaces_related_stale_memory_instead_of_adding():

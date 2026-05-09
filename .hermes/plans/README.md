@@ -4,11 +4,17 @@
 
 As of 2026-05-09, the current active implementation plan is:
 
+- `2026-05-09_132705-memory-placement-routing.md`
+  - **Status:** implemented.
+  - Refines the memory-noise cleanup so non-memory observations are not silently collapsed into generic skips. The implementation keeps the existing `improve` loop and `apply / defer / skip / block` summary, but adds explicit placement routing metadata and compact dry-run lines: duplicate existing memory, routed to skill maintenance, diagnostic-only raw output, and memory inventory that still needs planner judgment. Raw tool/run output now becomes diagnostic skip rather than block; recurring workflow observations remain visible to skill maintenance; semantic duplicate memory candidates record no-op metadata; and unsafe/sensitive memory cases still block. Dry-run verification after implementation produced `Would apply: 0 / Deferred: 26 / Skipped: 9 / Blocked: 0`.
+
+The previous active implementation plan is:
+
 - `2026-05-09_120400-knowledge-maintenance-planner.md`
   - **Status:** implemented.
   - Extends the existing `improve` loop so the planner can choose the right knowledge-base maintenance action: patch existing skill, merge/consolidate local skills, archive stale/duplicate local skills, create a new skill only when warranted, mutate memory, skip, defer, or block. Resolver remains attachment-only (`attach_existing_skill / memory_candidate / unresolved / skip_noise`), report context remains reference-only, and user-facing action semantics remain `apply / defer / skip / block`. The implementation generalizes `create_skill_affordance` into `maintenance_affordance`, adds editable/reference/archival skill inventory context, supports planner `patch_skill` and `merge_skills` as maintenance actions mapped to the existing bounded editor path, rejects create-skill duplicates against reference skills, filters raw `execute_code`/tool output out of memory candidates, and adds compact `Knowledge maintenance` dry-run summary lines.
 
-The previous active implementation plan is:
+The earlier active implementation plan is:
 
 - `2026-05-08_235526-markdown-llm-handoffs.md`
   - **Status:** implemented with follow-up active in the 2026-05-09 knowledge maintenance plan.

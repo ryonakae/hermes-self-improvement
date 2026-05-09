@@ -562,8 +562,9 @@ def test_memory_step_rejects_raw_tool_output_as_memory_payload():
     result = run_memory_improvement_step(evidence_pack=pack, config={"memory": {"provider": "hindsight"}}, mutate=False)
 
     decision = result["decisions"][0]
-    assert decision["decision"] == "rejected"
-    assert decision["reason"] == "memory_payload_not_fact"
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "not_memory_raw_tool_output"
+    assert decision["suggested_route"] == "diagnostic"
     assert decision["operation"]["tool_name"] == "terminal"
 
 
@@ -582,8 +583,9 @@ def test_memory_step_rejects_execute_code_run_artifact_output_as_memory_payload(
     result = run_memory_improvement_step(evidence_pack=pack, config={"memory": {"provider": "hindsight"}}, mutate=False)
 
     decision = result["decisions"][0]
-    assert decision["decision"] == "rejected"
-    assert decision["reason"] == "memory_payload_not_fact"
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "not_memory_raw_tool_output"
+    assert decision["suggested_route"] == "diagnostic"
     assert decision["operation"]["tool_name"] == "execute_code"
 
 
