@@ -430,15 +430,17 @@ def make_knowledge_coverage_candidate(
         "representative_evidence_ids": _clean_list(evidence_ids, max_items=8, max_chars=80),
         "workflow_boundary": _redact_text(workflow_boundary, max_chars=180),
     }
-    if resolution_kind == "create_new_skill":
+    planner_may_create_skill = resolution_kind == "unresolved" and gap_kind == "recurring_workflow_without_skill"
+    if planner_may_create_skill:
         coverage["not_memory_because"] = "procedural recurring workflow"
         coverage["not_existing_skill_because"] = "no Hermes-created local mutable skill matches this boundary"
     hint = {
         "resolution_kind": resolution_kind,
         "requires_existing_target": resolution_kind == "attach_existing_skill",
-        "allow_create_skill": resolution_kind == "create_new_skill",
+        "allow_create_skill": planner_may_create_skill,
     }
-    if resolution_kind == "create_new_skill":
+    if planner_may_create_skill:
+        hint["unresolved_reason"] = "no_existing_skill_fit"
         hint["promotion_hints"] = {
             "recurring": int(evidence_count) >= 2,
             "has_workflow_boundary": bool(str(workflow_boundary or "").strip()),
@@ -457,7 +459,7 @@ def make_knowledge_coverage_candidate(
         "id": _stable_id("coverage", {"gap_kind": gap_kind, "ids": evidence_ids, "boundary": workflow_boundary}),
         "kind": "knowledge_coverage_candidate",
         "source": "knowledge_coverage",
-        "likely_targets": _targets(("skill", 0.8), ("memory", 0.2)) if resolution_kind == "create_new_skill" else _targets(("memory", 0.8), ("skill", 0.2)),
+        "likely_targets": _targets(("skill", 0.8), ("memory", 0.2)) if planner_may_create_skill else _targets(("memory", 0.8), ("skill", 0.2)),
         "coverage": coverage,
         "target_resolution_hint": hint,
         "rationale": _redact_text(rationale, max_chars=260),
@@ -485,7 +487,7 @@ def collect_knowledge_coverage_candidates(
                     evidence_ids=[str(item.get("id") or "")],
                     evidence_count=int(item.get("count") or 1),
                     workflow_boundary=theme.replace("_", " "),
-                    resolution_kind="create_new_skill",
+                    resolution_kind="unresolved",
                     rationale=str(item.get("rationale") or "Recurring procedural workflow lacks a clear existing skill target."),
                 ))
         if len(out) >= limit:

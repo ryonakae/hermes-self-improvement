@@ -69,7 +69,7 @@ def test_normalize_target_resolver_payload_keeps_attachment_only_resolution_kind
     assert out["resolutions"][3]["decision_hint"] == "skip"
 
 
-def test_normalize_target_resolver_payload_downgrades_legacy_create_new_skill_to_unresolved():
+def test_normalize_target_resolver_payload_blocks_removed_legacy_resolution_kind():
     payload = {"resolutions": [{
         "candidate_id": "u1",
         "resolution_kind": "create_new_skill",
@@ -86,9 +86,9 @@ def test_normalize_target_resolver_payload_downgrades_legacy_create_new_skill_to
     assert row["resolution_kind"] == "unresolved"
     assert row["target_kind"] == "none"
     assert row["target"] == ""
-    assert row["decision_hint"] == "defer"
-    assert row["unresolved_reason"] == "no_existing_skill_fit"
-    assert row["suggested_boundary"] == "patch-tool-workflow"
+    assert row["decision_hint"] == "block"
+    assert row["block_reason"] == "unsupported_resolution_kind"
+    assert row["unsupported_resolution_kind"] == "create_new_skill"
 
 
 def test_planner_digest_attaches_llm_resolved_unmatched_candidate():
@@ -185,7 +185,7 @@ def test_knowledge_coverage_candidate_includes_create_skill_boundary_affordance(
         evidence_ids=["u1"],
         evidence_count=5,
         workflow_boundary="browser profile troubleshooting",
-        resolution_kind="create_new_skill",
+        resolution_kind="unresolved",
         rationale="Repeated browser profile failures lack a suitable local skill.",
     )
 
@@ -202,7 +202,7 @@ def test_target_resolution_digest_passes_create_skill_boundary_affordance():
         evidence_ids=["u1"],
         evidence_count=5,
         workflow_boundary="browser profile troubleshooting",
-        resolution_kind="create_new_skill",
+        resolution_kind="unresolved",
         rationale="Repeated browser profile failures lack a suitable local skill.",
     )
     pack = {"views": {"skill": [candidate["id"]]}, "evidence": [candidate]}
@@ -210,7 +210,7 @@ def test_target_resolution_digest_passes_create_skill_boundary_affordance():
     digest = build_target_resolution_digest(pack, skill_candidates=[])
 
     row = digest["candidates"][0]
-    assert row["target_resolution_hint"]["resolution_kind"] == "create_new_skill"
+    assert row["target_resolution_hint"]["resolution_kind"] == "unresolved"
     assert row["target_resolution_hint"]["create_skill_affordance"]["workflow_boundary"] == "browser profile troubleshooting"
 
 
@@ -229,7 +229,7 @@ def test_target_resolution_digest_marks_single_visible_target_as_negative_fit_fo
     signals = digest["candidates"][0]["target_fit_signals"]
     assert "generic_tool_failure" in signals["negative"]
     assert "single_visible_target" in signals["negative"]
-    assert signals["recommendation"] == "defer_unresolved"
+    assert signals["recommendation"] == "unresolved"
 
 
 def test_target_resolution_digest_marks_name_overlap_as_positive_fit():
@@ -281,4 +281,4 @@ def test_target_fit_signals_keep_generic_repeated_failure_deferred_without_bound
 
     signals = digest["candidates"][0]["target_fit_signals"]
     assert "missing_workflow_boundary" in signals["negative"]
-    assert signals["recommendation"] == "defer_unresolved"
+    assert signals["recommendation"] == "unresolved"

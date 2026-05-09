@@ -374,7 +374,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
                 "memory": {"entry_count": 7, "near_duplicate_group_count": 1, "exact_duplicate_group_count": 1, "stale_pair_count": 1},
             },
         }},
-        "target_resolution_digest": {"candidates": [{"target_fit_signals": {"recommendation": "defer_unresolved"}}, {"target_fit_signals": {"recommendation": "attach_existing_skill"}}]},
+        "target_resolution_digest": {"candidates": [{"target_fit_signals": {"recommendation": "unresolved"}}, {"target_fit_signals": {"recommendation": "attach_existing_skill"}}]},
         "artifact_path": "/tmp/run.json",
         "prompt_sources": {
             "planner": {"overlay_active": True, "overlay_hash": "sha256:planner-overlay", "base_hash": "sha256:planner-base"},
@@ -401,7 +401,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "Coverage gaps:" in text
     assert "- candidates: 3" in text
     assert "Target resolution:" in text
-    assert "- recommendations: attach_existing_skill 1, defer_unresolved 1" in text
+    assert "- recommendations: attach_existing_skill 1, unresolved 1" in text
     assert "Action summary:" in text
     assert "- Would apply: 2, Deferred: 1, Skipped: 1, Blocked: 1" in text
     assert "Would apply details:" in text
@@ -426,7 +426,7 @@ def test_improve_summary_reads_nested_skill_target_resolution_digest():
         "step_decisions": {
             "skill": {
                 "target_resolution_digest": {"candidates": [
-                    {"target_fit_signals": {"recommendation": "defer_unresolved"}},
+                    {"target_fit_signals": {"recommendation": "unresolved"}},
                     {"target_fit_signals": {"recommendation": "attach_existing_skill"}},
                 ]},
             }
@@ -435,7 +435,7 @@ def test_improve_summary_reads_nested_skill_target_resolution_digest():
     })
 
     assert "Target resolution:" in text
-    assert "- recommendations: attach_existing_skill 1, defer_unresolved 1" in text
+    assert "- recommendations: attach_existing_skill 1, unresolved 1" in text
 
 
 def test_improve_summary_lists_deferred_target_resolution_themes():
@@ -444,8 +444,8 @@ def test_improve_summary_lists_deferred_target_resolution_themes():
         "dry_run": True,
         "summary": {},
         "step_decisions": {"skill": {"target_resolution_digest": {"candidates": [
-            {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "defer_unresolved"}},
-            {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "defer_unresolved"}},
+            {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "unresolved"}},
+            {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "unresolved"}},
             {"theme": "sandbox_permission_workflow", "target_fit_signals": {"recommendation": "unresolved"}},
             {"theme": "stale_fact_pair", "target_fit_signals": {"recommendation": "memory_candidate"}},
             {"theme": "one_off_terminal_failure", "target_fit_signals": {"recommendation": "skip_noise"}},
@@ -453,9 +453,8 @@ def test_improve_summary_lists_deferred_target_resolution_themes():
         "evidence_pack": {"summary": {}},
     })
 
-    assert "- recommendations: defer_unresolved 2, memory_candidate 1, skip_noise 1, unresolved 1" in text
-    assert "- unresolved themes: timeout_workflow 2" in text
-    assert "- no existing skill fit: sandbox_permission_workflow 1" in text
+    assert "- recommendations: memory_candidate 1, skip_noise 1, unresolved 3" in text
+    assert "- unresolved themes: sandbox_permission_workflow 1, timeout_workflow 2" in text
     assert "- memory leaning: stale_fact_pair 1" in text
     assert "- skip-noise leaning: one_off_terminal_failure 1" in text
 

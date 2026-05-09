@@ -103,7 +103,7 @@ def test_collect_knowledge_coverage_candidates_emits_repeated_workflow_gap():
     assert items
     assert items[0]["kind"] == "knowledge_coverage_candidate"
     assert items[0]["coverage"]["gap_kind"] == "recurring_workflow_without_skill"
-    assert items[0]["target_resolution_hint"]["resolution_kind"] == "create_new_skill"
+    assert items[0]["target_resolution_hint"]["resolution_kind"] == "unresolved"
 
 
 def test_coverage_candidate_marks_create_skill_promotion_hints():

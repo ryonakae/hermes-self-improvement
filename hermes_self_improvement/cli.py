@@ -1085,7 +1085,6 @@ def _top_count_map(counts: dict[str, int], *, limit: int = 3) -> dict[str, int]:
 
 def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[str]:
     buckets = {
-        "defer_unresolved": {},
         "unresolved": {},
         "memory_candidate": {},
         "skip_noise": {},
@@ -1095,17 +1094,13 @@ def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[s
             continue
         signals = item.get("target_fit_signals") if isinstance(item.get("target_fit_signals"), dict) else {}
         rec = str(signals.get("recommendation") or "")
-        if rec == "create_new_skill":
-            rec = "unresolved"
         if rec not in buckets:
             continue
         theme = str(item.get("theme") or ((item.get("coverage") or {}).get("gap_kind") if isinstance(item.get("coverage"), dict) else "") or item.get("kind") or "unknown")
         buckets[rec][theme] = buckets[rec].get(theme, 0) + 1
     lines = []
-    if buckets["defer_unresolved"]:
-        lines.append(f"- unresolved themes: {_format_count_map(_top_count_map(buckets['defer_unresolved']))}")
     if buckets["unresolved"]:
-        lines.append(f"- no existing skill fit: {_format_count_map(_top_count_map(buckets['unresolved']))}")
+        lines.append(f"- unresolved themes: {_format_count_map(_top_count_map(buckets['unresolved']))}")
     if buckets["memory_candidate"]:
         lines.append(f"- memory leaning: {_format_count_map(_top_count_map(buckets['memory_candidate']))}")
     if buckets["skip_noise"]:
@@ -1147,8 +1142,6 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
             continue
         signals = item.get("target_fit_signals") if isinstance(item.get("target_fit_signals"), dict) else {}
         rec = str(signals.get("recommendation") or "")
-        if rec == "create_new_skill":
-            rec = "unresolved"
         if rec:
             target_recommendations[rec] = target_recommendations.get(rec, 0) + 1
     action_summary = _action_summary_from_result(result, step_decisions)

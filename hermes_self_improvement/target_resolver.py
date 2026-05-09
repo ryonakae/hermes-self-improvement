@@ -9,10 +9,6 @@ from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_ob
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
 ALLOWED_DECISIONS = {"apply", "defer", "skip", "block"}
 ALLOWED_RESOLUTION_KINDS = {"attach_existing_skill", "memory_candidate", "unresolved", "skip_noise"}
-LEGACY_RESOLUTION_KIND_ALIASES = {
-    "create_new_skill": "unresolved",
-    "defer_unresolved": "unresolved",
-}
 
 
 def _default_resolution_kind(target_kind: str, target: str, decision_hint: str) -> str:
@@ -63,21 +59,25 @@ def normalize_target_resolver_payload(
         decision_hint = str(raw.get("suggested_action") or raw.get("decision_hint") or "defer").strip()
         if decision_hint not in ALLOWED_DECISIONS:
             decision_hint = "defer"
-        resolution_kind = str(raw.get("resolution_kind") or _default_resolution_kind(target_kind, target, decision_hint)).strip()
-        legacy_resolution_kind = resolution_kind
-        resolution_kind = LEGACY_RESOLUTION_KIND_ALIASES.get(resolution_kind, resolution_kind)
+        raw_resolution_kind = str(raw.get("resolution_kind") or "").strip()
+        resolution_kind = raw_resolution_kind or _default_resolution_kind(target_kind, target, decision_hint)
+        unsupported_resolution_kind = ""
         if resolution_kind not in ALLOWED_RESOLUTION_KINDS:
-            resolution_kind = _default_resolution_kind(target_kind, target, decision_hint)
-        if resolution_kind == "memory_candidate":
+            unsupported_resolution_kind = resolution_kind
+            resolution_kind = "unresolved"
+            target_kind = "none"
+            target = ""
+            decision_hint = "block"
+            unresolved_reason = "out_of_scope"
+            suggested_boundary = ""
+        elif resolution_kind == "memory_candidate":
             target_kind = "memory"
             target = target or "memory"
+            unresolved_reason = ""
+            suggested_boundary = ""
         elif resolution_kind in {"unresolved", "skip_noise"}:
-            unresolved_reason = str(raw.get("unresolved_reason") or "").strip()
-            if not unresolved_reason:
-                unresolved_reason = "no_existing_skill_fit" if legacy_resolution_kind == "create_new_skill" else "unclear_target"
+            unresolved_reason = str(raw.get("unresolved_reason") or "").strip() or "unclear_target"
             suggested_boundary = str(raw.get("suggested_boundary") or "").strip()
-            if not suggested_boundary and legacy_resolution_kind == "create_new_skill" and target:
-                suggested_boundary = target
             target_kind = "none"
             target = ""
             decision_hint = "skip" if resolution_kind == "skip_noise" else "defer"
@@ -98,6 +98,9 @@ def normalize_target_resolver_payload(
             normalized["unresolved_reason"] = unresolved_reason or "unclear_target"
             if suggested_boundary:
                 normalized["suggested_boundary"] = _redact_text(suggested_boundary, max_chars=120)
+        if unsupported_resolution_kind:
+            normalized["block_reason"] = "unsupported_resolution_kind"
+            normalized["unsupported_resolution_kind"] = _redact_text(unsupported_resolution_kind, max_chars=80)
         if target_kind == "skill" and resolution_kind == "attach_existing_skill":
             block_reason = _skill_target_block_reason(target, known_skill_targets)
             if block_reason:
@@ -139,7 +142,7 @@ def _target_fit_signals(item: dict[str, Any], skill_candidates: list[dict[str, A
     elif positive and "single_visible_target" not in negative:
         recommendation = "attach_existing_skill"
     else:
-        recommendation = "defer_unresolved"
+        recommendation = "unresolved"
     return {
         "positive": sorted(set(positive)),
         "negative": sorted(set(negative)),
