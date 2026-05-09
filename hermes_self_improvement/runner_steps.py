@@ -995,17 +995,22 @@ def run_memory_improvement_step(
             if not any(decision.get("evidence_id") == evidence_id for decision in decisions):
                 decisions.append({
                     "evidence_id": evidence_id,
-                    "decision": "rejected",
-                    "reason": "memory_inventory_operation_missing",
+                    "decision": "defer",
+                    "reason": "memory_inventory_not_mutation_ready",
                     "changed": False,
                 })
             continue
         operation = _memory_operation_from_evidence(item)
         if not operation:
+            no_operation_decision = "skip" if item.get("kind") in {
+                "knowledge_coverage_candidate",
+                "memory_placement_candidate",
+                "unmatched_improvement_candidate",
+            } else "defer"
             decisions.append({
                 "evidence_id": evidence_id,
-                "decision": "rejected",
-                "reason": "memory_operation_missing",
+                "decision": no_operation_decision,
+                "reason": "memory_observation_not_mutation_ready",
                 "changed": False,
             })
             continue

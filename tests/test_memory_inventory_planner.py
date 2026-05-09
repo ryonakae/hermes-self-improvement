@@ -81,6 +81,36 @@ def test_memory_inventory_rejects_remove_without_old_text():
     assert result["decisions"][0]["reason"] == "memory_old_text_missing"
 
 
+def test_memory_inventory_without_operation_is_deferred_not_blocked():
+    result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config={}, mutate=False)
+
+    assert result["changed"] == 0
+    assert result["decisions"] == [{
+        "evidence_id": "mem-inv-1",
+        "decision": "defer",
+        "reason": "memory_inventory_not_mutation_ready",
+        "changed": False,
+    }]
+
+
+def test_memory_placement_without_operation_is_skipped_not_blocked():
+    evidence = {
+        "id": "memory-place-1",
+        "kind": "memory_placement_candidate",
+        "placement": {"target": "memory", "reason": "already diagnostic context only"},
+    }
+
+    result = run_memory_improvement_step(evidence_pack=_pack([evidence]), config={}, mutate=False)
+
+    assert result["changed"] == 0
+    assert result["decisions"] == [{
+        "evidence_id": "memory-place-1",
+        "decision": "skip",
+        "reason": "memory_observation_not_mutation_ready",
+        "changed": False,
+    }]
+
+
 def test_memory_inventory_rejects_secret_old_text():
     config = {"_memory_inventory_planner_fn": lambda evidence, config=None: [{"evidence_id": "mem-inv-1", "operation": "remove", "target": "memory", "old_text": "API_KEY=secret-value"}]}
 

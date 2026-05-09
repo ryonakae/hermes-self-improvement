@@ -121,6 +121,26 @@ def test_reconcile_memory_gap_payload_skips_near_duplicate_add():
     assert out["candidates"][0]["relation_to_existing"] == "duplicate_existing_memory"
 
 
+def test_reconcile_memory_gap_payload_skips_semantic_duplicate_browser_guidance():
+    payload = {"candidates": [{
+        "candidate_id": "m1",
+        "target": "memory",
+        "action": "add",
+        "candidate_fact": "Hermes の default browser tool interface は常に保持し、backend が agent-browser でも plugin/plan から直接 agent-browser CLI を前提にしない。blocked/thin/dynamic ページの軽い確認に留める。",
+        "confidence": "high",
+        "relation_to_existing": "missing",
+    }]}
+
+    out = reconcile_memory_gap_payload_with_existing_memories(
+        payload,
+        existing_memories=[{"target": "memory", "text": "Hermes browser はデフォルト browser tool interface を前提にする。現 backend が agent-browser の場合でも通常は直叩きせず、backend troubleshooting時だけ `AGENT_BROWSER_ARGS`/`AGENT_BROWSER_PROFILE` 等を扱う。"}],
+    )
+
+    candidate = out["candidates"][0]
+    assert candidate["action"] == "skip"
+    assert candidate["relation_to_existing"] == "duplicate_existing_memory"
+
+
 def test_reconcile_memory_gap_payload_replaces_related_stale_memory_instead_of_adding():
     payload = {"candidates": [{
         "candidate_id": "m1",

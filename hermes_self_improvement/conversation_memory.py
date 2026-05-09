@@ -133,6 +133,24 @@ def _memory_topic_overlap(left: str, right: str) -> bool:
     return len([token for token in anchors if token in right_tokens]) >= 2
 
 
+def _specific_value_tokens(text: str) -> set[str]:
+    tokens = set(_memory_tokens(text))
+    return {
+        token
+        for token in tokens
+        if token.startswith(("/", "~/"))
+        or token.endswith(('.md', '.json', '.yaml', '.yml', '.py'))
+    }
+
+
+def _memory_has_conflicting_specifics(left: str, right: str) -> bool:
+    left_specific = _specific_value_tokens(left)
+    right_specific = _specific_value_tokens(right)
+    if not left_specific or not right_specific:
+        return False
+    return left_specific != right_specific
+
+
 def reconcile_memory_gap_payload_with_existing_memories(payload: Any, *, existing_memories: list[Any] | None = None) -> dict[str, Any]:
     normalized = normalize_memory_gap_payload(payload)
     memories = existing_memories or []
@@ -168,7 +186,12 @@ def reconcile_memory_gap_payload_with_existing_memories(payload: Any, *, existin
             candidate["relation_to_existing"] = "duplicate_existing_memory"
             candidate["reason"] = "Candidate is already covered by existing memory."
             continue
-        if best_score >= 0.55 and _memory_topic_overlap(fact, best_text):
+        if best_score >= 0.50 and _memory_topic_overlap(fact, best_text):
+            if not _memory_has_conflicting_specifics(fact, best_text):
+                candidate["action"] = "skip"
+                candidate["relation_to_existing"] = "duplicate_existing_memory"
+                candidate["reason"] = "Candidate is already covered by existing memory."
+                continue
             candidate["action"] = "replace"
             candidate["old_text"] = _redact_text(best_text, max_chars=260)
             candidate["relation_to_existing"] = "updates_existing_memory"
