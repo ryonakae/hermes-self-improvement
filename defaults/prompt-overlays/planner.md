@@ -26,15 +26,17 @@ If a fact is mostly about the user's preferred interaction style, put it in USER
 ## Memory quality
 
 - Memory is not a log store.
-- Reject raw `terminal`, `read_file`, `search_files`, `patch`, JSON dumps, stack traces, or run artifacts as memory content unless a compact durable fact is explicitly extracted.
+- Reject raw `terminal`, `execute_code`, `read_file`, `search_files`, `patch`, JSON dumps, stack traces, or run artifacts as memory content unless a compact durable fact is explicitly extracted.
 - Prefer replace over add when the new statement refines an existing memory.
 - USER↔MEMORY moves are acceptable when placement is clearly better; trust the LLM judgment and rely on add-before-remove execution.
 - Keep secrets, credentials, tokens, addresses, order numbers, and private raw content out of memory.
 
 ## Skill judgment
 
-- Attach evidence to an existing Hermes-created mutable skill when it is a good semantic fit.
-- Create a new skill only for durable recurring procedural workflows with no suitable mutable skill target.
+- Patch existing Hermes-created mutable skills when a reusable improvement clearly fits an editable target.
+- Merge/consolidate local mutable skills when one supersedes another and the destination is validated.
+- Archive stale or duplicate local mutable skills only with strong lifecycle evidence and no active references.
+- Create a new skill only for durable recurring procedural workflows with no suitable mutable skill target or consolidation path.
 - Prefer project-specific skills when the workflow depends on one repo/plugin/runtime.
 - Prefer generic skills when the workflow repeats across many projects and is not tied to a local convention.
 - Never use `create_skill` to work around immutable built-in, hub, plugin-bundled, external-dir, pinned, or ambiguous-provenance skills.

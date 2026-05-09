@@ -1083,6 +1083,51 @@ def _top_count_map(counts: dict[str, int], *, limit: int = 3) -> dict[str, int]:
     return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit])
 
 
+def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], maintenance_candidates: list[dict[str, Any]] | None = None) -> list[str]:
+    buckets: dict[str, dict[str, int]] = {"patch": {}, "merge": {}, "archive": {}, "create": {}, "unresolved": {}}
+    for item in decisions:
+        if not isinstance(item, dict):
+            continue
+        skill = str(item.get("skill") or item.get("proposed_skill_name") or "").strip()
+        if not skill:
+            continue
+        decision = str(item.get("decision") or "")
+        maintenance_action = str(item.get("maintenance_action") or "")
+        if maintenance_action == "patch_skill" or decision == "patch_skill":
+            buckets["patch"][skill] = buckets["patch"].get(skill, 0) + 1
+        elif maintenance_action == "merge_skills" or decision == "merge_skills":
+            target = str(item.get("target_skill") or item.get("successor") or "unknown").strip() or "unknown"
+            label = f"{skill} -> {target}"
+            buckets["merge"][label] = buckets["merge"].get(label, 0) + 1
+        elif decision == "archive_skill":
+            buckets["archive"][skill] = buckets["archive"].get(skill, 0) + 1
+        elif decision == "create_skill":
+            buckets["create"][skill] = buckets["create"].get(skill, 0) + 1
+        elif decision == "defer":
+            buckets["unresolved"][skill] = buckets["unresolved"].get(skill, 0) + 1
+    for item in maintenance_candidates or []:
+        if not isinstance(item, dict):
+            continue
+        affordance = item.get("maintenance_affordance") if isinstance(item.get("maintenance_affordance"), dict) else {}
+        label = str(affordance.get("workflow_boundary") or item.get("theme") or item.get("kind") or "unknown").strip()
+        if label:
+            buckets["unresolved"][label] = buckets["unresolved"].get(label, 0) + 1
+    lines = []
+    if any(buckets.values()):
+        lines.append("Knowledge maintenance:")
+    if buckets["patch"]:
+        lines.append(f"- patch candidates: {_format_count_map(_top_count_map(buckets['patch']))}")
+    if buckets["merge"]:
+        lines.append(f"- merge candidates: {_format_count_map(_top_count_map(buckets['merge']))}")
+    if buckets["archive"]:
+        lines.append(f"- archive candidates: {_format_count_map(_top_count_map(buckets['archive']))}")
+    if buckets["create"]:
+        lines.append(f"- create candidates: {_format_count_map(_top_count_map(buckets['create']))}")
+    if buckets["unresolved"]:
+        lines.append(f"- unresolved: {_format_count_map(_top_count_map(buckets['unresolved']))}")
+    return lines
+
+
 def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[str]:
     buckets = {
         "unresolved": {},
@@ -1135,6 +1180,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     inventory_skill_health = inventory_health.get("skill_candidates") if isinstance(inventory_health.get("skill_candidates"), dict) else {}
     inventory_memory_health = inventory_health.get("memory") if isinstance(inventory_health.get("memory"), dict) else {}
     target_resolution_digest = result.get("target_resolution_digest") if isinstance(result.get("target_resolution_digest"), dict) else skill_step.get("target_resolution_digest") if isinstance(skill_step.get("target_resolution_digest"), dict) else {}
+    planner_digest = skill_step.get("planner_digest") if isinstance(skill_step.get("planner_digest"), dict) else {}
+    knowledge_maintenance = planner_digest.get("knowledge_maintenance") if isinstance(planner_digest.get("knowledge_maintenance"), dict) else {}
     target_recommendations: dict[str, int] = {}
     target_resolution_candidates = [item for item in (target_resolution_digest.get("candidates") or []) if isinstance(item, dict)]
     for item in target_resolution_candidates:
@@ -1262,10 +1309,15 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
             f"- reference-only: {source_report.get('artifact_path')}, signals {int(source_report.get('diagnostic_signal_count') or 0)}",
         ])
     target_resolution_lines = _target_resolution_summary_lines(target_resolution_candidates)
+    maintenance_candidates = [item for item in (knowledge_maintenance.get("maintenance_candidates") or []) if isinstance(item, dict)]
+    maintenance_lines = _knowledge_maintenance_summary_lines(planner_decisions, maintenance_candidates)
     action_bucket_lines = _action_bucket_lines(step_decisions)
     if target_resolution_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = target_resolution_lines
+    if maintenance_lines:
+        insert_at = lines.index("Action summary:")
+        lines[insert_at:insert_at] = maintenance_lines
     if action_bucket_lines:
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = action_bucket_lines

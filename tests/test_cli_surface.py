@@ -459,6 +459,45 @@ def test_improve_summary_lists_deferred_target_resolution_themes():
     assert "- skip-noise leaning: one_off_terminal_failure 1" in text
 
 
+def test_improve_summary_shows_knowledge_maintenance_decisions():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {},
+        "step_decisions": {"skill": {"planner": {"decisions": [
+            {"skill": "safe-patch-usage", "decision": "run_editor", "maintenance_action": "patch_skill"},
+            {"skill": "old-skill", "decision": "run_editor", "maintenance_action": "merge_skills", "target_skill": "new-skill"},
+            {"skill": "obsolete-skill", "decision": "archive_skill"},
+            {"skill": "patch-tool-workflow", "decision": "create_skill"},
+            {"skill": "timeout-workflow", "decision": "defer"},
+        ]}}},
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Knowledge maintenance:" in text
+    assert "- patch candidates: safe-patch-usage 1" in text
+    assert "- merge candidates: old-skill -> new-skill 1" in text
+    assert "- archive candidates: obsolete-skill 1" in text
+    assert "- create candidates: patch-tool-workflow 1" in text
+    assert "- unresolved: timeout-workflow 1" in text
+
+
+def test_improve_summary_shows_unresolved_maintenance_candidates_from_digest():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {},
+        "step_decisions": {"skill": {"planner": {"decisions": []}, "planner_digest": {"knowledge_maintenance": {"maintenance_candidates": [
+            {"maintenance_affordance": {"workflow_boundary": "patch tool workflow"}},
+            {"maintenance_affordance": {"workflow_boundary": "timeout workflow"}},
+        ]}}}},
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Knowledge maintenance:" in text
+    assert "- unresolved: patch tool workflow 1, timeout workflow 1" in text
+
+
 def test_improve_summary_shows_memory_placement_inventory_count():
     cli = load_cli_module()
     text = cli._render_improve_summary({

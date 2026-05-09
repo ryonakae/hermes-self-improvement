@@ -346,6 +346,63 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
         candidate_rows.append(row)
 
     summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
+    reference_skills = []
+    for item in raw_candidates:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        if not name or name in candidate_by_name:
+            continue
+        reference_skills.append({
+            "name": name,
+            "description": _redacted_preview(item.get("description") or item.get("summary") or "", max_chars=180),
+            "state": item.get("state"),
+            "provenance": item.get("provenance") or item.get("source"),
+            "source": item.get("source"),
+            "mutation_allowed": False,
+        })
+    maintenance_candidates = []
+    for item in skill_evidence:
+        if not isinstance(item, dict):
+            continue
+        hint = item.get("target_resolution_hint") if isinstance(item.get("target_resolution_hint"), dict) else {}
+        affordance = hint.get("maintenance_affordance") if isinstance(hint.get("maintenance_affordance"), dict) else None
+        if not affordance:
+            continue
+        coverage = item.get("coverage") if isinstance(item.get("coverage"), dict) else {}
+        maintenance_candidates.append({
+            "evidence_id": str(item.get("id") or ""),
+            "kind": item.get("kind"),
+            "theme": item.get("theme") or coverage.get("gap_kind"),
+            "count": item.get("count") or coverage.get("evidence_count"),
+            "maintenance_affordance": affordance,
+            "unresolved_reason": hint.get("unresolved_reason") or "no_existing_skill_fit",
+        })
+    knowledge_maintenance = {
+        "editable_skills": [
+            {
+                "name": row.get("name"),
+                "description": row.get("description"),
+                "state": row.get("state"),
+                "provenance": row.get("provenance"),
+                "mutation_allowed": True,
+                "active_reference_count": row.get("active_reference_count", 0),
+            }
+            for row in candidate_rows
+        ],
+        "reference_skills": reference_skills[:20],
+        "archival_candidates": [
+            {"name": row.get("name"), "state": row.get("state"), "archive_markers": row.get("archive_markers"), "active_reference_count": row.get("active_reference_count", 0)}
+            for row in candidate_rows
+            if row.get("state") == "stale" or row.get("archive_markers")
+        ],
+        "maintenance_candidates": maintenance_candidates[:20],
+        "hard_boundaries": [
+            "Only Hermes-created local mutable active/stale skills are mutation targets.",
+            "Reference skills are duplicate/coverage context only and must not be patched, merged into, archived, or created over.",
+            "New skill creation is one option, not the default; prefer patch/merge/archive when evidence supports it.",
+        ],
+    }
     return {
         "schema_name": "self_improvement_skill_planner_digest",
         "schema_version": "1.0",
@@ -356,6 +413,7 @@ def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
         },
         "available_skill_evidence_ids": skill_ids,
         "skill_candidates": candidate_rows,
+        "knowledge_maintenance": knowledge_maintenance,
         "unresolved_observations": unresolved_observations[:20],
         "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
         "unmatched_evidence": {"count": len(unmatched), "by_reason": by_reason, "examples": unmatched[:10]},
@@ -428,6 +486,7 @@ def _normalize_create_skill_decision(
     *,
     candidate_names: set[str],
     available_evidence_ids: set[str],
+    reference_skill_names: set[str] | None = None,
 ) -> dict[str, Any] | None:
     proposed = str(raw.get("proposed_skill_name") or raw.get("skill") or "").strip()
     if not proposed:
@@ -436,6 +495,8 @@ def _normalize_create_skill_decision(
         return {"skill": proposed, "decision": "skip", "reason": "create_skill_name_invalid", "evidence_ids": []}
     if proposed in candidate_names:
         return {"skill": proposed, "decision": "skip", "reason": "create_skill_duplicate_existing_skill", "evidence_ids": []}
+    if proposed in (reference_skill_names or set()):
+        return {"skill": proposed, "decision": "skip", "reason": "create_skill_duplicates_reference_skill", "evidence_ids": []}
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item) in available_evidence_ids]
     if not evidence_ids:
         return {"skill": proposed, "decision": "skip", "reason": "create_skill_without_attached_evidence", "evidence_ids": []}
@@ -469,10 +530,25 @@ def _normalize_decision(
     decision = str(raw.get("decision") or "skip").strip()
     normalized_decision = normalize_autonomous_decision({"decision": decision})
     decision = str(normalized_decision.get("decision") or "skip")
+    maintenance_action = ""
+    forced_skip_reason: str | None = None
+    target_skill = str(raw.get("target_skill") or raw.get("successor") or "").strip()
+    if decision == "patch_skill":
+        maintenance_action = "patch_skill"
+        decision = "run_editor"
+    elif decision == "merge_skills":
+        maintenance_action = "merge_skills"
+        if not target_skill or target_skill not in candidate_names:
+            decision = "skip"
+            forced_skip_reason = "merge_target_missing_or_not_editable"
+        elif target_skill == skill:
+            decision = "skip"
+            forced_skip_reason = "merge_target_same_as_source"
+        else:
+            decision = "run_editor"
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item)]
     allowed_evidence = evidence_by_candidate.get(skill) or set()
     evidence_ids = [item for item in evidence_ids if item in allowed_evidence]
-    forced_skip_reason: str | None = None
     if decision == "run_editor" and not evidence_ids:
         decision = "skip"
         forced_skip_reason = "run_editor_without_attached_evidence"
@@ -512,6 +588,10 @@ def _normalize_decision(
         normalized["original_decision"] = normalized_decision["original_decision"]
     if normalized_decision.get("defer_reason"):
         normalized["defer_reason"] = normalized_decision["defer_reason"]
+    if maintenance_action:
+        normalized["maintenance_action"] = maintenance_action
+        if target_skill:
+            normalized["target_skill"] = target_skill
     if raw.get("reason") is not None:
         normalized["reason"] = _redacted_preview(raw.get("reason"), max_chars=240)
     if raw.get("rationale") is not None:
@@ -565,13 +645,19 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         if item.get("name")
     }
     available_evidence_ids = {str(item) for item in (digest.get("available_skill_evidence_ids") or []) if str(item)}
+    knowledge_maintenance = digest.get("knowledge_maintenance") if isinstance(digest.get("knowledge_maintenance"), dict) else {}
+    reference_skill_names = {
+        str(item.get("name") or "")
+        for item in (knowledge_maintenance.get("reference_skills") or [])
+        if isinstance(item, dict) and item.get("name")
+    }
     decisions: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw in raw_decisions:
         if not isinstance(raw, dict):
             continue
         if str(raw.get("decision") or "") == "create_skill":
-            item = _normalize_create_skill_decision(raw, candidate_names=candidate_names, available_evidence_ids=available_evidence_ids)
+            item = _normalize_create_skill_decision(raw, candidate_names=candidate_names, available_evidence_ids=available_evidence_ids, reference_skill_names=reference_skill_names)
         else:
             item = _normalize_decision(
                 raw,

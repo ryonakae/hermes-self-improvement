@@ -179,7 +179,7 @@ def test_planner_digest_records_unresolved_no_existing_skill_fit_observations():
     assert row["count"] == 36
 
 
-def test_knowledge_coverage_candidate_includes_create_skill_boundary_affordance():
+def test_knowledge_coverage_candidate_includes_maintenance_affordance():
     candidate = make_knowledge_coverage_candidate(
         gap_kind="recurring_workflow_without_skill",
         evidence_ids=["u1"],
@@ -189,14 +189,25 @@ def test_knowledge_coverage_candidate_includes_create_skill_boundary_affordance(
         rationale="Repeated browser profile failures lack a suitable local skill.",
     )
 
-    affordance = candidate["target_resolution_hint"]["create_skill_affordance"]
+    hint = candidate["target_resolution_hint"]
+    assert hint["resolution_kind"] == "unresolved"
+    assert hint["unresolved_reason"] == "no_existing_skill_fit"
+    assert "create_skill_affordance" not in hint
+    affordance = hint["maintenance_affordance"]
     assert affordance["workflow_boundary"] == "browser profile troubleshooting"
     assert affordance["not_memory_because"]
-    assert affordance["not_existing_skill_because"]
-    assert affordance["candidate_skill_name_seed"] == "browser-profile-troubleshooting"
+    assert affordance["no_existing_editable_skill_fit"] is True
+    assert affordance["create_skill_name_seed"] == "browser-profile-troubleshooting"
+    assert affordance["possible_actions"] == [
+        "patch_existing_skill",
+        "merge_or_consolidate",
+        "archive_stale_or_duplicate",
+        "create_skill",
+        "skip_as_noise",
+    ]
 
 
-def test_target_resolution_digest_passes_create_skill_boundary_affordance():
+def test_target_resolution_digest_passes_maintenance_affordance():
     candidate = make_knowledge_coverage_candidate(
         gap_kind="recurring_workflow_without_skill",
         evidence_ids=["u1"],
@@ -211,7 +222,7 @@ def test_target_resolution_digest_passes_create_skill_boundary_affordance():
 
     row = digest["candidates"][0]
     assert row["target_resolution_hint"]["resolution_kind"] == "unresolved"
-    assert row["target_resolution_hint"]["create_skill_affordance"]["workflow_boundary"] == "browser profile troubleshooting"
+    assert row["target_resolution_hint"]["maintenance_affordance"]["workflow_boundary"] == "browser profile troubleshooting"
 
 
 def test_target_resolution_digest_marks_single_visible_target_as_negative_fit_for_generic_failure():

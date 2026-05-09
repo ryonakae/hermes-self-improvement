@@ -446,13 +446,20 @@ def make_knowledge_coverage_candidate(
             "has_workflow_boundary": bool(str(workflow_boundary or "").strip()),
             "no_existing_skill_fit": True,
         }
-        hint["create_skill_affordance"] = {
+        hint["maintenance_affordance"] = {
             "workflow_boundary": coverage["workflow_boundary"],
             "not_memory_because": coverage.get("not_memory_because"),
-            "not_existing_skill_because": coverage.get("not_existing_skill_because"),
+            "no_existing_editable_skill_fit": True,
             "evidence_count": int(evidence_count),
             "representative_evidence_ids": coverage["representative_evidence_ids"],
-            "candidate_skill_name_seed": _slug_seed(workflow_boundary),
+            "create_skill_name_seed": _slug_seed(workflow_boundary),
+            "possible_actions": [
+                "patch_existing_skill",
+                "merge_or_consolidate",
+                "archive_stale_or_duplicate",
+                "create_skill",
+                "skip_as_noise",
+            ],
             "disallowed_if": ["one_off", "belongs_in_memory", "duplicates_existing_skill", "would_patch_builtin_or_hub_skill"],
         }
     return {

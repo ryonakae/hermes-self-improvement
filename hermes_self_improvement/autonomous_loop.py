@@ -25,6 +25,8 @@ TARGET_KINDS = {
 }
 DECISIONS = {
     "run_editor",
+    "patch_skill",
+    "merge_skills",
     "archive_skill",
     "create_skill",
     "skip",

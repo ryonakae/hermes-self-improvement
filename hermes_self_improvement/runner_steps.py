@@ -17,6 +17,7 @@ from .target_resolver import build_target_resolution_digest, run_target_resolver
 
 
 MEMORY_SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
+RAW_TOOL_OUTPUT_MEMORY_SOURCES = {"terminal", "execute_code", "search_files", "read_file", "patch"}
 
 
 def _looks_sensitive_memory_text(text: str) -> bool:
@@ -143,14 +144,14 @@ def _memory_operation_from_evidence(item: dict[str, Any]) -> dict[str, Any] | No
             operation["operation"] = op_text
             return enriched(operation)
         if preview.get("content") and tool_name:
-            if tool_name in {"terminal", "search_files", "read_file", "patch"}:
+            if tool_name in RAW_TOOL_OUTPUT_MEMORY_SOURCES:
                 return rejected_raw_tool_output(preview.get("content"))
             return enriched({"operation": "memory_add", "content": preview.get("content")})
-        if preview.get("output") and tool_name in {"terminal", "search_files", "read_file", "patch"}:
+        if preview.get("output") and tool_name in RAW_TOOL_OUTPUT_MEMORY_SOURCES:
             return rejected_raw_tool_output(preview.get("output"))
     preview_text = str(event.get("result_preview") or event.get("message") or "").strip()
     if preview_text:
-        if tool_name in {"terminal", "search_files", "read_file", "patch"}:
+        if tool_name in RAW_TOOL_OUTPUT_MEMORY_SOURCES:
             return rejected_raw_tool_output(preview_text)
         return enriched({"operation": "memory_add", "content": preview_text, "reason": "memory_evidence"})
     return None
@@ -571,6 +572,8 @@ def build_skill_agent_task(
         llm_brief_markdown=llm_brief,
     )
     instructions = rendered["instructions"]
+    if planner_meta.get("editor_instructions"):
+        instructions = instructions + "\n\nPlanner maintenance instructions:\n" + str(planner_meta.get("editor_instructions"))
     observed_problem = planner_meta.get("observed_problem") or planner_meta.get("change_intent") or planner_meta.get("rationale") or "Improve the target skill if current content confirms the attached evidence."
     desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("editor_instructions") or planner_meta.get("change_intent") or "A small reusable procedural improvement, or a non-mutating stop if already covered."
     suggested_focus = planner_meta.get("suggested_focus") if isinstance(planner_meta.get("suggested_focus"), list) else []

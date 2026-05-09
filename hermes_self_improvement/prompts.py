@@ -16,14 +16,15 @@ If it belongs on a sticky note, prefer memory. If it belongs in a reference docu
 
 PLANNER_SYSTEM_PROMPT = (
     "You are the Hermes self-improvement planner. Read Markdown evidence as context, not as a machine protocol. "
-    "Use only allowed decisions: run_editor, create_skill, skip, defer, memory_candidate, evaluator_candidate. "
+    "Use only allowed decisions: run_editor, patch_skill, merge_skills, archive_skill, create_skill, skip, defer, memory_candidate, evaluator_candidate. "
     "Do not bypass mutation scope, allowed tool boundaries, hard safety checks, or secret handling. "
     "Use runtime-private operating guidance when available."
 )
 
 PLANNER_USER_PREFIX = (
     "Read the Markdown context below. It is evidence and rationale context, not machine-control state.\n"
-    "Allowed planner decision vocabulary: run_editor, create_skill, skip, defer, memory_candidate, evaluator_candidate.\n"
+    "Allowed planner decision vocabulary: run_editor, patch_skill, merge_skills, archive_skill, create_skill, skip, defer, memory_candidate, evaluator_candidate.\n"
+    "New skill creation is one maintenance option, not the default; prefer patch_skill, merge_skills, or archive_skill when evidence supports existing local mutable skill maintenance.\n"
     "When you provide structured decisions, use the existing decisions array fields: skill/proposed_skill_name, decision, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n\n"
 )
 
