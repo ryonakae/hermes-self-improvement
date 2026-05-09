@@ -237,6 +237,22 @@ def test_skill_step_skips_curator_candidate_without_hook_evidence():
     assert decision["evidence_ids"] == []
 
 
+def test_skill_step_converts_planner_defer_without_evidence_to_skip():
+    pack = {"evidence": [], "views": {"skill": [], "memory": [], "scorer": [], "evaluator": []}, "skill_candidates": [{"name": "thin-skill", "state": "active", "source": "curator", "usage": {}}]}
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "thin-skill", "decision": "defer", "reason": "target_uncertain_and_insufficient_evidence", "evidence_ids": []}]}
+
+    result = run_skill_improvement_step(evidence_pack=pack, config={"_skill_planner_func": fake_planner}, mutate=False)
+
+    assert result["status"] == "completed"
+    decision = result["decisions"][0]
+    assert decision["skill"] == "thin-skill"
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "insufficient_attached_evidence"
+    assert decision["evidence_ids"] == []
+
+
 def test_skill_step_matches_qualified_evidence_to_bare_candidate_name():
     result = run_skill_improvement_step(
         evidence_pack=evidence_pack_for(

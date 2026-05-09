@@ -2,7 +2,7 @@
 
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
-**Status:** implemented 2026-05-09. Full test passed (`533 passed, 2 skipped`), `git diff --check` passed, and dry-run verification produced `Would apply: 0 / Deferred: 8 / Skipped: 28 / Blocked: 0` with `Memory placement: kept in current store: memory 20`, `needs memory planner: 7`, diagnostic raw output, and skill-routed workflow lines. No mutating dogfood was run.
+**Status:** implemented 2026-05-09. Follow-up hardening also implemented. Full test passed (`535 passed, 2 skipped`), `git diff --check` passed, and dry-run verification produced `Would apply: 0 / Deferred: 0 / Skipped: 38 / Blocked: 0` with `Memory placement: kept in current store: memory 20, user 9`, diagnostic raw output, and skill-routed workflow lines. No mutating dogfood was run.
 
 **Goal:** Reduce the current `needs memory planner` backlog by turning obvious memory placement reviews into concrete no-op, move, merge, replace, skill-route, or skip decisions while keeping side effects bounded to the existing official memory/skill tool paths.
 

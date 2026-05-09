@@ -489,6 +489,20 @@ def _memory_non_operation_route(item: dict[str, Any]) -> dict[str, Any]:
             "changed": False,
         }
     if kind == "memory_placement_candidate":
+        inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
+        current_store = str(inventory.get("current_store") or "").strip()
+        if current_store in {"memory", "user"}:
+            return {
+                "decision": "skip",
+                "reason": "keep_current_user" if current_store == "user" else "keep_current_memory",
+                "suggested_route": "none",
+                "changed": False,
+                "operation": {
+                    "operation": "memory_keep",
+                    "target": current_store,
+                    "reason": "planner omitted existing placement candidate; keep current store",
+                },
+            }
         return {
             "decision": "defer",
             "reason": "memory_placement_needs_routing",
@@ -909,6 +923,14 @@ def run_skill_improvement_step(
             })
             continue
         if decision_kind != "run_editor":
+            if decision_kind == "defer" and not attached_evidence:
+                decisions.append({
+                    **base_decision,
+                    "decision": "skip",
+                    "reason": "insufficient_attached_evidence",
+                    "changed": False,
+                })
+                continue
             decisions.append({
                 **base_decision,
                 "decision": decision_kind,

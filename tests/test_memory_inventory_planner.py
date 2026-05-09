@@ -138,6 +138,24 @@ def test_memory_placement_without_operation_is_deferred_for_routing():
     }]
 
 
+def test_user_placement_without_planner_operation_keeps_current_user_store():
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_placement_evidence(evidence_id="user-preference", current_store="user", old_text="Ryo prefers concise reports.")]),
+        config={"_memory_inventory_planner_fn": lambda evidence, config=None, placement_markdown=None: []},
+        mutate=False,
+    )
+
+    assert result["changed"] == 0
+    assert result["decisions"] == [{
+        "evidence_id": "user-preference",
+        "decision": "skip",
+        "reason": "keep_current_user",
+        "suggested_route": "none",
+        "changed": False,
+        "operation": {"operation": "memory_keep", "target": "user", "reason": "planner omitted existing placement candidate; keep current store"},
+    }]
+
+
 def test_memory_placement_keep_decision_is_skip_noop_not_defer():
     config = {"_memory_inventory_planner_fn": lambda evidence, config=None, placement_markdown=None: [{
         "evidence_id": "memory-place-keep",
