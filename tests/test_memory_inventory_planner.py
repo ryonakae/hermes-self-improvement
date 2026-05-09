@@ -24,6 +24,27 @@ def _inventory_evidence():
     }
 
 
+def _placement_evidence(*, evidence_id="memory-place-keep", current_store="memory", old_text="Hermes runtime root は `~/.hermes`。"):
+    return {
+        "id": evidence_id,
+        "kind": "memory_placement_candidate",
+        "inventory": {
+            "group_kind": "placement_review",
+            "current_store": current_store,
+            "old_text": old_text,
+            "summary": old_text,
+            "allowed_recommendations": [
+                "keep",
+                "move_user_to_memory",
+                "move_memory_to_user",
+                "merge_with_existing",
+                "convert_to_skill_update",
+                "skip_noise",
+            ],
+        },
+    }
+
+
 def test_memory_inventory_replace_operation_executes_with_specific_old_text():
     calls = []
 
@@ -115,6 +136,97 @@ def test_memory_placement_without_operation_is_deferred_for_routing():
         "suggested_route": "memory_planner",
         "changed": False,
     }]
+
+
+def test_memory_placement_keep_decision_is_skip_noop_not_defer():
+    config = {"_memory_inventory_planner_fn": lambda evidence, config=None, placement_markdown=None: [{
+        "evidence_id": "memory-place-keep",
+        "operation": "keep",
+        "target": "memory",
+        "reason": "stable environment fact already belongs in MEMORY",
+    }]}
+
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_placement_evidence()]),
+        config=config,
+        mutate=False,
+    )
+
+    assert result["changed"] == 0
+    assert result["decisions"] == [{
+        "evidence_id": "memory-place-keep",
+        "decision": "skip",
+        "reason": "keep_current_memory",
+        "suggested_route": "none",
+        "changed": False,
+        "operation": {"operation": "memory_keep", "target": "memory", "reason": "stable environment fact already belongs in MEMORY"},
+    }]
+
+
+def test_memory_placement_convert_to_skill_update_is_skill_routed_skip():
+    config = {"_memory_inventory_planner_fn": lambda evidence, config=None, placement_markdown=None: [{
+        "evidence_id": "memory-place-skill",
+        "operation": "convert_to_skill_update",
+        "target": "skill",
+        "skill_route": "hermes-memory-and-live-context",
+        "content": "Move procedural live-context placement guidance into a skill.",
+        "reason": "procedural guidance belongs in skill",
+    }]}
+
+    result = run_memory_improvement_step(evidence_pack=_pack([_placement_evidence(evidence_id="memory-place-skill")]), config=config, mutate=False)
+
+    assert result["changed"] == 0
+    assert result["decisions"][0]["decision"] == "skip"
+    assert result["decisions"][0]["reason"] == "memory_convert_to_skill_update"
+    assert result["decisions"][0]["suggested_route"] == "skill"
+    assert result["decisions"][0]["skill_route"] == "hermes-memory-and-live-context"
+
+
+def test_memory_placement_skip_noise_is_skip_noop():
+    config = {"_memory_inventory_planner_fn": lambda evidence, config=None, placement_markdown=None: [{
+        "evidence_id": "memory-place-noise",
+        "operation": "skip_noise",
+        "target": "memory",
+        "reason": "temporary session detail",
+    }]}
+
+    result = run_memory_improvement_step(evidence_pack=_pack([_placement_evidence(evidence_id="memory-place-noise")]), config=config, mutate=False)
+
+    assert result["changed"] == 0
+    assert result["decisions"][0]["decision"] == "skip"
+    assert result["decisions"][0]["reason"] == "memory_skip_noise"
+    assert result["decisions"][0]["suggested_route"] == "none"
+
+
+def test_memory_inventory_stale_pair_replace_preview_is_actionable():
+    config = {"_memory_inventory_planner_fn": lambda evidence, config=None, placement_markdown=None: [{
+        "evidence_id": "mem-inv-1",
+        "operation": "replace",
+        "target": "memory",
+        "old_text": "Hermes root is /opt/data",
+        "content": "Hermes runtime root は `~/.hermes`。旧 Docker-style root は current runtime ではない。",
+        "reason": "replace stale runtime root fact",
+    }]}
+
+    result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config=config, mutate=False)
+
+    assert result["changed"] == 0
+    assert result["decisions"][0]["decision"] == "accepted"
+    assert result["decisions"][0]["reason"] == "dry_run_would_execute_memory_tool"
+    assert result["decisions"][0]["operation"]["operation"] == "memory_replace"
+
+
+def test_memory_placement_bare_skip_noise_for_existing_entry_is_kept():
+    config = {"_memory_inventory_planner_fn": lambda evidence, config=None, placement_markdown=None: [{
+        "evidence_id": "memory-place-keep",
+        "operation": "skip_noise",
+    }]}
+
+    result = run_memory_improvement_step(evidence_pack=_pack([_placement_evidence()]), config=config, mutate=False)
+
+    assert result["changed"] == 0
+    assert result["decisions"][0]["decision"] == "skip"
+    assert result["decisions"][0]["reason"] == "keep_current_memory"
 
 
 def test_memory_step_routes_workflow_candidates_to_skill_not_memory():

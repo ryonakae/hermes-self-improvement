@@ -387,6 +387,36 @@ def _normalize_inventory_operation(raw: dict[str, Any]) -> tuple[dict[str, Any] 
             "content": _redact_text(content, max_chars=500),
             "reason": _redact_text(str(raw.get("reason") or "memory_placement_candidate"), max_chars=240),
         }, None
+    if op_name in {"keep", "memory_keep"}:
+        keep_target = target or str(raw.get("current_store") or "").strip() or "memory"
+        if keep_target not in {"memory", "user"}:
+            return None, "memory_target_invalid"
+        return {
+            "operation": "memory_keep",
+            "target": keep_target,
+            "reason": _redact_text(str(raw.get("reason") or "current placement is correct"), max_chars=240),
+        }, None
+    if op_name in {"skip_noise", "memory_skip"}:
+        skip_target = target if target in {"memory", "user"} else "memory"
+        return {
+            "operation": "memory_skip",
+            "target": skip_target,
+            "reason": _redact_text(str(raw.get("reason") or "skip noisy memory placement candidate"), max_chars=240),
+        }, None
+    if op_name in {"convert_to_skill_update", "memory_convert_to_skill_update"}:
+        content = str(raw.get("content") or raw.get("summary") or "").strip()
+        if _looks_sensitive_memory_text(content):
+            return None, "memory_sensitive_text"
+        normalized = {
+            "operation": "memory_convert_to_skill_update",
+            "target": "skill",
+            "reason": _redact_text(str(raw.get("reason") or "procedural knowledge belongs in skill"), max_chars=240),
+        }
+        if raw.get("skill_route"):
+            normalized["skill_route"] = _redact_text(str(raw.get("skill_route")), max_chars=120)
+        if content:
+            normalized["content"] = _redact_text(content, max_chars=500)
+        return normalized, None
     if target not in {"memory", "user"}:
         return None, "memory_target_invalid"
     op_map = {
@@ -394,6 +424,7 @@ def _normalize_inventory_operation(raw: dict[str, Any]) -> tuple[dict[str, Any] 
         "memory_add": "memory_add",
         "replace": "memory_replace",
         "memory_replace": "memory_replace",
+        "merge_with_existing": "memory_replace",
         "remove": "memory_delete",
         "delete": "memory_delete",
         "memory_delete": "memory_delete",
@@ -517,9 +548,15 @@ def _call_memory_inventory_planner_llm(*, evidence: list[dict[str, Any]], config
         {
             "role": "system",
             "content": (
-                "You are the Hermes self-improvement memory planner. Convert fuzzy memory inventory and placement evidence into concrete memory tool operations. "
+                "You are the Hermes self-improvement memory planner. Return JSON only: {\"operations\": [...]}. "
+                "Allowed operation values: keep, add, replace, remove, move_user_to_memory, move_memory_to_user, merge_with_existing, convert_to_skill_update, skip_noise. "
                 "Read Markdown placement context as judgment context, not a machine protocol. "
-                "Use replace/remove/move only with exact old_text from evidence. Skip unsafe, sensitive, or ambiguous cases by omitting them."
+                "Use keep for entries already in the right USER or MEMORY store. "
+                "Use convert_to_skill_update for procedural reusable guidance; do not invent or execute a skill mutation here. "
+                "Use move/replace/remove/merge only with exact old_text copied from evidence. "
+                "Return one operation for every evidence_id unless the evidence is unsafe or sensitive. "
+                "If uncertain but the current store looks acceptable, choose keep rather than omitting. "
+                "Skip unsafe or sensitive cases by omitting them."
             ),
         },
         {"role": "user", "content": render_memory_placement_markdown(evidence)},
@@ -919,6 +956,44 @@ def run_skill_improvement_step(
         "decisions": decisions,
     }
 
+def _memory_non_mutating_operation_decision(evidence_id: str, operation: dict[str, Any]) -> dict[str, Any] | None:
+    operation_kind = str(operation.get("operation") or "")
+    if operation_kind == "memory_keep":
+        target = str(operation.get("target") or "memory")
+        return {
+            "evidence_id": evidence_id,
+            "decision": "skip",
+            "reason": "keep_current_user" if target == "user" else "keep_current_memory",
+            "suggested_route": "none",
+            "changed": False,
+            "operation": operation,
+        }
+    if operation_kind == "memory_skip":
+        return {
+            "evidence_id": evidence_id,
+            "decision": "skip",
+            "reason": "memory_skip_noise",
+            "suggested_route": "none",
+            "changed": False,
+            "operation": operation,
+        }
+    if operation_kind == "memory_convert_to_skill_update":
+        decision = {
+            "evidence_id": evidence_id,
+            "decision": "skip",
+            "reason": "memory_convert_to_skill_update",
+            "suggested_route": "skill",
+            "changed": False,
+            "operation": operation,
+        }
+        if operation.get("skill_route"):
+            decision["skill_route"] = operation.get("skill_route")
+        if operation.get("content"):
+            decision["content"] = operation.get("content")
+        return decision
+    return None
+
+
 def run_memory_improvement_step(
     *,
     evidence_pack: dict[str, Any],
@@ -951,7 +1026,14 @@ def run_memory_improvement_step(
 
     for raw_operation in _memory_inventory_operations(memory_evidence, config):
         evidence_id = str(raw_operation.get("evidence_id") or "")
-        operation, reject_reason = _normalize_inventory_operation(raw_operation)
+        source_evidence = evidence_by_id.get(evidence_id, {"id": evidence_id})
+        raw_for_normalization = raw_operation
+        if str(raw_operation.get("operation") or raw_operation.get("action") or "") == "skip_noise" and not raw_operation.get("reason"):
+            inventory = source_evidence.get("inventory") if isinstance(source_evidence.get("inventory"), dict) else {}
+            current_store = str(inventory.get("current_store") or "").strip()
+            if source_evidence.get("kind") == "memory_placement_candidate" and current_store in {"memory", "user"}:
+                raw_for_normalization = {**raw_operation, "operation": "keep", "target": current_store, "reason": "current placement is acceptable"}
+        operation, reject_reason = _normalize_inventory_operation(raw_for_normalization)
         if reject_reason or not operation:
             decisions.append({
                 "evidence_id": evidence_id,
@@ -970,6 +1052,10 @@ def run_memory_improvement_step(
                 "changed": False,
                 "operation": operation,
             })
+            continue
+        non_mutating_decision = _memory_non_mutating_operation_decision(evidence_id, operation)
+        if non_mutating_decision:
+            decisions.append(non_mutating_decision)
             continue
         source_evidence = evidence_by_id.get(evidence_id, {"id": evidence_id})
         if operation.get("operation") == "memory_move":
@@ -1042,9 +1128,10 @@ def run_memory_improvement_step(
 
     for item in memory_evidence:
         evidence_id = str(item.get("id") or "")
+        if any(decision.get("evidence_id") == evidence_id for decision in decisions):
+            continue
         if item.get("kind") == "memory_inventory_candidate":
-            if not any(decision.get("evidence_id") == evidence_id for decision in decisions):
-                decisions.append({"evidence_id": evidence_id, **_memory_non_operation_route(item)})
+            decisions.append({"evidence_id": evidence_id, **_memory_non_operation_route(item)})
             continue
         operation = _memory_operation_from_evidence(item)
         if not operation:
@@ -1078,6 +1165,10 @@ def run_memory_improvement_step(
                 "changed": False,
                 "operation": operation,
             })
+            continue
+        non_mutating_decision = _memory_non_mutating_operation_decision(evidence_id, operation)
+        if non_mutating_decision:
+            decisions.append(non_mutating_decision)
             continue
         context = build_memory_mutation_context(provider=external_provider, operation=operation)
         related_lookup = build_related_memory_lookup_context(

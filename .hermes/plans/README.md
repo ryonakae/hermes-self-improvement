@@ -4,11 +4,17 @@
 
 As of 2026-05-09, the current active implementation plan is:
 
+- `2026-05-09_134424-memory-placement-planner-actions.md`
+  - **Status:** implemented.
+  - Follow-up after the memory placement routing slice. The previous dry-run made non-memory routing visible (`Would apply: 0 / Deferred: 26 / Skipped: 9 / Blocked: 0`) but still left `memory_placement_needs_routing: 25` and `memory_inventory_needs_planner: 1`. The implementation makes the existing memory placement planner actionable without adding a new lane: normalizes `keep`, `skip_noise`, `convert_to_skill_update`, move, merge/replace, and stale-pair operations; keeps obvious correct USER/MEMORY placement as no-op skips; routes procedural placement to skill maintenance without mutating skills in the memory step; preserves exact-old-text and sensitive-content guards; and extends the dry-run `Memory placement` summary with kept/move/merge/skill-route/still-needs-planner counts. Dry-run verification produced `Would apply: 0 / Deferred: 8 / Skipped: 28 / Blocked: 0`, with `kept in current store: memory 20` and `needs memory planner: 7`.
+
+The previous active implementation plan is:
+
 - `2026-05-09_132705-memory-placement-routing.md`
   - **Status:** implemented.
   - Refines the memory-noise cleanup so non-memory observations are not silently collapsed into generic skips. The implementation keeps the existing `improve` loop and `apply / defer / skip / block` summary, but adds explicit placement routing metadata and compact dry-run lines: duplicate existing memory, routed to skill maintenance, diagnostic-only raw output, and memory inventory that still needs planner judgment. Raw tool/run output now becomes diagnostic skip rather than block; recurring workflow observations remain visible to skill maintenance; semantic duplicate memory candidates record no-op metadata; and unsafe/sensitive memory cases still block. Dry-run verification after implementation produced `Would apply: 0 / Deferred: 26 / Skipped: 9 / Blocked: 0`.
 
-The previous active implementation plan is:
+The earlier active implementation plan is:
 
 - `2026-05-09_120400-knowledge-maintenance-planner.md`
   - **Status:** implemented.

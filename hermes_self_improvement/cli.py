@@ -1132,26 +1132,47 @@ def _memory_placement_summary_lines(decisions: list[dict[str, Any]]) -> list[str
     duplicate_count = 0
     diagnostic_count = 0
     needs_planner_count = 0
+    merge_replace_count = 0
     workflow_counts: dict[str, int] = {}
+    keep_counts: dict[str, int] = {}
+    move_counts: dict[str, int] = {}
     for item in decisions:
         if not isinstance(item, dict):
             continue
         reason = str(item.get("reason") or "")
+        operation = item.get("operation") if isinstance(item.get("operation"), dict) else {}
+        operation_kind = str(operation.get("operation") or "")
         if reason == "memory_duplicate_existing" or item.get("skip_reason") == "memory_duplicate_existing":
             duplicate_count += 1
+        elif reason in {"keep_current_memory", "keep_current_user"}:
+            target = "user" if reason == "keep_current_user" else "memory"
+            keep_counts[target] = keep_counts.get(target, 0) + 1
+        elif operation_kind == "memory_move":
+            source = str(operation.get("source") or "?")
+            target = str(operation.get("target") or "?")
+            label = f"{source} -> {target}"
+            move_counts[label] = move_counts.get(label, 0) + 1
+        elif operation_kind in {"memory_replace", "memory_delete"}:
+            merge_replace_count += 1
         elif reason in {"not_memory_raw_tool_output", "not_memory_diagnostic_only"} or item.get("suggested_route") == "diagnostic":
             diagnostic_count += 1
         elif reason in {"memory_inventory_needs_planner", "memory_placement_needs_routing"} or item.get("suggested_route") == "memory_planner":
             needs_planner_count += 1
-        elif reason == "not_memory_workflow_to_skill" or item.get("suggested_route") == "skill":
-            boundary = str(item.get("workflow_boundary") or "workflow" or "workflow").strip()
+        elif reason in {"not_memory_workflow_to_skill", "memory_convert_to_skill_update"} or item.get("suggested_route") == "skill":
+            boundary = str(item.get("skill_route") or item.get("workflow_boundary") or "placement review").strip()
             workflow_counts[boundary] = workflow_counts.get(boundary, 0) + 1
     lines: list[str] = []
-    if not any([duplicate_count, diagnostic_count, needs_planner_count, workflow_counts]):
+    if not any([duplicate_count, diagnostic_count, needs_planner_count, workflow_counts, keep_counts, move_counts, merge_replace_count]):
         return lines
     lines.append("Memory placement:")
     if duplicate_count:
         lines.append(f"- duplicate existing memory: {duplicate_count}")
+    if keep_counts:
+        lines.append(f"- kept in current store: {_format_count_map(_top_count_map(keep_counts))}")
+    if move_counts:
+        lines.append(f"- would move: {_format_count_map(_top_count_map(move_counts))}")
+    if merge_replace_count:
+        lines.append(f"- would merge/replace: {merge_replace_count}")
     if workflow_counts:
         lines.append(f"- routed to skill maintenance: {_format_count_map(_top_count_map(workflow_counts))}")
     if diagnostic_count:

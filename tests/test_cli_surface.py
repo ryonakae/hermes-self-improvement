@@ -508,15 +508,24 @@ def test_improve_summary_shows_memory_placement_routing():
             {"decision": "skip", "reason": "not_memory_raw_tool_output", "suggested_route": "diagnostic"},
             {"decision": "defer", "reason": "memory_inventory_needs_planner", "suggested_route": "memory_planner"},
             {"decision": "skip", "reason": "memory_duplicate_existing", "suggested_route": "none"},
+            {"decision": "skip", "reason": "keep_current_memory", "target": "memory"},
+            {"decision": "skip", "reason": "keep_current_user", "target": "user"},
+            {"decision": "accepted", "reason": "dry_run_would_execute_memory_tool", "operation": {"operation": "memory_move", "source": "user", "target": "memory"}},
+            {"decision": "accepted", "reason": "dry_run_would_execute_memory_tool", "operation": {"operation": "memory_replace", "target": "memory"}},
+            {"decision": "skip", "reason": "memory_convert_to_skill_update", "suggested_route": "skill", "skill_route": "hermes-memory-and-live-context"},
         ]}},
         "evidence_pack": {"summary": {}},
     })
 
     assert "Memory placement:" in text
     assert "- duplicate existing memory: 1" in text
-    assert "- routed to skill maintenance: patch tool workflow 1" in text
+    assert "patch tool workflow 1" in text
     assert "- diagnostic only: raw tool output 1" in text
     assert "- needs memory planner: 1" in text
+    assert "- kept in current store: memory 1, user 1" in text
+    assert "- would move: user -> memory 1" in text
+    assert "- would merge/replace: 1" in text
+    assert "hermes-memory-and-live-context 1" in text
 
 
 def test_improve_summary_shows_memory_placement_inventory_count():

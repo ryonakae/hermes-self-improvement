@@ -4,6 +4,7 @@ from hermes_self_improvement.markdown_artifacts import (
     render_calibration_context_markdown,
     render_candidate_markdown,
     render_evidence_markdown,
+    render_memory_placement_markdown,
     render_planner_markdown,
     render_tool_result_markdown,
 )
@@ -57,6 +58,28 @@ def test_render_planner_and_tool_result_markdown_are_human_context():
     assert "demo" in planner_text
     assert "# Tool result summary" in result_text
     assert "created demo skill" in result_text
+
+
+def test_render_memory_placement_markdown_includes_output_operations_schema():
+    text = render_memory_placement_markdown([
+        {
+            "id": "memory-place-1",
+            "kind": "memory_placement_candidate",
+            "inventory": {"current_store": "memory", "old_text": "Hermes runtime root is ~/.hermes."},
+        }
+    ])
+
+    assert "## Output operations" in text
+    assert "- keep" in text
+    assert "- move_user_to_memory" in text
+    assert "- move_memory_to_user" in text
+    assert "- merge_with_existing" in text
+    assert "- replace" in text
+    assert "- remove" in text
+    assert "- convert_to_skill_update" in text
+    assert "- skip_noise" in text
+    assert "If the current store is already correct, output keep instead of a mutation." in text
+    assert "Return one operation for every evidence_id unless the evidence is unsafe or sensitive." in text
 
 
 def test_render_calibration_context_markdown_includes_lessons():
