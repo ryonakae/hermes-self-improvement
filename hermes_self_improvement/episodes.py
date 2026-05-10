@@ -251,6 +251,12 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
             episode["post_validation_has_pitfalls"] = bool(post_validation.get("has_pitfalls"))
         if post_validation.get("has_verification") is not None:
             episode["post_validation_has_verification"] = bool(post_validation.get("has_verification"))
+        if post_validation.get("has_trigger_conditions") is not None:
+            episode["post_validation_has_trigger_conditions"] = bool(post_validation.get("has_trigger_conditions"))
+        if post_validation.get("has_concrete_steps") is not None:
+            episode["post_validation_has_concrete_steps"] = bool(post_validation.get("has_concrete_steps"))
+        if post_validation.get("memory_shaped") is not None:
+            episode["post_validation_memory_shaped"] = bool(post_validation.get("memory_shaped"))
     return validate_episode(episode)
 
 

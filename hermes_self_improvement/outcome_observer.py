@@ -302,6 +302,12 @@ def collect_post_validation_observations(*, episodes: list[dict[str, Any]], wind
             signals["skill_quality_has_pitfalls"] = bool(episode.get("post_validation_has_pitfalls"))
         if episode.get("post_validation_has_verification") is not None:
             signals["skill_quality_has_verification"] = bool(episode.get("post_validation_has_verification"))
+        if episode.get("post_validation_has_trigger_conditions") is not None:
+            signals["skill_quality_has_trigger_conditions"] = bool(episode.get("post_validation_has_trigger_conditions"))
+        if episode.get("post_validation_has_concrete_steps") is not None:
+            signals["skill_quality_has_concrete_steps"] = bool(episode.get("post_validation_has_concrete_steps"))
+        if episode.get("post_validation_memory_shaped") is not None:
+            signals["skill_quality_memory_shaped"] = bool(episode.get("post_validation_memory_shaped"))
         candidates.append({
             "schema_name": "self_improvement_outcome_observation",
             "schema_version": "1.0",

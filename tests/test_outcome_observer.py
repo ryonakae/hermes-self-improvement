@@ -418,6 +418,9 @@ def test_collect_post_validation_observations_records_immediate_validation_signa
             post_validation_status="passed",
             post_validation_has_pitfalls=True,
             post_validation_has_verification=True,
+            post_validation_has_trigger_conditions=False,
+            post_validation_has_concrete_steps=True,
+            post_validation_memory_shaped=False,
         ),
         episode_payload(
             "episode-2",
@@ -437,6 +440,9 @@ def test_collect_post_validation_observations_records_immediate_validation_signa
     assert by_episode["episode-1"]["signals"]["validation_passed"] is True
     assert by_episode["episode-1"]["signals"]["skill_quality_has_pitfalls"] is True
     assert by_episode["episode-1"]["signals"]["skill_quality_has_verification"] is True
+    assert by_episode["episode-1"]["signals"]["skill_quality_has_trigger_conditions"] is False
+    assert by_episode["episode-1"]["signals"]["skill_quality_has_concrete_steps"] is True
+    assert by_episode["episode-1"]["signals"]["skill_quality_memory_shaped"] is False
     assert by_episode["episode-1"]["confidence"] == 0.7
     assert by_episode["episode-2"]["signals"]["validation_passed"] is False
     assert by_episode["episode-2"]["confidence"] == 0.8

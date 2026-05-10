@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-quality-outcome-signals.md`
+  - **Status:** implemented.
+  - Carries richer skill-quality diagnostics from post-validation into episode ledgers and immediate outcome observations, including trigger-condition, concrete-step, and memory-shaped signals.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-quality-diagnostics.md`
   - **Status:** implemented.
   - Extends post-validation quality diagnostics with trigger-condition, concrete-step, and memory-shaped signals. CLI skill quality summaries now classify missing trigger/procedure guidance as `needs_patch` and memory-shaped skill content as `too_generic`.
