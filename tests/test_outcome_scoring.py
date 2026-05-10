@@ -96,6 +96,9 @@ def test_score_episode_outcomes_applies_skill_quality_penalties_to_validation_si
     thin = score_episode_outcomes(episode_payload("thin"), [
         outcome_payload("thin", signals={"validation_passed": True, "skill_quality_needs_patch": True}, confidence=0.65),
     ])
+    too_short = score_episode_outcomes(episode_payload("too-short"), [
+        outcome_payload("too-short", signals={"validation_passed": True, "skill_quality_content_too_short": True}, confidence=0.65),
+    ])
     memory_shaped = score_episode_outcomes(episode_payload("memory-shaped"), [
         outcome_payload("memory-shaped", signals={"validation_passed": True, "skill_quality_too_generic": True}, confidence=0.75),
     ])
@@ -103,6 +106,8 @@ def test_score_episode_outcomes_applies_skill_quality_penalties_to_validation_si
     assert good["windows"]["immediate"]["score"] == 0.2
     assert thin["windows"]["immediate"]["score"] == 0.05
     assert thin["components"]["skill_quality_needs_patch_penalty"] == -0.15
+    assert too_short["windows"]["immediate"]["score"] == 0.1
+    assert too_short["components"]["skill_quality_compactness_penalty"] == -0.1
     assert memory_shaped["windows"]["immediate"]["score"] == -0.05
     assert memory_shaped["components"]["skill_quality_too_generic_penalty"] == -0.25
 

@@ -204,7 +204,7 @@ def test_record_run_episodes_uses_mutation_metadata_for_executed_skill_change(tm
     skill_decision.update({
         "decision": "accepted",
         "changed": True,
-        "result": {"success": True, "post_validation": {"status": "passed", "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": True, "memory_shaped": False}},
+        "result": {"success": True, "post_validation": {"status": "passed", "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": True, "memory_shaped": False, "content_too_short": True, "content_too_long": False}},
     })
 
     record_run_episodes(config=config, run_result=result)
@@ -224,6 +224,8 @@ def test_record_run_episodes_uses_mutation_metadata_for_executed_skill_change(tm
     assert episode["post_validation_has_trigger_conditions"] is False
     assert episode["post_validation_has_concrete_steps"] is True
     assert episode["post_validation_memory_shaped"] is False
+    assert episode["post_validation_content_too_short"] is True
+    assert episode["post_validation_content_too_long"] is False
 
 
 def test_record_run_episodes_preserves_archive_skill_decision(tmp_path):

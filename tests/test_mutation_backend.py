@@ -336,6 +336,8 @@ def test_native_backend_post_validation_records_trigger_step_and_memory_shape_qu
     assert result["post_validation"]["has_trigger_conditions"] is False
     assert result["post_validation"]["has_concrete_steps"] is False
     assert result["post_validation"]["memory_shaped"] is True
+    assert result["post_validation"]["content_too_short"] is True
+    assert result["post_validation"]["content_too_long"] is False
 
 
 def test_native_backend_rejects_create_when_post_validation_readback_fails():

@@ -85,8 +85,8 @@ Overall: **about 7合目**.
   - Trace-backed accounting exists, skill create/improve mutations are read back through `skill_view`, built-in memory mutations use before/after state-hash checks, and skill patch/edit readback now verifies the intended changed text where available.
   - Remaining gaps are mostly richer diagnostics and broader provider-specific memory readback beyond the built-in store hash path.
 
-- **Skill quality evaluation:** around 6.5合目.
-  - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, and compactness signals. These diagnostics are now also preserved into episodes and immediate outcome observations. Evidence-fit and low-risk auto-patch generation still need deeper evaluator work.
+- **Skill quality evaluation:** around 6.8合目.
+  - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, and compactness signals (`content_too_short` / `content_too_long`). These diagnostics are now also preserved into episodes and immediate outcome observations. Evidence-fit and low-risk auto-patch generation still need deeper evaluator work.
 
 - **Duplicate / existing coverage decisions:** around 6合目.
   - `patch-tool-workflow` style duplicates are now recorded as meaningful no-ops such as `covered_by_existing_skill` / `duplicate_prevented`, shown in summaries, preserved into episodes, and given a conservative positive outcome component when duplicate creation is prevented.
@@ -194,7 +194,7 @@ Evaluator should check:
 - not memory-shaped — deterministic signal implemented
 - not duplicate of existing skills — duplicate/no-op checks implemented for create proposals
 - aligned with evidence — still needs deeper evaluator work
-- compact enough to load usefully — basic content length signal exists; thresholds still need tuning
+- compact enough to load usefully — deterministic `content_too_short` / `content_too_long` signals implemented; thresholds are conservative and may still need tuning
 
 Exit criteria:
 
@@ -541,6 +541,14 @@ Goal: prevent usage-only weak positives from being reported as proven improvemen
 
 Result: credit assignment now keeps `skill_used_without_correction`-only positive rows as `unknown` and counts them as `skill_usage_under_observation`; improve, calibrate, and read-only operational reports surface that count explicitly.
 
+### Slice AG — Skill compactness diagnostics
+
+**Status:** implemented in current change set.
+
+Goal: make `content_chars` actionable without overfitting to exact skill length.
+
+Result: post-validation now emits conservative `content_too_short` / `content_too_long` flags, preserves them into episodes, carries them into immediate outcome observations, applies a light compactness penalty in outcome scoring, and includes compactness problems in `needs_patch` skill-quality summaries.
+
 ---
 
 ## Progress Log
@@ -587,6 +595,7 @@ Result: credit assignment now keeps `skill_used_without_correction`-only positiv
 - Implemented skill usage positive outcomes: successful later `skill_view(name=<target_id>)` events now emit weak `skill_used_after_mutation` observations for prior executed skill mutation episodes, while pre-mutation usage, unrelated skills, and broad `skills_list` calls do not count.
 - Implemented skill usage outcome scoring: `skill_used_after_mutation` now contributes the weak `skill_used_without_correction` score component, so later-use observations affect credit assignment instead of remaining raw-only evidence.
 - Implemented skill usage under-observation reporting: usage-only weak positives now remain `unknown` with a dedicated `skill_usage_under_observation` count in improve, calibrate, and read-only operational report surfaces.
+- Implemented skill compactness diagnostics: post-validation now emits `content_too_short` / `content_too_long`, persists them through episodes and outcome observations, applies a light compactness quality penalty, and classifies compactness issues as `needs_patch` in skill-quality summaries.
 
 ---
 

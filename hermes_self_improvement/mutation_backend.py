@@ -110,6 +110,10 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+SKILL_CONTENT_TOO_SHORT_CHARS = 900
+SKILL_CONTENT_TOO_LONG_CHARS = 12000
+
+
 def _tool_trace_has_skill_manage(trace: list[Any], *, action: str | None, name: str) -> bool:
     for item in trace:
         if not isinstance(item, dict):
@@ -132,6 +136,9 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
     content = result.get("content") if isinstance(result, dict) else ""
     content_text = str(content or "")
     content_lower = content_text.lower()
+    content_chars = len(content_text)
+    content_too_short = ok and content_chars < SKILL_CONTENT_TOO_SHORT_CHARS
+    content_too_long = ok and content_chars > SKILL_CONTENT_TOO_LONG_CHARS
     has_frontmatter = content_text.lstrip().startswith("---")
     has_pitfalls = "pitfall" in content_lower or "注意" in content_text or "落とし穴" in content_text
     has_verification = "verification" in content_lower or "verify" in content_lower or "検証" in content_text
@@ -151,7 +158,9 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
         "has_trigger_conditions": has_trigger_conditions,
         "has_concrete_steps": has_concrete_steps,
         "memory_shaped": memory_shaped,
-        "content_chars": len(content_text),
+        "content_chars": content_chars,
+        "content_too_short": content_too_short,
+        "content_too_long": content_too_long,
         **{key: value for key, value in intended_check.items() if key != "passed"},
         "error": result.get("error") if isinstance(result, dict) else "skill_view_returned_invalid_result",
     }

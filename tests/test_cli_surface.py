@@ -561,15 +561,17 @@ def test_improve_summary_skill_quality_uses_trigger_steps_and_memory_shape():
         "summary": {"skill_changes": 2},
         "step_decisions": {"skill": {"planner": {"decisions": []}, "decisions": [
             {"decision": "accepted", "changed": True, "result": {"created_skills": ["workflow-thin"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": False}}},
+            {"decision": "accepted", "changed": True, "result": {"changed_skills": ["too-short"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": True, "has_concrete_steps": True, "content_too_short": True}}},
             {"decision": "accepted", "changed": True, "result": {"changed_skills": ["memory-shaped"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": False, "memory_shaped": True}}},
         ]}},
         "evidence_pack": {"summary": {}},
     })
 
     assert "Skill quality:" in text
-    assert "- reviewed: 2" in text
-    assert "- good: 0, needs patch: 1, duplicate: 0, too generic: 1, unsafe: 0" in text
+    assert "- reviewed: 3" in text
+    assert "- good: 0, needs patch: 2, duplicate: 0, too generic: 1, unsafe: 0" in text
     assert "memory-shaped" in text
+    assert "too-short" in text
     assert "workflow-thin" in text
 
 

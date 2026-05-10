@@ -518,6 +518,8 @@ def test_collect_post_validation_observations_records_immediate_validation_signa
             post_validation_has_trigger_conditions=False,
             post_validation_has_concrete_steps=True,
             post_validation_memory_shaped=False,
+            post_validation_content_too_short=True,
+            post_validation_content_too_long=False,
         ),
         episode_payload(
             "episode-2",
@@ -540,6 +542,8 @@ def test_collect_post_validation_observations_records_immediate_validation_signa
     assert by_episode["episode-1"]["signals"]["skill_quality_has_trigger_conditions"] is False
     assert by_episode["episode-1"]["signals"]["skill_quality_has_concrete_steps"] is True
     assert by_episode["episode-1"]["signals"]["skill_quality_memory_shaped"] is False
+    assert by_episode["episode-1"]["signals"]["skill_quality_content_too_short"] is True
+    assert by_episode["episode-1"]["signals"]["skill_quality_content_too_long"] is False
     assert by_episode["episode-1"]["signals"]["skill_quality_needs_patch"] is True
     assert by_episode["episode-1"]["outcome_score"] == 0.05
     assert by_episode["episode-1"]["confidence"] == 0.65

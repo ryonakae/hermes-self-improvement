@@ -262,6 +262,10 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
             episode["post_validation_has_concrete_steps"] = bool(post_validation.get("has_concrete_steps"))
         if post_validation.get("memory_shaped") is not None:
             episode["post_validation_memory_shaped"] = bool(post_validation.get("memory_shaped"))
+        if post_validation.get("content_too_short") is not None:
+            episode["post_validation_content_too_short"] = bool(post_validation.get("content_too_short"))
+        if post_validation.get("content_too_long") is not None:
+            episode["post_validation_content_too_long"] = bool(post_validation.get("content_too_long"))
     return validate_episode(episode)
 
 

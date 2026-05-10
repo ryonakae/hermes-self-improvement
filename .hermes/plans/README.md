@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-compactness-diagnostics.md`
+  - **Status:** implemented.
+  - Adds conservative `content_too_short` / `content_too_long` post-validation diagnostics and carries them through episode ledgers, outcome observations, scoring, and skill-quality summaries as light under-observation quality issues.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-usage-under-observation-reporting.md`
   - **Status:** implemented.
   - Keeps skill-usage-only weak positives as `unknown` with a dedicated `skill_usage_under_observation` count in improve, calibrate, and operational report surfaces, so later views do not become proven improvement by themselves.

@@ -123,7 +123,7 @@ def _outcome_status(row: dict[str, Any]) -> str:
         if float(score) > 0:
             if _has_only_weak_usage_positive(components):
                 return "unknown"
-            quality_penalties = {"skill_quality_needs_patch_penalty", "skill_quality_too_generic_penalty"}
+            quality_penalties = {"skill_quality_needs_patch_penalty", "skill_quality_too_generic_penalty", "skill_quality_compactness_penalty"}
             stronger_positive = any(
                 key in components
                 for key in ("failure_reduction", "repeat_fix_absent", "user_correction_absent", "cluster_absent", "skill_used_without_correction", "memory_retrieved_useful")
@@ -145,7 +145,10 @@ def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int],
         status = _outcome_status(row)
         counts[status] = counts.get(status, 0) + 1
         components = row.get("components") if isinstance(row.get("components"), dict) else {}
-        if status == "unknown" and components.get("skill_quality_needs_patch_penalty") is not None:
+        if status == "unknown" and (
+            components.get("skill_quality_needs_patch_penalty") is not None
+            or components.get("skill_quality_compactness_penalty") is not None
+        ):
             quality["quality_under_observation"] += 1
         if status == "unknown" and _has_only_weak_usage_positive(components):
             quality["skill_usage_under_observation"] += 1

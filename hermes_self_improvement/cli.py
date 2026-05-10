@@ -1315,6 +1315,8 @@ def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_
                 or not post_validation.get("has_verification")
                 or post_validation.get("has_trigger_conditions") is False
                 or post_validation.get("has_concrete_steps") is False
+                or post_validation.get("content_too_short")
+                or post_validation.get("content_too_long")
             ):
                 category = "needs_patch"
             else:

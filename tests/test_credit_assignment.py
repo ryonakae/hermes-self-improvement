@@ -176,20 +176,23 @@ def test_credit_assignment_keeps_thin_skill_validation_under_observation(tmp_pat
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "good.json", episode_payload("good-skill"))
     write_json(root / "episodes" / "2026-05-03" / "thin.json", episode_payload("thin-skill", target_id="thin-skill"))
+    write_json(root / "episodes" / "2026-05-03" / "too-short.json", episode_payload("too-short", target_id="too-short"))
     write_json(root / "episodes" / "2026-05-03" / "memory-shaped.json", episode_payload("memory-shaped", target_id="memory-shaped"))
     write_json(root / "outcomes" / "2026-05-03" / "good-outcome.json", outcome_payload("good-skill", "immediate", {"validation_passed": True}))
     write_json(root / "outcomes" / "2026-05-03" / "thin-outcome.json", outcome_payload("thin-skill", "immediate", {"validation_passed": True, "skill_quality_needs_patch": True}, confidence=0.65))
+    write_json(root / "outcomes" / "2026-05-03" / "too-short-outcome.json", outcome_payload("too-short", "immediate", {"validation_passed": True, "skill_quality_content_too_short": True}, confidence=0.65))
     write_json(root / "outcomes" / "2026-05-03" / "memory-outcome.json", outcome_payload("memory-shaped", "immediate", {"validation_passed": True, "skill_quality_too_generic": True}, confidence=0.75))
 
     aggregate = build_credit_assignment_aggregate(config=config, limit=100)
 
     assert aggregate["outcome_status_counts"]["improved"] == 1
-    assert aggregate["outcome_status_counts"]["unknown"] == 1
+    assert aggregate["outcome_status_counts"]["unknown"] == 2
     assert aggregate["outcome_status_counts"]["regressed"] == 1
     assert "thin-skill" in aggregate["related_episode_ids"]["unknown"]
+    assert "too-short" in aggregate["related_episode_ids"]["unknown"]
     assert "memory-shaped" in aggregate["related_episode_ids"]["regressed"]
     compact = compact_credit_assignment_summary(aggregate)
-    assert compact["outcomes"]["quality_under_observation"] == 1
+    assert compact["outcomes"]["quality_under_observation"] == 2
 
 
 def test_credit_assignment_groups_archive_outcomes_by_lifecycle_factors(tmp_path):
