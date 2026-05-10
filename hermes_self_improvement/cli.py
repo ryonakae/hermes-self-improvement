@@ -277,6 +277,23 @@ def _build_operational_report_payloads(config: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def _operational_grouped_signal_lines(signal_strength: dict[str, Any]) -> list[str]:
+    actionable = signal_strength.get("actionable_cluster_groups") if isinstance(signal_strength.get("actionable_cluster_groups"), dict) else {}
+    non_actionable = signal_strength.get("non_actionable_clusters") if isinstance(signal_strength.get("non_actionable_clusters"), dict) else {}
+    lines: list[str] = []
+    if actionable:
+        parts = []
+        for name, payload in sorted(actionable.items()):
+            count = int(payload.get("count") or 0) if isinstance(payload, dict) else int(payload or 0)
+            coverage = str(payload.get("suggested_coverage") or "review") if isinstance(payload, dict) else "review"
+            parts.append(f"{name} {count} -> {coverage}")
+        lines.append("- grouped actionable: " + "; ".join(parts[:5]))
+    if non_actionable:
+        parts = [f"{name} {int(count or 0)}" for name, count in sorted(non_actionable.items(), key=lambda item: (-int(item[1] or 0), str(item[0])))]
+        lines.append("- non-actionable volume: " + "; ".join(parts[:5]))
+    return lines
+
+
 def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list[str]:
     if not isinstance(payloads, dict):
         return []
@@ -324,6 +341,9 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
             f"{int(evidence.get('bad_outcomes') or 0)} bad outcomes, "
             f"{int(evidence.get('scorer_errors') or 0)} scorer errors"
         )
+        signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else {}
+        if signal_strength:
+            lines.extend(_operational_grouped_signal_lines(signal_strength))
         for ledger in calibration_ledgers[:5]:
             lines.append(
                 f"- `{ledger.get('ledger_id')}`: regression `{ledger.get('regression_status')}`, "

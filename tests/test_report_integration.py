@@ -87,3 +87,28 @@ def test_report_does_not_include_removed_review_outcome_surface(tmp_path):
 
     assert "review_outcomes" not in out["operational_reports"]
     assert "## Review outcomes" not in out["report"]
+
+
+def test_operational_report_sections_show_grouped_calibration_signals():
+    mod = load_plugin_module()
+
+    lines = mod._render_operational_report_sections({
+        "calibration": {
+            "evidence_summary": {
+                "total_events": 10,
+                "disagreements": 0,
+                "bad_outcomes": 0,
+                "scorer_errors": 0,
+                "signal_strength": {
+                    "actionable_cluster_groups": {"patch_tool": {"count": 71, "suggested_coverage": "safe-patch-usage"}},
+                    "non_actionable_clusters": {"tool_error:terminal:terminal_nonzero_exit": 493},
+                },
+            },
+            "ledgers": [],
+        }
+    })
+    text = "\n".join(lines)
+
+    assert "## Calibration summary" in text
+    assert "- grouped actionable: patch_tool 71 -> safe-patch-usage" in text
+    assert "- non-actionable volume: tool_error:terminal:terminal_nonzero_exit 493" in text

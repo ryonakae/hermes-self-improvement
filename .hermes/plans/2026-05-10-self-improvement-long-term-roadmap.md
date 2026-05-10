@@ -95,8 +95,8 @@ Overall: **about 7合目**.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations can score executed skill mutations, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
   - Actual later positive observations are intentionally conservative; absence alone is not proof of improvement, and stronger evidence such as useful skill use without correction is still future work.
 
-- **Human-readable daily / CLI reporting:** around 7合目.
-  - The daily Slack template has been improved, and `improve` / `calibrate` summaries now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, and non-actionable diagnostic volume more clearly.
+- **Human-readable daily / CLI reporting:** around 7.5合目.
+  - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, and non-actionable diagnostic volume more clearly.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
   - Generic high-volume unmatched clusters such as `tool_error:terminal:terminal_nonzero_exit` are now separated from actionable `recurring_clusters` so reports do not overstate vague terminal failures as concrete skill gaps.
   - Patch tool failures are grouped as `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, so `patch:not_found` and `patch:unknown_error` are visible as one workflow area without hiding the raw counts.
@@ -436,6 +436,14 @@ Goal: make grouped calibration signals readable without opening JSON artifacts.
 
 Result: calibration summaries now show actionable workflow groups with suggested coverage separately from non-actionable high-volume diagnostic clusters.
 
+### Slice U — Operational report grouped signal surface
+
+**Status:** implemented in current change set.
+
+Goal: carry grouped signal meaning into read-only report and daily Slack report inputs.
+
+Result: operational report calibration sections now show grouped actionable and non-actionable signal lines, and the daily Slack template guidance tells the report writer to keep actionable workflow areas separate from diagnostic noise.
+
 ---
 
 ## Progress Log
@@ -470,6 +478,7 @@ Result: calibration summaries now show actionable workflow groups with suggested
 - Implemented skill quality diagnostics: post-validation now records trigger-condition, concrete-step, and memory-shaped signals, and CLI quality summaries use them to separate `needs_patch` from `too_generic`.
 - Implemented skill quality outcome signals: richer post-validation quality diagnostics now flow into episode ledgers and immediate outcome observations so later credit assignment/evaluator material can see thin or memory-shaped skills.
 - Implemented calibration grouped signal reporting: `calibrate` summaries now expose actionable workflow groups and non-actionable diagnostic volume separately, reducing the need to inspect JSON artifacts for signal meaning.
+- Implemented operational report grouped signal surface: read-only operational report sections and the daily Slack template now preserve the distinction between actionable workflow groups and non-actionable diagnostic volume.
 
 ---
 

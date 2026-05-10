@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-operational-report-grouped-signal-surface.md`
+  - **Status:** implemented.
+  - Extends read-only operational reports with grouped actionable/non-actionable calibration signal lines and updates the daily Slack template guidance so morning reports keep those meanings separate.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-calibration-grouped-signal-reporting.md`
   - **Status:** implemented.
   - Adds human-readable grouped signal lines to calibration summaries, separating actionable workflow groups and non-actionable high-volume diagnostic clusters.
