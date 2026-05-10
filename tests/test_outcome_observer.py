@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from hermes_self_improvement.outcome_observer import (
+    _unmatched_summary,
     collect_failure_cluster_recurrence_observations,
     collect_failure_cluster_stability_observations,
     collect_post_validation_observations,
@@ -135,6 +136,23 @@ def test_write_outcome_observations_skips_invalid_candidates(tmp_path):
     assert summary["written_observation_count"] == 0
     assert summary["invalid_observation_count"] == 1
     assert load_outcome_observations(config=config, limit=10) == []
+
+
+def test_unmatched_summary_separates_generic_terminal_nonzero_exit_from_actionable_recurring_clusters():
+    unmatched = [
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:terminal:terminal_nonzero_exit"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:terminal:terminal_nonzero_exit"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:terminal:terminal_nonzero_exit"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:patch:not_found"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:patch:not_found"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:patch:not_found"},
+    ]
+
+    summary = _unmatched_summary(unmatched)
+
+    assert summary["recurring_clusters"] == {"tool_error:patch:not_found": 3}
+    assert summary["non_actionable_clusters"] == {"tool_error:terminal:terminal_nonzero_exit": 3}
+    assert summary["by_cluster"]["tool_error:terminal:terminal_nonzero_exit"] == 3
 
 
 def test_collect_target_reedit_observations_attributes_weak_negative_to_prior_episode():

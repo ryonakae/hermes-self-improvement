@@ -94,9 +94,10 @@ Overall: **about 6.5–7合目**.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations can score executed skill mutations, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
   - Actual later positive observations are intentionally conservative; absence alone is not proof of improvement, and stronger evidence such as useful skill use without correction is still future work.
 
-- **Human-readable daily / CLI reporting:** around 6.5合目.
+- **Human-readable daily / CLI reporting:** around 6.5–7合目.
   - The daily Slack template has been improved, and `improve` / `calibrate` summaries now separate actual mutation, preview, no-op/skip, validation reject, and overlay promotion more clearly.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
+  - Generic high-volume unmatched clusters such as `tool_error:terminal:terminal_nonzero_exit` are now separated from actionable `recurring_clusters` so reports do not overstate vague terminal failures as concrete skill gaps.
 
 ---
 
@@ -350,6 +351,14 @@ Goal: add a cautious positive counterpart for mature coverage-skill episodes wit
 
 Result: known coverage-skill episodes now emit a weak `coverage_target_quiet_window` positive observation only after a 24-hour quiet window with later telemetry activity and no matching cluster recurrence. Recent episodes, no later activity, and reappeared clusters are not rewarded.
 
+### Slice K — Unmatched cluster actionability summary
+
+**Status:** implemented in current change set.
+
+Goal: keep high-volume generic unmatched clusters visible without making them look like concrete skill gaps.
+
+Result: `tool_error:terminal:terminal_nonzero_exit` remains in raw `by_cluster` counts but is separated into `non_actionable_clusters` and excluded from actionable `recurring_clusters`.
+
 ---
 
 ## Progress Log
@@ -374,6 +383,7 @@ Result: known coverage-skill episodes now emit a weak `coverage_target_quiet_win
 - Implemented post-validation outcome signals: executed skill mutation episodes now keep compact post-validation metadata, and outcome prepass emits immediate `validation_passed` observations from that metadata. Real smoke wrote 0 new observations because existing recent episodes predate the metadata.
 - Implemented failure-cluster coverage outcome attribution: timeout, permission-denied, and patch clusters now attach to relevant workflow-skill coverage episodes when exact evidence-id matching is missing. Real smoke wrote 80 recurrence observations and reduced unmatched clusters from 857 to 780.
 - Implemented failure-cluster stability outcomes: mature known coverage-skill episodes can now emit weak positive quiet-window observations only when later telemetry exists and the related cluster did not reappear. This is deliberately low-confidence and does not treat silence as proof of improvement. Real smoke emitted no quiet-window positives because covered clusters still reappeared, which is the intended conservative behavior.
+- Implemented unmatched cluster actionability summary: generic `tool_error:terminal:terminal_nonzero_exit` remains visible but is moved out of actionable `recurring_clusters` into `non_actionable_clusters` so reports do not overstate vague nonzero exits as a concrete maintenance target.
 
 ---
 

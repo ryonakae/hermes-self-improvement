@@ -20,6 +20,9 @@ COVERAGE_CLUSTER_ALIASES = {
     "patch-tool-workflow": ("tool_error:patch:",),
     "safe-patch-usage": ("tool_error:patch:",),
 }
+NON_ACTIONABLE_UNMATCHED_CLUSTERS = {
+    "tool_error:terminal:terminal_nonzero_exit",
+}
 
 
 def _now() -> datetime:
@@ -575,8 +578,17 @@ def _unmatched_summary(unmatched: list[dict[str, Any]]) -> dict[str, Any]:
         cluster_id = str(item.get("cluster_id") or "").strip()
         if cluster_id:
             by_cluster[cluster_id] = by_cluster.get(cluster_id, 0) + 1
-    recurring_clusters = {cluster_id: count for cluster_id, count in by_cluster.items() if count >= 3}
-    return {"by_signal": by_signal, "by_cluster": by_cluster, "recurring_clusters": recurring_clusters}
+    non_actionable_clusters = {
+        cluster_id: count
+        for cluster_id, count in by_cluster.items()
+        if cluster_id in NON_ACTIONABLE_UNMATCHED_CLUSTERS
+    }
+    recurring_clusters = {
+        cluster_id: count
+        for cluster_id, count in by_cluster.items()
+        if count >= 3 and cluster_id not in NON_ACTIONABLE_UNMATCHED_CLUSTERS
+    }
+    return {"by_signal": by_signal, "by_cluster": by_cluster, "recurring_clusters": recurring_clusters, "non_actionable_clusters": non_actionable_clusters}
 
 
 def compact_outcome_prepass_summary(prepass: dict[str, Any]) -> dict[str, Any]:

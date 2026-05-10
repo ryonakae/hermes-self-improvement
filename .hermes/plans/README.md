@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-unmatched-cluster-actionability-summary.md`
+  - **Status:** implemented.
+  - Separates generic high-volume unmatched clusters from actionable recurring clusters. `tool_error:terminal:terminal_nonzero_exit` remains visible in raw `by_cluster` counts and `non_actionable_clusters`, but no longer dominates `recurring_clusters` as if it were a concrete skill gap.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-failure-cluster-stability-outcomes.md`
   - **Status:** implemented.
   - Adds a cautious positive outcome signal for mature coverage-skill episodes. Known workflow skill targets now get a low-confidence `coverage_target_quiet_window` observation only when the episode is at least 24 hours old, later telemetry activity exists, and the related failure cluster has not reappeared.
