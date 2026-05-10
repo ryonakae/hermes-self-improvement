@@ -8,6 +8,16 @@ As of 2026-05-10, the long-term roadmap is:
   - **Status:** active long-term source of truth.
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 7合目. The active milestone is deeper skill quality and knowledge inventory maintenance.
 
+The detailed milestone implementation plans are:
+
+- `2026-05-10-milestone-1-reliable-mutation-accounting.md`
+- `2026-05-10-milestone-2-duplicate-existing-coverage.md`
+- `2026-05-10-milestone-3-skill-quality-evaluator.md`
+- `2026-05-10-milestone-4-knowledge-inventory-maintenance.md`
+- `2026-05-10-milestone-5-outcome-credit-assignment.md`
+- `2026-05-10-milestone-6-trustworthy-reporting.md`
+- `2026-05-10-milestone-7-autonomous-steady-state.md`
+
 The latest completed implementation plan is:
 
 - `2026-05-10-actual-results-created-skill-names.md`

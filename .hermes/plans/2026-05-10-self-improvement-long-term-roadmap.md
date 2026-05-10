@@ -126,6 +126,18 @@ Overall: **about 7合目**.
 
 ---
 
+## Milestone implementation plans
+
+Detailed milestone plans are split by file so execution can proceed without bloating this roadmap:
+
+- [Milestone 1 — Reliable mutation accounting and post-validation](2026-05-10-milestone-1-reliable-mutation-accounting.md)
+- [Milestone 2 — Duplicate and existing coverage handling](2026-05-10-milestone-2-duplicate-existing-coverage.md)
+- [Milestone 3 — Skill quality evaluator](2026-05-10-milestone-3-skill-quality-evaluator.md)
+- [Milestone 4 — Knowledge inventory beyond tool failures](2026-05-10-milestone-4-knowledge-inventory-maintenance.md)
+- [Milestone 5 — Outcome and credit assignment](2026-05-10-milestone-5-outcome-credit-assignment.md)
+- [Milestone 6 — Reporting that prevents confusion](2026-05-10-milestone-6-trustworthy-reporting.md)
+- [Milestone 7 — Autonomous steady state](2026-05-10-milestone-7-autonomous-steady-state.md)
+
 ## Milestones
 
 ### Milestone 1 — Reliable mutation accounting and post-validation
