@@ -241,6 +241,7 @@ def test_calibration_signal_strength_counts_under_observation_as_weak_only():
                 "outcomes": {
                     "quality_under_observation": 2,
                     "skill_usage_under_observation": 1,
+                    "missing_evidence_under_observation": 1,
                 }
             },
             "outcome_prepass": {"unmatched_observation_count": 1, "unmatched_summary": {}},
@@ -248,10 +249,10 @@ def test_calibration_signal_strength_counts_under_observation_as_weak_only():
         overlay_case_count=0,
     )
 
-    assert signal["weak"] == 4
+    assert signal["weak"] == 5
     assert signal["medium"] == 0
     assert signal["strong"] == 0
-    assert signal["under_observation"] == {"quality": 2, "skill_usage": 1}
+    assert signal["under_observation"] == {"quality": 2, "skill_usage": 1, "missing_evidence": 1}
 
 
 def test_calibration_preview_does_not_write_active_pointer(tmp_path):
@@ -406,7 +407,7 @@ def test_calibration_summary_reports_quality_under_observation():
                 "episode_count": 4,
                 "scored_episode_count": 3,
                 "overall": {"mean_outcome_score": 0.03, "confidence": 0.6},
-                "outcomes": {"tracked": 4, "improved": 1, "recurring": 0, "regressed": 0, "unknown": 2, "insufficient_window": 1, "quality_under_observation": 2, "duplicate_noop_credited": 1, "skill_usage_under_observation": 1},
+                "outcomes": {"tracked": 4, "improved": 1, "recurring": 0, "regressed": 0, "unknown": 2, "insufficient_window": 1, "quality_under_observation": 2, "duplicate_noop_credited": 1, "skill_usage_under_observation": 1, "missing_evidence_under_observation": 1},
             },
         },
     })
@@ -414,6 +415,7 @@ def test_calibration_summary_reports_quality_under_observation():
     assert "Quality under observation: 2" in text
     assert "Duplicate no-op credited: 1" in text
     assert "Skill usage under observation: 1" in text
+    assert "Missing evidence under observation: 1" in text
 
 
 def test_calibration_summary_reports_grouped_actionable_and_non_actionable_signals():
@@ -435,14 +437,14 @@ def test_calibration_summary_reports_grouped_actionable_and_non_actionable_signa
                     "long_running_tool_execution": {"count": 85, "suggested_coverage": "timeout-workflow"},
                 },
                 "non_actionable_clusters": {"tool_error:terminal:terminal_nonzero_exit": 493},
-                "under_observation": {"quality": 2, "skill_usage": 1},
+                "under_observation": {"quality": 2, "skill_usage": 1, "missing_evidence": 1},
             },
         },
     })
 
     assert "Grouped signals:" in text
     assert "- actionable: long_running_tool_execution 85 -> timeout-workflow; patch_tool 71 -> safe-patch-usage" in text
-    assert "- under observation: quality 2; skill_usage 1" in text
+    assert "- under observation: missing_evidence 1; quality 2; skill_usage 1" in text
     assert "- non-actionable volume: tool_error:terminal:terminal_nonzero_exit 493" in text
 
 

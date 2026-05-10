@@ -195,6 +195,7 @@ def test_operational_report_sections_show_quality_under_observation():
                         "insufficient_window": 1,
                         "quality_under_observation": 2,
                         "skill_usage_under_observation": 1,
+                        "missing_evidence_under_observation": 1,
                     }
                 },
             },
@@ -206,3 +207,4 @@ def test_operational_report_sections_show_quality_under_observation():
     assert "## Calibration summary" in text
     assert "- quality under observation: 2" in text
     assert "- skill usage under observation: 1" in text
+    assert "- missing evidence under observation: 1" in text

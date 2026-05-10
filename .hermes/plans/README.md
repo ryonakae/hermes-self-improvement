@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-calibration-missing-evidence-under-observation.md`
+  - **Status:** implemented.
+  - Carries missing-evidence under-observation into calibration signal strength and calibration/read-only operational summaries as weak-only material.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-missing-evidence-under-observation-reporting.md`
   - **Status:** implemented.
   - Adds a dedicated missing-evidence outcome component and compact `missing_evidence_under_observation` count in `Outcomes:` summaries.

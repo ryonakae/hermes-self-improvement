@@ -54,10 +54,10 @@ Overall: **about 7合目**.
   - Recent planner correctly selected `create_skill` for recurring workflow gaps.
   - The apparent failure was not planner quality; it was mutation harness/accounting.
 
-- **Runtime-private prompt overlays / GEPA:** around 7.2合目.
+- **Runtime-private prompt overlays / GEPA:** around 7.3合目.
   - `calibrate` can generate and promote planner/editor/evaluator overlay sets.
   - Recent active overlay generation `overlay-set-b8335b6c61af` was selected by GEPA and promoted from the inspected candidate-set artifact.
-  - Calibration signal strength now receives actionable cluster groups and under-observation quality/usage counts, so grouped workflow areas and weak held outcomes can guide overlay material without being dominated by non-actionable raw volume.
+  - Calibration signal strength now receives actionable cluster groups and under-observation quality/usage/missing-evidence counts, so grouped workflow areas and weak held outcomes can guide overlay material without being dominated by non-actionable raw volume.
 
 - **Boundaries:** around 7.5合目.
   - Built-in / hub / plugin-bundled / external-dir skills are not mutation targets.
@@ -644,6 +644,14 @@ Goal: expose evidence-fit holds separately from generic quality holds in compact
 
 Result: outcome scoring now preserves `skill_quality_missing_attached_evidence_penalty`, credit assignment counts `missing_evidence_under_observation`, and `Outcomes:` summaries render it alongside other under-observation counts.
 
+### Slice AS — Calibration missing-evidence under-observation surface
+
+**Status:** implemented in current change set.
+
+Goal: carry missing-evidence holds into calibration signal-strength and calibration report surfaces.
+
+Result: calibration signal strength now includes `under_observation.missing_evidence` as weak-only material, and calibration/read-only operational summaries render missing-evidence under-observation alongside quality and skill-usage holds.
+
 ---
 
 ## Progress Log
@@ -702,6 +710,7 @@ Result: outcome scoring now preserves `skill_quality_missing_attached_evidence_p
 - Implemented skill quality evidence attachment summary: skill runner decisions now preserve attached evidence counts, and accepted skill mutations with explicit zero attached evidence appear as `needs_patch` with `missing_attached_evidence` in CLI/read-only report quality summaries.
 - Implemented skill evidence attachment outcome signal: attached/missing evidence counts now persist into skill episodes, and immediate post-validation observations emit `skill_quality_missing_attached_evidence` as a conservative needs-patch signal.
 - Implemented missing evidence under-observation reporting: outcome scoring now preserves a dedicated missing-evidence component, and compact `Outcomes` summaries count `missing_evidence_under_observation` separately from generic quality holds.
+- Implemented calibration missing-evidence under-observation surface: calibration signal strength now carries missing-evidence holds as weak-only material, and calibration/read-only operational summaries render them explicitly.
 
 ---
 

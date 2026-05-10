@@ -195,6 +195,7 @@ def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: in
     under_observation = {
         "quality": int(credit_outcomes.get("quality_under_observation") or 0),
         "skill_usage": int(credit_outcomes.get("skill_usage_under_observation") or 0),
+        "missing_evidence": int(credit_outcomes.get("missing_evidence_under_observation") or 0),
     }
     under_observation_total = sum(under_observation.values())
     strong = int(evidence.get("bad_outcomes") or 0) + int(evidence.get("scorer_errors") or 0) + int(evidence.get("disagreements") or 0)

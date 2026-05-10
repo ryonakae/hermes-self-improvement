@@ -399,6 +399,9 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
         skill_usage_under_observation = int(credit_outcomes.get("skill_usage_under_observation") or 0)
         if skill_usage_under_observation:
             lines.append(f"- skill usage under observation: {skill_usage_under_observation}")
+        missing_evidence_under_observation = int(credit_outcomes.get("missing_evidence_under_observation") or 0)
+        if missing_evidence_under_observation:
+            lines.append(f"- missing evidence under observation: {missing_evidence_under_observation}")
         signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else {}
         if signal_strength:
             lines.extend(_operational_grouped_signal_lines(signal_strength))
@@ -730,6 +733,9 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     skill_usage_under_observation = int(credit_outcomes.get("skill_usage_under_observation") or 0)
     if skill_usage_under_observation:
         lines.append(f"Skill usage under observation: {skill_usage_under_observation}")
+    missing_evidence_under_observation = int(credit_outcomes.get("missing_evidence_under_observation") or 0)
+    if missing_evidence_under_observation:
+        lines.append(f"Missing evidence under observation: {missing_evidence_under_observation}")
     signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else {}
     if signal_strength:
         lines.append(
