@@ -29,6 +29,11 @@ ACTIONABLE_CLUSTER_GROUPS = {
         "suggested_coverage": "safe-patch-usage",
         "reason": "patch tool failures should be interpreted as safe patch workflow evidence, not separate skill names",
     },
+    "skill_mutation_tool": {
+        "prefixes": ("tool_error:skill_manage:",),
+        "suggested_coverage": "hermes-skill-management",
+        "reason": "skill_manage failures should be reviewed as official skill mutation workflow/tooling evidence",
+    },
 }
 
 

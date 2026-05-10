@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-manage-cluster-actionability-grouping.md`
+  - **Status:** implemented.
+  - Groups `tool_error:skill_manage:*` unmatched clusters into an actionable `skill_mutation_tool` summary with suggested coverage `hermes-skill-management`, while preserving raw per-cluster counts.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-patch-cluster-actionability-grouping.md`
   - **Status:** implemented.
   - Groups `tool_error:patch:*` unmatched clusters into an actionable `patch_tool` summary with suggested coverage `safe-patch-usage`, while preserving raw per-cluster counts.

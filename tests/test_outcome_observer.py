@@ -176,6 +176,28 @@ def test_unmatched_summary_groups_patch_clusters_by_actionable_failure_mode():
     }
 
 
+def test_unmatched_summary_groups_skill_manage_clusters_by_mutation_tool_area():
+    unmatched = [
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:skill_manage:unknown_error"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:skill_manage:unknown_error"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:skill_manage:not_found"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:skill_manage:timeout"},
+    ]
+
+    summary = _unmatched_summary(unmatched)
+
+    assert summary["actionable_cluster_groups"]["skill_mutation_tool"] == {
+        "count": 4,
+        "clusters": {
+            "tool_error:skill_manage:not_found": 1,
+            "tool_error:skill_manage:timeout": 1,
+            "tool_error:skill_manage:unknown_error": 2,
+        },
+        "suggested_coverage": "hermes-skill-management",
+        "reason": "skill_manage failures should be reviewed as official skill mutation workflow/tooling evidence",
+    }
+
+
 def test_collect_target_reedit_observations_attributes_weak_negative_to_prior_episode():
     episodes = [
         episode_payload("episode-1", created_at="2026-05-05T09:00:00+00:00", target_id="demo-skill"),

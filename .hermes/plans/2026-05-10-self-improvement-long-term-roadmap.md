@@ -99,6 +99,7 @@ Overall: **about 6.5–7合目**.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
   - Generic high-volume unmatched clusters such as `tool_error:terminal:terminal_nonzero_exit` are now separated from actionable `recurring_clusters` so reports do not overstate vague terminal failures as concrete skill gaps.
   - Patch tool failures are grouped as `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, so `patch:not_found` and `patch:unknown_error` are visible as one workflow area without hiding the raw counts.
+  - Skill mutation tool failures are grouped as `actionable_cluster_groups.skill_mutation_tool` with suggested coverage `hermes-skill-management`, so self-improvement can inspect skill mutation reliability without spawning one-off skill names per error kind.
 
 ---
 
@@ -368,6 +369,14 @@ Goal: group patch-related raw clusters as one actionable workflow area without c
 
 Result: `tool_error:patch:*` clusters now appear under `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, while individual raw counts stay in `by_cluster` and `recurring_clusters`.
 
+### Slice M — Skill manage cluster actionability grouping
+
+**Status:** implemented in current change set.
+
+Goal: group skill mutation tool failures as one actionable workflow/tooling area because `skill_manage` is central to self-improvement mutation reliability.
+
+Result: `tool_error:skill_manage:*` clusters now appear under `actionable_cluster_groups.skill_mutation_tool` with suggested coverage `hermes-skill-management`, while individual raw counts stay visible.
+
 ---
 
 ## Progress Log
@@ -394,6 +403,7 @@ Result: `tool_error:patch:*` clusters now appear under `actionable_cluster_group
 - Implemented failure-cluster stability outcomes: mature known coverage-skill episodes can now emit weak positive quiet-window observations only when later telemetry exists and the related cluster did not reappear. This is deliberately low-confidence and does not treat silence as proof of improvement. Real smoke emitted no quiet-window positives because covered clusters still reappeared, which is the intended conservative behavior.
 - Implemented unmatched cluster actionability summary: generic `tool_error:terminal:terminal_nonzero_exit` remains visible but is moved out of actionable `recurring_clusters` into `non_actionable_clusters` so reports do not overstate vague nonzero exits as a concrete maintenance target.
 - Implemented patch cluster actionability grouping: `tool_error:patch:*` raw clusters are grouped under `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, preserving subcluster counts while preventing separate patch-error skill names from proliferating.
+- Implemented skill_manage cluster actionability grouping: `tool_error:skill_manage:*` raw clusters are grouped under `actionable_cluster_groups.skill_mutation_tool` with suggested coverage `hermes-skill-management`, preserving subcluster counts while focusing future investigation on official skill mutation workflow/tooling reliability.
 
 ---
 
