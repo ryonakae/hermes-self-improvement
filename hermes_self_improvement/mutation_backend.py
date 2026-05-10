@@ -73,6 +73,11 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     changed = [str(name) for key in ("changed_skills", "created_skills", "deleted_skills") for name in (result.get(key) or [])]
     if changed and not result.get("verification_notes"):
         return {"success": False, "error": "mutation_agent_result_verification_notes_missing"}
+    if result.get("success") and outcome and outcome not in {"applied", "changed", *NON_MUTATING_AGENT_OUTCOMES}:
+        result["reported_outcome"] = outcome
+        result["outcome"] = "applied" if changed else outcome
+    elif outcome == "changed":
+        result["outcome"] = "applied"
     allowed_targets = set(result.get("_allowed_targets") or [])
     expected_target = str(result.get("_expected_target") or "").strip()
     task_kind = str(result.get("_task_kind") or "").strip()
@@ -83,9 +88,9 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     if task_kind == "skill_create" and expected_target:
         created = {str(name) for name in result.get("created_skills") or []}
         if expected_target not in created:
-            return {"success": False, "error": "mutation_agent_result_created_skill_missing"}
+            return {"success": False, "error": "mutation_agent_result_created_skill_missing", "expected_target": expected_target, "created_skills": sorted(created), "used_tools": result.get("used_tools") or []}
         if not _tool_trace_has_skill_manage(result.get("used_tools") or [], action="create", name=expected_target):
-            return {"success": False, "error": "mutation_agent_result_create_tool_trace_missing"}
+            return {"success": False, "error": "mutation_agent_result_create_tool_trace_missing", "expected_target": expected_target, "used_tools": result.get("used_tools") or []}
     if task_kind == "skill_improve" and expected_target:
         outcome = str(result.get("outcome") or "")
         if outcome not in NON_MUTATING_AGENT_OUTCOMES:
@@ -478,8 +483,10 @@ class NativeSkillToolEditorBackend:
                 "content": (
                     "You are a constrained Hermes skill editor. Use only the provided skill tools. "
                     "Read Markdown briefs as judgment context, not as a machine protocol. "
-                    "Read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
-                    "If the skill already covers the point, is stale, or is uncertain, do not mutate. Finish every run by calling submit_mutation_result."
+                    "For skill_create tasks, the target skill is expected to be missing: do not stop just because skill_view cannot read it; "
+                    "if the evidence supports creation, call skill_manage(action=\"create\") with complete SKILL.md content, then call submit_mutation_result with outcome=\"applied\" and created_skills containing the exact new skill name. "
+                    "For existing-skill edits, read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
+                    "If the target is materially different from the premise, already covered, stale, or uncertain, do not mutate. Finish every run by calling submit_mutation_result."
                 ),
             },
             {"role": "user", "content": user_context},

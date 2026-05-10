@@ -76,7 +76,8 @@ def test_validate_create_skill_success_uses_tool_trace_not_natural_language_outc
     )
 
     assert result["success"] is True
-    assert result["outcome"] == "created safe-patch-usage skill with compact guidance"
+    assert result["outcome"] == "applied"
+    assert result["reported_outcome"] == "created safe-patch-usage skill with compact guidance"
 
 
 def test_validate_create_skill_rejects_natural_language_outcome_without_created_skill_trace():
