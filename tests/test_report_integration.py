@@ -41,7 +41,25 @@ def create_runner_artifacts(config: dict) -> None:
     root = Path(config["_self_improvement_root"])
     run_path = root / "runs" / "run-test.json"
     run_path.parent.mkdir(parents=True, exist_ok=True)
-    run_path.write_text(json.dumps({"schema_name": "self_improvement_run", "run_id": "run-test", "summary": {"proposal_count": 2}}, sort_keys=True) + "\n", encoding="utf-8")
+    run_path.write_text(json.dumps({
+        "schema_name": "self_improvement_run",
+        "run_id": "run-test",
+        "summary": {"proposal_count": 2, "memory_changes": 1, "scorer_evaluator_changed": True},
+        "step_decisions": {
+            "skill": {
+                "planner": {"decisions": [
+                    {"decision": "skip", "noop_outcome": "covered_by_existing_skill"},
+                ]},
+                "decisions": [
+                    {"decision": "accepted", "changed": True, "result": {"created_skills": ["timeout-workflow"], "post_validation": {"status": "passed"}}},
+                    {"decision": "rejected", "changed": False, "result": {"error": "mutation_agent_post_validation_failed", "post_validation": {"status": "failed"}}},
+                ],
+            },
+            "memory": {"decisions": [
+                {"decision": "accepted", "changed": True, "result": {"changed": True}},
+            ]},
+        },
+    }, sort_keys=True) + "\n", encoding="utf-8")
     evidence_path = root / "evidence" / "evidence-test.json"
     evidence_path.parent.mkdir(parents=True, exist_ok=True)
     evidence_path.write_text(json.dumps({
@@ -80,6 +98,10 @@ def test_run_pipeline_report_includes_runner_and_calibration_summaries(tmp_path)
     assert "retention" not in out["operational_reports"]
     assert "approval" not in out["operational_reports"]
     assert "## Recent runner artifacts" in report
+    assert "Actual results:" in report
+    assert "- actual mutations: skill created 1, skill patched 0, memory 1" in report
+    assert "- validation: post-validated 1, rejected 1" in report
+    assert "- duplicate/no-op: covered by existing skill 1" in report
     assert "Knowledge inventory: skill groups similar 1, possible stale 2, stale singletons 3; memory duplicates exact 4, near 5, stale pairs 6" in report
     assert "## Calibration summary" in report
     assert "calibration-ledger-test" in report

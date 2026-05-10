@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-operational-report-actual-results.md`
+  - **Status:** implemented.
+  - Shows actual mutation/validation/no-op/overlay result lines for the latest run inside read-only operational reports, using retained `step_decisions` from recent run artifacts.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-operational-report-inventory-reasons.md`
   - **Status:** implemented.
   - Carries knowledge-inventory reason counts from recent evidence artifacts into read-only operational reports, so daily report inputs show skill similar/stale groups and memory duplicate/stale-pair counts.

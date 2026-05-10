@@ -249,6 +249,8 @@ def _recent_json_files(root: Path, pattern: str = "*.json", limit: int = 5) -> l
     for path in sorted((p for p in root.glob(pattern) if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
         payload = _load_report_json(path) or {}
         row = {"path": str(path), "schema_name": payload.get("schema_name"), "created_at": payload.get("created_at"), "summary": payload.get("summary"), "run_id": payload.get("run_id")}
+        if isinstance(payload.get("step_decisions"), dict):
+            row["step_decisions"] = payload.get("step_decisions")
         lifecycle = _summarize_run_skill_lifecycle(payload)
         if lifecycle:
             row["skill_lifecycle"] = lifecycle
@@ -310,8 +312,20 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
     if recent_runs or recent_evidence or int(runtime_eval_cases.get("case_count") or 0):
         lines.extend(["", "## Recent runner artifacts"])
         if recent_runs:
-            lines.append(f"- runs: {len(recent_runs)} recent artifacts; latest `{recent_runs[0].get('path')}`")
-            lifecycle = recent_runs[0].get("skill_lifecycle") if isinstance(recent_runs[0].get("skill_lifecycle"), dict) else {}
+            latest_run = recent_runs[0]
+            lines.append(f"- runs: {len(recent_runs)} recent artifacts; latest `{latest_run.get('path')}`")
+            step_decisions = latest_run.get("step_decisions") if isinstance(latest_run.get("step_decisions"), dict) else {}
+            skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
+            memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
+            actual_lines = _actual_result_summary_lines(
+                summary=latest_run.get("summary") if isinstance(latest_run.get("summary"), dict) else {},
+                skill_decisions=skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else [],
+                memory_decisions=memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [],
+                planner_decisions=(skill_step.get("planner") or {}).get("decisions") if isinstance(skill_step.get("planner"), dict) and isinstance((skill_step.get("planner") or {}).get("decisions"), list) else [],
+            )
+            if len(actual_lines) > 1:
+                lines.extend(actual_lines[:6])
+            lifecycle = latest_run.get("skill_lifecycle") if isinstance(latest_run.get("skill_lifecycle"), dict) else {}
             if lifecycle:
                 lines.append(
                     "- Skill lifecycle: "
