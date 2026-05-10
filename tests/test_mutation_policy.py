@@ -130,6 +130,52 @@ def test_memory_tool_operation_execute_fails_closed_without_direct_fallback():
     assert rejected["success"] is False
     assert rejected["error"] == "memory_remove_args_missing:old_text"
 
+
+def test_memory_tool_operation_post_validates_builtin_memory_state_change(tmp_path):
+    mod = load_plugin_module()
+    hermes_home = tmp_path / "hermes-home"
+    memory_file = hermes_home / "MEMORY.md"
+    memory_file.parent.mkdir(parents=True)
+    memory_file.write_text("", encoding="utf-8")
+    config = {"_hermes_home": str(hermes_home), "_builtin_memory_store_files": [str(memory_file)]}
+
+    def fake_memory(**kwargs):
+        memory_file.write_text(str(kwargs["content"]) + "\n", encoding="utf-8")
+        return {"success": True}
+
+    result = mod.execute_memory_tool_operation(
+        {"action": "add", "target": "memory", "content": "Project uses pytest."},
+        memory_fn=fake_memory,
+        config=config,
+    )
+
+    assert result["success"] is True
+    assert result["post_validation"]["status"] == "passed"
+    assert result["post_validation"]["tool"] == "memory_state_hash"
+    assert result["post_validation"]["state_changed"] is True
+    assert result["post_validation"]["target"] == "memory"
+
+
+def test_memory_tool_operation_rejects_success_when_builtin_state_did_not_change(tmp_path):
+    mod = load_plugin_module()
+    hermes_home = tmp_path / "hermes-home"
+    memory_file = hermes_home / "MEMORY.md"
+    memory_file.parent.mkdir(parents=True)
+    memory_file.write_text("Existing memory.\n", encoding="utf-8")
+    config = {"_hermes_home": str(hermes_home), "_builtin_memory_store_files": [str(memory_file)]}
+
+    result = mod.execute_memory_tool_operation(
+        {"action": "add", "target": "memory", "content": "Project uses pytest."},
+        memory_fn=lambda **kwargs: {"success": True},
+        config=config,
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "memory_tool_post_validation_failed"
+    assert result["post_validation"]["status"] == "failed"
+    assert result["post_validation"]["state_changed"] is False
+
+
 def test_provider_tool_loader_uses_active_memory_provider_tool_surface(monkeypatch):
     import types
 

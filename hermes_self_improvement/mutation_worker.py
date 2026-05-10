@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
+from .memory_store_probe import capture_builtin_memory_state
+
 
 def _load_skill_manage() -> Callable[..., str]:
     try:
@@ -169,7 +171,33 @@ def execute_skill_archive_operation(context: dict[str, Any], *, archive_fn: Call
     return parsed
 
 
-def execute_memory_tool_operation(tool_args: dict[str, Any], *, memory_fn: Callable[..., str] | None = None) -> dict[str, Any]:
+def _memory_post_validation(*, config: dict[str, Any] | None, target: str, before: dict[str, Any] | None, after: dict[str, Any] | None) -> dict[str, Any] | None:
+    if before is None or after is None:
+        return None
+    if before.get("status") != "captured" or after.get("status") != "captured":
+        return {
+            "status": "skipped",
+            "tool": "memory_state_hash",
+            "target": target,
+            "reason": "memory_state_capture_unavailable",
+            "before_status": before.get("status"),
+            "after_status": after.get("status"),
+        }
+    before_hash = before.get("state_hash")
+    after_hash = after.get("state_hash")
+    changed = bool(before_hash and after_hash and before_hash != after_hash)
+    return {
+        "status": "passed" if changed else "failed",
+        "tool": "memory_state_hash",
+        "target": target,
+        "state_changed": changed,
+        "before_state_hash": before_hash,
+        "after_state_hash": after_hash,
+        "cache_invalidation_verified": bool(after.get("cache_invalidation_verified")),
+    }
+
+
+def execute_memory_tool_operation(tool_args: dict[str, Any], *, memory_fn: Callable[..., str] | None = None, config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Execute a constrained built-in memory tool operation with no direct fallback."""
     args = dict(tool_args or {})
     action = str(args.get("action") or "")
@@ -185,6 +213,8 @@ def execute_memory_tool_operation(tool_args: dict[str, Any], *, memory_fn: Calla
         return {"success": False, "error": f"memory_{action}_args_missing:content", "direct_fallback_used": False}
     if action in {"replace", "remove"} and not args.get("old_text"):
         return {"success": False, "error": f"memory_{action}_args_missing:old_text", "direct_fallback_used": False}
+    cfg = config if isinstance(config, dict) else None
+    before_state = capture_builtin_memory_state(cfg) if cfg is not None else None
     fn = memory_fn or _load_memory_tool()
     try:
         raw = fn(**args)
@@ -192,6 +222,14 @@ def execute_memory_tool_operation(tool_args: dict[str, Any], *, memory_fn: Calla
         return {"success": False, "error": f"memory_tool_unavailable:{exc}", "direct_fallback_used": False}
     parsed = _normalize_skill_manage_result(raw, args)
     parsed["tool_name"] = "memory"
+    if parsed.get("success") and cfg is not None:
+        after_state = capture_builtin_memory_state(cfg)
+        validation = _memory_post_validation(config=cfg, target=str(args.get("target") or "memory"), before=before_state, after=after_state)
+        if validation is not None:
+            parsed["post_validation"] = validation
+            if validation.get("status") == "failed":
+                parsed["success"] = False
+                parsed["error"] = "memory_tool_post_validation_failed"
     return parsed
 
 

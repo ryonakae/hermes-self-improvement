@@ -134,15 +134,16 @@ Done:
 Remaining:
 
 - Post-patch intended-change verification beyond readability.
-- Memory mutation post-validation.
 - Validation errors include enough compact diagnostics.
 - Report accepted/recovered/skipped/blocked distinctions clearly.
 
 Implemented in current slice:
 
 - Post-create and post-improve `skill_view` readback.
+- Built-in memory mutation before/after state-hash post-validation.
 - Compact `post_validation` object in backend results.
-- Fail-closed `mutation_agent_post_validation_failed` when readback fails.
+- Fail-closed `mutation_agent_post_validation_failed` when skill readback fails.
+- Fail-closed `memory_tool_post_validation_failed` when memory tool success has no observable state change.
 
 Exit criteria:
 
@@ -395,6 +396,14 @@ Goal: feed grouped workflow areas into calibration signal strength without letti
 
 Result: `signal_strength` now includes `actionable_cluster_groups`, and grouped workflow areas count as medium signals while non-actionable clusters remain excluded from medium-signal counts.
 
+### Slice P — Memory mutation post-validation
+
+**Status:** implemented in current change set.
+
+Goal: validate built-in memory mutations by observable post-state rather than trusting tool success claims alone.
+
+Result: built-in memory tool execution now captures before/after memory store hashes when config is available, records compact `post_validation`, and fails closed if a reported success has no observable state change.
+
 ---
 
 ## Progress Log
@@ -424,6 +433,7 @@ Result: `signal_strength` now includes `actionable_cluster_groups`, and grouped 
 - Implemented skill_manage cluster actionability grouping: `tool_error:skill_manage:*` raw clusters are grouped under `actionable_cluster_groups.skill_mutation_tool` with suggested coverage `hermes-skill-management`, preserving subcluster counts while focusing future investigation on official skill mutation workflow/tooling reliability.
 - Implemented timeout cluster actionability grouping: clusters ending in `:timeout` are grouped under `actionable_cluster_groups.long_running_tool_execution` with suggested coverage `timeout-workflow`, preserving subcluster counts while making cross-tool timeout behavior easier to report and review.
 - Implemented calibration signal-strength use of actionable groups: grouped workflow areas now enter `signal_strength.actionable_cluster_groups` and count as medium signals, while non-actionable high-volume clusters remain excluded from medium-signal counts.
+- Implemented memory mutation post-validation: built-in memory tool execution now captures before/after memory store hashes when config is available, records compact `post_validation`, and fails closed when a reported success has no observable state change.
 
 ---
 

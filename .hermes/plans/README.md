@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-memory-mutation-post-validation.md`
+  - **Status:** implemented.
+  - Adds conservative built-in memory mutation post-validation using before/after memory store hashes. Successful memory operations now carry compact `post_validation` metadata, and success without an observable state change fails closed.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-calibration-actionable-groups-signal-strength.md`
   - **Status:** implemented.
   - Feeds `actionable_cluster_groups` into calibration signal strength, so grouped workflow areas count as medium signals while high-volume non-actionable clusters do not.

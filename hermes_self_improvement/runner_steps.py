@@ -371,7 +371,7 @@ def _execute_built_in_memory_context(
     external_provider: str | None,
 ) -> dict[str, Any]:
     args = context.get("tool_args") or {}
-    result = execute_memory_tool_operation(args, memory_fn=config.get("_memory_tool_fn"))
+    result = execute_memory_tool_operation(args, memory_fn=config.get("_memory_tool_fn"), config=config)
     if result.get("success") or args.get("action") != "add" or not _is_memory_capacity_error(result):
         if _is_memory_capacity_error(result):
             result.setdefault("error", "memory_capacity_exceeded")
@@ -397,12 +397,12 @@ def _execute_built_in_memory_context(
         if action in {"move_to_skill", "skill_candidate", "create_skill_candidate"}:
             recovery["skill_candidate_operations"].append(compaction)
             continue
-        compaction_result = execute_memory_tool_operation(compaction, memory_fn=config.get("_memory_tool_fn"))
+        compaction_result = execute_memory_tool_operation(compaction, memory_fn=config.get("_memory_tool_fn"), config=config)
         recovery["compaction_results"].append({"operation": compaction, "result": compaction_result})
         if compaction_result.get("success"):
             recovery["compaction_changed"] += 1
     if recovery["compaction_changed"]:
-        retry = execute_memory_tool_operation(args, memory_fn=config.get("_memory_tool_fn"))
+        retry = execute_memory_tool_operation(args, memory_fn=config.get("_memory_tool_fn"), config=config)
         retry["capacity_recovery"] = recovery
         if retry.get("success"):
             return retry
