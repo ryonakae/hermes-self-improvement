@@ -2,7 +2,7 @@
 
 > **For Hermes:** This is Slice C from `2026-05-10-self-improvement-long-term-roadmap.md`. Start here after duplicate no-op metadata. Keep it focused on summary/report clarity; do not change mutation policy.
 
-**Status:** planned / next.
+**Status:** implemented in current change set.
 
 **Goal:** Make CLI/daily self-improvement summaries distinguish actual mutations, recovered accounting, duplicate no-ops, validation rejects, overlay updates, and unresolved work without requiring JSON artifact digging.
 

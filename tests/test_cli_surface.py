@@ -498,6 +498,38 @@ def test_improve_summary_shows_unresolved_maintenance_candidates_from_digest():
     assert "- unresolved: patch tool workflow 1, timeout workflow 1" in text
 
 
+def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 2, "memory_changes": 1, "scorer_evaluator_changed": True},
+        "step_decisions": {
+            "skill": {
+                "planner": {"decisions": [
+                    {"decision": "skip", "noop_outcome": "covered_by_existing_skill", "covered_by_reference_skill": "safe-patch-usage"},
+                    {"decision": "skip", "noop_outcome": "duplicate_prevented", "covered_by_existing_skill": "timeout-workflow"},
+                ]},
+                "decisions": [
+                    {"decision": "accepted", "changed": True, "result": {"created_skills": ["timeout-workflow"], "created_skills_inferred_from_trace": True, "post_validation": {"status": "passed"}}},
+                    {"decision": "accepted", "changed": True, "result": {"changed_skills": ["sandbox-permission-workflow"], "post_validation": {"status": "passed"}}},
+                    {"decision": "rejected", "changed": False, "result": {"error": "mutation_agent_post_validation_failed", "post_validation": {"status": "failed"}}},
+                ],
+            },
+            "memory": {"decisions": [
+                {"decision": "accepted", "changed": True, "result": {"changed": True}},
+            ]},
+        },
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Actual results:" in text
+    assert "- actual mutations: skill created 1, skill patched 1, memory 1" in text
+    assert "- validation: post-validated 2, rejected 1" in text
+    assert "- recovered accounting: created skills inferred from trace 1" in text
+    assert "- duplicate/no-op: covered by existing skill 1, duplicate prevented 1" in text
+    assert "- prompt overlay/evaluator: changed" in text
+
+
 def test_improve_summary_shows_memory_placement_routing():
     cli = load_cli_module()
     text = cli._render_improve_summary({

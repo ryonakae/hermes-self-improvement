@@ -1128,6 +1128,57 @@ def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], mainte
     return lines
 
 
+def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: list[dict[str, Any]], memory_decisions: list[dict[str, Any]], planner_decisions: list[dict[str, Any]]) -> list[str]:
+    created = 0
+    patched = 0
+    post_validated = 0
+    validation_rejected = 0
+    trace_recovered = 0
+    for item in skill_decisions:
+        if not isinstance(item, dict):
+            continue
+        result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
+        if item.get("decision") == "accepted" and item.get("changed"):
+            created += len(result_payload.get("created_skills") or [])
+            patched += len(result_payload.get("changed_skills") or [])
+        post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
+        if post_validation.get("status") == "passed":
+            post_validated += 1
+        if post_validation.get("status") == "failed" or result_payload.get("error") == "mutation_agent_post_validation_failed":
+            validation_rejected += 1
+        if result_payload.get("created_skills_inferred_from_trace"):
+            trace_recovered += 1
+    memory_changed = sum(1 for item in memory_decisions if isinstance(item, dict) and item.get("decision") == "accepted" and item.get("changed"))
+    if not memory_changed:
+        memory_changed = int(summary.get("memory_changes") or 0)
+    noop_counts: dict[str, int] = {}
+    for item in planner_decisions:
+        if not isinstance(item, dict):
+            continue
+        outcome = str(item.get("noop_outcome") or "")
+        if outcome:
+            noop_counts[outcome] = noop_counts.get(outcome, 0) + 1
+    lines = [
+        "Actual results:",
+        f"- actual mutations: skill created {created}, skill patched {patched}, memory {memory_changed}",
+        f"- validation: post-validated {post_validated}, rejected {validation_rejected}",
+    ]
+    if trace_recovered:
+        lines.append(f"- recovered accounting: created skills inferred from trace {trace_recovered}")
+    if noop_counts:
+        labels = {
+            "covered_by_existing_skill": "covered by existing skill",
+            "duplicate_prevented": "duplicate prevented",
+            "existing_skill_sufficient": "existing skill sufficient",
+        }
+        parts = []
+        for key, count in sorted(noop_counts.items()):
+            parts.append(f"{labels.get(key, key.replace('_', ' '))} {count}")
+        lines.append("- duplicate/no-op: " + ", ".join(parts))
+    lines.append(f"- prompt overlay/evaluator: {'changed' if summary.get('scorer_evaluator_changed') else 'unchanged'}")
+    return lines
+
+
 def _memory_placement_summary_lines(decisions: list[dict[str, Any]]) -> list[str]:
     duplicate_count = 0
     diagnostic_count = 0
@@ -1367,6 +1418,12 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     maintenance_lines = _knowledge_maintenance_summary_lines(planner_decisions, maintenance_candidates)
     memory_placement_lines = _memory_placement_summary_lines(memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [])
     action_bucket_lines = _action_bucket_lines(step_decisions)
+    actual_result_lines = _actual_result_summary_lines(
+        summary=summary,
+        skill_decisions=skill_decisions,
+        memory_decisions=memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [],
+        planner_decisions=planner_decisions,
+    )
     if target_resolution_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = target_resolution_lines
@@ -1380,6 +1437,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = action_bucket_lines
     if not result.get("dry_run"):
+        insert_at = lines.index("Skill planner:")
+        lines[insert_at:insert_at] = actual_result_lines
         insert_at = lines.index("Skill planner:")
         executed_lines = [
             "Executed:",
