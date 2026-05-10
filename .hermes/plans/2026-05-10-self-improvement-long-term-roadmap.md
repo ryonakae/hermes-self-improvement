@@ -92,7 +92,7 @@ Overall: **about 7合目**.
   - `patch-tool-workflow` style duplicates are now recorded as meaningful no-ops such as `covered_by_existing_skill` / `duplicate_prevented`, shown in summaries, preserved into episodes, and given a conservative positive outcome component when duplicate creation is prevented.
 
 - **Knowledge inventory beyond tool failures:** around 6.3合目.
-  - Inventory health now reports skill overlap/staleness reason counts and memory duplicate/stale-pair counts in CLI/daily-facing summaries, so knowledge maintenance work is not only raw candidate volume. Knowledge-maintenance summaries now include source buckets (`failure_driven`, `inventory`, `knowledge_coverage`) so failure-driven proposals are separated from inventory/coverage work. Deeper stale/overlap planning and low-risk maintenance execution still need expansion.
+  - Inventory health now reports skill overlap/staleness reason counts and memory duplicate/stale-pair counts in CLI/daily-facing summaries, so knowledge maintenance work is not only raw candidate volume. Knowledge-maintenance summaries now include source buckets (`failure_driven`, `inventory`, `knowledge_coverage`) so failure-driven proposals are separated from inventory/coverage work, and read-only operational reports reuse that summary for latest-run daily report inputs. Deeper stale/overlap planning and low-risk maintenance execution still need expansion.
 
 - **Outcome / credit assignment:** around 7.4合目.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
@@ -729,6 +729,7 @@ Result: `Knowledge maintenance:` summaries now include source buckets for `failu
 - Implemented calibration missing-evidence under-observation surface: calibration signal strength now carries missing-evidence holds as weak-only material, and calibration/read-only operational summaries render them explicitly.
 - Implemented calibration under-observation deduplication: missing-evidence remains visible as a reason detail, but weak signal volume now counts aggregate quality plus skill usage only to avoid double-counting the same hold.
 - Implemented knowledge maintenance source breakdown: `Knowledge maintenance:` summaries now show whether candidates are failure-driven, inventory-driven, or knowledge-coverage driven when source metadata exists.
+- Implemented operational report knowledge maintenance sources: read-only operational reports now reuse the latest-run `Knowledge maintenance:` source/action summary so daily report inputs can distinguish failure-driven proposals from inventory/coverage work without opening run artifacts.
 
 ---
 

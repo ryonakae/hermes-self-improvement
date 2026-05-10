@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-operational-report-knowledge-maintenance-sources.md`
+  - **Status:** implemented.
+  - Reuses the knowledge-maintenance summary renderer in read-only operational reports so latest-run source buckets and maintenance actions are visible to daily report inputs.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-knowledge-maintenance-source-breakdown.md`
   - **Status:** implemented.
   - Adds source buckets to `Knowledge maintenance:` summaries so failure-driven, inventory-driven, and knowledge-coverage-driven candidates are visibly separated.
