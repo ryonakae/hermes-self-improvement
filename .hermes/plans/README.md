@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-evidence-attachment-outcome-signal.md`
+  - **Status:** implemented.
+  - Carries attached/missing evidence counts into skill episodes and immediate post-validation outcome observations as `skill_quality_missing_attached_evidence`.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-quality-evidence-attachment-summary.md`
   - **Status:** implemented.
   - Preserves attached evidence counts on skill runner decisions and surfaces explicit zero attached evidence as `missing_attached_evidence` in skill-quality summaries.

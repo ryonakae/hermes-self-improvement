@@ -297,7 +297,7 @@ def _post_validation_score_and_confidence(*, passed: bool, signals: dict[str, An
             "skill_quality_has_trigger_conditions",
             "skill_quality_has_concrete_steps",
         )
-    ) or bool(signals.get("skill_quality_content_too_short")) or bool(signals.get("skill_quality_content_too_long"))
+    ) or bool(signals.get("skill_quality_content_too_short")) or bool(signals.get("skill_quality_content_too_long")) or bool(signals.get("skill_quality_missing_attached_evidence"))
     if too_generic:
         signals["skill_quality_too_generic"] = True
         if needs_patch:
@@ -445,6 +445,13 @@ def collect_post_validation_observations(*, episodes: list[dict[str, Any]], wind
             signals["skill_quality_content_too_short"] = bool(episode.get("post_validation_content_too_short"))
         if episode.get("post_validation_content_too_long") is not None:
             signals["skill_quality_content_too_long"] = bool(episode.get("post_validation_content_too_long"))
+        if "attached_evidence_count" in episode:
+            try:
+                attached_count = int(episode.get("attached_evidence_count") or 0)
+            except (TypeError, ValueError):
+                attached_count = 0
+            if attached_count <= 0:
+                signals["skill_quality_missing_attached_evidence"] = True
         outcome_score, confidence = _post_validation_score_and_confidence(passed=passed, signals=signals)
         candidates.append({
             "schema_name": "self_improvement_outcome_observation",
