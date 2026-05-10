@@ -21,6 +21,9 @@ from .target_resolver import build_target_resolution_digest, run_target_resolver
 
 MEMORY_SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
 RAW_TOOL_OUTPUT_MEMORY_SOURCES = {"terminal", "execute_code", "search_files", "read_file", "patch"}
+CREATE_SKILL_COVERAGE_ALIASES = {
+    "patch-tool-workflow": "safe-patch-usage",
+}
 MEMORY_REPLACE_STOPWORDS = {
     "the", "and", "for", "with", "from", "that", "this", "into", "only", "when", "then",
     "する", "ある", "いる", "こと", "ため", "よう", "では", "ます", "です", "として",
@@ -28,13 +31,49 @@ MEMORY_REPLACE_STOPWORDS = {
 
 
 def _memory_replace_has_topic_continuity(old_text: str, content: str) -> bool:
-    old_tokens = {token.lower() for token in re.findall(r"[A-Za-z0-9_./:-]{4,}|[\u3040-\u30ff\u4e00-\u9fff]{2,}", old_text or "") if token.lower() not in MEMORY_REPLACE_STOPWORDS}
-    new_tokens = {token.lower() for token in re.findall(r"[A-Za-z0-9_./:-]{4,}|[\u3040-\u30ff\u4e00-\u9fff]{2,}", content or "") if token.lower() not in MEMORY_REPLACE_STOPWORDS}
+    old_tokens = _memory_topic_tokens(old_text)
+    new_tokens = _memory_topic_tokens(content)
     if not old_tokens or not new_tokens:
         return False
     if len(old_tokens) < 3 or len(new_tokens) < 3:
         return True
     return len(old_tokens & new_tokens) >= 2
+
+
+def _memory_topic_tokens(text: str) -> set[str]:
+    return {
+        token.lower()
+        for token in re.findall(r"[A-Za-z0-9_./:-]{4,}|[\u3040-\u30ff\u4e00-\u9fff]{2,}", text or "")
+        if token.lower() not in MEMORY_REPLACE_STOPWORDS
+    }
+
+
+def _memory_replace_evidence_preflight(operation: dict[str, Any], source_evidence: dict[str, Any]) -> str | None:
+    if operation.get("operation") != "memory_replace":
+        return None
+    old_text = str(operation.get("old_text") or "").strip()
+    content = str(operation.get("content") or "").strip()
+    if not _memory_replace_has_topic_continuity(old_text, content):
+        return "memory_replace_topic_mismatch"
+    inventory = source_evidence.get("inventory") if isinstance(source_evidence.get("inventory"), dict) else {}
+    entries = [entry for entry in (inventory.get("entries") or []) if isinstance(entry, dict)]
+    if not entries:
+        old_tokens = _memory_topic_tokens(old_text)
+        content_tokens = _memory_topic_tokens(content)
+        if old_tokens and len(old_tokens & content_tokens) / len(old_tokens) < 0.45:
+            return "memory_replace_content_loses_existing_context"
+        return None
+    entry_texts = [str(entry.get("old_text") or "").strip() for entry in entries if str(entry.get("old_text") or "").strip()]
+    if old_text not in entry_texts:
+        return "memory_replace_old_text_not_in_evidence"
+    content_tokens = _memory_topic_tokens(content)
+    for entry_text in entry_texts:
+        if entry_text == old_text:
+            continue
+        entry_tokens = _memory_topic_tokens(entry_text)
+        if len(content_tokens & entry_tokens) >= 3:
+            return None
+    return "memory_replace_content_not_supported_by_evidence"
 
 
 def _looks_sensitive_memory_text(text: str) -> bool:
@@ -888,6 +927,7 @@ def run_skill_improvement_step(
                 "rationale": planner_decision.get("rationale"),
             }
             task = build_skill_create_agent_task(skill_name=skill_name, evidence=attached_evidence, planner_decision=planner_decision, config=config)
+            covered_by = CREATE_SKILL_COVERAGE_ALIASES.get(skill_name)
             if _local_skill_exists(skill_name, config=config):
                 decisions.append({
                     **base_decision,
@@ -896,6 +936,16 @@ def run_skill_improvement_step(
                     "changed": False,
                     "noop_outcome": "duplicate_prevented",
                     "covered_by_existing_skill": skill_name,
+                })
+                continue
+            if covered_by and _local_skill_exists(covered_by, config=config):
+                decisions.append({
+                    **base_decision,
+                    "decision": "skip",
+                    "reason": "create_skill_covered_by_existing_skill",
+                    "changed": False,
+                    "noop_outcome": "covered_by_existing_skill",
+                    "covered_by_existing_skill": covered_by,
                 })
                 continue
             if not mutate:
@@ -1117,6 +1167,16 @@ def run_memory_improvement_step(
                 "operation": raw_operation,
             })
             continue
+        preflight_reason = _memory_replace_evidence_preflight(operation, source_evidence)
+        if preflight_reason:
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "rejected",
+                "reason": preflight_reason,
+                "changed": False,
+                "operation": operation,
+            })
+            continue
         conflict_reason = _operation_conflict_reason(operation)
         if conflict_reason:
             decisions.append({
@@ -1226,6 +1286,16 @@ def run_memory_improvement_step(
                 "evidence_id": evidence_id,
                 "decision": "rejected",
                 "reason": operation.get("_reject_reason"),
+                "changed": False,
+                "operation": operation,
+            })
+            continue
+        preflight_reason = _memory_replace_evidence_preflight(operation, item)
+        if preflight_reason:
+            decisions.append({
+                "evidence_id": evidence_id,
+                "decision": "rejected",
+                "reason": preflight_reason,
                 "changed": False,
                 "operation": operation,
             })

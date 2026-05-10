@@ -92,6 +92,24 @@ def test_memory_inventory_dry_run_previews_without_mutation():
     assert result["decisions"][0]["reason"] == "dry_run_would_execute_memory_tool"
 
 
+def test_memory_inventory_rejects_replace_content_not_supported_by_inventory_evidence():
+    config = {
+        "_memory_inventory_planner_fn": lambda evidence, config=None: [{
+            "evidence_id": "mem-inv-1",
+            "operation": "replace",
+            "target": "memory",
+            "old_text": "Hermes root is /opt/data",
+            "content": "Hermes root should be /var/lib/hermes.",
+        }],
+    }
+
+    result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config=config, mutate=False)
+
+    assert result["changed"] == 0
+    assert result["decisions"][0]["decision"] == "rejected"
+    assert result["decisions"][0]["reason"] == "memory_replace_content_not_supported_by_evidence"
+
+
 def test_memory_inventory_rejects_remove_without_old_text():
     config = {"_memory_inventory_planner_fn": lambda evidence, config=None: [{"evidence_id": "mem-inv-1", "operation": "remove", "target": "memory"}]}
 
@@ -453,25 +471,47 @@ def test_memory_inventory_rejects_conflicting_replaces_for_same_old_text_before_
                 "evidence_id": "mem-inv-1",
                 "operation": "replace",
                 "target": "memory",
-                "old_text": "Hermes memory uses official tool.",
-                "content": "First replacement.",
+                "old_text": "Hermes memory uses legacy direct file edits.",
+                "content": "Hermes memory uses official MemoryStore tool.",
             },
             {
                 "evidence_id": "mem-inv-2",
                 "operation": "replace",
                 "target": "memory",
-                "old_text": "Hermes memory uses official tool.",
-                "content": "Conflicting replacement.",
+                "old_text": "Hermes memory uses legacy direct file edits.",
+                "content": "Hermes memory uses official memory tool.",
             },
         ],
         "_memory_tool_fn": lambda **args: calls.append(args) or {"success": True, "changed": True},
     }
-    evidence = [_inventory_evidence(), {**_inventory_evidence(), "id": "mem-inv-2"}]
+    evidence = [
+        {
+            **_inventory_evidence(),
+            "inventory": {
+                "group_kind": "semantic_duplicate",
+                "entries": [
+                    {"target": "memory", "old_text": "Hermes memory uses legacy direct file edits.", "summary": "stale memory mutation path"},
+                    {"target": "memory", "old_text": "Hermes memory uses official MemoryStore tool.", "summary": "current memory mutation path"},
+                ],
+            },
+        },
+        {
+            **_inventory_evidence(),
+            "id": "mem-inv-2",
+            "inventory": {
+                "group_kind": "semantic_duplicate",
+                "entries": [
+                    {"target": "memory", "old_text": "Hermes memory uses legacy direct file edits.", "summary": "stale memory mutation path"},
+                    {"target": "memory", "old_text": "Hermes memory uses official MemoryStore tool.", "summary": "current memory mutation path"},
+                ],
+            },
+        },
+    ]
 
     result = run_memory_improvement_step(evidence_pack=_pack(evidence), config=config, mutate=True)
 
     assert result["changed"] == 1
-    assert calls == [{"action": "replace", "target": "memory", "old_text": "Hermes memory uses official tool.", "content": "First replacement."}]
+    assert calls == [{"action": "replace", "target": "memory", "old_text": "Hermes memory uses legacy direct file edits.", "content": "Hermes memory uses official MemoryStore tool."}]
     assert result["decisions"][0]["decision"] == "accepted"
     assert result["decisions"][1]["decision"] == "rejected"
     assert result["decisions"][1]["reason"] == "memory_operation_conflicts_with_prior_operation"

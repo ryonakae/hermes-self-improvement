@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from hermes_self_improvement.prompts import base_prompt_hash
@@ -123,7 +124,7 @@ def test_skill_step_dry_run_records_planner_editor_preview_without_mutating(tmp_
     assert result["decisions"][0]["task"]["targets"]["primary_skill"] == "demo-skill"
 
 
-def test_skill_step_dry_run_records_create_skill_preview_without_existing_candidates():
+def test_skill_step_dry_run_records_create_skill_preview_without_existing_candidates(tmp_path):
     pack = evidence_pack_for(None, candidates=[])
 
     def fake_planner(*, digest, config):
@@ -139,7 +140,7 @@ def test_skill_step_dry_run_records_create_skill_preview_without_existing_candid
             ]
         }
 
-    result = run_skill_improvement_step(evidence_pack=pack, config={"_skill_planner_func": fake_planner}, mutate=False)
+    result = run_skill_improvement_step(evidence_pack=pack, config={"_skill_planner_func": fake_planner, "_skills_root": str(tmp_path / "skills")}, mutate=False)
 
     assert result["status"] == "completed"
     decision = result["decisions"][0]
@@ -172,6 +173,29 @@ def test_skill_step_skips_create_skill_when_local_skill_already_exists(tmp_path)
     assert "task" not in decision
 
 
+def test_skill_step_skips_create_skill_when_existing_alias_covers_workflow(tmp_path):
+    pack = evidence_pack_for(None, candidates=[])
+    skills_root = tmp_path / "skills"
+    (skills_root / "safe-patch-usage").mkdir(parents=True)
+    (skills_root / "safe-patch-usage" / "SKILL.md").write_text("---\nname: safe-patch-usage\n---\n", encoding="utf-8")
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low"}]}
+
+    result = run_skill_improvement_step(
+        evidence_pack=pack,
+        config={"_skill_planner_func": fake_planner, "_skills_root": str(skills_root)},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "create_skill_covered_by_existing_skill"
+    assert decision["noop_outcome"] == "covered_by_existing_skill"
+    assert decision["covered_by_existing_skill"] == "safe-patch-usage"
+    assert "task" not in decision
+
+
 def test_skill_step_executes_create_skill_through_skill_agent_when_mutating():
     pack = evidence_pack_for(None, candidates=[])
 
@@ -195,7 +219,7 @@ def test_skill_step_executes_create_skill_through_skill_agent_when_mutating():
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_skill_planner_func": fake_planner, "_mutation_agent_backend": FakeBackend()},
+        config={"_skill_planner_func": fake_planner, "_mutation_agent_backend": FakeBackend(), "_skills_root": str(Path("/tmp/hermes-self-improvement-test-empty-skills"))},
         mutate=True,
     )
 
@@ -512,6 +536,23 @@ def test_memory_step_rejects_topic_mismatched_replace():
     decision = result["decisions"][0]
     assert decision["decision"] == "rejected"
     assert decision["reason"] == "memory_replace_topic_mismatch"
+
+
+def test_memory_step_rejects_replace_that_drops_existing_context():
+    result = run_memory_improvement_step(
+        evidence_pack=memory_evidence_pack({
+            "operation": "memory_replace",
+            "target_store": "user",
+            "old_text": "開発作業では必要に応じて commit/push する。commit-push指定でも残タスクがあればpush後も継続。実装計画は skill 化せず `.hermes/plans/` へ保存。`~/.agents/skills/` は勝手に編集しない。",
+            "content": "実装計画は skill 化せず、repo 側の既存の計画置き場ルールを優先して保存する。",
+        }),
+        config={"memory": {"provider": "built-in"}},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert decision["decision"] == "rejected"
+    assert decision["reason"] == "memory_replace_content_loses_existing_context"
 
 
 def test_memory_step_executes_built_in_memory_tool_when_mutating():

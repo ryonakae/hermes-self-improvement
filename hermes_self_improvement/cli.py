@@ -876,7 +876,7 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
             continue
         kind = str(decision.get("decision") or "")
         if kind not in {"run_editor_preview", "create_skill_preview"}:
-            skill_decisions.append({**decision, "decision": "rejected", "reason": "replay_not_mutation_ready", "changed": False})
+            skill_decisions.append({**decision, "decision": "skip", "reason": "replay_not_mutation_ready", "changed": False})
             continue
         task = decision.get("task") if isinstance(decision.get("task"), dict) else None
         if not task:
@@ -896,7 +896,7 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
         if not isinstance(decision, dict):
             continue
         if decision.get("decision") != "accepted" or decision.get("reason") != "dry_run_would_execute_memory_tool":
-            memory_decisions.append({**decision, "decision": "rejected", "reason": "replay_not_mutation_ready", "changed": False})
+            memory_decisions.append({**decision, "decision": "skip", "reason": "replay_not_mutation_ready", "changed": False})
             continue
         operation = decision.get("operation") if isinstance(decision.get("operation"), dict) else {}
         if operation.get("operation") == "memory_move":

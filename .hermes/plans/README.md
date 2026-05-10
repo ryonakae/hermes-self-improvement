@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-memory-replacement-planner-quality-hardening.md`
+  - **Status:** implemented.
+  - Hardens memory replacement previews and replay: unrelated replacements, context-losing replacements, and inventory replacements unsupported by evidence now reject before mutation. Also maps `patch-tool-workflow` to existing `safe-patch-usage` coverage and keeps non-mutation-ready replay decisions as skips.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-autonomous-steady-state-dogfood.md`
   - **Status:** partially dogfooded / hardening applied.
   - Ran real dry-runs and fixed gaps exposed by the output: dry-run summaries now show `Outcomes`, existing local skill names are duplicate no-op skips before create replay, and topically mismatched `memory_replace` proposals reject before mutation. Mutating replay remains intentionally held until memory replacement planner quality is tighter.
@@ -22,10 +28,10 @@ The previous completed implementation plan is:
 
 The current active follow-up is:
 
-- Memory replacement planner-quality hardening.
+- Steady-state calibration / report wording review.
   - **Status:** next.
-  - Plan: `2026-05-10-memory-replacement-planner-quality-hardening.md`.
-  - The dogfood dry-run still produced mutation-ready memory replacements. Before mutating replay, tighten planner/context rules so memory replacements are only used for clear duplicate/stale consolidation with exact old_text continuity; otherwise defer or route to skill maintenance.
+  - `calibrate --dry-run` now reaches an overlay candidate set from runtime evidence. Next, inspect whether the candidate-set/reports communicate dry-run vs actual promotion clearly before promoting anything.
+  - Plan: `2026-05-10-steady-state-calibration-report-wording-review.md`.
 
 The previous completed implementation plan is:
 

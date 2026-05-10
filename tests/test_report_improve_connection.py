@@ -148,3 +148,28 @@ def test_run_replay_improve_executes_dry_run_artifact_without_replanning(monkeyp
     assert result["summary"]["memory_changes"] == 1
     assert result["skill_changes"] == ["patch-tool-workflow"]
     assert result["memory_changes"] == ["m1"]
+
+
+def test_run_replay_improve_keeps_non_mutation_ready_decisions_as_skips(tmp_path):
+    import hermes_self_improvement.cli as cli
+
+    source_path = tmp_path / "dry-run.json"
+    source_path.write_text(json.dumps({
+        "run_id": "run-dry",
+        "dry_run": True,
+        "summary": {"dry_run": True},
+        "step_decisions": {
+            "skill": {"decisions": [{"decision": "skip", "skill": "patch-tool-workflow", "reason": "create_skill_covered_by_existing_skill"}]},
+            "memory": {"decisions": [{"decision": "rejected", "reason": "memory_replace_content_loses_existing_context", "evidence_id": "m1"}]},
+        },
+    }), encoding="utf-8")
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+
+    result = cli.run_replay_improve(config=config, source_run_path=str(source_path))
+
+    assert result["summary"]["skill_changes"] == 0
+    assert result["summary"]["memory_changes"] == 0
+    assert result["step_decisions"]["skill"]["decisions"][0]["decision"] == "skip"
+    assert result["step_decisions"]["memory"]["decisions"][0]["decision"] == "skip"
+    assert result["action_summary"]["skip"] == 2
+    assert result["action_summary"]["block"] == 0
