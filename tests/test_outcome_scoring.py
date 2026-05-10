@@ -89,6 +89,24 @@ def test_score_episode_outcomes_uses_deterministic_components_by_window():
     assert scored["confidence"] > 0
 
 
+def test_score_episode_outcomes_applies_skill_quality_penalties_to_validation_signal():
+    good = score_episode_outcomes(episode_payload("good"), [
+        outcome_payload("good", signals={"validation_passed": True}, confidence=0.7),
+    ])
+    thin = score_episode_outcomes(episode_payload("thin"), [
+        outcome_payload("thin", signals={"validation_passed": True, "skill_quality_needs_patch": True}, confidence=0.65),
+    ])
+    memory_shaped = score_episode_outcomes(episode_payload("memory-shaped"), [
+        outcome_payload("memory-shaped", signals={"validation_passed": True, "skill_quality_too_generic": True}, confidence=0.75),
+    ])
+
+    assert good["windows"]["immediate"]["score"] == 0.2
+    assert thin["windows"]["immediate"]["score"] == 0.05
+    assert thin["components"]["skill_quality_needs_patch_penalty"] == -0.15
+    assert memory_shaped["windows"]["immediate"]["score"] == -0.05
+    assert memory_shaped["components"]["skill_quality_too_generic_penalty"] == -0.25
+
+
 def test_build_outcome_score_aggregate_groups_by_prompt_and_target(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])

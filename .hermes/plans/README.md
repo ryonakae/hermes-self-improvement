@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-quality-outcome-score-components.md`
+  - **Status:** implemented.
+  - Adds deterministic outcome-scoring components for `skill_quality_needs_patch` and `skill_quality_too_generic`, so credit assignment and calibration aggregates actually reflect thin or memory-shaped validated skills.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-quality-weighted-validation-outcomes.md`
   - **Status:** implemented.
   - Weights immediate post-validation outcome observations by deterministic skill quality flags: good validation remains lightly positive, thin skills are weak positives under observation, and memory-shaped skills become slightly negative despite readback success.

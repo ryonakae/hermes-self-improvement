@@ -92,7 +92,7 @@ Overall: **about 7合目**.
   - `patch-tool-workflow` was not created and the agent inspected `safe-patch-usage`, which was probably good, but the artifact still expressed it as a rejection rather than a meaningful no-op such as `covered_by_existing_skill`.
 
 - **Outcome / credit assignment:** around 7合目.
-  - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
+  - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations and deterministic outcome-score components can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
   - Actual later positive observations are intentionally conservative; absence alone is not proof of improvement, and stronger evidence such as useful skill use without correction is still future work.
 
 - **Human-readable daily / CLI reporting:** around 7.5合目.
@@ -452,6 +452,14 @@ Goal: avoid treating every passed post-validation readback as equally positive w
 
 Result: immediate post-validation outcome observations now weight skill quality: complete-looking skills stay lightly positive, missing trigger/procedure guidance becomes weak positive with `skill_quality_needs_patch`, and memory-shaped skills become slightly negative with `skill_quality_too_generic`.
 
+### Slice W — Skill quality outcome score components
+
+**Status:** implemented in current change set.
+
+Goal: make the deterministic outcome scorer and downstream credit/calibration aggregates honor the new quality-weighted signals.
+
+Result: `score_episode_outcomes` now applies `skill_quality_needs_patch_penalty` and `skill_quality_too_generic_penalty`, so thin or memory-shaped validated skills no longer score as full validation success.
+
 ---
 
 ## Progress Log
@@ -488,6 +496,7 @@ Result: immediate post-validation outcome observations now weight skill quality:
 - Implemented calibration grouped signal reporting: `calibrate` summaries now expose actionable workflow groups and non-actionable diagnostic volume separately, reducing the need to inspect JSON artifacts for signal meaning.
 - Implemented operational report grouped signal surface: read-only operational report sections and the daily Slack template now preserve the distinction between actionable workflow groups and non-actionable diagnostic volume.
 - Implemented skill quality weighted validation outcomes: passed readback is no longer uniformly positive; thin skills become weak positives under observation and memory-shaped skills become slightly negative despite validation success.
+- Implemented skill quality outcome score components: deterministic outcome scoring now applies penalties for `skill_quality_needs_patch` and `skill_quality_too_generic`, so credit assignment/calibration aggregates reflect those quality weaknesses.
 
 ---
 
