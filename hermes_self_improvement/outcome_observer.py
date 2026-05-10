@@ -13,6 +13,12 @@ from .config import normalize_calibration_config
 
 UTC = timezone.utc
 REEDIT_WINDOW = timedelta(days=7)
+COVERAGE_CLUSTER_ALIASES = {
+    "timeout-workflow": ("timeout",),
+    "sandbox-permission-workflow": ("permission_denied",),
+    "patch-tool-workflow": ("tool_error:patch:",),
+    "safe-patch-usage": ("tool_error:patch:",),
+}
 
 
 def _now() -> datetime:
@@ -294,6 +300,35 @@ def collect_post_validation_observations(*, episodes: list[dict[str, Any]], wind
     return candidates, []
 
 
+def _coverage_targets_for_cluster(cluster_id: str) -> list[str]:
+    matches: list[str] = []
+    for target_id, needles in COVERAGE_CLUSTER_ALIASES.items():
+        if any(needle in cluster_id for needle in needles):
+            matches.append(target_id)
+    return matches
+
+
+def _coverage_episode_for_cluster(*, episodes: list[dict[str, Any]], cluster_id: str, event_time: datetime) -> dict[str, Any] | None:
+    target_ids = set(_coverage_targets_for_cluster(cluster_id))
+    if not target_ids:
+        return None
+    candidates: list[tuple[datetime, dict[str, Any]]] = []
+    for episode in episodes:
+        if str(episode.get("target_kind") or "") != "skill":
+            continue
+        if str(episode.get("target_id") or "") not in target_ids:
+            continue
+        if not bool(episode.get("learnable", True)):
+            continue
+        episode_time = _parse_time(episode.get("created_at"))
+        if episode_time is None or episode_time >= event_time:
+            continue
+        candidates.append((episode_time, episode))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
 def collect_failure_cluster_recurrence_observations(
     *,
     config: dict[str, Any],
@@ -339,6 +374,32 @@ def collect_failure_cluster_recurrence_observations(
                 },
             })
             matched = True
+        if not matched and event_time is not None:
+            coverage_episode = _coverage_episode_for_cluster(episodes=episodes, cluster_id=cluster_id, event_time=event_time)
+            if coverage_episode is not None:
+                episode_time = _parse_time(coverage_episode.get("created_at"))
+                if episode_time is not None:
+                    candidates.append({
+                        "schema_name": "self_improvement_outcome_observation",
+                        "schema_version": "1.0",
+                        "episode_id": coverage_episode.get("episode_id"),
+                        "observed_at": _iso(event_time),
+                        "window": _outcome_window(episode_time, event_time),
+                        "signals": {"same_failure_cluster_recurrence": True, "tool_error_cluster_reappeared": True},
+                        "outcome_score": -0.4,
+                        "confidence": 0.35,
+                        "source": {
+                            "kind": "automatic_observation",
+                            "signal": "same_failure_cluster_recurrence",
+                            "source_path": event.get("source_path"),
+                            "source_id": event.get("tool_call_id") or event.get("session_id"),
+                            "match_kind": "coverage_target",
+                            "cluster_id": cluster_id,
+                            "target_kind": coverage_episode.get("target_kind"),
+                            "target_id": coverage_episode.get("target_id"),
+                        },
+                    })
+                    matched = True
         if not matched:
             unmatched.append({"reason": "cluster_episode_not_matched", "signal": "same_failure_cluster_recurrence", "cluster_id": cluster_id, "source_path": event.get("source_path")})
     return candidates, unmatched

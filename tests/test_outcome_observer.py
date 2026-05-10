@@ -193,7 +193,57 @@ def test_collect_failure_cluster_recurrence_observations_matches_post_tool_call_
     assert candidates[0]["episode_id"] == "episode-1"
     assert candidates[0]["signals"]["same_failure_cluster_recurrence"] is True
     assert candidates[0]["signals"]["tool_error_cluster_reappeared"] is True
+    assert candidates[0]["source"]["match_kind"] == "failure_cluster"
     assert candidates[0]["confidence"] == 0.6
+
+
+def test_collect_failure_cluster_recurrence_observations_matches_coverage_skill_target(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    timeout_episode = episode_payload("episode-timeout", created_at="2026-05-05T09:00:00+00:00", target_id="timeout-workflow")
+    unrelated_episode = episode_payload("episode-other", created_at="2026-05-05T09:30:00+00:00", target_id="other-skill")
+    event = {
+        "ts": "2026-05-05T10:00:00+00:00",
+        "event": "post_tool_call",
+        "status": "error",
+        "tool_name": "terminal",
+        "error_kind": "timeout",
+        "session_id": "session-1",
+    }
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text(json.dumps(event, sort_keys=True) + "\n", encoding="utf-8")
+    window = {"start": "2026-05-05T09:30:00+00:00", "end": "2026-05-05T11:00:00+00:00"}
+
+    candidates, unmatched = collect_failure_cluster_recurrence_observations(config=config, episodes=[timeout_episode, unrelated_episode], window=window)
+
+    assert unmatched == []
+    assert len(candidates) == 1
+    assert candidates[0]["episode_id"] == "episode-timeout"
+    assert candidates[0]["source"]["match_kind"] == "coverage_target"
+    assert candidates[0]["source"]["target_id"] == "timeout-workflow"
+    assert candidates[0]["confidence"] == 0.35
+
+
+def test_collect_failure_cluster_recurrence_observations_keeps_unrelated_cluster_unmatched(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    episode = episode_payload("episode-timeout", created_at="2026-05-05T09:00:00+00:00", target_id="timeout-workflow")
+    event = {
+        "ts": "2026-05-05T10:00:00+00:00",
+        "event": "post_tool_call",
+        "status": "error",
+        "tool_name": "read_file",
+        "error_kind": "not_found",
+        "session_id": "session-1",
+    }
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text(json.dumps(event, sort_keys=True) + "\n", encoding="utf-8")
+    window = {"start": "2026-05-05T09:30:00+00:00", "end": "2026-05-05T11:00:00+00:00"}
+
+    candidates, unmatched = collect_failure_cluster_recurrence_observations(config=config, episodes=[episode], window=window)
+
+    assert candidates == []
+    assert unmatched[0]["cluster_id"] == "tool_error:read_file:not_found"
 
 
 def test_collect_user_correction_recurrence_observations_matches_explicit_target(tmp_path):

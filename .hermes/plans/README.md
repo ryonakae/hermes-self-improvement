@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-failure-cluster-coverage-outcomes.md`
+  - **Status:** implemented.
+  - Adds conservative failure-cluster coverage outcome attribution for known workflow skills. Timeout, permission-denied, and patch tool clusters can now attach to `timeout-workflow`, `sandbox-permission-workflow`, `patch-tool-workflow`, or `safe-patch-usage` episodes when exact evidence-id matching is unavailable, using lower confidence recurrence observations.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-outcome-observation-post-validation-signals.md`
   - **Status:** implemented.
   - Adds immediate outcome observations from mutation post-validation metadata. Skill mutation episodes preserve compact post-validation status/quality flags, and outcome prepass emits `validation_passed` observations for passed/failed readback without treating them as long-term success.

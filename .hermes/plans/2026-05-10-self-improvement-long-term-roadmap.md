@@ -90,9 +90,9 @@ Overall: **about 6.5–7合目**.
 - **Duplicate / existing coverage decisions:** around 5合目.
   - `patch-tool-workflow` was not created and the agent inspected `safe-patch-usage`, which was probably good, but the artifact still expressed it as a rejection rather than a meaningful no-op such as `covered_by_existing_skill`.
 
-- **Outcome / credit assignment:** around 6合目.
-  - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, and immediate post-validation observations can now score executed skill mutations without pretending long-term success.
-  - Actual later outcome observations over time are still needed before changes are proven effective.
+- **Outcome / credit assignment:** around 6.5合目.
+  - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations can score executed skill mutations, and recurring timeout/permission/patch clusters can now attach to relevant coverage-skill episodes with low-confidence recurrence observations.
+  - Actual later positive observations, such as verified failure reduction or useful skill use without correction, are still needed before changes are proven effective.
 
 - **Human-readable daily / CLI reporting:** around 6.5合目.
   - The daily Slack template has been improved, and `improve` / `calibrate` summaries now separate actual mutation, preview, no-op/skip, validation reject, and overlay promotion more clearly.
@@ -334,6 +334,14 @@ Goal: increase reliable scored observations from immediate mutation validation w
 
 Result: skill mutation episodes now preserve compact post-validation status, and outcome prepass emits immediate validation observations for passed/failed post-validation metadata. Existing old episodes do not backfill these signals.
 
+### Slice I — Failure cluster coverage outcomes
+
+**Status:** implemented in current change set.
+
+Goal: reduce unmatched failure-cluster recurrence observations by linking covered tool-error clusters to relevant workflow-skill episodes.
+
+Result: timeout, permission-denied, and patch clusters now fall back to explicit coverage-skill aliases when exact evidence-id matching is unavailable. Matches are low-confidence recurrence observations (`confidence: 0.35`) and do not prove long-term failure.
+
 ---
 
 ## Progress Log
@@ -356,6 +364,7 @@ Result: skill mutation episodes now preserve compact post-validation status, and
 - Implemented calibration wording review: `calibrate --dry-run` now reports evaluated promotion candidates as `action would promote`, compact tool summaries include explicit `action`, and mutating calibration from the inspected candidate set promoted active generation `overlay-set-b8335b6c61af` for planner/editor/scorer with passed regression.
 - Implemented overlay-generation outcome attribution: calibration episodes now record planner/editor/scorer overlay candidates/promotions with `overlay_generation_id`, and credit assignment groups/scans later outcomes by overlay generation.
 - Implemented post-validation outcome signals: executed skill mutation episodes now keep compact post-validation metadata, and outcome prepass emits immediate `validation_passed` observations from that metadata. Real smoke wrote 0 new observations because existing recent episodes predate the metadata.
+- Implemented failure-cluster coverage outcome attribution: timeout, permission-denied, and patch clusters now attach to relevant workflow-skill coverage episodes when exact evidence-id matching is missing. Real smoke wrote 80 recurrence observations and reduced unmatched clusters from 857 to 780.
 
 ---
 
