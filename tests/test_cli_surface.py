@@ -370,7 +370,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
             "coverage_candidate_count": 3,
             "evidence_by_kind": {"skill_inventory_candidate": 1, "memory_inventory_candidate": 1, "knowledge_coverage_candidate": 3},
             "inventory_health": {
-                "skill_candidates": {"raw_count": 5, "llm_visible_count": 2, "filtered_by_reason": {"non_mutable": 2, "pinned": 1}},
+                "skill_candidates": {"raw_count": 5, "llm_visible_count": 2, "filtered_by_reason": {"non_mutable": 2, "pinned": 1}, "similar_group_count": 1, "possible_stale_group_count": 1, "stale_singleton_count": 1},
                 "memory": {"entry_count": 7, "near_duplicate_group_count": 1, "exact_duplicate_group_count": 1, "stale_pair_count": 1},
             },
         }},
@@ -397,6 +397,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "inventory: 2 (skill 1, memory 1)" in text
     assert "Knowledge inventory:" in text
     assert "- skills visible to LLM: 2/5, filtered: non_mutable 2, pinned 1" in text
+    assert "- skill groups: similar 1, possible stale 1, stale singletons 1" in text
     assert "- memory entries: 7, duplicates: exact 1, near 1, stale pairs 1" in text
     assert "Coverage gaps:" in text
     assert "- candidates: 3" in text

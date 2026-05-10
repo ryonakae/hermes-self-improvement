@@ -91,6 +91,9 @@ Overall: **about 7合目**.
 - **Duplicate / existing coverage decisions:** around 6合目.
   - `patch-tool-workflow` style duplicates are now recorded as meaningful no-ops such as `covered_by_existing_skill` / `duplicate_prevented`, shown in summaries, preserved into episodes, and given a conservative positive outcome component when duplicate creation is prevented.
 
+- **Knowledge inventory beyond tool failures:** around 6.2合目.
+  - Inventory health now reports skill overlap/staleness reason counts and memory duplicate/stale-pair counts in CLI/daily-facing summaries, so knowledge maintenance work is not only raw candidate volume. Deeper stale/overlap planning and low-risk maintenance execution still need expansion.
+
 - **Outcome / credit assignment:** around 7.2合目.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
   - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, and credit assignment keeps usage-only positives under observation instead of counting them as proven improvement.
@@ -567,6 +570,14 @@ Goal: make skill-quality follow-up actionable from CLI/daily-facing summaries.
 
 Result: skill-quality summaries now include bounded reason counts derived from existing post-validation flags, such as missing trigger conditions, concrete steps, memory-shaped content, compactness problems, and validation failures.
 
+### Slice AJ — Knowledge inventory reason summary
+
+**Status:** implemented in current change set.
+
+Goal: make knowledge-inventory follow-up actionable from CLI/daily-facing summaries rather than showing only raw inventory candidate volume.
+
+Result: inventory health now includes deterministic skill-inventory reason counts (`similar_group_count`, `possible_stale_group_count`, `stale_singleton_count`), and improve summaries show skill overlap/staleness groups next to memory duplicate/stale-pair counts.
+
 ---
 
 ## Progress Log
@@ -616,6 +627,7 @@ Result: skill-quality summaries now include bounded reason counts derived from e
 - Implemented skill compactness diagnostics: post-validation now emits `content_too_short` / `content_too_long`, persists them through episodes and outcome observations, applies a light compactness quality penalty, and classifies compactness issues as `needs_patch` in skill-quality summaries.
 - Implemented calibration under-observation signal strength: quality-held and usage-held weak positives now enter `signal_strength.under_observation` and weak signal volume without becoming medium/strong signals, and the detail is rendered in calibrate / operational report summaries.
 - Implemented skill quality reason summary: CLI/daily-facing skill-quality sections now include bounded reason counts from post-validation flags, making follow-up candidates actionable without inspecting JSON artifacts.
+- Implemented knowledge inventory reason summary: inventory health now carries skill overlap/staleness group counts, and improve summaries show `similar`, `possible stale`, and `stale singleton` skill groups next to memory duplicate/stale-pair counts.
 
 ---
 

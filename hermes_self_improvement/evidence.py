@@ -761,6 +761,22 @@ def _memory_inventory_group_counts(inventory_evidence: list[dict[str, Any]]) -> 
     return counts
 
 
+def _skill_inventory_group_counts(inventory_evidence: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {"similar_group_count": 0, "possible_stale_group_count": 0, "stale_singleton_count": 0}
+    for item in inventory_evidence:
+        if not isinstance(item, dict):
+            continue
+        inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
+        kind = str(inventory.get("group_kind") or "")
+        if kind == "similar_skills":
+            counts["similar_group_count"] += 1
+        elif kind == "possible_stale_skill":
+            counts["possible_stale_group_count"] += 1
+        elif kind == "stale_singleton_skill":
+            counts["stale_singleton_count"] += 1
+    return counts
+
+
 def build_inventory_health_snapshot(
     *,
     raw_skill_candidates: list[Any],
@@ -769,13 +785,16 @@ def build_inventory_health_snapshot(
     memory_entries: list[dict[str, Any]],
     inventory_evidence: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    skill_inventory = [item for item in inventory_evidence if isinstance(item, dict) and item.get("kind") == "skill_inventory_candidate"]
     memory_inventory = [item for item in inventory_evidence if isinstance(item, dict) and item.get("kind") == "memory_inventory_candidate"]
+    skill_counts = _skill_inventory_group_counts(skill_inventory)
     memory_counts = _memory_inventory_group_counts(memory_inventory)
     return {
         "skill_candidates": {
             "raw_count": len(raw_skill_candidates),
             "llm_visible_count": len(skill_candidates),
             "filtered_by_reason": dict(filtered_skill_candidate_count_by_reason),
+            **skill_counts,
         },
         "memory": {
             "entry_count": len(memory_entries),

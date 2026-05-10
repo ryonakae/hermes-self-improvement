@@ -225,16 +225,21 @@ def test_build_evidence_pack_includes_inventory_health_snapshot_for_skills_and_m
     memory.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
     user.write_text("User prefers concise Japanese replies.\n", encoding="utf-8")
     curator = {"available": True, "candidates": [
-        {"name": "local-a", "mutable": True, "state": "active", "provenance": "agent_created"},
+        {"name": "alpha-guide", "mutable": True, "state": "active", "provenance": "agent_created"},
+        {"name": "alpha-development", "mutable": True, "state": "active", "provenance": "agent_created"},
+        {"name": "stale-alone", "mutable": True, "state": "stale", "provenance": "agent_created"},
         {"name": "builtin", "mutable": False, "state": "active", "provenance": "builtin"},
-    ], "summary": {"candidate_count": 2}}
+    ], "summary": {"candidate_count": 4}}
 
     pack = build_evidence_pack([], since, until, curator_telemetry=curator, memory_paths={"memory": memory, "user": user})
 
     health = pack["inventory_health"]
-    assert health["skill_candidates"]["raw_count"] == 2
-    assert health["skill_candidates"]["llm_visible_count"] == 1
+    assert health["skill_candidates"]["raw_count"] == 4
+    assert health["skill_candidates"]["llm_visible_count"] == 3
     assert health["skill_candidates"]["filtered_by_reason"]["non_mutable"] == 1
+    assert health["skill_candidates"]["similar_group_count"] == 1
+    assert health["skill_candidates"]["possible_stale_group_count"] == 0
+    assert health["skill_candidates"]["stale_singleton_count"] == 1
     assert health["memory"]["entry_count"] == 2
     assert health["memory"]["near_duplicate_group_count"] == 0
     assert health["memory"]["exact_duplicate_group_count"] == 0

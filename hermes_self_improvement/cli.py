@@ -1566,6 +1566,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- evidence: {int(evidence_summary.get('evidence_count') or 0)}, ignored: {int(evidence_summary.get('ignored_count') or 0)}, inventory: {inventory_count} ({inventory_parts})",
         "Knowledge inventory:",
         f"- skills visible to LLM: {int(inventory_skill_health.get('llm_visible_count') or 0)}/{int(inventory_skill_health.get('raw_count') or 0)}, filtered: {_format_count_map(inventory_skill_health.get('filtered_by_reason') if isinstance(inventory_skill_health.get('filtered_by_reason'), dict) else {})}",
+        f"- skill groups: similar {int(inventory_skill_health.get('similar_group_count') or 0)}, possible stale {int(inventory_skill_health.get('possible_stale_group_count') or 0)}, stale singletons {int(inventory_skill_health.get('stale_singleton_count') or 0)}",
         f"- memory entries: {int(inventory_memory_health.get('entry_count') or 0)}, duplicates: exact {int(inventory_memory_health.get('exact_duplicate_group_count') or 0)}, near {int(inventory_memory_health.get('near_duplicate_group_count') or 0)}, stale pairs {int(inventory_memory_health.get('stale_pair_count') or 0)}",
         "Coverage gaps:",
         f"- candidates: {int(evidence_summary.get('coverage_candidate_count') or 0)}",

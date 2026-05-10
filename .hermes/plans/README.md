@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-knowledge-inventory-reason-summary.md`
+  - **Status:** implemented.
+  - Adds skill-inventory reason counts to health snapshots and CLI/daily-facing summaries, separating similar skill groups, possible stale groups, stale singletons, and memory duplicate/stale-pair counts.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-quality-reason-summary.md`
   - **Status:** implemented.
   - Adds bounded skill-quality reason counts to CLI/daily-facing summaries so follow-up candidates explain whether they lack triggers, concrete steps, compactness, verification, frontmatter, or have memory-shaped content.
