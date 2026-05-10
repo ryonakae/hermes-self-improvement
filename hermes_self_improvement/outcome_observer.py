@@ -255,6 +255,45 @@ def _event_cluster_id(event: dict[str, Any]) -> str | None:
     return None
 
 
+def collect_post_validation_observations(*, episodes: list[dict[str, Any]], window: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    candidates: list[dict[str, Any]] = []
+    for episode in episodes:
+        if not _is_executed_mutation(episode):
+            continue
+        status = str(episode.get("post_validation_status") or "").strip().lower()
+        if status not in {"passed", "failed"}:
+            continue
+        episode_time = _parse_time(episode.get("created_at"))
+        if episode_time is None or not _window_contains(window, episode_time):
+            continue
+        passed = status == "passed"
+        signals: dict[str, Any] = {"validation_passed": passed}
+        if episode.get("post_validation_has_pitfalls") is not None:
+            signals["skill_quality_has_pitfalls"] = bool(episode.get("post_validation_has_pitfalls"))
+        if episode.get("post_validation_has_verification") is not None:
+            signals["skill_quality_has_verification"] = bool(episode.get("post_validation_has_verification"))
+        candidates.append({
+            "schema_name": "self_improvement_outcome_observation",
+            "schema_version": "1.0",
+            "episode_id": episode.get("episode_id"),
+            "observed_at": _iso(episode_time),
+            "window": "immediate",
+            "signals": signals,
+            "outcome_score": 0.2 if passed else -0.25,
+            "confidence": 0.7 if passed else 0.8,
+            "source": {
+                "kind": "automatic_observation",
+                "signal": "validation_passed",
+                "source_path": episode.get("path") or episode.get("artifact_path"),
+                "source_id": episode.get("episode_id"),
+                "match_kind": "episode_post_validation",
+                "target_kind": episode.get("target_kind"),
+                "target_id": episode.get("target_id"),
+            },
+        })
+    return candidates, []
+
+
 def collect_failure_cluster_recurrence_observations(
     *,
     config: dict[str, Any],
@@ -370,7 +409,7 @@ def _signal_counts(candidates: list[dict[str, Any]]) -> dict[str, int]:
     for candidate in candidates:
         signals = candidate.get("signals") if isinstance(candidate.get("signals"), dict) else {}
         for key, value in signals.items():
-            if value is True and key in {"user_correction_recurrence", "same_failure_cluster_recurrence", "target_reedit_shortly_after_mutation"}:
+            if value is True and key in {"user_correction_recurrence", "same_failure_cluster_recurrence", "target_reedit_shortly_after_mutation", "validation_passed"}:
                 counts[key] = counts.get(key, 0) + 1
     return counts
 
@@ -418,6 +457,7 @@ def run_outcome_prepass(*, config: dict[str, Any], now: datetime | None = None) 
     window = determine_collection_window(config=config, now=created)
     episodes = load_recent_episodes(config=config, limit=1000)
     collector_results = [
+        collect_post_validation_observations(episodes=episodes, window=window),
         collect_target_reedit_observations(episodes=episodes, window=window),
         collect_failure_cluster_recurrence_observations(config=config, episodes=episodes, window=window),
         collect_user_correction_recurrence_observations(config=config, episodes=episodes, window=window),

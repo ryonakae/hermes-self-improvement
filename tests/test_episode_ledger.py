@@ -181,7 +181,11 @@ def test_record_run_episodes_uses_mutation_metadata_for_executed_skill_change(tm
     result["dry_run"] = False
     result["execute"] = True
     skill_decision = result["step_decisions"]["skill"]["decisions"][0]
-    skill_decision.update({"decision": "accepted", "changed": True, "result": {"success": True}})
+    skill_decision.update({
+        "decision": "accepted",
+        "changed": True,
+        "result": {"success": True, "post_validation": {"status": "passed", "has_pitfalls": True, "has_verification": True}},
+    })
 
     record_run_episodes(config=config, run_result=result)
 
@@ -194,6 +198,9 @@ def test_record_run_episodes_uses_mutation_metadata_for_executed_skill_change(tm
     assert episode["planner_prompt_hash"] == "sha256:planner"
     assert episode["editor_prompt_hash"] == "sha256:editor"
     assert episode["evaluator_hash"] == "sha256:evaluator"
+    assert episode["post_validation_status"] == "passed"
+    assert episode["post_validation_has_pitfalls"] is True
+    assert episode["post_validation_has_verification"] is True
 
 
 def test_record_run_episodes_preserves_archive_skill_decision(tmp_path):

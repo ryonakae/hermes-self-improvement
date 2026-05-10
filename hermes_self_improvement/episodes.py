@@ -241,6 +241,16 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
             episode["lifecycle_after"] = str(after_state)[:80]
     if decision.get("evidence_ids"):
         episode["evidence_ids"] = [str(item) for item in decision.get("evidence_ids") or []]
+    result = decision.get("result") if isinstance(decision.get("result"), dict) else {}
+    post_validation = result.get("post_validation") if isinstance(result.get("post_validation"), dict) else {}
+    if post_validation:
+        status = str(post_validation.get("status") or "").strip()
+        if status:
+            episode["post_validation_status"] = status[:80]
+        if post_validation.get("has_pitfalls") is not None:
+            episode["post_validation_has_pitfalls"] = bool(post_validation.get("has_pitfalls"))
+        if post_validation.get("has_verification") is not None:
+            episode["post_validation_has_verification"] = bool(post_validation.get("has_verification"))
     return validate_episode(episode)
 
 

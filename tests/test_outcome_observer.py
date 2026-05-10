@@ -6,6 +6,7 @@ from pathlib import Path
 
 from hermes_self_improvement.outcome_observer import (
     collect_failure_cluster_recurrence_observations,
+    collect_post_validation_observations,
     collect_target_reedit_observations,
     collect_user_correction_recurrence_observations,
     determine_collection_window,
@@ -31,6 +32,7 @@ def episode_payload(
     changed: bool = True,
     action: str = "skill_patch",
     evidence_ids: list[str] | None = None,
+    **extra,
 ) -> dict:
     payload = {
         "schema_name": "self_improvement_episode",
@@ -51,6 +53,7 @@ def episode_payload(
     }
     if evidence_ids is not None:
         payload["evidence_ids"] = evidence_ids
+    payload.update(extra)
     return payload
 
 
@@ -218,18 +221,57 @@ def test_collect_user_correction_recurrence_observations_matches_explicit_target
     assert candidates[0]["confidence"] == 0.9
 
 
+def test_collect_post_validation_observations_records_immediate_validation_signal():
+    episodes = [
+        episode_payload(
+            "episode-1",
+            created_at="2026-05-05T09:00:00+00:00",
+            target_id="demo-skill",
+            post_validation_status="passed",
+            post_validation_has_pitfalls=True,
+            post_validation_has_verification=True,
+        ),
+        episode_payload(
+            "episode-2",
+            created_at="2026-05-05T10:00:00+00:00",
+            target_id="bad-skill",
+            post_validation_status="failed",
+        ),
+    ]
+    window = {"start": "2026-05-05T08:00:00+00:00", "end": "2026-05-05T11:00:00+00:00"}
+
+    candidates, unmatched = collect_post_validation_observations(episodes=episodes, window=window)
+
+    assert unmatched == []
+    assert len(candidates) == 2
+    by_episode = {item["episode_id"]: item for item in candidates}
+    assert by_episode["episode-1"]["window"] == "immediate"
+    assert by_episode["episode-1"]["signals"]["validation_passed"] is True
+    assert by_episode["episode-1"]["signals"]["skill_quality_has_pitfalls"] is True
+    assert by_episode["episode-1"]["signals"]["skill_quality_has_verification"] is True
+    assert by_episode["episode-1"]["confidence"] == 0.7
+    assert by_episode["episode-2"]["signals"]["validation_passed"] is False
+    assert by_episode["episode-2"]["confidence"] == 0.8
+
+
 def test_run_outcome_prepass_writes_target_reedit_observation_and_compact_artifact(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
-    write_episode(root, episode_payload("episode-1", created_at="2026-05-05T09:00:00+00:00", target_id="demo-skill"))
+    write_episode(root, episode_payload(
+        "episode-1",
+        created_at="2026-05-05T09:00:00+00:00",
+        target_id="demo-skill",
+        post_validation_status="passed",
+    ))
     write_episode(root, episode_payload("episode-2", created_at="2026-05-05T12:00:00+00:00", target_id="demo-skill"))
 
     summary = run_outcome_prepass(config=config, now=datetime(2026, 5, 5, 13, 0, tzinfo=timezone.utc))
 
-    assert summary["written_observation_count"] == 1
+    assert summary["written_observation_count"] == 2
     assert summary["signals"]["target_reedit_shortly_after_mutation"] == 1
+    assert summary["signals"]["validation_passed"] == 1
     assert Path(summary["artifact_path"]).exists()
     artifact = json.loads(Path(summary["artifact_path"]).read_text(encoding="utf-8"))
-    assert artifact["written_observation_count"] == 1
+    assert artifact["written_observation_count"] == 2
     assert "observation_paths" in artifact
     assert "large_payload" not in json.dumps(artifact)
