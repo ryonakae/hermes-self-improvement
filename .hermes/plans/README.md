@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-failure-cluster-stability-outcomes.md`
+  - **Status:** implemented.
+  - Adds a cautious positive outcome signal for mature coverage-skill episodes. Known workflow skill targets now get a low-confidence `coverage_target_quiet_window` observation only when the episode is at least 24 hours old, later telemetry activity exists, and the related failure cluster has not reappeared.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-failure-cluster-coverage-outcomes.md`
   - **Status:** implemented.
   - Adds conservative failure-cluster coverage outcome attribution for known workflow skills. Timeout, permission-denied, and patch tool clusters can now attach to `timeout-workflow`, `sandbox-permission-workflow`, `patch-tool-workflow`, or `safe-patch-usage` episodes when exact evidence-id matching is unavailable, using lower confidence recurrence observations.

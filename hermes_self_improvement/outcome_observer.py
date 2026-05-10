@@ -13,6 +13,7 @@ from .config import normalize_calibration_config
 
 UTC = timezone.utc
 REEDIT_WINDOW = timedelta(days=7)
+STABILITY_MIN_AGE = timedelta(hours=24)
 COVERAGE_CLUSTER_ALIASES = {
     "timeout-workflow": ("timeout",),
     "sandbox-permission-workflow": ("permission_denied",),
@@ -308,6 +309,17 @@ def _coverage_targets_for_cluster(cluster_id: str) -> list[str]:
     return matches
 
 
+def _clusters_for_coverage_target(target_id: str) -> list[str]:
+    needles = COVERAGE_CLUSTER_ALIASES.get(target_id)
+    if not needles:
+        return []
+    return [str(needle) for needle in needles if str(needle).strip()]
+
+
+def _cluster_matches_target(cluster_id: str, target_id: str) -> bool:
+    return any(needle in cluster_id for needle in _clusters_for_coverage_target(target_id))
+
+
 def _coverage_episode_for_cluster(*, episodes: list[dict[str, Any]], cluster_id: str, event_time: datetime) -> dict[str, Any] | None:
     target_ids = set(_coverage_targets_for_cluster(cluster_id))
     if not target_ids:
@@ -405,6 +417,68 @@ def collect_failure_cluster_recurrence_observations(
     return candidates, unmatched
 
 
+def collect_failure_cluster_stability_observations(
+    *,
+    config: dict[str, Any],
+    episodes: list[dict[str, Any]],
+    window: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    candidates: list[dict[str, Any]] = []
+    unmatched: list[dict[str, Any]] = []
+    window_end = _parse_time(window.get("end"))
+    if window_end is None:
+        return candidates, [{"reason": "window_end_missing", "signal": "failure_cluster_stability"}]
+    events = _load_event_log(config)
+    events_in_window = [event for event in events if _event_in_window(event, window)]
+    for episode in episodes:
+        if not _is_executed_mutation(episode):
+            continue
+        if str(episode.get("target_kind") or "") != "skill":
+            continue
+        target_id = str(episode.get("target_id") or "").strip()
+        if not _clusters_for_coverage_target(target_id):
+            continue
+        episode_time = _parse_time(episode.get("created_at"))
+        if episode_time is None:
+            continue
+        if window_end - episode_time < STABILITY_MIN_AGE:
+            unmatched.append({"reason": "quiet_window_too_short", "signal": "failure_cluster_stability", "target_id": target_id})
+            continue
+        later_events = [event for event in events_in_window if (event_time := _event_time(event)) is not None and event_time > episode_time]
+        if not later_events:
+            unmatched.append({"reason": "no_later_observation_activity", "signal": "failure_cluster_stability", "target_id": target_id})
+            continue
+        matching_cluster = None
+        for event in later_events:
+            cluster_id = _event_cluster_id(event)
+            if cluster_id and _cluster_matches_target(cluster_id, target_id):
+                matching_cluster = cluster_id
+                break
+        if matching_cluster:
+            unmatched.append({"reason": "cluster_reappeared", "signal": "failure_cluster_stability", "target_id": target_id, "cluster_id": matching_cluster})
+            continue
+        candidates.append({
+            "schema_name": "self_improvement_outcome_observation",
+            "schema_version": "1.0",
+            "episode_id": episode.get("episode_id"),
+            "observed_at": _iso(window_end),
+            "window": _outcome_window(episode_time, window_end),
+            "signals": {"tool_error_cluster_reappeared": False, "observation_window_completed": True},
+            "outcome_score": 0.12,
+            "confidence": 0.25,
+            "source": {
+                "kind": "automatic_observation",
+                "signal": "failure_cluster_stability",
+                "source_path": _event_log_path(config),
+                "source_id": target_id,
+                "match_kind": "coverage_target_quiet_window",
+                "target_kind": episode.get("target_kind"),
+                "target_id": target_id,
+            },
+        })
+    return candidates, unmatched
+
+
 def _is_user_correction_event(event: dict[str, Any]) -> bool:
     return str(event.get("event") or "") in {"user_correction", "user_feedback", "session_outcome"} and (
         bool(event.get("user_correction")) or str(event.get("outcome") or "") in {"corrected", "rejected", "failed"} or str(event.get("event") or "") == "user_correction"
@@ -470,7 +544,13 @@ def _signal_counts(candidates: list[dict[str, Any]]) -> dict[str, int]:
     for candidate in candidates:
         signals = candidate.get("signals") if isinstance(candidate.get("signals"), dict) else {}
         for key, value in signals.items():
-            if value is True and key in {"user_correction_recurrence", "same_failure_cluster_recurrence", "target_reedit_shortly_after_mutation", "validation_passed"}:
+            if value is True and key in {
+                "user_correction_recurrence",
+                "same_failure_cluster_recurrence",
+                "target_reedit_shortly_after_mutation",
+                "validation_passed",
+                "observation_window_completed",
+            }:
                 counts[key] = counts.get(key, 0) + 1
     return counts
 
@@ -521,6 +601,7 @@ def run_outcome_prepass(*, config: dict[str, Any], now: datetime | None = None) 
         collect_post_validation_observations(episodes=episodes, window=window),
         collect_target_reedit_observations(episodes=episodes, window=window),
         collect_failure_cluster_recurrence_observations(config=config, episodes=episodes, window=window),
+        collect_failure_cluster_stability_observations(config=config, episodes=episodes, window=window),
         collect_user_correction_recurrence_observations(config=config, episodes=episodes, window=window),
     ]
     candidates: list[dict[str, Any]] = []

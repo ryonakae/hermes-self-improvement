@@ -6,6 +6,7 @@ from pathlib import Path
 
 from hermes_self_improvement.outcome_observer import (
     collect_failure_cluster_recurrence_observations,
+    collect_failure_cluster_stability_observations,
     collect_post_validation_observations,
     collect_target_reedit_observations,
     collect_user_correction_recurrence_observations,
@@ -244,6 +245,58 @@ def test_collect_failure_cluster_recurrence_observations_keeps_unrelated_cluster
 
     assert candidates == []
     assert unmatched[0]["cluster_id"] == "tool_error:read_file:not_found"
+
+
+def test_collect_failure_cluster_stability_observations_records_weak_positive_after_quiet_window(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    episode = episode_payload("episode-timeout", created_at="2026-05-05T09:00:00+00:00", target_id="timeout-workflow")
+    later_non_matching_event = {
+        "ts": "2026-05-06T12:00:00+00:00",
+        "event": "post_tool_call",
+        "status": "success",
+        "tool_name": "terminal",
+        "session_id": "session-1",
+    }
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text(json.dumps(later_non_matching_event, sort_keys=True) + "\n", encoding="utf-8")
+    window = {"start": "2026-05-05T09:00:00+00:00", "end": "2026-05-07T10:00:00+00:00"}
+
+    candidates, unmatched = collect_failure_cluster_stability_observations(config=config, episodes=[episode], window=window)
+
+    assert unmatched == []
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["episode_id"] == "episode-timeout"
+    assert candidate["signals"]["tool_error_cluster_reappeared"] is False
+    assert candidate["signals"]["observation_window_completed"] is True
+    assert candidate["outcome_score"] == 0.12
+    assert candidate["confidence"] == 0.25
+    assert candidate["source"]["match_kind"] == "coverage_target_quiet_window"
+    assert candidate["source"]["target_id"] == "timeout-workflow"
+
+
+def test_collect_failure_cluster_stability_observations_does_not_reward_recent_or_reappeared_cluster(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    old_episode = episode_payload("episode-timeout", created_at="2026-05-05T09:00:00+00:00", target_id="timeout-workflow")
+    recent_episode = episode_payload("episode-recent", created_at="2026-05-07T00:00:00+00:00", target_id="timeout-workflow")
+    timeout_event = {
+        "ts": "2026-05-06T12:00:00+00:00",
+        "event": "post_tool_call",
+        "status": "error",
+        "tool_name": "terminal",
+        "error_kind": "timeout",
+        "session_id": "session-1",
+    }
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text(json.dumps(timeout_event, sort_keys=True) + "\n", encoding="utf-8")
+    window = {"start": "2026-05-05T09:00:00+00:00", "end": "2026-05-07T10:00:00+00:00"}
+
+    candidates, unmatched = collect_failure_cluster_stability_observations(config=config, episodes=[old_episode, recent_episode], window=window)
+
+    assert candidates == []
+    assert {item["reason"] for item in unmatched} == {"cluster_reappeared", "quiet_window_too_short"}
 
 
 def test_collect_user_correction_recurrence_observations_matches_explicit_target(tmp_path):
