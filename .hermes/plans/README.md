@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-operational-report-inventory-reasons.md`
+  - **Status:** implemented.
+  - Carries knowledge-inventory reason counts from recent evidence artifacts into read-only operational reports, so daily report inputs show skill similar/stale groups and memory duplicate/stale-pair counts.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-knowledge-inventory-reason-summary.md`
   - **Status:** implemented.
   - Adds skill-inventory reason counts to health snapshots and CLI/daily-facing summaries, separating similar skill groups, possible stale groups, stale singletons, and memory duplicate/stale-pair counts.

@@ -44,7 +44,25 @@ def create_runner_artifacts(config: dict) -> None:
     run_path.write_text(json.dumps({"schema_name": "self_improvement_run", "run_id": "run-test", "summary": {"proposal_count": 2}}, sort_keys=True) + "\n", encoding="utf-8")
     evidence_path = root / "evidence" / "evidence-test.json"
     evidence_path.parent.mkdir(parents=True, exist_ok=True)
-    evidence_path.write_text(json.dumps({"schema_name": "self_improvement_evidence_pack", "summary": {"evidence_count": 3, "ignored_count": 4}}, sort_keys=True) + "\n", encoding="utf-8")
+    evidence_path.write_text(json.dumps({
+        "schema_name": "self_improvement_evidence_pack",
+        "summary": {
+            "evidence_count": 3,
+            "ignored_count": 4,
+            "inventory_health": {
+                "skill_candidates": {
+                    "similar_group_count": 1,
+                    "possible_stale_group_count": 2,
+                    "stale_singleton_count": 3,
+                },
+                "memory": {
+                    "exact_duplicate_group_count": 4,
+                    "near_duplicate_group_count": 5,
+                    "stale_pair_count": 6,
+                },
+            },
+        },
+    }, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def test_run_pipeline_report_includes_runner_and_calibration_summaries(tmp_path):
@@ -62,6 +80,7 @@ def test_run_pipeline_report_includes_runner_and_calibration_summaries(tmp_path)
     assert "retention" not in out["operational_reports"]
     assert "approval" not in out["operational_reports"]
     assert "## Recent runner artifacts" in report
+    assert "Knowledge inventory: skill groups similar 1, possible stale 2, stale singletons 3; memory duplicates exact 4, near 5, stale pairs 6" in report
     assert "## Calibration summary" in report
     assert "calibration-ledger-test" in report
 

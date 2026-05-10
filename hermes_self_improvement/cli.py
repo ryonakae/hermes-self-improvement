@@ -329,6 +329,26 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
                 f"- evidence packs: {len(recent_evidence)} recent artifacts; "
                 f"latest evidence {int(summary.get('evidence_count') or 0)}, ignored {int(summary.get('ignored_count') or 0)}"
             )
+            inventory_health = summary.get("inventory_health") if isinstance(summary.get("inventory_health"), dict) else {}
+            skill_health = inventory_health.get("skill_candidates") if isinstance(inventory_health.get("skill_candidates"), dict) else {}
+            memory_health = inventory_health.get("memory") if isinstance(inventory_health.get("memory"), dict) else {}
+            has_inventory_reason_counts = any(
+                int(skill_health.get(key) or 0)
+                for key in ("similar_group_count", "possible_stale_group_count", "stale_singleton_count")
+            ) or any(
+                int(memory_health.get(key) or 0)
+                for key in ("exact_duplicate_group_count", "near_duplicate_group_count", "stale_pair_count")
+            )
+            if has_inventory_reason_counts:
+                lines.append(
+                    "- Knowledge inventory: "
+                    f"skill groups similar {int(skill_health.get('similar_group_count') or 0)}, "
+                    f"possible stale {int(skill_health.get('possible_stale_group_count') or 0)}, "
+                    f"stale singletons {int(skill_health.get('stale_singleton_count') or 0)}; "
+                    f"memory duplicates exact {int(memory_health.get('exact_duplicate_group_count') or 0)}, "
+                    f"near {int(memory_health.get('near_duplicate_group_count') or 0)}, "
+                    f"stale pairs {int(memory_health.get('stale_pair_count') or 0)}"
+                )
         lines.append(
             f"- runtime-private eval cases: {int(runtime_eval_cases.get('case_count') or 0)} "
             f"stored outside repo eval assets"
