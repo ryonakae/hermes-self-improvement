@@ -428,20 +428,6 @@ def _extract_native_tool_calls(response: Any) -> list[dict[str, Any]] | None:
     return calls
 
 
-def _assistant_tool_call_message(call: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": call["id"],
-                "type": "function",
-                "function": {"name": call["name"], "arguments": json.dumps(call.get("args") or {}, ensure_ascii=False, sort_keys=True)},
-            }
-        ],
-    }
-
-
 def _tool_result_message(call: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     return {
         "role": "user",
@@ -546,7 +532,6 @@ class NativeSkillToolEditorBackend:
                 if args.get("name"):
                     trace_entry["name"] = args.get("name")
                 actual_used.append(trace_entry)
-                messages.append(_assistant_tool_call_message(call))
                 messages.append(_tool_result_message(call, result))
         return _with_last_safe_step({"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_iterations_exceeded"]}, actual_used)
 

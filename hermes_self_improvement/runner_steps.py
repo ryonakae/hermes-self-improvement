@@ -928,6 +928,9 @@ def run_skill_improvement_step(
                     **base_decision,
                     "decision": "skip",
                     "reason": "insufficient_attached_evidence",
+                    "planner_reason": planner_decision.get("reason"),
+                    "skip_detail": "planner_defer_without_attached_evidence",
+                    "next_action": "attach concrete evidence or keep as unresolved maintenance candidate",
                     "changed": False,
                 })
                 continue

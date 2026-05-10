@@ -251,6 +251,9 @@ def test_skill_step_converts_planner_defer_without_evidence_to_skip():
     assert decision["decision"] == "skip"
     assert decision["reason"] == "insufficient_attached_evidence"
     assert decision["evidence_ids"] == []
+    assert decision["planner_reason"] == "target_uncertain_and_insufficient_evidence"
+    assert decision["skip_detail"] == "planner_defer_without_attached_evidence"
+    assert decision["next_action"] == "attach concrete evidence or keep as unresolved maintenance candidate"
 
 
 def test_skill_step_matches_qualified_evidence_to_bare_candidate_name():

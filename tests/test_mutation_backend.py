@@ -201,7 +201,7 @@ def test_native_backend_executes_skill_tools_and_finalizer():
     assert "Task JSON:" not in first_user_message
 
 
-def test_native_backend_sends_tool_results_without_tool_role_messages():
+def test_native_backend_sends_tool_results_as_plain_user_context_only():
     calls = []
     responses = iter([
         _tool_response("skill_view", {"name": "demo"}, call_id="call_view"),
@@ -232,9 +232,11 @@ def test_native_backend_sends_tool_results_without_tool_role_messages():
 
     assert result["success"] is True
     assert len(calls) == 2
-    assert {message["role"] for message in calls[1]} <= {"system", "assistant", "user"}
-    assert not any(message["role"] == "tool" for message in calls[1])
-    assert any("Tool result for skill_view" in str(message.get("content")) for message in calls[1] if message["role"] == "user")
+    second_call_messages = calls[1]
+    assert {message["role"] for message in second_call_messages} <= {"system", "user"}
+    assert not any(message["role"] == "tool" for message in second_call_messages)
+    assert not any(message.get("tool_calls") for message in second_call_messages)
+    assert any("Tool result for skill_view" in str(message.get("content")) for message in second_call_messages if message["role"] == "user")
 
 
 def test_native_backend_non_mutating_finalizer_succeeds_without_changes():
