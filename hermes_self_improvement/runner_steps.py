@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+from pathlib import Path
 from typing import Any
 
 from .mutation_agent import run_skill_agent_task
@@ -18,6 +21,20 @@ from .target_resolver import build_target_resolution_digest, run_target_resolver
 
 MEMORY_SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
 RAW_TOOL_OUTPUT_MEMORY_SOURCES = {"terminal", "execute_code", "search_files", "read_file", "patch"}
+MEMORY_REPLACE_STOPWORDS = {
+    "the", "and", "for", "with", "from", "that", "this", "into", "only", "when", "then",
+    "する", "ある", "いる", "こと", "ため", "よう", "では", "ます", "です", "として",
+}
+
+
+def _memory_replace_has_topic_continuity(old_text: str, content: str) -> bool:
+    old_tokens = {token.lower() for token in re.findall(r"[A-Za-z0-9_./:-]{4,}|[\u3040-\u30ff\u4e00-\u9fff]{2,}", old_text or "") if token.lower() not in MEMORY_REPLACE_STOPWORDS}
+    new_tokens = {token.lower() for token in re.findall(r"[A-Za-z0-9_./:-]{4,}|[\u3040-\u30ff\u4e00-\u9fff]{2,}", content or "") if token.lower() not in MEMORY_REPLACE_STOPWORDS}
+    if not old_tokens or not new_tokens:
+        return False
+    if len(old_tokens) < 3 or len(new_tokens) < 3:
+        return True
+    return len(old_tokens & new_tokens) >= 2
 
 
 def _looks_sensitive_memory_text(text: str) -> bool:
@@ -78,6 +95,21 @@ def _candidate_names_by_bare_name(candidate_names: list[str]) -> dict[str, list[
             continue
         by_bare.setdefault(bare, []).append(name)
     return by_bare
+
+
+def _skill_root(config: dict[str, Any] | None) -> Path:
+    configured = (config or {}).get("_skills_root")
+    if configured:
+        return Path(str(configured)).expanduser()
+    home = os.environ.get("HERMES_HOME") or str(Path.home() / ".hermes")
+    return Path(home).expanduser() / "skills"
+
+
+def _local_skill_exists(name: str, *, config: dict[str, Any] | None) -> bool:
+    skill_name = str(name or "").strip()
+    if not skill_name or ":" in skill_name or "/" in skill_name or "\\" in skill_name:
+        return False
+    return (_skill_root(config) / skill_name / "SKILL.md").is_file()
 
 
 def _resolve_candidate_skill_names(raw_skill_name: str, candidate_by_name: dict[str, dict[str, Any]]) -> tuple[list[str], str, str]:
@@ -142,6 +174,11 @@ def _memory_operation_from_evidence(item: dict[str, Any]) -> dict[str, Any] | No
             if op_text in {"add", "replace", "remove"}:
                 op_text = {"add": "memory_add", "replace": "memory_replace", "remove": "memory_delete"}[op_text]
             operation["operation"] = op_text
+            if op_text == "memory_replace":
+                old_text = str(operation.get("old_text") or "").strip()
+                content = str(operation.get("content") or operation.get("current_claim") or "").strip()
+                if old_text and content and not _memory_replace_has_topic_continuity(old_text, content):
+                    operation["_reject_reason"] = "memory_replace_topic_mismatch"
             return enriched(operation)
         if preview.get("content") and tool_name:
             if tool_name in RAW_TOOL_OUTPUT_MEMORY_SOURCES:
@@ -438,6 +475,8 @@ def _normalize_inventory_operation(raw: dict[str, Any]) -> tuple[dict[str, Any] 
         return None, "memory_old_text_missing"
     if operation in {"memory_add", "memory_replace"} and not content:
         return None, "memory_content_missing"
+    if operation == "memory_replace" and not _memory_replace_has_topic_continuity(old_text, content):
+        return None, "memory_replace_topic_mismatch"
     if _looks_sensitive_memory_text(old_text) or _looks_sensitive_memory_text(content):
         return None, "memory_sensitive_text"
     normalized = {
@@ -849,6 +888,16 @@ def run_skill_improvement_step(
                 "rationale": planner_decision.get("rationale"),
             }
             task = build_skill_create_agent_task(skill_name=skill_name, evidence=attached_evidence, planner_decision=planner_decision, config=config)
+            if _local_skill_exists(skill_name, config=config):
+                decisions.append({
+                    **base_decision,
+                    "decision": "skip",
+                    "reason": "create_skill_duplicate_existing_skill",
+                    "changed": False,
+                    "noop_outcome": "duplicate_prevented",
+                    "covered_by_existing_skill": skill_name,
+                })
+                continue
             if not mutate:
                 decisions.append({
                     **base_decision,

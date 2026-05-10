@@ -538,6 +538,23 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- unproven changes remain under observation" in text
 
 
+def test_improve_dry_run_summary_shows_outcomes_without_claiming_success():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {},
+        "step_decisions": {},
+        "evidence_pack": {"summary": {}},
+        "credit_assignment": {"outcomes": {"tracked": 5, "improved": 0, "recurring": 0, "regressed": 0, "unknown": 2, "insufficient_window": 3}},
+    })
+
+    assert "Outcomes:" in text
+    assert "- tracked: 5, proven improved: 0, recurring: 0, regressed: 0, unknown: 2, insufficient window: 3" in text
+    assert "- unproven changes remain under observation" in text
+    assert "Actual results:" not in text
+    assert "Executed:" not in text
+
+
 def test_improve_summary_shows_memory_placement_routing():
     cli = load_cli_module()
     text = cli._render_improve_summary({

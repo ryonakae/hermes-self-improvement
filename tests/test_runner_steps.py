@@ -149,6 +149,29 @@ def test_skill_step_dry_run_records_create_skill_preview_without_existing_candid
     assert decision["task"]["targets"] == {"new_skill": "patch-tool-workflow"}
 
 
+def test_skill_step_skips_create_skill_when_local_skill_already_exists(tmp_path):
+    pack = evidence_pack_for(None, candidates=[])
+    skills_root = tmp_path / "skills"
+    (skills_root / "patch-tool-workflow").mkdir(parents=True)
+    (skills_root / "patch-tool-workflow" / "SKILL.md").write_text("---\nname: patch-tool-workflow\n---\n", encoding="utf-8")
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low"}]}
+
+    result = run_skill_improvement_step(
+        evidence_pack=pack,
+        config={"_skill_planner_func": fake_planner, "_skills_root": str(skills_root)},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "create_skill_duplicate_existing_skill"
+    assert decision["noop_outcome"] == "duplicate_prevented"
+    assert decision["covered_by_existing_skill"] == "patch-tool-workflow"
+    assert "task" not in decision
+
+
 def test_skill_step_executes_create_skill_through_skill_agent_when_mutating():
     pack = evidence_pack_for(None, candidates=[])
 
@@ -472,6 +495,23 @@ def test_memory_step_lookup_failure_does_not_block_safe_memory_operation():
     decision = result["decisions"][0]
     assert decision["decision"] == "accepted"
     assert decision["related_memory_lookup"]["status"] == "failed"
+
+
+def test_memory_step_rejects_topic_mismatched_replace():
+    result = run_memory_improvement_step(
+        evidence_pack=memory_evidence_pack({
+            "operation": "memory_replace",
+            "target_store": "memory",
+            "old_text": "Hermes live context reads ~/.hermes/live-contexts and uses injector state.",
+            "content": "Trading policy belongs in plugin-local skills and decision journals.",
+        }),
+        config={"memory": {"provider": "built-in"}},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert decision["decision"] == "rejected"
+    assert decision["reason"] == "memory_replace_topic_mismatch"
 
 
 def test_memory_step_executes_built_in_memory_tool_when_mutating():

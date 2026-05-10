@@ -939,6 +939,8 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
     result_payload["artifact_path"] = str(artifact_path)
     episode_summary = record_run_episodes(config=config, run_result=result_payload)
     result_payload["episodes"] = episode_summary
+    credit_aggregate = build_credit_assignment_aggregate(config=config, limit=1000)
+    result_payload["credit_assignment"] = compact_credit_assignment_summary(credit_aggregate)
     _write_run_artifact(result_payload, config)
     return result_payload
 
@@ -1500,15 +1502,15 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     if action_bucket_lines:
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = action_bucket_lines
+    if outcome_lines:
+        insert_at = lines.index("Skill planner:")
+        lines[insert_at:insert_at] = outcome_lines
     if not result.get("dry_run"):
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = actual_result_lines
         if skill_quality_lines:
             insert_at = lines.index("Skill planner:")
             lines[insert_at:insert_at] = skill_quality_lines
-        if outcome_lines:
-            insert_at = lines.index("Skill planner:")
-            lines[insert_at:insert_at] = outcome_lines
         insert_at = lines.index("Skill planner:")
         executed_lines = [
             "Executed:",
