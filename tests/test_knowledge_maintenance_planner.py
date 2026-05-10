@@ -128,6 +128,8 @@ def test_planner_rejects_create_skill_that_duplicates_reference_skill():
     decision = result["decisions"][0]
     assert decision["decision"] == "skip"
     assert decision["reason"] == "create_skill_duplicates_reference_skill"
+    assert decision["noop_outcome"] == "covered_by_existing_skill"
+    assert decision["covered_by_reference_skill"] == "safe-patch-usage"
 
 
 def test_skill_step_dry_run_maps_merge_skill_to_editor_preview():

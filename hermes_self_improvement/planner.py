@@ -494,9 +494,23 @@ def _normalize_create_skill_decision(
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]", proposed):
         return {"skill": proposed, "decision": "skip", "reason": "create_skill_name_invalid", "evidence_ids": []}
     if proposed in candidate_names:
-        return {"skill": proposed, "decision": "skip", "reason": "create_skill_duplicate_existing_skill", "evidence_ids": []}
+        return {
+            "skill": proposed,
+            "decision": "skip",
+            "reason": "create_skill_duplicate_existing_skill",
+            "evidence_ids": [],
+            "noop_outcome": "duplicate_prevented",
+            "covered_by_existing_skill": proposed,
+        }
     if proposed in (reference_skill_names or set()):
-        return {"skill": proposed, "decision": "skip", "reason": "create_skill_duplicates_reference_skill", "evidence_ids": []}
+        return {
+            "skill": proposed,
+            "decision": "skip",
+            "reason": "create_skill_duplicates_reference_skill",
+            "evidence_ids": [],
+            "noop_outcome": "covered_by_existing_skill",
+            "covered_by_reference_skill": proposed,
+        }
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item) in available_evidence_ids]
     if not evidence_ids:
         return {"skill": proposed, "decision": "skip", "reason": "create_skill_without_attached_evidence", "evidence_ids": []}

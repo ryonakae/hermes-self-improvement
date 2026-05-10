@@ -277,13 +277,15 @@ Result: successful skill create/improve results now get compact `post_validation
 
 ### Slice B — Existing coverage / duplicate no-op classification
 
-**Status:** next implementation slice.
+**Status:** implemented in current change set.
 
 Goal: make cases like `patch-tool-workflow` being covered by `safe-patch-usage` visible as meaningful maintenance outcomes instead of generic rejects.
 
+Result: hard create-skill duplicates now remain `decision: skip` for compatibility while carrying compact no-op metadata: `duplicate_prevented` for mutable existing skills and `covered_by_existing_skill` for reference skills.
+
 ### Slice C — Report actual mutation summary
 
-**Status:** after Slice A/B.
+**Status:** next implementation slice.
 
 Goal: update CLI/daily report summary so actual changes, recovered accounting, duplicate no-ops, validation rejects, and overlays are obvious.
 
@@ -310,8 +312,9 @@ Goal: connect created/updated knowledge and overlay generations to later observe
 - Fixed native editor tool-call history.
 - Dogfood run created `timeout-workflow` and `sandbox-permission-workflow` but artifact accounting initially rejected them.
 - Fixed natural-language outcome normalization and same-run trace-backed `created_skills` inference.
-- Current next gap: duplicate/existing coverage classification, then clearer actual mutation reporting.
+- Current next gap: report actual mutation summary, then skill quality evaluation.
 - Implemented Slice A: native skill mutation results now post-validate changed/created skill targets through official `skill_view`; failures are recorded as `mutation_agent_post_validation_failed` instead of accepted mutation accounting.
+- Implemented Slice B: hard create-skill duplicates now carry no-op metadata, so duplicate prevention / reference skill coverage can be summarized instead of appearing as a generic rejection.
 
 ---
 

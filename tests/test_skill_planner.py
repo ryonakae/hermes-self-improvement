@@ -182,6 +182,8 @@ def test_planner_rejects_create_skill_when_existing_hermes_skill_matches_name():
 
     assert decision["decision"] == "skip"
     assert decision["reason"] == "create_skill_duplicate_existing_skill"
+    assert decision["noop_outcome"] == "duplicate_prevented"
+    assert decision["covered_by_existing_skill"] == "demo-skill"
 
 
 def test_run_skill_planner_uses_injected_planner_and_normalizes_decisions():

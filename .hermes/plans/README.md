@@ -8,13 +8,19 @@ As of 2026-05-10, the long-term roadmap is:
   - **Status:** active long-term source of truth.
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 6.5–7合目. The active milestone is reliable mutation accounting and post-validation.
 
-The current active implementation slice is:
+The latest completed implementation plan is:
 
 - `2026-05-10-existing-coverage-duplicate-noop-classification.md`
-  - **Status:** recommended next slice / not created yet.
-  - Should make cases like `patch-tool-workflow -> safe-patch-usage` visible as meaningful maintenance outcomes such as `covered_by_existing_skill`, `existing_skill_sufficient`, or `duplicate_prevented`, instead of generic rejection.
+  - **Status:** implemented.
+  - Makes hard create-skill duplicate checks visible as meaningful no-op maintenance outcomes. Existing mutable-skill duplicates now carry `noop_outcome: duplicate_prevented`; reference-skill duplicates carry `noop_outcome: covered_by_existing_skill` and the covering reference skill name.
 
-The latest completed implementation plan is:
+The current active implementation slice is:
+
+- `2026-05-10-report-actual-mutation-summary.md`
+  - **Status:** planned / next.
+  - Makes CLI/daily summaries separate actual mutations, recovered accounting, duplicate no-ops, validation rejects, overlay updates, and unresolved work without requiring JSON artifact digging.
+
+The previous completed implementation plan is:
 
 - `2026-05-10-skill-mutation-post-validation-readback.md`
   - **Status:** implemented.
