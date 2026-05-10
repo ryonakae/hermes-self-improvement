@@ -174,6 +174,41 @@ def test_calibration_classifies_recurring_unmatched_failures_as_medium_signal(tm
     assert "medium_signal_cluster" in evidence["gepa_trigger"]["reasons"]
 
 
+def test_calibration_signal_strength_uses_actionable_groups_not_non_actionable_cluster_volume(tmp_path):
+    mod = load_plugin_module()
+    cfg = base_config(tmp_path)
+    root = Path(cfg["_self_improvement_root"])
+    events = []
+    for index in range(5):
+        events.append({
+            "ts": f"2026-05-05T10:0{index}:00+00:00",
+            "event": "post_tool_call",
+            "status": "error",
+            "tool_name": "terminal",
+            "error_kind": "terminal_nonzero_exit",
+            "session_id": f"non-actionable-{index}",
+        })
+    for index in range(2):
+        events.append({
+            "ts": f"2026-05-05T11:0{index}:00+00:00",
+            "event": "post_tool_call",
+            "status": "error",
+            "tool_name": "patch",
+            "error_kind": "unknown_error",
+            "session_id": f"patch-{index}",
+        })
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text("".join(json.dumps(event, sort_keys=True) + "\n" for event in events), encoding="utf-8")
+
+    evidence = mod.collect_calibration_evidence(cfg, now=datetime(2026, 5, 6, tzinfo=timezone.utc))
+
+    summary = evidence["outcome_prepass"]["unmatched_summary"]
+    assert summary["non_actionable_clusters"] == {"tool_error:terminal:terminal_nonzero_exit": 5}
+    assert summary["actionable_cluster_groups"]["patch_tool"]["count"] == 2
+    assert evidence["signal_strength"]["medium"] == 1
+    assert evidence["signal_strength"]["actionable_cluster_groups"]["patch_tool"]["count"] == 2
+
+
 def test_calibration_does_not_trigger_gepa_for_sparse_weak_signal(tmp_path):
     mod = load_plugin_module()
     cfg = base_config(tmp_path)

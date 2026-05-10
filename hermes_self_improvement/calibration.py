@@ -183,6 +183,7 @@ def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: in
     unmatched_count = int(outcome_prepass.get("unmatched_observation_count") or 0)
     unmatched_summary = outcome_prepass.get("unmatched_summary") if isinstance(outcome_prepass.get("unmatched_summary"), dict) else {}
     recurring_clusters = unmatched_summary.get("recurring_clusters") if isinstance(unmatched_summary.get("recurring_clusters"), dict) else {}
+    actionable_groups = unmatched_summary.get("actionable_cluster_groups") if isinstance(unmatched_summary.get("actionable_cluster_groups"), dict) else {}
     weak_by_tool: dict[str, int] = {}
     by_cluster = unmatched_summary.get("by_cluster") if isinstance(unmatched_summary.get("by_cluster"), dict) else {}
     for cluster_id, count in by_cluster.items():
@@ -191,12 +192,13 @@ def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: in
             weak_by_tool[parts[1]] = weak_by_tool.get(parts[1], 0) + int(count or 0)
     strong = int(evidence.get("bad_outcomes") or 0) + int(evidence.get("scorer_errors") or 0) + int(evidence.get("disagreements") or 0)
     strong += int((outcome_prepass.get("signals") or {}).get("user_correction_recurrence") or 0) if isinstance(outcome_prepass.get("signals"), dict) else 0
-    medium = len(recurring_clusters) + int(evidence.get("planner_prompt_signals") or 0)
+    medium = len(recurring_clusters) + len(actionable_groups) + int(evidence.get("planner_prompt_signals") or 0)
     return {
         "weak": unmatched_count,
         "medium": medium,
         "strong": strong,
         "recurring_clusters": recurring_clusters,
+        "actionable_cluster_groups": actionable_groups,
         "weak_by_tool": weak_by_tool,
         "overlay_runtime_eval_cases": overlay_case_count,
     }

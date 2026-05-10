@@ -57,6 +57,7 @@ Overall: **about 6.5–7合目**.
 - **Runtime-private prompt overlays / GEPA:** around 7合目.
   - `calibrate` can generate and promote planner/editor/evaluator overlay sets.
   - Recent active overlay generation `overlay-set-b8335b6c61af` was selected by GEPA and promoted from the inspected candidate-set artifact.
+  - Calibration signal strength now receives actionable cluster groups, so grouped workflow areas can guide overlay material without being dominated by non-actionable raw volume.
 
 - **Boundaries:** around 7.5合目.
   - Built-in / hub / plugin-bundled / external-dir skills are not mutation targets.
@@ -386,6 +387,14 @@ Goal: group timeout failures across tools as one long-running execution workflow
 
 Result: clusters ending in `:timeout` now appear under `actionable_cluster_groups.long_running_tool_execution` with suggested coverage `timeout-workflow`, while individual raw counts stay visible.
 
+### Slice O — Calibration signal strength uses actionable groups
+
+**Status:** implemented in current change set.
+
+Goal: feed grouped workflow areas into calibration signal strength without letting non-actionable raw volume dominate medium signals.
+
+Result: `signal_strength` now includes `actionable_cluster_groups`, and grouped workflow areas count as medium signals while non-actionable clusters remain excluded from medium-signal counts.
+
 ---
 
 ## Progress Log
@@ -414,6 +423,7 @@ Result: clusters ending in `:timeout` now appear under `actionable_cluster_group
 - Implemented patch cluster actionability grouping: `tool_error:patch:*` raw clusters are grouped under `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, preserving subcluster counts while preventing separate patch-error skill names from proliferating.
 - Implemented skill_manage cluster actionability grouping: `tool_error:skill_manage:*` raw clusters are grouped under `actionable_cluster_groups.skill_mutation_tool` with suggested coverage `hermes-skill-management`, preserving subcluster counts while focusing future investigation on official skill mutation workflow/tooling reliability.
 - Implemented timeout cluster actionability grouping: clusters ending in `:timeout` are grouped under `actionable_cluster_groups.long_running_tool_execution` with suggested coverage `timeout-workflow`, preserving subcluster counts while making cross-tool timeout behavior easier to report and review.
+- Implemented calibration signal-strength use of actionable groups: grouped workflow areas now enter `signal_strength.actionable_cluster_groups` and count as medium signals, while non-actionable high-volume clusters remain excluded from medium-signal counts.
 
 ---
 

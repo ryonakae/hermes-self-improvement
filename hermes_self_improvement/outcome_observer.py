@@ -26,16 +26,19 @@ NON_ACTIONABLE_UNMATCHED_CLUSTERS = {
 ACTIONABLE_CLUSTER_GROUPS = {
     "patch_tool": {
         "prefixes": ("tool_error:patch:",),
+        "min_count": 2,
         "suggested_coverage": "safe-patch-usage",
         "reason": "patch tool failures should be interpreted as safe patch workflow evidence, not separate skill names",
     },
     "skill_mutation_tool": {
         "prefixes": ("tool_error:skill_manage:",),
+        "min_count": 2,
         "suggested_coverage": "hermes-skill-management",
         "reason": "skill_manage failures should be reviewed as official skill mutation workflow/tooling evidence",
     },
     "long_running_tool_execution": {
         "suffixes": (":timeout",),
+        "min_count": 2,
         "suggested_coverage": "timeout-workflow",
         "reason": "timeout failures across tools should be reviewed as long-running execution guidance",
     },
@@ -600,8 +603,11 @@ def _cluster_groups(by_cluster: dict[str, int]) -> dict[str, dict[str, Any]]:
         }
         if not clusters:
             continue
+        count = sum(clusters.values())
+        if count < int(spec.get("min_count") or 1):
+            continue
         groups[group_name] = {
-            "count": sum(clusters.values()),
+            "count": count,
             "clusters": clusters,
             "suggested_coverage": spec.get("suggested_coverage"),
             "reason": spec.get("reason"),

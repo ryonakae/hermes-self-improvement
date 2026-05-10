@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-calibration-actionable-groups-signal-strength.md`
+  - **Status:** implemented.
+  - Feeds `actionable_cluster_groups` into calibration signal strength, so grouped workflow areas count as medium signals while high-volume non-actionable clusters do not.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-timeout-cluster-actionability-grouping.md`
   - **Status:** implemented.
   - Groups timeout clusters across tools into `actionable_cluster_groups.long_running_tool_execution` with suggested coverage `timeout-workflow`, while preserving raw per-cluster counts.
