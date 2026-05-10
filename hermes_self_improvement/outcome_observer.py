@@ -23,6 +23,13 @@ COVERAGE_CLUSTER_ALIASES = {
 NON_ACTIONABLE_UNMATCHED_CLUSTERS = {
     "tool_error:terminal:terminal_nonzero_exit",
 }
+ACTIONABLE_CLUSTER_GROUPS = {
+    "patch_tool": {
+        "prefixes": ("tool_error:patch:",),
+        "suggested_coverage": "safe-patch-usage",
+        "reason": "patch tool failures should be interpreted as safe patch workflow evidence, not separate skill names",
+    },
+}
 
 
 def _now() -> datetime:
@@ -567,6 +574,26 @@ def _write_prepass_artifact(config: dict[str, Any], payload: dict[str, Any], cre
     return str(path)
 
 
+def _cluster_groups(by_cluster: dict[str, int]) -> dict[str, dict[str, Any]]:
+    groups: dict[str, dict[str, Any]] = {}
+    for group_name, spec in ACTIONABLE_CLUSTER_GROUPS.items():
+        prefixes = tuple(str(item) for item in spec.get("prefixes", ()) if str(item))
+        clusters = {
+            cluster_id: count
+            for cluster_id, count in sorted(by_cluster.items())
+            if cluster_id not in NON_ACTIONABLE_UNMATCHED_CLUSTERS and any(cluster_id.startswith(prefix) for prefix in prefixes)
+        }
+        if not clusters:
+            continue
+        groups[group_name] = {
+            "count": sum(clusters.values()),
+            "clusters": clusters,
+            "suggested_coverage": spec.get("suggested_coverage"),
+            "reason": spec.get("reason"),
+        }
+    return groups
+
+
 def _unmatched_summary(unmatched: list[dict[str, Any]]) -> dict[str, Any]:
     by_cluster: dict[str, int] = {}
     by_signal: dict[str, int] = {}
@@ -588,7 +615,13 @@ def _unmatched_summary(unmatched: list[dict[str, Any]]) -> dict[str, Any]:
         for cluster_id, count in by_cluster.items()
         if count >= 3 and cluster_id not in NON_ACTIONABLE_UNMATCHED_CLUSTERS
     }
-    return {"by_signal": by_signal, "by_cluster": by_cluster, "recurring_clusters": recurring_clusters, "non_actionable_clusters": non_actionable_clusters}
+    return {
+        "by_signal": by_signal,
+        "by_cluster": by_cluster,
+        "recurring_clusters": recurring_clusters,
+        "non_actionable_clusters": non_actionable_clusters,
+        "actionable_cluster_groups": _cluster_groups(by_cluster),
+    }
 
 
 def compact_outcome_prepass_summary(prepass: dict[str, Any]) -> dict[str, Any]:

@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-patch-cluster-actionability-grouping.md`
+  - **Status:** implemented.
+  - Groups `tool_error:patch:*` unmatched clusters into an actionable `patch_tool` summary with suggested coverage `safe-patch-usage`, while preserving raw per-cluster counts.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-unmatched-cluster-actionability-summary.md`
   - **Status:** implemented.
   - Separates generic high-volume unmatched clusters from actionable recurring clusters. `tool_error:terminal:terminal_nonzero_exit` remains visible in raw `by_cluster` counts and `non_actionable_clusters`, but no longer dominates `recurring_clusters` as if it were a concrete skill gap.

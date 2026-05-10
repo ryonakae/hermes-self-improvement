@@ -155,6 +155,27 @@ def test_unmatched_summary_separates_generic_terminal_nonzero_exit_from_actionab
     assert summary["by_cluster"]["tool_error:terminal:terminal_nonzero_exit"] == 3
 
 
+def test_unmatched_summary_groups_patch_clusters_by_actionable_failure_mode():
+    unmatched = [
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:patch:not_found"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:patch:not_found"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:patch:unknown_error"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:patch:unknown_error"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:patch:unknown_error"},
+    ]
+
+    summary = _unmatched_summary(unmatched)
+
+    assert summary["actionable_cluster_groups"] == {
+        "patch_tool": {
+            "count": 5,
+            "clusters": {"tool_error:patch:not_found": 2, "tool_error:patch:unknown_error": 3},
+            "suggested_coverage": "safe-patch-usage",
+            "reason": "patch tool failures should be interpreted as safe patch workflow evidence, not separate skill names",
+        }
+    }
+
+
 def test_collect_target_reedit_observations_attributes_weak_negative_to_prior_episode():
     episodes = [
         episode_payload("episode-1", created_at="2026-05-05T09:00:00+00:00", target_id="demo-skill"),

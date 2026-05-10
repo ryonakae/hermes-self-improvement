@@ -98,6 +98,7 @@ Overall: **about 6.5–7合目**.
   - The daily Slack template has been improved, and `improve` / `calibrate` summaries now separate actual mutation, preview, no-op/skip, validation reject, and overlay promotion more clearly.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
   - Generic high-volume unmatched clusters such as `tool_error:terminal:terminal_nonzero_exit` are now separated from actionable `recurring_clusters` so reports do not overstate vague terminal failures as concrete skill gaps.
+  - Patch tool failures are grouped as `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, so `patch:not_found` and `patch:unknown_error` are visible as one workflow area without hiding the raw counts.
 
 ---
 
@@ -359,6 +360,14 @@ Goal: keep high-volume generic unmatched clusters visible without making them lo
 
 Result: `tool_error:terminal:terminal_nonzero_exit` remains in raw `by_cluster` counts but is separated into `non_actionable_clusters` and excluded from actionable `recurring_clusters`.
 
+### Slice L — Patch cluster actionability grouping
+
+**Status:** implemented in current change set.
+
+Goal: group patch-related raw clusters as one actionable workflow area without creating separate skill names for every patch error kind.
+
+Result: `tool_error:patch:*` clusters now appear under `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, while individual raw counts stay in `by_cluster` and `recurring_clusters`.
+
 ---
 
 ## Progress Log
@@ -384,6 +393,7 @@ Result: `tool_error:terminal:terminal_nonzero_exit` remains in raw `by_cluster` 
 - Implemented failure-cluster coverage outcome attribution: timeout, permission-denied, and patch clusters now attach to relevant workflow-skill coverage episodes when exact evidence-id matching is missing. Real smoke wrote 80 recurrence observations and reduced unmatched clusters from 857 to 780.
 - Implemented failure-cluster stability outcomes: mature known coverage-skill episodes can now emit weak positive quiet-window observations only when later telemetry exists and the related cluster did not reappear. This is deliberately low-confidence and does not treat silence as proof of improvement. Real smoke emitted no quiet-window positives because covered clusters still reappeared, which is the intended conservative behavior.
 - Implemented unmatched cluster actionability summary: generic `tool_error:terminal:terminal_nonzero_exit` remains visible but is moved out of actionable `recurring_clusters` into `non_actionable_clusters` so reports do not overstate vague nonzero exits as a concrete maintenance target.
+- Implemented patch cluster actionability grouping: `tool_error:patch:*` raw clusters are grouped under `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, preserving subcluster counts while preventing separate patch-error skill names from proliferating.
 
 ---
 
