@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-quality-negative-reason-labels.md`
+  - **Status:** implemented.
+  - Renames skill-quality deficiency reason labels in CLI/read-only reports to `missing_*`, avoiding positive-looking raw field labels when the signal means guidance is absent.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-operational-report-latest-run-skill-quality.md`
   - **Status:** implemented.
   - Shows latest-run skill-quality reviewed counts, categories, reason counts, and follow-up candidates inside read-only operational reports.

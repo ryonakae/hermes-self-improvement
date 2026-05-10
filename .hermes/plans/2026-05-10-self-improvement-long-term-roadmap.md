@@ -98,8 +98,9 @@ Overall: **about 7合目**.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
   - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, credit assignment keeps usage-only positives under observation, and read-only operational reports now surface latest-run outcome status without opening the run JSON artifact.
 
-- **Human-readable daily / CLI reporting:** around 7.9合目.
+- **Human-readable daily / CLI reporting:** around 8.0合目.
   - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, non-actionable diagnostic volume, knowledge-inventory reason counts, latest-run actual results, latest-run outcome status, and latest-run skill-quality reason counts more clearly.
+  - Skill-quality reason labels now describe deficiencies (`missing_*`) instead of exposing positive boolean field names, so daily-facing summaries are harder to misread.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
   - Duplicate/coverage no-op credit is visible separately from proven mutation improvement as `duplicate no-op credited`, so duplicate prevention is not hidden inside the generic improved bucket.
   - Usage-only weak positives are visible as `skill usage under observation`, so later skill views contribute evidence without being reported as proven improvement by themselves.
@@ -610,6 +611,14 @@ Goal: make read-only operational reports show latest-run skill-quality classific
 
 Result: operational report latest-run sections now reuse skill-quality summary logic, showing reviewed counts, quality categories, bounded reason counts, and follow-up candidates from recent run `step_decisions`.
 
+### Slice AO — Skill quality negative reason labels
+
+**Status:** implemented in current change set.
+
+Goal: make skill-quality reason summaries harder to misread by labeling deficiencies directly.
+
+Result: CLI and operational report skill-quality summaries now render missing guidance as `missing_pitfalls`, `missing_verification`, `missing_trigger_conditions`, and `missing_concrete_steps`, while leaving the underlying post-validation field names unchanged for artifact compatibility.
+
 ---
 
 ## Progress Log
@@ -664,6 +673,7 @@ Result: operational report latest-run sections now reuse skill-quality summary l
 - Implemented operational report actual results: recent run rows now retain compact `step_decisions`, and read-only operational reports show actual mutations, post-validation pass/reject counts, duplicate/no-op counts, and overlay/evaluator change status for the latest run.
 - Implemented operational report latest-run outcomes: recent run rows now retain compact `credit_assignment`, and read-only operational reports show latest-run proven/recurring/unknown/under-observation outcome status without opening the run artifact.
 - Implemented operational report latest-run skill quality: read-only operational reports now show latest-run skill-quality reviewed counts, categories, bounded reason counts, and follow-up candidates from run `step_decisions`.
+- Implemented skill quality negative reason labels: CLI and operational report skill-quality summaries now use `missing_*` labels for deficiencies, avoiding misleading positive-looking labels such as raw `has_concrete_steps` when the signal means the guidance is absent.
 
 ---
 

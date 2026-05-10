@@ -571,7 +571,7 @@ def test_improve_summary_skill_quality_uses_trigger_steps_and_memory_shape():
     assert "Skill quality:" in text
     assert "- reviewed: 3" in text
     assert "- good: 0, needs patch: 2, duplicate: 0, too generic: 1, unsafe: 0" in text
-    assert "- quality reasons: has_concrete_steps 2; has_trigger_conditions 2; content_too_short 1; memory_shaped 1" in text
+    assert "- quality reasons: missing_concrete_steps 2; missing_trigger_conditions 2; content_too_short 1; memory_shaped 1" in text
     assert "memory-shaped" in text
     assert "too-short" in text
     assert "workflow-thin" in text

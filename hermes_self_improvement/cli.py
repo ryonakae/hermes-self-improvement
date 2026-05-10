@@ -1384,13 +1384,13 @@ def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_
             if not post_validation.get("has_frontmatter"):
                 reasons.append("missing_frontmatter")
             if not post_validation.get("has_pitfalls"):
-                reasons.append("has_pitfalls")
+                reasons.append("missing_pitfalls")
             if not post_validation.get("has_verification"):
-                reasons.append("has_verification")
+                reasons.append("missing_verification")
             if post_validation.get("has_trigger_conditions") is False:
-                reasons.append("has_trigger_conditions")
+                reasons.append("missing_trigger_conditions")
             if post_validation.get("has_concrete_steps") is False:
-                reasons.append("has_concrete_steps")
+                reasons.append("missing_concrete_steps")
             if post_validation.get("memory_shaped"):
                 reasons.append("memory_shaped")
             if post_validation.get("content_too_short"):
