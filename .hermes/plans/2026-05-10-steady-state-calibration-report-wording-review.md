@@ -2,7 +2,7 @@
 
 > **For Hermes:** Follow-up after memory replacement hardening. The autonomous loop now dry-runs to zero mutation-ready changes and replay produces zero side effects. Calibration dry-run reaches an overlay candidate set; inspect clarity before promoting anything.
 
-**Status:** planned / next.
+**Status:** implemented.
 
 **Goal:** Ensure calibration and reports distinguish dry-run candidate sets, actual overlay promotion, actual skill/memory mutations, no-op skips, and blocked validation issues clearly.
 
@@ -29,8 +29,31 @@ Out of scope:
 4. If candidate set is safe and the summary is clear, optionally run mutating calibrate from that candidate set.
 5. Update roadmap/index after verification.
 
+## Result
+
+Implemented on 2026-05-10.
+
+- `calibrate --dry-run` now renders evaluated promotion candidates as `action would promote`, not `decision promote`.
+- Actual mutating calibration renders promoted overlays as `action promoted`.
+- The compact tool result also includes an explicit `action` field (`would_promote` vs `promoted`) so agent-facing summaries can distinguish preview from mutation without interpreting raw `decision`.
+- Dry-run candidate set inspected and then promoted from artifact:
+  - candidate set: `overlay-set-b8335b6c61af`
+  - artifact: `/Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260510T044730Z-dccb26ee3720.json`
+  - active pointer: `/Users/ryo.nakae/.hermes/self-improvement/evaluator/active-prompts.json`
+  - active generation: `overlay-set-b8335b6c61af`
+  - roles promoted: planner, editor, scorer
+  - regression: passed for all promoted roles
+
+## Verification
+
+- `bin/hermes-self-improve calibrate --dry-run` showed `action would promote`, with promoted `no` for prompt overlays.
+- `bin/hermes-self-improve calibrate --from-candidate-set /Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260510T044730Z-dccb26ee3720.json` completed with `Calibration: updated` and `action promoted`.
+- `python -m py_compile __init__.py hermes_self_improvement/*.py`
+- `python -m pytest -q` -> `550 passed, 2 skipped`
+- `git diff --check`
+
 ## Exit Criteria
 
-- Dry-run calibration cannot be mistaken for an actual overlay promotion.
-- Candidate-set artifact path and intended action are clear.
-- If mutating calibration runs, active overlay change is reported with generation id and regression status.
+- [x] Dry-run calibration cannot be mistaken for an actual overlay promotion.
+- [x] Candidate-set artifact path and intended action are clear.
+- [x] Mutating calibration reports the active overlay generation and regression status.

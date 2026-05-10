@@ -551,15 +551,26 @@ def _add_config_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _overlay_set_action_label(overlay_set: dict[str, Any]) -> str:
+    status = str(overlay_set.get("status") or "")
+    decision = str(overlay_set.get("decision") or "")
+    if status == "promoted":
+        return "promoted"
+    if decision == "promote":
+        return "would promote"
+    return decision or "none"
+
+
 def _prompt_overlay_set_component(overlay_set: dict[str, Any]) -> str | None:
     if not overlay_set or overlay_set.get("status") == "not_built":
         return None
     changed = overlay_set.get("changed_targets") if isinstance(overlay_set.get("changed_targets"), list) else []
     source = overlay_set.get("source")
     source_suffix = f", source {source}" if source else ""
+    action = _overlay_set_action_label(overlay_set)
     return (
         f"- prompt overlay set: {overlay_set.get('status')}, "
-        f"decision {overlay_set.get('decision')}, "
+        f"action {action}, "
         f"GEPA {overlay_set.get('gepa_result')}, "
         f"changed {len(changed)}"
         f"{source_suffix}"
@@ -647,9 +658,10 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
         source = overlay_set.get("source")
         source_suffix = f", source {source}" if source else ""
         lines.append("Overlay candidate set:")
+        action = _overlay_set_action_label(overlay_set)
         lines.append(
             f"- status: {overlay_set.get('status')}, "
-            f"decision {overlay_set.get('decision')}, "
+            f"action {action}, "
             f"GEPA {overlay_set.get('gepa_result')}, "
             f"changed {len(changed)}, "
             f"hard violations {int(overlay_set.get('hard_violations') or 0)}"

@@ -358,7 +358,7 @@ def test_calibration_summary_separates_overlay_set_from_failed_evaluator():
     })
 
     assert "Component status:" in text
-    assert "- prompt overlay set: evaluated, decision keep_candidate, GEPA no_improvement, changed 0" in text
+    assert "- prompt overlay set: evaluated, action keep_candidate, GEPA no_improvement, changed 0" in text
     assert "- evaluator: failed, reason regression_runner_not_configured, active changed no" in text
     assert "Regression:" not in text
 
@@ -381,9 +381,35 @@ def test_calibration_summary_includes_compact_overlay_candidate_set():
     })
 
     assert "Overlay candidate set:" in text
-    assert "- status: promoted, decision promote, GEPA selected, changed 1, hard violations 0" in text
+    assert "- status: promoted, action promoted, GEPA selected, changed 1, hard violations 0" in text
     assert "- candidate set: overlay-set-001" in text
     assert "- artifact: /tmp/candidate-set.json" in text
+
+
+def test_calibration_summary_labels_evaluated_promote_as_would_promote():
+    cli = load_cli_module()
+
+    text = cli._render_calibration_summary({
+        "current_status": "would_update",
+        "evidence_summary": {"total_events": 20, "disagreements": 0, "bad_outcomes": 0},
+        "overlay_candidate_set": {
+            "status": "evaluated",
+            "decision": "promote",
+            "gepa_result": "selected",
+            "candidate_set_id": "overlay-set-001",
+            "candidate_set_path": "/tmp/candidate-set.json",
+            "changed_targets": ["planner_overlay", "editor_overlay"],
+            "hard_violations": 0,
+        },
+        "prompt_overlays": {
+            "planner": {"candidate": True, "promoted": False, "reason": "no_signal"},
+        },
+    })
+
+    assert "- prompt overlay set: evaluated, action would promote, GEPA selected, changed 2" in text
+    assert "- status: evaluated, action would promote, GEPA selected, changed 2, hard violations 0" in text
+    assert "decision promote" not in text
+    assert "planner: candidate yes, promoted no" in text
 
 
 def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):

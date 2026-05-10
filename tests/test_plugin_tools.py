@@ -227,9 +227,9 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
     assert payload["evaluator_update"] == {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False}
     assert payload["full_payload"]["path"] == str(tmp_path / "ledger.json")
     assert "prompt_overlays" not in payload
-    assert payload["overlay_candidate_set"] == {"status": "promoted", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0}
+    assert payload["overlay_candidate_set"] == {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0}
     assert payload["components"] == {
-        "prompt_overlay_set": {"status": "promoted", "decision": "promote", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": 0},
+        "prompt_overlay_set": {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": 0},
         "evaluator": {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False},
     }
     assert large_details not in raw

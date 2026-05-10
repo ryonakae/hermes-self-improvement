@@ -184,6 +184,7 @@ def test_compact_tool_result_includes_overlay_set_summary_without_payload(monkey
     assert compact["overlay_candidate_set"] == {
         "status": "evaluated",
         "decision": "promote",
+        "action": "would_promote",
         "gepa_result": "selected",
         "candidate_set_id": "overlay-set-001",
         "candidate_set_path": str(tmp_path / "candidate-set.json"),

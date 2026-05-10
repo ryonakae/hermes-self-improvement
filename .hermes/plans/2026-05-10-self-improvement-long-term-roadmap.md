@@ -54,9 +54,9 @@ Overall: **about 6.5–7合目**.
   - Recent planner correctly selected `create_skill` for recurring workflow gaps.
   - The apparent failure was not planner quality; it was mutation harness/accounting.
 
-- **Runtime-private prompt overlays / GEPA:** around 6.5合目.
+- **Runtime-private prompt overlays / GEPA:** around 7合目.
   - `calibrate` can generate and promote planner/editor/evaluator overlay sets.
-  - Recent active overlay generation `overlay-set-e82e93329fc4` was selected by GEPA and promoted.
+  - Recent active overlay generation `overlay-set-b8335b6c61af` was selected by GEPA and promoted from the inspected candidate-set artifact.
 
 - **Boundaries:** around 7.5合目.
   - Built-in / hub / plugin-bundled / external-dir skills are not mutation targets.
@@ -93,8 +93,9 @@ Overall: **about 6.5–7合目**.
 - **Outcome / credit assignment:** around 4.5合目.
   - Episodes exist, but later evidence is not yet strongly tied back to whether a created skill or prompt overlay actually improved future behavior.
 
-- **Human-readable daily / CLI reporting:** around 5.5–6合目.
-  - The daily Slack template has been improved, but plugin reports still require artifact digging to understand actual mutations vs preview/no-op/reject/block.
+- **Human-readable daily / CLI reporting:** around 6.5合目.
+  - The daily Slack template has been improved, and `improve` / `calibrate` summaries now separate actual mutation, preview, no-op/skip, validation reject, and overlay promotion more clearly.
+  - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
 
 ---
 
@@ -307,6 +308,14 @@ Goal: connect created/updated knowledge and overlay generations to later observe
 
 Result: credit assignment now classifies outcome status (`improved`, `recurring`, `regressed`, `unknown`, `insufficient_window`), tracks first scored credit windows, records related episode ids, and exposes compact outcome summaries in improve results.
 
+### Slice F — Calibration report wording and safe overlay promotion
+
+**Status:** implemented in current change set.
+
+Goal: make `calibrate --dry-run` clearly preview-only, then promote an inspected candidate set when safe.
+
+Result: dry-run output now says `action would promote`; executed calibration says `action promoted`. Candidate set `overlay-set-b8335b6c61af` was promoted for planner/editor/scorer with passed regression.
+
 ---
 
 ## Progress Log
@@ -326,6 +335,7 @@ Result: credit assignment now classifies outcome status (`improved`, `recurring`
 - Implemented Slice E: credit assignment now classifies outcomes and keeps unproven changes under observation rather than treating execution as success.
 - Dogfooded Slice F dry-runs and hardened three real gaps: dry-run summaries now show `Outcomes`, create-skill previews skip already-existing local skill names as duplicate no-ops, and topically unrelated `memory_replace` proposals reject with `memory_replace_topic_mismatch`. Mutating replay was intentionally held because the dry-run still contained memory replacements needing planner-quality review.
 - Implemented memory replacement hardening: replacements must preserve topic/context, inventory replacements must be supported by evidence entries, `patch-tool-workflow` is treated as covered by `safe-patch-usage`, and replay now keeps non-mutation-ready items as skips. Latest dry-run had `Would apply: 0`; replay produced zero actual mutations and no misleading blocked count.
+- Implemented calibration wording review: `calibrate --dry-run` now reports evaluated promotion candidates as `action would promote`, compact tool summaries include explicit `action`, and mutating calibration from the inspected candidate set promoted active generation `overlay-set-b8335b6c61af` for planner/editor/scorer with passed regression.
 
 ---
 

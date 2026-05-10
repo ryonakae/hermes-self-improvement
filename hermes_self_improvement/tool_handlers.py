@@ -216,9 +216,13 @@ def _compact_overlay_candidate_set(value: Any) -> dict[str, Any]:
     item = value if isinstance(value, dict) else {}
     if not item:
         return {}
+    status = str(item.get("status") or "")
+    decision = str(item.get("decision") or "")
+    action = "promoted" if status == "promoted" else "would_promote" if decision == "promote" else decision or "none"
     out = {
         "status": item.get("status"),
         "decision": item.get("decision"),
+        "action": action,
         "gepa_result": item.get("gepa_result"),
         "candidate_set_id": item.get("candidate_set_id"),
         "candidate_set_path": item.get("candidate_set_path"),
@@ -236,6 +240,7 @@ def _compact_calibration_components(*, overlay_candidate_set: dict[str, Any], ev
         "prompt_overlay_set": {
             "status": overlay_candidate_set.get("status"),
             "decision": overlay_candidate_set.get("decision"),
+            "action": overlay_candidate_set.get("action"),
             "gepa_result": overlay_candidate_set.get("gepa_result"),
             "changed_targets": changed_targets,
             "hard_violations": int(overlay_candidate_set.get("hard_violations") or 0),

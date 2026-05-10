@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-steady-state-calibration-report-wording-review.md`
+  - **Status:** implemented.
+  - Clarifies `calibrate --dry-run` vs actual overlay promotion: evaluated promotion candidates now show `action would promote`, while executed calibration shows `action promoted`. The compact tool result includes the same action distinction. Promoted candidate set `overlay-set-b8335b6c61af` from `/Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260510T044730Z-dccb26ee3720.json`; active prompts now point at that generation for planner/editor/scorer with passed regression.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-memory-replacement-planner-quality-hardening.md`
   - **Status:** implemented.
   - Hardens memory replacement previews and replay: unrelated replacements, context-losing replacements, and inventory replacements unsupported by evidence now reject before mutation. Also maps `patch-tool-workflow` to existing `safe-patch-usage` coverage and keeps non-mutation-ready replay decisions as skips.
@@ -25,13 +31,6 @@ The previous completed implementation plan is:
 - `2026-05-10-outcome-scoring-credit-assignment.md`
   - **Status:** implemented.
   - Adds outcome status counts, credit windows, related episode ids, and compact `Outcomes` summaries so execution is not treated as proven improvement until observations exist.
-
-The current active follow-up is:
-
-- Steady-state calibration / report wording review.
-  - **Status:** next.
-  - `calibrate --dry-run` now reaches an overlay candidate set from runtime evidence. Next, inspect whether the candidate-set/reports communicate dry-run vs actual promotion clearly before promoting anything.
-  - Plan: `2026-05-10-steady-state-calibration-report-wording-review.md`.
 
 The previous completed implementation plan is:
 
