@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-quality-reason-summary.md`
+  - **Status:** implemented.
+  - Adds bounded skill-quality reason counts to CLI/daily-facing summaries so follow-up candidates explain whether they lack triggers, concrete steps, compactness, verification, frontmatter, or have memory-shaped content.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-calibration-under-observation-signal-strength.md`
   - **Status:** implemented.
   - Adds `signal_strength.under_observation` for quality-held and skill-usage-held weak positives, counts them only as weak calibration material, and renders the detail in calibrate / operational report summaries.

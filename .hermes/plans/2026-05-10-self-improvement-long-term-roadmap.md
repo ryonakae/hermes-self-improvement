@@ -85,8 +85,8 @@ Overall: **about 7合目**.
   - Trace-backed accounting exists, skill create/improve mutations are read back through `skill_view`, built-in memory mutations use before/after state-hash checks, and skill patch/edit readback now verifies the intended changed text where available.
   - Remaining gaps are mostly richer diagnostics and broader provider-specific memory readback beyond the built-in store hash path.
 
-- **Skill quality evaluation:** around 6.8合目.
-  - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, and compactness signals (`content_too_short` / `content_too_long`). These diagnostics are now also preserved into episodes and immediate outcome observations. Evidence-fit and low-risk auto-patch generation still need deeper evaluator work.
+- **Skill quality evaluation:** around 6.9合目.
+  - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, and compactness signals (`content_too_short` / `content_too_long`). These diagnostics are preserved into episodes and immediate outcome observations, scored conservatively, and summarized with compact reason counts in CLI/daily-facing output. Evidence-fit and low-risk auto-patch generation still need deeper evaluator work.
 
 - **Duplicate / existing coverage decisions:** around 6合目.
   - `patch-tool-workflow` style duplicates are now recorded as meaningful no-ops such as `covered_by_existing_skill` / `duplicate_prevented`, shown in summaries, preserved into episodes, and given a conservative positive outcome component when duplicate creation is prevented.
@@ -267,6 +267,7 @@ Exit criteria:
 
 - Daily Slack report and CLI summary distinguish actual mutation / preview / skip / block / validation reject / overlay update.
 - No more “候補が出たが実際どうだったの？” ambiguity.
+- Skill quality sections show compact reason counts, not only target names, so follow-up patches are actionable without opening JSON artifacts.
 
 ### Milestone 7 — Autonomous steady state
 
@@ -558,6 +559,14 @@ Goal: ensure held weak-positive outcomes can inform calibration without becoming
 
 Result: calibration signal strength now reads compact credit-assignment `quality_under_observation` and `skill_usage_under_observation` counts, adds them to weak signal volume, exposes an `under_observation` detail, and renders that detail in calibrate / operational report grouped-signal summaries.
 
+### Slice AI — Skill quality reason summary
+
+**Status:** implemented in current change set.
+
+Goal: make skill-quality follow-up actionable from CLI/daily-facing summaries.
+
+Result: skill-quality summaries now include bounded reason counts derived from existing post-validation flags, such as missing trigger conditions, concrete steps, memory-shaped content, compactness problems, and validation failures.
+
 ---
 
 ## Progress Log
@@ -606,6 +615,7 @@ Result: calibration signal strength now reads compact credit-assignment `quality
 - Implemented skill usage under-observation reporting: usage-only weak positives now remain `unknown` with a dedicated `skill_usage_under_observation` count in improve, calibrate, and read-only operational report surfaces.
 - Implemented skill compactness diagnostics: post-validation now emits `content_too_short` / `content_too_long`, persists them through episodes and outcome observations, applies a light compactness quality penalty, and classifies compactness issues as `needs_patch` in skill-quality summaries.
 - Implemented calibration under-observation signal strength: quality-held and usage-held weak positives now enter `signal_strength.under_observation` and weak signal volume without becoming medium/strong signals, and the detail is rendered in calibrate / operational report summaries.
+- Implemented skill quality reason summary: CLI/daily-facing skill-quality sections now include bounded reason counts from post-validation flags, making follow-up candidates actionable without inspecting JSON artifacts.
 
 ---
 

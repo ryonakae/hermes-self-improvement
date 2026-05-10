@@ -1302,6 +1302,7 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
 def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_decisions: list[dict[str, Any]]) -> list[str]:
     reviewed = 0
     counts = {"good": 0, "needs_patch": 0, "duplicate": 0, "too_generic": 0, "unsafe": 0}
+    reason_counts: dict[str, int] = {}
     follow_up: list[str] = []
     duplicate_targets = {str(item.get("covered_by_existing_skill") or item.get("covered_by_reference_skill") or item.get("skill") or "") for item in planner_decisions if isinstance(item, dict) and item.get("noop_outcome")}
     for item in skill_decisions:
@@ -1332,6 +1333,27 @@ def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_
             else:
                 category = "good"
             counts[category] += 1
+            reasons: list[str] = []
+            if post_validation.get("status") != "passed":
+                reasons.append("validation_failed")
+            if not post_validation.get("has_frontmatter"):
+                reasons.append("missing_frontmatter")
+            if not post_validation.get("has_pitfalls"):
+                reasons.append("has_pitfalls")
+            if not post_validation.get("has_verification"):
+                reasons.append("has_verification")
+            if post_validation.get("has_trigger_conditions") is False:
+                reasons.append("has_trigger_conditions")
+            if post_validation.get("has_concrete_steps") is False:
+                reasons.append("has_concrete_steps")
+            if post_validation.get("memory_shaped"):
+                reasons.append("memory_shaped")
+            if post_validation.get("content_too_short"):
+                reasons.append("content_too_short")
+            if post_validation.get("content_too_long"):
+                reasons.append("content_too_long")
+            for reason in reasons:
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
             if category in {"needs_patch", "too_generic", "unsafe"}:
                 follow_up.append(target)
     if not reviewed:
@@ -1341,6 +1363,9 @@ def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_
         f"- reviewed: {reviewed}",
         f"- good: {counts['good']}, needs patch: {counts['needs_patch']}, duplicate: {counts['duplicate']}, too generic: {counts['too_generic']}, unsafe: {counts['unsafe']}",
     ]
+    if reason_counts:
+        reason_parts = [f"{name} {count}" for name, count in sorted(reason_counts.items(), key=lambda item: (-int(item[1]), str(item[0])))[:6]]
+        lines.append("- quality reasons: " + "; ".join(reason_parts))
     if follow_up:
         lines.append("- follow-up candidates: " + ", ".join(sorted(set(follow_up))[:5]))
     return lines
