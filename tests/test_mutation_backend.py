@@ -259,6 +259,82 @@ def test_native_backend_executes_skill_tools_and_finalizer():
     assert "Task JSON:" not in first_user_message
 
 
+def test_native_backend_post_validates_created_skill():
+    responses = iter([
+        _tool_response("skill_manage", {"action": "create", "name": "demo-created-skill", "content": "---\nname: demo-created-skill\ndescription: Demo.\n---\n\n# Demo"}, call_id="call_create"),
+        _tool_response(
+            "submit_mutation_result",
+            {
+                "success": True,
+                "outcome": "created demo-created-skill",
+                "changed_skills": [],
+                "created_skills": [],
+                "deleted_skills": [],
+                "verification_notes": ["skill_manage create returned success"],
+                "rollback_hints": ["delete demo-created-skill if incorrect"],
+            },
+            call_id="call_final",
+        ),
+    ])
+    viewed = []
+
+    def fake_skill_view(**kwargs):
+        viewed.append(kwargs)
+        return {"success": True, "content": "---\nname: demo-created-skill\ndescription: Demo.\n---\n\n# Demo"}
+
+    backend = NativeSkillToolEditorBackend(
+        tool_executor=SkillToolExecutor(
+            skills_list_fn=lambda **_: {"success": True, "skills": []},
+            skill_view_fn=fake_skill_view,
+            skill_manage_fn=lambda **_: {"success": True},
+        ),
+        llm_call=lambda messages, **kwargs: next(responses),
+    )
+
+    result = backend.run("prompt", {"targets": {"new_skill": "demo-created-skill"}, "task_kind": "skill_create"}, {})
+
+    assert result["success"] is True
+    assert result["created_skills"] == ["demo-created-skill"]
+    assert result["post_validation"]["status"] == "passed"
+    assert result["post_validation"]["target"] == "demo-created-skill"
+    assert result["post_validation"]["tool"] == "skill_view"
+    assert viewed[-1] == {"name": "demo-created-skill"}
+
+
+def test_native_backend_rejects_create_when_post_validation_readback_fails():
+    responses = iter([
+        _tool_response("skill_manage", {"action": "create", "name": "demo-created-skill", "content": "---\nname: demo-created-skill\ndescription: Demo.\n---\n\n# Demo"}, call_id="call_create"),
+        _tool_response(
+            "submit_mutation_result",
+            {
+                "success": True,
+                "outcome": "applied",
+                "changed_skills": [],
+                "created_skills": ["demo-created-skill"],
+                "deleted_skills": [],
+                "verification_notes": ["skill_manage create returned success"],
+                "rollback_hints": ["delete demo-created-skill if incorrect"],
+            },
+            call_id="call_final",
+        ),
+    ])
+    backend = NativeSkillToolEditorBackend(
+        tool_executor=SkillToolExecutor(
+            skills_list_fn=lambda **_: {"success": True, "skills": []},
+            skill_view_fn=lambda **_: {"success": False, "error": "skill_not_found"},
+            skill_manage_fn=lambda **_: {"success": True},
+        ),
+        llm_call=lambda messages, **kwargs: next(responses),
+    )
+
+    result = backend.run("prompt", {"targets": {"new_skill": "demo-created-skill"}, "task_kind": "skill_create"}, {})
+
+    assert result["success"] is False
+    assert result["error"] == "mutation_agent_post_validation_failed"
+    assert result["post_validation"]["status"] == "failed"
+    assert result["post_validation"]["target"] == "demo-created-skill"
+
+
 def test_native_backend_sends_tool_results_as_plain_user_context_only():
     calls = []
     responses = iter([

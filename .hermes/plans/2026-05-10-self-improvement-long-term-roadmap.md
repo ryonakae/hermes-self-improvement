@@ -80,8 +80,9 @@ Overall: **about 6.5–7合目**.
 
 ### Weak areas
 
-- **Post-validation / accounting:** around 5.5–6合目.
-  - Trace-backed accounting exists, but true read-back validation after create/patch/memory mutation is not complete.
+- **Post-validation / accounting:** around 6.5合目.
+  - Trace-backed accounting exists, and skill create/improve mutations are now read back through `skill_view` before accepted accounting.
+  - Memory mutation readback and richer intended-change verification are still future work.
 
 - **Skill quality evaluation:** around 5合目.
   - New skills can be created, but evaluator review of quality, duplication, and evidence fit is shallow.
@@ -125,11 +126,16 @@ Done:
 
 Remaining:
 
-- Post-create `skill_view` readback.
-- Post-patch readback and intended-change verification.
-- Compact `post_validation` object in decisions/artifacts.
+- Post-patch intended-change verification beyond readability.
+- Memory mutation post-validation.
 - Validation errors include enough compact diagnostics.
 - Report accepted/recovered/skipped/blocked distinctions clearly.
+
+Implemented in current slice:
+
+- Post-create and post-improve `skill_view` readback.
+- Compact `post_validation` object in backend results.
+- Fail-closed `mutation_agent_post_validation_failed` when readback fails.
 
 Exit criteria:
 
@@ -263,17 +269,15 @@ Exit criteria:
 
 ### Slice A — Skill mutation post-validation readback
 
-**Status:** next implementation slice.
+**Status:** implemented in current change set.
 
 Plan file: `2026-05-10-skill-mutation-post-validation-readback.md`.
 
-Goal: after skill create/patch, read the target back through official skill tools and record compact post-validation status.
-
-Why now: trace-backed accounting is fixed, but true post-state validation is still the next reliability gap.
+Result: successful skill create/improve results now get compact `post_validation` metadata from an official `skill_view` readback. Readback failure returns `mutation_agent_post_validation_failed` instead of accepting the mutation.
 
 ### Slice B — Existing coverage / duplicate no-op classification
 
-**Status:** next after Slice A.
+**Status:** next implementation slice.
 
 Goal: make cases like `patch-tool-workflow` being covered by `safe-patch-usage` visible as meaningful maintenance outcomes instead of generic rejects.
 
@@ -306,7 +310,8 @@ Goal: connect created/updated knowledge and overlay generations to later observe
 - Fixed native editor tool-call history.
 - Dogfood run created `timeout-workflow` and `sandbox-permission-workflow` but artifact accounting initially rejected them.
 - Fixed natural-language outcome normalization and same-run trace-backed `created_skills` inference.
-- Current next gap: read-back post-validation and better duplicate/existing coverage classification.
+- Current next gap: duplicate/existing coverage classification, then clearer actual mutation reporting.
+- Implemented Slice A: native skill mutation results now post-validate changed/created skill targets through official `skill_view`; failures are recorded as `mutation_agent_post_validation_failed` instead of accepted mutation accounting.
 
 ---
 

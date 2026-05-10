@@ -4,6 +4,8 @@
 
 **Goal:** After a skill create or patch mutation, verify the target by reading it back through official skill tools and record compact `post_validation` status in the decision/result artifact.
 
+**Status:** implemented in current change set. Create and improve targets are read back through `skill_view`; richer patch-intent semantic verification remains a follow-up.
+
 **Architecture:** Extend the existing native skill-tool editor harness and validation path. Do not add a new command, approval queue, direct filesystem fallback, or separate maintenance lane. Use `skill_view` / official skill tool results as post-state evidence.
 
 **Tech Stack:** Python, `NativeSkillToolEditorBackend`, `SkillToolExecutor`, `validate_backend_success_result`, pytest.

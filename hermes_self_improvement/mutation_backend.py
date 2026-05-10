@@ -126,6 +126,36 @@ def _tool_trace_has_skill_manage(trace: list[Any], *, action: str | None, name: 
     return False
 
 
+def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, task_kind: str) -> dict[str, Any]:
+    result = executor.call("skill_view", {"name": target})
+    ok = bool(isinstance(result, dict) and result.get("success"))
+    content = result.get("content") if isinstance(result, dict) else ""
+    content_text = str(content or "")
+    has_frontmatter = content_text.lstrip().startswith("---")
+    passed = ok and (task_kind != "skill_create" or has_frontmatter)
+    return {
+        "status": "passed" if passed else "failed",
+        "tool": "skill_view",
+        "target": target,
+        "read_success": ok,
+        "has_frontmatter": has_frontmatter,
+        "content_chars": len(content_text),
+        "error": result.get("error") if isinstance(result, dict) else "skill_view_returned_invalid_result",
+    }
+
+
+def _needs_skill_post_validation(result: dict[str, Any], *, task_kind: str, expected_target: str) -> bool:
+    if not result.get("success") or not expected_target:
+        return False
+    if str(result.get("outcome") or "") in NON_MUTATING_AGENT_OUTCOMES:
+        return False
+    if task_kind == "skill_create":
+        return expected_target in {str(name) for name in result.get("created_skills") or []}
+    if task_kind == "skill_improve":
+        return expected_target in {str(name) for name in result.get("changed_skills") or []}
+    return False
+
+
 def _task_allowed_targets(task: dict[str, Any]) -> set[str]:
     targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
     names = set()
@@ -524,9 +554,22 @@ class NativeSkillToolEditorBackend:
                     if allowed_targets:
                         final["_allowed_targets"] = sorted(allowed_targets)
                     targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
-                    final["_task_kind"] = str(task.get("task_kind") or "")
-                    final["_expected_target"] = str(targets.get("new_skill") or targets.get("primary_skill") or "")
-                    return validate_backend_success_result(final)
+                    task_kind = str(task.get("task_kind") or "")
+                    expected_target = str(targets.get("new_skill") or targets.get("primary_skill") or "")
+                    final["_task_kind"] = task_kind
+                    final["_expected_target"] = expected_target
+                    validated = validate_backend_success_result(final)
+                    if _needs_skill_post_validation(validated, task_kind=task_kind, expected_target=expected_target):
+                        post_validation = _post_validate_skill_target(self.tool_executor, target=expected_target, task_kind=task_kind)
+                        validated["post_validation"] = post_validation
+                        if post_validation.get("status") != "passed":
+                            return {
+                                "success": False,
+                                "error": "mutation_agent_post_validation_failed",
+                                "post_validation": post_validation,
+                                "raw_result": _redact_large(validated),
+                            }
+                    return validated
                 if tool not in ALLOWED_MUTATION_AGENT_TOOLS:
                     return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_MUTATION_AGENT_TOOLS)}
                 args_error = _validate_tool_call_args(tool, args)

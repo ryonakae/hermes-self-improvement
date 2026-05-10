@@ -10,11 +10,17 @@ As of 2026-05-10, the long-term roadmap is:
 
 The current active implementation slice is:
 
-- `2026-05-10-skill-mutation-post-validation-readback.md`
-  - **Status:** planned / next.
-  - Extends the existing native skill-tool editor harness so successful skill create/patch mutations are read back through official `skill_view` and recorded with compact `post_validation` status. This follows the trace-backed accounting fix and avoids direct filesystem fallback, duplicate creation, or new lanes.
+- `2026-05-10-existing-coverage-duplicate-noop-classification.md`
+  - **Status:** recommended next slice / not created yet.
+  - Should make cases like `patch-tool-workflow -> safe-patch-usage` visible as meaningful maintenance outcomes such as `covered_by_existing_skill`, `existing_skill_sufficient`, or `duplicate_prevented`, instead of generic rejection.
 
 The latest completed implementation plan is:
+
+- `2026-05-10-skill-mutation-post-validation-readback.md`
+  - **Status:** implemented.
+  - Extends the existing native skill-tool editor harness so successful skill create/improve mutations are read back through official `skill_view` and recorded with compact `post_validation` status. Readback failure now returns `mutation_agent_post_validation_failed` rather than accepting the mutation. This follows the trace-backed accounting fix and avoids direct filesystem fallback, duplicate creation, or new lanes.
+
+The previous completed implementation plan is:
 
 - `2026-05-10-post-state-created-skill-accounting.md`
   - **Status:** implemented.
