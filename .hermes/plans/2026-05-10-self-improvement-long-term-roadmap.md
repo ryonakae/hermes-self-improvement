@@ -94,8 +94,9 @@ Overall: **about 7合目**.
 - **Knowledge inventory beyond tool failures:** around 6.2合目.
   - Inventory health now reports skill overlap/staleness reason counts and memory duplicate/stale-pair counts in CLI/daily-facing summaries, so knowledge maintenance work is not only raw candidate volume. Deeper stale/overlap planning and low-risk maintenance execution still need expansion.
 
-- **Outcome / credit assignment:** around 7.3合目.
+- **Outcome / credit assignment:** around 7.4合目.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
+  - Missing attached evidence now has an explicit outcome-score component and compact `missing_evidence_under_observation` count, so evidence-fit holds do not hide inside generic quality holds.
   - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, credit assignment keeps usage-only positives under observation, and read-only operational reports now surface latest-run outcome status without opening the run JSON artifact.
 
 - **Human-readable daily / CLI reporting:** around 8.0合目.
@@ -635,6 +636,14 @@ Goal: carry evidence-attachment quality diagnostics into episode and outcome mat
 
 Result: skill episodes now preserve attached/missing evidence counts, and immediate post-validation outcome observations emit `skill_quality_missing_attached_evidence` as a light needs-patch signal when executed mutations explicitly had zero attached evidence.
 
+### Slice AR — Missing evidence under-observation reporting
+
+**Status:** implemented in current change set.
+
+Goal: expose evidence-fit holds separately from generic quality holds in compact credit-assignment summaries.
+
+Result: outcome scoring now preserves `skill_quality_missing_attached_evidence_penalty`, credit assignment counts `missing_evidence_under_observation`, and `Outcomes:` summaries render it alongside other under-observation counts.
+
 ---
 
 ## Progress Log
@@ -692,6 +701,7 @@ Result: skill episodes now preserve attached/missing evidence counts, and immedi
 - Implemented skill quality negative reason labels: CLI and operational report skill-quality summaries now use `missing_*` labels for deficiencies, avoiding misleading positive-looking labels such as raw `has_concrete_steps` when the signal means the guidance is absent.
 - Implemented skill quality evidence attachment summary: skill runner decisions now preserve attached evidence counts, and accepted skill mutations with explicit zero attached evidence appear as `needs_patch` with `missing_attached_evidence` in CLI/read-only report quality summaries.
 - Implemented skill evidence attachment outcome signal: attached/missing evidence counts now persist into skill episodes, and immediate post-validation observations emit `skill_quality_missing_attached_evidence` as a conservative needs-patch signal.
+- Implemented missing evidence under-observation reporting: outcome scoring now preserves a dedicated missing-evidence component, and compact `Outcomes` summaries count `missing_evidence_under_observation` separately from generic quality holds.
 
 ---
 

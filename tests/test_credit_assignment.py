@@ -95,7 +95,7 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert aggregate["credit_windows"]["short"] == 1
     assert "episode-1" in aggregate["related_episode_ids"]["improved"]
     compact = compact_credit_assignment_summary(aggregate)
-    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0}
+    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0}
     assert compact["overlay_generations"]["tracked"] == 2
     assert compact["overlay_generations"]["best"]["overlay_generation_id"] == "overlay-set-good"
     assert compact["overlay_generations"]["worst"]["overlay_generation_id"] == "overlay-set-risky"
@@ -178,21 +178,25 @@ def test_credit_assignment_keeps_thin_skill_validation_under_observation(tmp_pat
     write_json(root / "episodes" / "2026-05-03" / "thin.json", episode_payload("thin-skill", target_id="thin-skill"))
     write_json(root / "episodes" / "2026-05-03" / "too-short.json", episode_payload("too-short", target_id="too-short"))
     write_json(root / "episodes" / "2026-05-03" / "memory-shaped.json", episode_payload("memory-shaped", target_id="memory-shaped"))
+    write_json(root / "episodes" / "2026-05-03" / "missing-evidence.json", episode_payload("missing-evidence", target_id="missing-evidence"))
     write_json(root / "outcomes" / "2026-05-03" / "good-outcome.json", outcome_payload("good-skill", "immediate", {"validation_passed": True}))
     write_json(root / "outcomes" / "2026-05-03" / "thin-outcome.json", outcome_payload("thin-skill", "immediate", {"validation_passed": True, "skill_quality_needs_patch": True}, confidence=0.65))
     write_json(root / "outcomes" / "2026-05-03" / "too-short-outcome.json", outcome_payload("too-short", "immediate", {"validation_passed": True, "skill_quality_content_too_short": True}, confidence=0.65))
     write_json(root / "outcomes" / "2026-05-03" / "memory-outcome.json", outcome_payload("memory-shaped", "immediate", {"validation_passed": True, "skill_quality_too_generic": True}, confidence=0.75))
+    write_json(root / "outcomes" / "2026-05-03" / "missing-evidence-outcome.json", outcome_payload("missing-evidence", "immediate", {"validation_passed": True, "skill_quality_needs_patch": True, "skill_quality_missing_attached_evidence": True}, confidence=0.65))
 
     aggregate = build_credit_assignment_aggregate(config=config, limit=100)
 
     assert aggregate["outcome_status_counts"]["improved"] == 1
-    assert aggregate["outcome_status_counts"]["unknown"] == 2
+    assert aggregate["outcome_status_counts"]["unknown"] == 3
     assert aggregate["outcome_status_counts"]["regressed"] == 1
     assert "thin-skill" in aggregate["related_episode_ids"]["unknown"]
     assert "too-short" in aggregate["related_episode_ids"]["unknown"]
+    assert "missing-evidence" in aggregate["related_episode_ids"]["unknown"]
     assert "memory-shaped" in aggregate["related_episode_ids"]["regressed"]
     compact = compact_credit_assignment_summary(aggregate)
-    assert compact["outcomes"]["quality_under_observation"] == 2
+    assert compact["outcomes"]["quality_under_observation"] == 3
+    assert compact["outcomes"]["missing_evidence_under_observation"] == 1
 
 
 def test_credit_assignment_groups_archive_outcomes_by_lifecycle_factors(tmp_path):

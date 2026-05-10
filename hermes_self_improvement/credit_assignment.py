@@ -123,7 +123,7 @@ def _outcome_status(row: dict[str, Any]) -> str:
         if float(score) > 0:
             if _has_only_weak_usage_positive(components):
                 return "unknown"
-            quality_penalties = {"skill_quality_needs_patch_penalty", "skill_quality_too_generic_penalty", "skill_quality_compactness_penalty"}
+            quality_penalties = {"skill_quality_needs_patch_penalty", "skill_quality_too_generic_penalty", "skill_quality_compactness_penalty", "skill_quality_missing_attached_evidence_penalty"}
             stronger_positive = any(
                 key in components
                 for key in ("failure_reduction", "repeat_fix_absent", "user_correction_absent", "cluster_absent", "skill_used_without_correction", "memory_retrieved_useful")
@@ -140,7 +140,7 @@ def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int],
     counts = {"improved": 0, "recurring": 0, "regressed": 0, "unknown": 0, "insufficient_window": 0}
     credit_windows = {window: 0 for window in WINDOWS}
     related: dict[str, list[str]] = {key: [] for key in counts}
-    quality = {"quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0}
+    quality = {"quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0}
     for row in rows:
         status = _outcome_status(row)
         counts[status] = counts.get(status, 0) + 1
@@ -148,8 +148,11 @@ def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int],
         if status == "unknown" and (
             components.get("skill_quality_needs_patch_penalty") is not None
             or components.get("skill_quality_compactness_penalty") is not None
+            or components.get("skill_quality_missing_attached_evidence_penalty") is not None
         ):
             quality["quality_under_observation"] += 1
+        if status == "unknown" and components.get("skill_quality_missing_attached_evidence_penalty") is not None:
+            quality["missing_evidence_under_observation"] += 1
         if status == "unknown" and _has_only_weak_usage_positive(components):
             quality["skill_usage_under_observation"] += 1
         if components.get("duplicate_noop_prevented") is not None:
@@ -279,6 +282,7 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
             "quality_under_observation": int(quality_outcomes.get("quality_under_observation") or 0),
             "duplicate_noop_credited": int(quality_outcomes.get("duplicate_noop_credited") or 0),
             "skill_usage_under_observation": int(quality_outcomes.get("skill_usage_under_observation") or 0),
+            "missing_evidence_under_observation": int(quality_outcomes.get("missing_evidence_under_observation") or 0),
         },
         "overlay_generations": _overlay_generation_summary(by_generation),
         "aggregate_hash": aggregate.get("aggregate_hash"),

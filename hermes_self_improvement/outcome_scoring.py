@@ -30,6 +30,7 @@ COMPONENT_WEIGHTS = {
     "skill_quality_needs_patch_penalty": -0.15,
     "skill_quality_too_generic_penalty": -0.25,
     "skill_quality_compactness_penalty": -0.10,
+    "skill_quality_missing_attached_evidence_penalty": -0.05,
 }
 WINDOWS = ("immediate", "short", "medium", "long")
 
@@ -121,6 +122,8 @@ def _signal_components(signals: dict[str, Any]) -> dict[str, float]:
         components["skill_quality_needs_patch_penalty"] = COMPONENT_WEIGHTS["skill_quality_needs_patch_penalty"]
     if signals.get("skill_quality_content_too_short") is True or signals.get("skill_quality_content_too_long") is True:
         components["skill_quality_compactness_penalty"] = COMPONENT_WEIGHTS["skill_quality_compactness_penalty"]
+    if signals.get("skill_quality_missing_attached_evidence") is True:
+        components["skill_quality_missing_attached_evidence_penalty"] = COMPONENT_WEIGHTS["skill_quality_missing_attached_evidence_penalty"]
     if signals.get("skill_quality_too_generic") is True:
         components["skill_quality_too_generic_penalty"] = COMPONENT_WEIGHTS["skill_quality_too_generic_penalty"]
     return components

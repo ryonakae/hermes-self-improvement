@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-missing-evidence-under-observation-reporting.md`
+  - **Status:** implemented.
+  - Adds a dedicated missing-evidence outcome component and compact `missing_evidence_under_observation` count in `Outcomes:` summaries.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-evidence-attachment-outcome-signal.md`
   - **Status:** implemented.
   - Carries attached/missing evidence counts into skill episodes and immediate post-validation outcome observations as `skill_quality_missing_attached_evidence`.

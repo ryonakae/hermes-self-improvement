@@ -103,11 +103,17 @@ def test_score_episode_outcomes_applies_skill_quality_penalties_to_validation_si
         outcome_payload("memory-shaped", signals={"validation_passed": True, "skill_quality_too_generic": True}, confidence=0.75),
     ])
 
+    missing_evidence = score_episode_outcomes(episode_payload("missing-evidence"), [
+        outcome_payload("missing-evidence", signals={"validation_passed": True, "skill_quality_needs_patch": True, "skill_quality_missing_attached_evidence": True}, confidence=0.65),
+    ])
+
     assert good["windows"]["immediate"]["score"] == 0.2
     assert thin["windows"]["immediate"]["score"] == 0.05
     assert thin["components"]["skill_quality_needs_patch_penalty"] == -0.15
     assert too_short["windows"]["immediate"]["score"] == 0.1
     assert too_short["components"]["skill_quality_compactness_penalty"] == -0.1
+    assert missing_evidence["windows"]["immediate"]["score"] == 0.0
+    assert missing_evidence["components"]["skill_quality_missing_attached_evidence_penalty"] == -0.05
     assert memory_shaped["windows"]["immediate"]["score"] == -0.05
     assert memory_shaped["components"]["skill_quality_too_generic_penalty"] == -0.25
 

@@ -1329,6 +1329,7 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
     quality_under_observation = int(outcomes.get("quality_under_observation") or 0)
     duplicate_noop_credited = int(outcomes.get("duplicate_noop_credited") or 0)
     skill_usage_under_observation = int(outcomes.get("skill_usage_under_observation") or 0)
+    missing_evidence_under_observation = int(outcomes.get("missing_evidence_under_observation") or 0)
     lines = [
         "Outcomes:",
         f"- tracked: {tracked}, proven improved: {improved}, recurring: {recurring}, regressed: {regressed}, unknown: {unknown}, insufficient window: {insufficient}",
@@ -1341,6 +1342,8 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
         lines.append(f"- duplicate no-op credited: {duplicate_noop_credited}")
     if skill_usage_under_observation:
         lines.append(f"- skill usage under observation: {skill_usage_under_observation}")
+    if missing_evidence_under_observation:
+        lines.append(f"- missing evidence under observation: {missing_evidence_under_observation}")
     return lines
 
 
