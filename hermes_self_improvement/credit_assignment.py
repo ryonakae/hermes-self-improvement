@@ -20,6 +20,7 @@ def _score_rows(*, config: dict[str, Any], limit: int) -> list[dict[str, Any]]:
         row = {
             **scored,
             "episode_kind": episode.get("episode_kind"),
+            "overlay_generation_id": episode.get("overlay_generation_id"),
             "decision": episode.get("decision"),
             "action": episode.get("action"),
             "executed": bool(episode.get("executed")),
@@ -137,6 +138,33 @@ def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int],
     return counts, credit_windows, related
 
 
+def _overlay_generation_item(overlay_generation_id: str, summary: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "overlay_generation_id": overlay_generation_id,
+        "episodes": int(summary.get("episodes") or 0),
+        "scored": int(summary.get("scored") or 0),
+        "mean_outcome_score": summary.get("mean_outcome_score"),
+        "confidence": float(summary.get("confidence") or 0.0),
+    }
+
+
+def _overlay_generation_summary(by_generation: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    rows = [
+        _overlay_generation_item(generation_id, summary)
+        for generation_id, summary in by_generation.items()
+        if generation_id not in {"", "unknown"}
+    ]
+    scored = [row for row in rows if row.get("mean_outcome_score") is not None]
+    best = max(scored, key=lambda row: (float(row.get("mean_outcome_score") or 0.0), float(row.get("confidence") or 0.0)), default=None)
+    worst = min(scored, key=lambda row: (float(row.get("mean_outcome_score") or 0.0), -float(row.get("confidence") or 0.0)), default=None)
+    return {
+        "tracked": len(rows),
+        "scored": len(scored),
+        "best": best or {},
+        "worst": worst or {},
+    }
+
+
 def _archive_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [row for row in rows if row.get("decision") == "archive_skill" or row.get("action") == "skill_archive"]
 
@@ -173,6 +201,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
     scored = [row for row in rows if row.get("score") is not None]
     window_buckets = _window_rows(rows)
     outcome_status_counts, credit_windows, related_episode_ids = _outcome_status_summary(rows)
+    by_overlay_generation_id = _group(rows, lambda row: row.get("overlay_generation_id"))
     aggregate = {
         "schema_name": "self_improvement_credit_assignment_aggregate",
         "schema_version": "1.0",
@@ -182,6 +211,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
         "by_planner_prompt_hash": _group(rows, lambda row: row.get("planner_prompt_hash")),
         "by_editor_prompt_hash": _group(rows, lambda row: row.get("editor_prompt_hash")),
         "by_evaluator_hash": _group(rows, lambda row: row.get("evaluator_hash")),
+        "by_overlay_generation_id": by_overlay_generation_id,
         "by_target_kind": _group(rows, lambda row: row.get("target_kind")),
         "by_target_id": _group(rows, lambda row: row.get("target_id")),
         "by_decision": _group(rows, lambda row: row.get("decision")),
@@ -200,6 +230,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
 def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, Any]:
     overall = aggregate.get("overall") if isinstance(aggregate.get("overall"), dict) else {}
     status_counts = aggregate.get("outcome_status_counts") if isinstance(aggregate.get("outcome_status_counts"), dict) else {}
+    by_generation = aggregate.get("by_overlay_generation_id") if isinstance(aggregate.get("by_overlay_generation_id"), dict) else {}
     return {
         "episode_count": int(aggregate.get("episode_count") or 0),
         "scored_episode_count": int(aggregate.get("scored_episode_count") or 0),
@@ -219,5 +250,6 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
             "unknown": int(status_counts.get("unknown") or 0),
             "insufficient_window": int(status_counts.get("insufficient_window") or 0),
         },
+        "overlay_generations": _overlay_generation_summary(by_generation),
         "aggregate_hash": aggregate.get("aggregate_hash"),
     }

@@ -90,8 +90,9 @@ Overall: **about 6.5–7合目**.
 - **Duplicate / existing coverage decisions:** around 5合目.
   - `patch-tool-workflow` was not created and the agent inspected `safe-patch-usage`, which was probably good, but the artifact still expressed it as a rejection rather than a meaningful no-op such as `covered_by_existing_skill`.
 
-- **Outcome / credit assignment:** around 4.5合目.
-  - Episodes exist, but later evidence is not yet strongly tied back to whether a created skill or prompt overlay actually improved future behavior.
+- **Outcome / credit assignment:** around 5.5合目.
+  - Episodes exist, outcome status buckets exist, and credit assignment now groups by overlay generation so prompt overlay generations can be associated with later better/worse behavior.
+  - Actual outcome observations over time are still needed before changes are proven effective.
 
 - **Human-readable daily / CLI reporting:** around 6.5合目.
   - The daily Slack template has been improved, and `improve` / `calibrate` summaries now separate actual mutation, preview, no-op/skip, validation reject, and overlay promotion more clearly.
@@ -208,7 +209,7 @@ Exit criteria:
 
 ### Milestone 5 — Outcome and credit assignment
 
-**Status:** planned / early foundations exist.
+**Status:** partially implemented / expand.
 
 Goal: determine whether self-improvement changes actually helped.
 
@@ -226,6 +227,7 @@ Exit criteria:
 - Episodes can be scored over time windows: immediate / short / medium / long.
 - `calibrate` can use outcome data as GEPA/evaluator material.
 - Unknown outcome stays unproven, not automatically successful.
+- Prompt overlay generations are grouped in credit assignment so later outcomes can be attributed to a promoted generation.
 
 ### Milestone 6 — Reporting that prevents confusion
 
@@ -316,6 +318,14 @@ Goal: make `calibrate --dry-run` clearly preview-only, then promote an inspected
 
 Result: dry-run output now says `action would promote`; executed calibration says `action promoted`. Candidate set `overlay-set-b8335b6c61af` was promoted for planner/editor/scorer with passed regression.
 
+### Slice G — Overlay generation outcome attribution
+
+**Status:** implemented in current change set.
+
+Goal: make outcome/credit assignment connect later behavior to promoted overlay generations.
+
+Result: calibration episodes now include planner/editor/scorer overlay candidates/promotions with `overlay_generation_id`, and credit assignment exposes `by_overlay_generation_id` plus compact generation-level best/worst summaries.
+
 ---
 
 ## Progress Log
@@ -336,6 +346,7 @@ Result: dry-run output now says `action would promote`; executed calibration say
 - Dogfooded Slice F dry-runs and hardened three real gaps: dry-run summaries now show `Outcomes`, create-skill previews skip already-existing local skill names as duplicate no-ops, and topically unrelated `memory_replace` proposals reject with `memory_replace_topic_mismatch`. Mutating replay was intentionally held because the dry-run still contained memory replacements needing planner-quality review.
 - Implemented memory replacement hardening: replacements must preserve topic/context, inventory replacements must be supported by evidence entries, `patch-tool-workflow` is treated as covered by `safe-patch-usage`, and replay now keeps non-mutation-ready items as skips. Latest dry-run had `Would apply: 0`; replay produced zero actual mutations and no misleading blocked count.
 - Implemented calibration wording review: `calibrate --dry-run` now reports evaluated promotion candidates as `action would promote`, compact tool summaries include explicit `action`, and mutating calibration from the inspected candidate set promoted active generation `overlay-set-b8335b6c61af` for planner/editor/scorer with passed regression.
+- Implemented overlay-generation outcome attribution: calibration episodes now record planner/editor/scorer overlay candidates/promotions with `overlay_generation_id`, and credit assignment groups/scans later outcomes by overlay generation.
 
 ---
 

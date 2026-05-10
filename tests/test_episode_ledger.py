@@ -108,9 +108,11 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
         "schema_name": "self_improvement_calibration_result",
         "current_status": "would_update",
         "active_changed": False,
+        "overlay_candidate_set": {"overlay_generation_id": "overlay-set-preview", "candidate_set_id": "overlay-set-preview"},
         "prompt_overlays": {
-            "planner": {"candidate": True, "promoted": False, "candidate_hash": "sha256:planner-candidate"},
+            "planner": {"candidate": True, "promoted": False, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-preview"},
             "editor": {"candidate": False, "promoted": False},
+            "scorer": {"candidate": True, "promoted": False, "candidate_hash": "sha256:scorer-candidate", "candidate_set_id": "overlay-set-preview"},
         },
         "candidate": {"candidate_hash": "sha256:evaluator-candidate"},
         "ledger_path": str(tmp_path / "ledger.json"),
@@ -119,27 +121,36 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
     episodes = calibration_episodes_from_result(result, created_at="2026-05-03T00:00:00+00:00")
     summary = record_calibration_episodes(config=config, calibration_result=result)
 
-    assert len(episodes) == 2
-    assert summary["count"] == 2
+    assert len(episodes) == 3
+    assert summary["count"] == 3
     loaded = load_recent_episodes(config=config, limit=10)
     by_target_kind = {item["target_kind"]: item for item in loaded}
     assert by_target_kind["planner_prompt"]["episode_kind"] == "prompt_candidate"
     assert by_target_kind["planner_prompt"]["action"] == "no_op"
+    assert by_target_kind["planner_prompt"]["overlay_generation_id"] == "overlay-set-preview"
+    assert by_target_kind["scorer"]["episode_kind"] == "prompt_candidate"
+    assert by_target_kind["scorer"]["overlay_generation_id"] == "overlay-set-preview"
     assert by_target_kind["evaluator"]["episode_kind"] == "prompt_candidate"
     assert by_target_kind["evaluator"]["decision"] == "evaluator_candidate"
 
     promoted = dict(result)
     promoted["active_changed"] = True
     promoted["active_evaluator_hash"] = "sha256:active-evaluator"
+    promoted["overlay_candidate_set"] = {"overlay_generation_id": "overlay-set-001", "candidate_set_id": "overlay-set-001"}
     promoted["prompt_overlays"] = {
-        "planner": {"candidate": True, "promoted": True, "candidate_hash": "sha256:planner-candidate"},
-        "editor": {"candidate": False, "promoted": False},
+        "planner": {"candidate": True, "promoted": True, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-001"},
+        "editor": {"candidate": True, "promoted": True, "candidate_hash": "sha256:editor-candidate", "candidate_set_id": "overlay-set-001"},
+        "scorer": {"candidate": True, "promoted": True, "candidate_hash": "sha256:scorer-candidate", "candidate_set_id": "overlay-set-001"},
     }
     promoted_episodes = calibration_episodes_from_result(promoted, created_at="2026-05-03T00:00:00+00:00")
-    planner_episode = [item for item in promoted_episodes if item["target_kind"] == "planner_prompt"][0]
+    by_promoted_kind = {item["target_kind"]: item for item in promoted_episodes}
+    planner_episode = by_promoted_kind["planner_prompt"]
     assert planner_episode["episode_kind"] == "prompt_promotion"
     assert planner_episode["action"] == "prompt_overlay_promote"
     assert planner_episode["executed"] is True
+    assert planner_episode["overlay_generation_id"] == "overlay-set-001"
+    assert by_promoted_kind["editor_prompt"]["overlay_generation_id"] == "overlay-set-001"
+    assert by_promoted_kind["scorer"]["overlay_generation_id"] == "overlay-set-001"
 
 
 def test_record_run_episodes_records_overlay_generation_and_hashes(tmp_path):

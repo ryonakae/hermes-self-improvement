@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-overlay-generation-outcome-attribution.md`
+  - **Status:** implemented.
+  - Strengthens outcome/credit assignment for promoted prompt overlays. Calibration episodes now include planner/editor/scorer overlay candidates and preserve `overlay_generation_id`; credit assignment now groups by overlay generation and compact summaries expose tracked/scored generation outcomes plus best/worst scored generations.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-steady-state-calibration-report-wording-review.md`
   - **Status:** implemented.
   - Clarifies `calibrate --dry-run` vs actual overlay promotion: evaluated promotion candidates now show `action would promote`, while executed calibration shows `action promoted`. The compact tool result includes the same action distinction. Promoted candidate set `overlay-set-b8335b6c61af` from `/Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260510T044730Z-dccb26ee3720.json`; active prompts now point at that generation for planner/editor/scorer with passed regression.

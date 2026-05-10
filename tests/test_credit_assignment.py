@@ -52,10 +52,11 @@ def outcome_payload(episode_id: str, window: str, signals: dict, confidence: flo
 def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
-    write_json(root / "episodes" / "2026-05-03" / "e1.json", episode_payload("episode-1"))
+    write_json(root / "episodes" / "2026-05-03" / "e1.json", episode_payload("episode-1", overlay_generation_id="overlay-set-good"))
     write_json(root / "episodes" / "2026-05-03" / "e2.json", episode_payload(
         "episode-2",
         target_id="weak-skill",
+        overlay_generation_id="overlay-set-risky",
         planner_prompt_hash="sha256:planner-b",
         decision="run_editor",
         action="no_op",
@@ -83,6 +84,8 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert aggregate["by_planner_prompt_hash"]["sha256:planner-b"]["mean_outcome_score"] < 0
     assert aggregate["by_decision"]["run_editor"]["episodes"] == 2
     assert aggregate["by_target_kind"]["skill"]["episodes"] == 2
+    assert aggregate["by_overlay_generation_id"]["overlay-set-good"]["mean_outcome_score"] > 0
+    assert aggregate["by_overlay_generation_id"]["overlay-set-risky"]["mean_outcome_score"] < 0
     assert aggregate["by_evidence_strength"]["weak"]["weak_only_selected_rate"] == 1.0
     assert aggregate["by_window"]["immediate"]["mean_outcome_score"] > 0
     assert aggregate["by_window"]["short"]["mean_outcome_score"] < 0
@@ -93,6 +96,9 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert "episode-1" in aggregate["related_episode_ids"]["improved"]
     compact = compact_credit_assignment_summary(aggregate)
     assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0}
+    assert compact["overlay_generations"]["tracked"] == 2
+    assert compact["overlay_generations"]["best"]["overlay_generation_id"] == "overlay-set-good"
+    assert compact["overlay_generations"]["worst"]["overlay_generation_id"] == "overlay-set-risky"
 
 
 def test_credit_assignment_keeps_unobserved_and_ambiguous_links_low_confidence(tmp_path):

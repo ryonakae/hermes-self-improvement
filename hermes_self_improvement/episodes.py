@@ -313,6 +313,21 @@ def record_run_episodes(*, config: dict[str, Any], run_result: dict[str, Any]) -
     return _write_episodes(config, episodes, created)
 
 
+def _calibration_overlay_generation_id(result: dict[str, Any], item: dict[str, Any] | None = None) -> str | None:
+    sources: list[dict[str, Any]] = []
+    if isinstance(item, dict):
+        sources.append(item)
+    overlay_set = result.get("overlay_candidate_set") if isinstance(result.get("overlay_candidate_set"), dict) else None
+    if overlay_set is not None:
+        sources.append(overlay_set)
+    sources.append(result)
+    for source in sources:
+        value = source.get("overlay_generation_id") or source.get("candidate_set_id")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str | None = None) -> list[dict[str, Any]]:
     stamp = created_at or _now().isoformat()
     episodes: list[dict[str, Any]] = []
@@ -323,13 +338,13 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
         "editor_prompt_hash": base_prompt_hash("editor"),
         "evaluator_hash": evaluator_hash,
     }
-    for role in ("planner", "editor"):
+    for role in ("planner", "editor", "scorer"):
         item = prompt_overlays.get(role) if isinstance(prompt_overlays.get(role), dict) else {}
         if not item.get("candidate"):
             continue
         promoted = bool(item.get("promoted"))
         action = "prompt_overlay_promote" if promoted else "no_op"
-        target_kind = f"{role}_prompt"
+        target_kind = f"{role}_prompt" if role in {"planner", "editor"} else "scorer"
         seed = {"kind": "calibration", "role": role, "candidate_hash": item.get("candidate_hash"), "created_at": stamp}
         episode = {
             "schema_name": "self_improvement_episode",
@@ -348,6 +363,9 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "candidate_hash": item.get("candidate_hash"),
             **source_hashes,
         }
+        generation_id = _calibration_overlay_generation_id(result, item)
+        if generation_id:
+            episode["overlay_generation_id"] = generation_id
         episodes.append(validate_episode(episode))
     candidate = result.get("candidate") if isinstance(result.get("candidate"), dict) else None
     if candidate is not None:
@@ -371,6 +389,9 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "candidate_hash": candidate.get("candidate_hash"),
             **source_hashes,
         }
+        generation_id = _calibration_overlay_generation_id(result, candidate)
+        if generation_id:
+            episode["overlay_generation_id"] = generation_id
         episodes.append(validate_episode(episode))
     return episodes
 
