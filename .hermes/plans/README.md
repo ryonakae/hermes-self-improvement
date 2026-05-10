@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-calibration-grouped-signal-reporting.md`
+  - **Status:** implemented.
+  - Adds human-readable grouped signal lines to calibration summaries, separating actionable workflow groups and non-actionable high-volume diagnostic clusters.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-quality-outcome-signals.md`
   - **Status:** implemented.
   - Carries richer skill-quality diagnostics from post-validation into episode ledgers and immediate outcome observations, including trigger-condition, concrete-step, and memory-shaped signals.

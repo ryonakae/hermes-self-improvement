@@ -371,6 +371,34 @@ def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
     assert "planner: candidate yes, promoted yes" in text
 
 
+def test_calibration_summary_reports_grouped_actionable_and_non_actionable_signals():
+    cli = load_cli_module()
+
+    text = cli._render_calibration_summary({
+        "current_status": "no_op",
+        "evidence_summary": {
+            "total_events": 20,
+            "disagreements": 0,
+            "bad_outcomes": 0,
+            "signal_strength": {
+                "weak": 10,
+                "medium": 2,
+                "strong": 0,
+                "overlay_runtime_eval_cases": 12,
+                "actionable_cluster_groups": {
+                    "patch_tool": {"count": 71, "suggested_coverage": "safe-patch-usage"},
+                    "long_running_tool_execution": {"count": 85, "suggested_coverage": "timeout-workflow"},
+                },
+                "non_actionable_clusters": {"tool_error:terminal:terminal_nonzero_exit": 493},
+            },
+        },
+    })
+
+    assert "Grouped signals:" in text
+    assert "- actionable: long_running_tool_execution 85 -> timeout-workflow; patch_tool 71 -> safe-patch-usage" in text
+    assert "- non-actionable volume: tool_error:terminal:terminal_nonzero_exit 493" in text
+
+
 def test_calibration_summary_separates_overlay_set_from_failed_evaluator():
     cli = load_cli_module()
 

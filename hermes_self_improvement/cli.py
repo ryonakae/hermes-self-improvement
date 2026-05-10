@@ -590,6 +590,30 @@ def _evaluator_component(evaluator_update: dict[str, Any], regression: dict[str,
     return None
 
 
+def _calibration_grouped_signal_lines(signal_strength: dict[str, Any]) -> list[str]:
+    actionable = signal_strength.get("actionable_cluster_groups") if isinstance(signal_strength.get("actionable_cluster_groups"), dict) else {}
+    non_actionable = signal_strength.get("non_actionable_clusters") if isinstance(signal_strength.get("non_actionable_clusters"), dict) else {}
+    if not actionable and not non_actionable:
+        return []
+    lines = ["Grouped signals:"]
+    if actionable:
+        parts = []
+        for name, payload in sorted(actionable.items()):
+            if isinstance(payload, dict):
+                count = int(payload.get("count") or 0)
+                coverage = str(payload.get("suggested_coverage") or "review")
+                parts.append(f"{name} {count} -> {coverage}")
+            else:
+                parts.append(f"{name} {int(payload or 0)}")
+        lines.append("- actionable: " + "; ".join(parts[:5]))
+    if non_actionable:
+        parts = []
+        for name, count in sorted(non_actionable.items(), key=lambda item: (-int(item[1] or 0), str(item[0]))):
+            parts.append(f"{name} {int(count or 0)}")
+        lines.append("- non-actionable volume: " + "; ".join(parts[:5]))
+    return lines
+
+
 def _render_calibration_summary(result: dict[str, Any]) -> str:
     evidence = result.get("evidence_summary") if isinstance(result.get("evidence_summary"), dict) else {}
     outcome_scores = evidence.get("outcome_scores") if isinstance(evidence.get("outcome_scores"), dict) else {}
@@ -622,6 +646,9 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
             f"strong {int(signal_strength.get('strong') or 0)}, "
             f"eval cases {int(signal_strength.get('overlay_runtime_eval_cases') or 0)}"
         )
+        grouped_lines = _calibration_grouped_signal_lines(signal_strength)
+        if grouped_lines:
+            lines.extend(grouped_lines)
     gepa_trigger = evidence.get("gepa_trigger") if isinstance(evidence.get("gepa_trigger"), dict) else {}
     if gepa_trigger:
         trigger_reasons = gepa_trigger.get("reasons") if isinstance(gepa_trigger.get("reasons"), list) else []
