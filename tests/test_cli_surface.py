@@ -577,6 +577,23 @@ def test_improve_summary_skill_quality_uses_trigger_steps_and_memory_shape():
     assert "workflow-thin" in text
 
 
+def test_improve_summary_skill_quality_marks_missing_attached_evidence():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 1},
+        "step_decisions": {"skill": {"planner": {"decisions": []}, "decisions": [
+            {"decision": "accepted", "changed": True, "attached_evidence_count": 0, "result": {"created_skills": ["thin-evidence-skill"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": True, "has_concrete_steps": True}}},
+        ]}},
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Skill quality:" in text
+    assert "- good: 0, needs patch: 1, duplicate: 0, too generic: 0, unsafe: 0" in text
+    assert "missing_attached_evidence 1" in text
+    assert "thin-evidence-skill" in text
+
+
 def test_improve_dry_run_summary_shows_outcomes_without_claiming_success():
     cli = load_cli_module()
     text = cli._render_improve_summary({

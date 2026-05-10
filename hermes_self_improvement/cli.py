@@ -1367,7 +1367,8 @@ def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_
             elif not post_validation.get("has_frontmatter") or post_validation.get("memory_shaped"):
                 category = "too_generic"
             elif (
-                not post_validation.get("has_pitfalls")
+                ("attached_evidence_count" in item and int(item.get("attached_evidence_count") or 0) <= 0)
+                or not post_validation.get("has_pitfalls")
                 or not post_validation.get("has_verification")
                 or post_validation.get("has_trigger_conditions") is False
                 or post_validation.get("has_concrete_steps") is False
@@ -1381,6 +1382,8 @@ def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_
             reasons: list[str] = []
             if post_validation.get("status") != "passed":
                 reasons.append("validation_failed")
+            if "attached_evidence_count" in item and int(item.get("attached_evidence_count") or 0) <= 0:
+                reasons.append("missing_attached_evidence")
             if not post_validation.get("has_frontmatter"):
                 reasons.append("missing_frontmatter")
             if not post_validation.get("has_pitfalls"):

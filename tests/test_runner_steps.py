@@ -148,6 +148,8 @@ def test_skill_step_dry_run_records_create_skill_preview_without_existing_candid
     assert decision["skill"] == "patch-tool-workflow"
     assert decision["task"]["task_kind"] == "skill_create"
     assert decision["task"]["targets"] == {"new_skill": "patch-tool-workflow"}
+    assert decision["attached_evidence_count"] == 1
+    assert decision["missing_evidence_id_count"] == 0
 
 
 def test_skill_step_skips_create_skill_when_local_skill_already_exists(tmp_path):

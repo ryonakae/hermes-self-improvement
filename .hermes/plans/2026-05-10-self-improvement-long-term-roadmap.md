@@ -85,8 +85,8 @@ Overall: **about 7合目**.
   - Trace-backed accounting exists, skill create/improve mutations are read back through `skill_view`, built-in memory mutations use before/after state-hash checks, and skill patch/edit readback now verifies the intended changed text where available.
   - Remaining gaps are mostly richer diagnostics and broader provider-specific memory readback beyond the built-in store hash path.
 
-- **Skill quality evaluation:** around 7.0合目.
-  - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, and compactness signals (`content_too_short` / `content_too_long`). These diagnostics are preserved into episodes and immediate outcome observations, scored conservatively, and summarized with compact reason counts in CLI/daily-facing output and latest-run operational reports. Evidence-fit and low-risk auto-patch generation still need deeper evaluator work.
+- **Skill quality evaluation:** around 7.1合目.
+  - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, compactness signals (`content_too_short` / `content_too_long`), and whether the accepted mutation carried attached evidence. These diagnostics are preserved into episodes and immediate outcome observations where applicable, scored conservatively, and summarized with compact reason counts in CLI/daily-facing output and latest-run operational reports. Deeper semantic evidence-fit evaluation and low-risk auto-patch generation still need evaluator work.
 
 - **Duplicate / existing coverage decisions:** around 6合目.
   - `patch-tool-workflow` style duplicates are now recorded as meaningful no-ops such as `covered_by_existing_skill` / `duplicate_prevented`, shown in summaries, preserved into episodes, and given a conservative positive outcome component when duplicate creation is prevented.
@@ -198,7 +198,7 @@ Evaluator should check:
 - verification checklist — deterministic signal implemented
 - not memory-shaped — deterministic signal implemented
 - not duplicate of existing skills — duplicate/no-op checks implemented for create proposals
-- aligned with evidence — still needs deeper evaluator work
+- aligned with evidence — attached-evidence count is now preserved and surfaced as `missing_attached_evidence`; deeper semantic evidence-fit evaluation still needs evaluator work
 - compact enough to load usefully — deterministic `content_too_short` / `content_too_long` signals implemented; thresholds are conservative and may still need tuning
 
 Exit criteria:
@@ -619,6 +619,14 @@ Goal: make skill-quality reason summaries harder to misread by labeling deficien
 
 Result: CLI and operational report skill-quality summaries now render missing guidance as `missing_pitfalls`, `missing_verification`, `missing_trigger_conditions`, and `missing_concrete_steps`, while leaving the underlying post-validation field names unchanged for artifact compatibility.
 
+### Slice AP — Skill quality evidence attachment summary
+
+**Status:** implemented in current change set.
+
+Goal: make evidence attachment visible as part of skill-quality follow-up without changing old artifact compatibility.
+
+Result: skill runner decisions now preserve `attached_evidence_count` and bounded `missing_evidence_id_count`; skill-quality summaries classify accepted skill mutations with explicit zero attached evidence as `needs_patch` with `missing_attached_evidence`.
+
 ---
 
 ## Progress Log
@@ -674,6 +682,7 @@ Result: CLI and operational report skill-quality summaries now render missing gu
 - Implemented operational report latest-run outcomes: recent run rows now retain compact `credit_assignment`, and read-only operational reports show latest-run proven/recurring/unknown/under-observation outcome status without opening the run artifact.
 - Implemented operational report latest-run skill quality: read-only operational reports now show latest-run skill-quality reviewed counts, categories, bounded reason counts, and follow-up candidates from run `step_decisions`.
 - Implemented skill quality negative reason labels: CLI and operational report skill-quality summaries now use `missing_*` labels for deficiencies, avoiding misleading positive-looking labels such as raw `has_concrete_steps` when the signal means the guidance is absent.
+- Implemented skill quality evidence attachment summary: skill runner decisions now preserve attached evidence counts, and accepted skill mutations with explicit zero attached evidence appear as `needs_patch` with `missing_attached_evidence` in CLI/read-only report quality summaries.
 
 ---
 

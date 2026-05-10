@@ -61,7 +61,7 @@ def create_runner_artifacts(config: dict) -> None:
                     {"decision": "skip", "noop_outcome": "covered_by_existing_skill"},
                 ]},
                 "decisions": [
-                    {"decision": "accepted", "changed": True, "result": {"created_skills": ["timeout-workflow"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": False}}},
+                    {"decision": "accepted", "changed": True, "attached_evidence_count": 0, "result": {"created_skills": ["timeout-workflow"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": False}}},
                     {"decision": "rejected", "changed": False, "result": {"error": "mutation_agent_post_validation_failed", "post_validation": {"status": "failed"}}},
                 ],
             },
@@ -118,7 +118,7 @@ def test_run_pipeline_report_includes_runner_and_calibration_summaries(tmp_path)
     assert "Skill quality:" in report
     assert "- reviewed: 1" in report
     assert "- good: 0, needs patch: 1, duplicate: 0, too generic: 0, unsafe: 0" in report
-    assert "- quality reasons: missing_concrete_steps 1; missing_trigger_conditions 1" in report
+    assert "- quality reasons: missing_attached_evidence 1; missing_concrete_steps 1; missing_trigger_conditions 1" in report
     assert "- duplicate/no-op: covered by existing skill 1" in report
     assert "Knowledge inventory: skill groups similar 1, possible stale 2, stale singletons 3; memory duplicates exact 4, near 5, stale pairs 6" in report
     assert "## Calibration summary" in report
