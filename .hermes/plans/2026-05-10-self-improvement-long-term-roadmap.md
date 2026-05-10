@@ -81,9 +81,9 @@ Overall: **about 7合目**.
 
 ### Weak areas
 
-- **Post-validation / accounting:** around 7.5合目.
-  - Trace-backed accounting exists, skill create/improve mutations are read back through `skill_view`, built-in memory mutations use before/after state-hash checks, and skill patch/edit readback now verifies the intended changed text where available.
-  - Remaining gaps are mostly richer diagnostics and broader provider-specific memory readback beyond the built-in store hash path.
+- **Post-validation / accounting:** around 7.8合目.
+  - Trace-backed accounting exists, skill create/improve mutations are read back through `skill_view`, built-in memory mutations use before/after state-hash checks, skill patch/edit readback now verifies the intended changed text where available, failed validations carry compact `reason` / `observed` / `next_action`, and external memory provider write-only execution is explicitly marked `write_only_unverified` / `applied_unverified` instead of validated success.
+  - Remaining gaps are mostly summary reconciliation fields that make accepted/recovered/rejected/unverified paths obvious at a glance.
 
 - **Skill quality evaluation:** around 7.2合目.
   - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, compactness signals (`content_too_short` / `content_too_long`), and whether the accepted mutation carried attached evidence. These diagnostics are preserved into episodes and immediate outcome observations where applicable, scored conservatively, and summarized with compact reason counts in CLI/daily-facing output and latest-run operational reports. Deeper semantic evidence-fit evaluation and low-risk auto-patch generation still need evaluator work.
@@ -164,8 +164,10 @@ Implemented in current slice:
 - Compact `post_validation` object in backend results.
 - Fail-closed `mutation_agent_post_validation_failed` when skill readback fails.
 - Fail-closed `memory_tool_post_validation_failed` when memory tool success has no observable state change.
+- Provider-specific memory capability metadata for built-in hash validation, external write-only providers, and unsupported providers.
 - Post-patch intended-change verification for native skill `patch` / `edit` traces using official `skill_view` readback.
 - Compact post-validation failure diagnostics (`reason`, `observed`, `next_action`) for skill readback failure, intended-change mismatch, and built-in memory unchanged-state rejection.
+- External provider write-only successes are recorded as unverified (`write_only_unverified` / `applied_unverified`), not passed validation.
 
 Exit criteria:
 
@@ -745,6 +747,7 @@ Result: `Knowledge maintenance:` summaries now include source buckets for `failu
 - Implemented operational report knowledge maintenance sources: read-only operational reports now reuse the latest-run `Knowledge maintenance:` source/action summary so daily report inputs can distinguish failure-driven proposals from inventory/coverage work without opening run artifacts.
 - Implemented actual-results skill name reporting: `Actual results:` now includes bounded created/patched skill-name lists when run artifacts contain them, so reports answer which skills changed as well as how many.
 - Implemented post-validation failure diagnostics: failed skill readback, missing intended skill patch/edit text, and built-in memory no-state-change rejection now include compact `reason`, `observed`, and `next_action` fields for artifact/report consumers.
+- Implemented memory post-validation capability accounting: memory mutation contexts now distinguish built-in hash verification, external write-only provider execution, and unsupported providers; successful write-only provider execution is recorded as `write_only_unverified` / `applied_unverified` rather than validated success.
 
 ---
 

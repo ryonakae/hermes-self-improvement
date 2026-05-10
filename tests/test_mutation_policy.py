@@ -179,6 +179,56 @@ def test_memory_tool_operation_rejects_success_when_builtin_state_did_not_change
     assert result["post_validation"]["next_action"] == "treat_memory_mutation_as_unverified_and_replan"
 
 
+def test_memory_mutation_context_marks_builtin_hash_post_validation():
+    mod = load_plugin_module()
+
+    context = mod.build_memory_mutation_context(
+        provider="built-in",
+        operation={"operation": "memory_add", "target_kind": "builtin_memory", "content": "Project uses pytest."},
+    )
+
+    assert context["execution_enabled"] is True
+    assert context["post_validation_capability"] == {
+        "mode": "built_in_hash",
+        "status": "verifiable",
+        "validated_status": "passed_on_state_change",
+        "unverified_status": None,
+    }
+
+
+def test_memory_mutation_context_marks_external_provider_write_only_unverified():
+    mod = load_plugin_module()
+
+    context = mod.build_memory_mutation_context(
+        provider="hindsight",
+        operation={"operation": "memory_add", "target_kind": "external_memory", "content": "Project uses pytest."},
+    )
+
+    assert context["execution_enabled"] is True
+    assert context["post_validation_capability"]["mode"] == "provider_write_only"
+    assert context["post_validation_capability"]["status"] == "write_only_unverified"
+    assert context["post_validation_capability"]["unverified_status"] == "applied_unverified"
+    assert context["post_validation_capability"]["provider"] == "hindsight"
+
+
+def test_memory_mutation_context_marks_unsupported_provider_readback():
+    mod = load_plugin_module()
+
+    context = mod.build_memory_mutation_context(
+        provider="unknown-provider",
+        operation={"operation": "memory_add", "target_kind": "external_memory", "content": "Project uses pytest."},
+    )
+
+    assert context["execution_enabled"] is False
+    assert context["post_validation_capability"] == {
+        "mode": "unsupported",
+        "status": "blocked",
+        "validated_status": None,
+        "unverified_status": None,
+        "provider": "unknown-provider",
+    }
+
+
 def test_provider_tool_loader_uses_active_memory_provider_tool_surface(monkeypatch):
     import types
 
@@ -303,11 +353,21 @@ def test_generic_provider_tool_executor_validates_supported_surfaces():
         "tool_name": "retaindb_forget",
         "allowed_tools": ["retaindb_forget"],
         "tool_args": {"memory_id": "mem-1"},
+        "post_validation_capability": {
+            "mode": "provider_write_only",
+            "status": "write_only_unverified",
+            "validated_status": None,
+            "unverified_status": "applied_unverified",
+            "provider": "retaindb",
+        },
     }
     result = mod.execute_memory_provider_tool_operation(context, provider_tool_fn=fake_provider)
     assert result["success"] is True
     assert result["tool_name"] == "retaindb_forget"
     assert result["direct_fallback_used"] is False
+    assert result["post_validation"]["status"] == "write_only_unverified"
+    assert result["post_validation"]["accounting_status"] == "applied_unverified"
+    assert result["post_validation"]["provider"] == "retaindb"
     assert calls == [((), {"memory_id": "mem-1"})]
 
     rejected = mod.execute_memory_provider_tool_operation(

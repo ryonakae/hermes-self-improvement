@@ -8,7 +8,7 @@
 
 **Goal:** Make every skill, memory, and overlay mutation recorded according to verified post-state, not LLM prose.
 
-**Current state:** Mostly implemented for native skill create/patch/edit and built-in memory state-hash validation. Remaining work is richer diagnostics, provider-specific memory readback, and summary fields that make reject/recover paths obvious.
+**Current state:** Mostly implemented for native skill create/patch/edit, built-in memory state-hash validation, compact validation failure diagnostics, and provider write-only/unavailable validation capability accounting. Remaining work is summary reconciliation fields that make accepted/recovered/rejected/unverified paths obvious.
 **Execution status:** Mostly implemented; remaining slices are hardening/diagnostics only.
 
 **Depends on:** Existing native skill editor harness, memory mutation policy, and overlay pointer machinery.
@@ -52,6 +52,8 @@
 4. Run targeted tests and inspect one rendered failure summary.
 
 ### Phase 1.2 — Provider-specific memory readback capability
+
+**Status:** implemented.
 
 **Objective:** Extend memory validation beyond built-in state hash without hardcoding Hindsight.
 
@@ -111,6 +113,13 @@ Covered cases in this slice:
 - skill readback failure: `skill_readback_failed`
 - patch/edit intended change missing: `skill_intended_change_missing`
 - memory tool success with unchanged built-in memory state: `memory_state_unchanged`
+
+Provider-specific memory capability metadata is now attached to memory mutation contexts and provider execution results:
+
+- built-in memory: `post_validation_capability.mode = built_in_hash`
+- external provider tools: `post_validation_capability.mode = provider_write_only`
+- unsupported/missing provider: `post_validation_capability.mode = unsupported`
+- successful write-only provider execution records `post_validation.status = write_only_unverified` and `accounting_status = applied_unverified`, never `passed`.
 
 ## Exit criteria
 

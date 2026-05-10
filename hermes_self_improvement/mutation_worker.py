@@ -297,6 +297,23 @@ def _provider_tool_missing_args(tool_name: str, args: dict[str, Any]) -> list[st
     return []
 
 
+def _attach_provider_post_validation(parsed: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    capability = context.get("post_validation_capability") if isinstance(context.get("post_validation_capability"), dict) else {}
+    if not parsed.get("success") or not capability:
+        return parsed
+    if capability.get("mode") == "provider_write_only":
+        parsed["post_validation"] = {
+            "status": capability.get("status") or "write_only_unverified",
+            "tool": parsed.get("tool_name") or context.get("tool_name"),
+            "provider": capability.get("provider"),
+            "mode": "provider_write_only",
+            "accounting_status": capability.get("unverified_status") or "applied_unverified",
+            "reason": "provider_readback_unavailable",
+            "next_action": "treat_provider_memory_mutation_as_unverified_until_later_observed",
+        }
+    return parsed
+
+
 def execute_memory_provider_tool_operation(context: dict[str, Any], *, provider_tool_fn: Callable[..., str] | None = None) -> dict[str, Any]:
     tool_name = str(context.get("tool_name") or "")
     tool_args = context.get("tool_args") if isinstance(context.get("tool_args"), dict) else {}
@@ -313,7 +330,7 @@ def execute_memory_provider_tool_operation(context: dict[str, Any], *, provider_
     if missing:
         return {"success": False, "error": f"{tool_name}_args_missing:{','.join(missing)}", "direct_fallback_used": False}
     if tool_name == "hindsight_retain":
-        return execute_hindsight_retain_operation(tool_args, provider_tool_fn=provider_tool_fn)
+        return _attach_provider_post_validation(execute_hindsight_retain_operation(tool_args, provider_tool_fn=provider_tool_fn), context)
     try:
         fn = provider_tool_fn or _load_provider_tool(tool_name)
         try:
@@ -322,4 +339,4 @@ def execute_memory_provider_tool_operation(context: dict[str, Any], *, provider_
             raw = fn(tool_name, tool_args)
     except Exception as exc:
         return {"success": False, "error": f"memory_provider_tool_unavailable:{exc}", "direct_fallback_used": False}
-    return _normalize_provider_tool_result(raw, tool_args, tool_name=tool_name)
+    return _attach_provider_post_validation(_normalize_provider_tool_result(raw, tool_args, tool_name=tool_name), context)

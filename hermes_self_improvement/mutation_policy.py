@@ -309,6 +309,32 @@ def resolve_memory_strategy(*, provider: str | None, operation: dict[str, Any]) 
     }
 
 
+def memory_post_validation_capability(*, target_layer: str | None, provider: str | None = None, tool_name: str | None = None, status: str | None = None) -> dict[str, Any]:
+    normalized_provider = normalize_memory_provider(provider) if provider else None
+    if target_layer in {"built_in", "builtin"} or tool_name == "memory":
+        return {
+            "mode": "built_in_hash",
+            "status": "verifiable",
+            "validated_status": "passed_on_state_change",
+            "unverified_status": None,
+        }
+    if status == "blocked" or normalized_provider not in PROVIDER_POLICIES:
+        return {
+            "mode": "unsupported",
+            "status": "blocked",
+            "validated_status": None,
+            "unverified_status": None,
+            "provider": normalized_provider,
+        }
+    return {
+        "mode": "provider_write_only",
+        "status": "write_only_unverified",
+        "validated_status": None,
+        "unverified_status": "applied_unverified",
+        "provider": normalized_provider,
+    }
+
+
 def build_memory_tool_context(*, action: str, target: str = "memory", content: str | None = None, old_text: str | None = None) -> dict[str, Any]:
     args: dict[str, Any] = {"action": action, "target": target}
     if content is not None:
@@ -476,6 +502,7 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
             "allowed_tools": [],
             "forbidden": ["direct_file_edit", "direct_db_edit", "unsupported_provider_api"],
             "reasons": ["memory_target_missing"],
+            "post_validation_capability": memory_post_validation_capability(target_layer=None, provider=external_provider, status="blocked"),
             **skill_memory_classification_context(),
         }
 
@@ -510,6 +537,7 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
             "requested_operation": requested,
             "active_external_provider": external_provider,
             "reasons": [],
+            "post_validation_capability": memory_post_validation_capability(target_layer="built_in", provider="built-in", tool_name="memory"),
             **context,
         }
 
@@ -528,6 +556,7 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
             "tool_args": {},
             "forbidden": ["direct_file_edit", "direct_db_edit", "unsupported_provider_api"],
             "reasons": ["external_memory_provider_missing"],
+            "post_validation_capability": memory_post_validation_capability(target_layer="external", provider=None, status="blocked"),
             **skill_memory_classification_context(),
         }
 
@@ -544,6 +573,7 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
                 "requested_operation": requested,
                 "active_external_provider": external_provider,
                 "reasons": [],
+                "post_validation_capability": memory_post_validation_capability(target_layer="external", provider=external_provider, tool_name=context.get("tool_name")),
                 **context,
             }
         return {
@@ -560,6 +590,7 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
             "tool_args": context.get("tool_args") or {},
             "forbidden": ["direct_file_edit", "direct_db_edit", "unsupported_provider_api"],
             "reasons": ["unsupported_memory_provider"],
+            "post_validation_capability": memory_post_validation_capability(target_layer="external", provider=external_provider, status="blocked"),
             **skill_memory_classification_context(),
         }
 
@@ -576,6 +607,7 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
                 "active_external_provider": external_provider,
                 "reasons": [],
                 "provider_resolution": resolved,
+                "post_validation_capability": memory_post_validation_capability(target_layer="external", provider=external_provider, tool_name=context.get("tool_name")),
                 **context,
             }
         resolved = {**resolved, "status": "blocked", "reasons": ["memory_correction_tool_context_missing"]}
@@ -591,6 +623,7 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
                 "active_external_provider": external_provider,
                 "reasons": [],
                 "provider_resolution": resolved,
+                "post_validation_capability": memory_post_validation_capability(target_layer="external", provider=external_provider, tool_name=context.get("tool_name")),
                 **context,
             }
         resolved = {**resolved, "status": "blocked", "reasons": ["native_delete_identity_missing"]}
@@ -598,6 +631,7 @@ def build_memory_mutation_context(*, provider: str | None, operation: dict[str, 
         "target_kind": "memory",
         "execution_enabled": False,
         "direct_fallback_allowed": False,
+        "post_validation_capability": memory_post_validation_capability(target_layer="external", provider=external_provider, status="blocked"),
         **resolved,
         **skill_memory_classification_context(),
     }
