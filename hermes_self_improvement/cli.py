@@ -666,6 +666,9 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     quality_under_observation = int(credit_outcomes.get("quality_under_observation") or 0)
     if quality_under_observation:
         lines.append(f"Quality under observation: {quality_under_observation}")
+    duplicate_noop_credited = int(credit_outcomes.get("duplicate_noop_credited") or 0)
+    if duplicate_noop_credited:
+        lines.append(f"Duplicate no-op credited: {duplicate_noop_credited}")
     signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else {}
     if signal_strength:
         lines.append(
@@ -1263,6 +1266,7 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
     unknown = int(outcomes.get("unknown") or 0)
     insufficient = int(outcomes.get("insufficient_window") or 0)
     quality_under_observation = int(outcomes.get("quality_under_observation") or 0)
+    duplicate_noop_credited = int(outcomes.get("duplicate_noop_credited") or 0)
     lines = [
         "Outcomes:",
         f"- tracked: {tracked}, proven improved: {improved}, recurring: {recurring}, regressed: {regressed}, unknown: {unknown}, insufficient window: {insufficient}",
@@ -1271,6 +1275,8 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
         lines.append("- unproven changes remain under observation")
     if quality_under_observation:
         lines.append(f"- quality under observation: {quality_under_observation}")
+    if duplicate_noop_credited:
+        lines.append(f"- duplicate no-op credited: {duplicate_noop_credited}")
     return lines
 
 

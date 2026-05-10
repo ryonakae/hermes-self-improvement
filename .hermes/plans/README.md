@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-duplicate-noop-reporting.md`
+  - **Status:** implemented.
+  - Adds `duplicate_noop_credited` to compact credit assignment and shows duplicate no-op credit separately in `improve` / `calibrate` summaries, so duplicate prevention does not hide inside generic improved counts.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-duplicate-noop-credit-assignment.md`
   - **Status:** implemented.
   - Preserves duplicate/coverage no-op metadata into skill episodes and emits conservative `duplicate_noop_prevented` outcome observations/components, so avoiding redundant skill creation can be credited without treating arbitrary skips as improvements.

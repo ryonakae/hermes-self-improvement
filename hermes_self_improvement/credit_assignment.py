@@ -133,13 +133,15 @@ def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int],
     counts = {"improved": 0, "recurring": 0, "regressed": 0, "unknown": 0, "insufficient_window": 0}
     credit_windows = {window: 0 for window in WINDOWS}
     related: dict[str, list[str]] = {key: [] for key in counts}
-    quality = {"quality_under_observation": 0}
+    quality = {"quality_under_observation": 0, "duplicate_noop_credited": 0}
     for row in rows:
         status = _outcome_status(row)
         counts[status] = counts.get(status, 0) + 1
         components = row.get("components") if isinstance(row.get("components"), dict) else {}
         if status == "unknown" and components.get("skill_quality_needs_patch_penalty") is not None:
             quality["quality_under_observation"] += 1
+        if components.get("duplicate_noop_prevented") is not None:
+            quality["duplicate_noop_credited"] += 1
         episode_id = str(row.get("episode_id") or "")
         if episode_id:
             related.setdefault(status, []).append(episode_id)
@@ -263,6 +265,7 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
             "unknown": int(status_counts.get("unknown") or 0),
             "insufficient_window": int(status_counts.get("insufficient_window") or 0),
             "quality_under_observation": int(quality_outcomes.get("quality_under_observation") or 0),
+            "duplicate_noop_credited": int(quality_outcomes.get("duplicate_noop_credited") or 0),
         },
         "overlay_generations": _overlay_generation_summary(by_generation),
         "aggregate_hash": aggregate.get("aggregate_hash"),

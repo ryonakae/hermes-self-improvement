@@ -98,6 +98,7 @@ Overall: **about 7合目**.
 - **Human-readable daily / CLI reporting:** around 7.5合目.
   - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, and non-actionable diagnostic volume more clearly.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
+  - Duplicate/coverage no-op credit is visible separately from proven mutation improvement as `duplicate no-op credited`, so duplicate prevention is not hidden inside the generic improved bucket.
   - Quality-held unknown outcomes are visible in `improve`, `calibrate`, and read-only operational report calibration sections as `quality under observation`, so thin-skill holds do not blend into generic unknown.
   - Generic high-volume unmatched clusters such as `tool_error:terminal:terminal_nonzero_exit` are now separated from actionable `recurring_clusters` so reports do not overstate vague terminal failures as concrete skill gaps.
   - Patch tool failures are grouped as `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, so `patch:not_found` and `patch:unknown_error` are visible as one workflow area without hiding the raw counts.
@@ -507,6 +508,14 @@ Goal: make meaningful duplicate/coverage no-ops feed the outcome loop instead of
 
 Result: skill episodes now preserve `noop_outcome` / covering skill metadata, outcome prepass emits `duplicate_noop_prevented`, and outcome scoring gives duplicate prevention a conservative positive component weaker than a validated mutation.
 
+### Slice AC — Duplicate no-op reporting
+
+**Status:** implemented in current change set.
+
+Goal: expose duplicate no-op credit separately from proven mutation improvement.
+
+Result: compact credit assignment now includes `duplicate_noop_credited`, and `improve` / `calibrate` summaries show duplicate no-op credit as its own line when present.
+
 ---
 
 ## Progress Log
@@ -549,6 +558,7 @@ Result: skill episodes now preserve `noop_outcome` / covering skill metadata, ou
 - Implemented calibration quality under-observation reporting: `calibrate` summaries now surface quality-held outcomes directly for evaluator/GEPA review.
 - Implemented operational report quality under-observation: read-only operational report calibration sections now surface `quality under observation` counts, so daily report inputs preserve thin-skill holds instead of hiding them as generic unknown.
 - Implemented duplicate no-op credit assignment: duplicate/coverage no-op decisions now persist into episodes and produce conservative `duplicate_noop_prevented` outcome observations/components, so avoiding redundant skill creation can be credited without treating arbitrary skips as improvements.
+- Implemented duplicate no-op reporting: compact credit assignment and `improve` / `calibrate` summaries now expose `duplicate_noop_credited` separately from the generic improved bucket.
 
 ---
 

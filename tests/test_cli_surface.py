@@ -545,11 +545,12 @@ def test_improve_summary_outcomes_show_quality_under_observation():
         "summary": {},
         "step_decisions": {},
         "evidence_pack": {"summary": {}},
-        "credit_assignment": {"outcomes": {"tracked": 3, "improved": 1, "recurring": 0, "regressed": 0, "unknown": 1, "insufficient_window": 1, "quality_under_observation": 1}},
+        "credit_assignment": {"outcomes": {"tracked": 3, "improved": 1, "recurring": 0, "regressed": 0, "unknown": 1, "insufficient_window": 1, "quality_under_observation": 1, "duplicate_noop_credited": 1}},
     })
 
     assert "Outcomes:" in text
     assert "- quality under observation: 1" in text
+    assert "- duplicate no-op credited: 1" in text
 
 
 def test_improve_summary_skill_quality_uses_trigger_steps_and_memory_shape():
