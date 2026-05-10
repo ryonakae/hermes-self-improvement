@@ -538,6 +538,20 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- unproven changes remain under observation" in text
 
 
+def test_improve_summary_outcomes_show_quality_under_observation():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {},
+        "step_decisions": {},
+        "evidence_pack": {"summary": {}},
+        "credit_assignment": {"outcomes": {"tracked": 3, "improved": 1, "recurring": 0, "regressed": 0, "unknown": 1, "insufficient_window": 1, "quality_under_observation": 1}},
+    })
+
+    assert "Outcomes:" in text
+    assert "- quality under observation: 1" in text
+
+
 def test_improve_summary_skill_quality_uses_trigger_steps_and_memory_shape():
     cli = load_cli_module()
     text = cli._render_improve_summary({

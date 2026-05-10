@@ -1253,12 +1253,15 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
     regressed = int(outcomes.get("regressed") or 0)
     unknown = int(outcomes.get("unknown") or 0)
     insufficient = int(outcomes.get("insufficient_window") or 0)
+    quality_under_observation = int(outcomes.get("quality_under_observation") or 0)
     lines = [
         "Outcomes:",
         f"- tracked: {tracked}, proven improved: {improved}, recurring: {recurring}, regressed: {regressed}, unknown: {unknown}, insufficient window: {insufficient}",
     ]
     if unknown or insufficient:
         lines.append("- unproven changes remain under observation")
+    if quality_under_observation:
+        lines.append(f"- quality under observation: {quality_under_observation}")
     return lines
 
 

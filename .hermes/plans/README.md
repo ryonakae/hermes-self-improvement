@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-quality-under-observation-reporting.md`
+  - **Status:** implemented.
+  - Adds `quality_under_observation` to compact credit assignment summaries and CLI `Outcomes:` output, making thin-skill unknown outcomes visible instead of blending them into generic unknown.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-quality-weak-positive-outcome-status.md`
   - **Status:** implemented.
   - Keeps weak-positive validation outcomes for thin skills under observation instead of counting them as `improved`; stronger later positive signals can still promote the status, while too-generic/memory-shaped skills remain negative.

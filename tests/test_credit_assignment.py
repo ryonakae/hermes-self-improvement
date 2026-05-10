@@ -95,7 +95,7 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert aggregate["credit_windows"]["short"] == 1
     assert "episode-1" in aggregate["related_episode_ids"]["improved"]
     compact = compact_credit_assignment_summary(aggregate)
-    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0}
+    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0}
     assert compact["overlay_generations"]["tracked"] == 2
     assert compact["overlay_generations"]["best"]["overlay_generation_id"] == "overlay-set-good"
     assert compact["overlay_generations"]["worst"]["overlay_generation_id"] == "overlay-set-risky"
@@ -142,6 +142,8 @@ def test_credit_assignment_keeps_thin_skill_validation_under_observation(tmp_pat
     assert aggregate["outcome_status_counts"]["regressed"] == 1
     assert "thin-skill" in aggregate["related_episode_ids"]["unknown"]
     assert "memory-shaped" in aggregate["related_episode_ids"]["regressed"]
+    compact = compact_credit_assignment_summary(aggregate)
+    assert compact["outcomes"]["quality_under_observation"] == 1
 
 
 def test_credit_assignment_groups_archive_outcomes_by_lifecycle_factors(tmp_path):

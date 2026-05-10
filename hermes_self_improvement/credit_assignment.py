@@ -129,20 +129,24 @@ def _outcome_status(row: dict[str, Any]) -> str:
     return "unknown"
 
 
-def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int], dict[str, int], dict[str, list[str]]]:
+def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int], dict[str, int], dict[str, list[str]], dict[str, int]]:
     counts = {"improved": 0, "recurring": 0, "regressed": 0, "unknown": 0, "insufficient_window": 0}
     credit_windows = {window: 0 for window in WINDOWS}
     related: dict[str, list[str]] = {key: [] for key in counts}
+    quality = {"quality_under_observation": 0}
     for row in rows:
         status = _outcome_status(row)
         counts[status] = counts.get(status, 0) + 1
+        components = row.get("components") if isinstance(row.get("components"), dict) else {}
+        if status == "unknown" and components.get("skill_quality_needs_patch_penalty") is not None:
+            quality["quality_under_observation"] += 1
         episode_id = str(row.get("episode_id") or "")
         if episode_id:
             related.setdefault(status, []).append(episode_id)
         window = _first_scored_window(row)
         if window:
             credit_windows[window] = credit_windows.get(window, 0) + 1
-    return counts, credit_windows, related
+    return counts, credit_windows, related, quality
 
 
 def _overlay_generation_item(overlay_generation_id: str, summary: dict[str, Any]) -> dict[str, Any]:
@@ -207,7 +211,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
     rows = _score_rows(config=config, limit=limit)
     scored = [row for row in rows if row.get("score") is not None]
     window_buckets = _window_rows(rows)
-    outcome_status_counts, credit_windows, related_episode_ids = _outcome_status_summary(rows)
+    outcome_status_counts, credit_windows, related_episode_ids, quality_outcomes = _outcome_status_summary(rows)
     by_overlay_generation_id = _group(rows, lambda row: row.get("overlay_generation_id"))
     aggregate = {
         "schema_name": "self_improvement_credit_assignment_aggregate",
@@ -226,6 +230,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
         "by_evidence_strength": _group(rows, lambda row: row.get("evidence_strength")),
         "by_window": {window: _bucket_summary(window_rows) for window, window_rows in window_buckets.items()},
         "outcome_status_counts": outcome_status_counts,
+        "quality_outcomes": quality_outcomes,
         "credit_windows": credit_windows,
         "related_episode_ids": related_episode_ids,
     }
@@ -237,6 +242,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
 def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, Any]:
     overall = aggregate.get("overall") if isinstance(aggregate.get("overall"), dict) else {}
     status_counts = aggregate.get("outcome_status_counts") if isinstance(aggregate.get("outcome_status_counts"), dict) else {}
+    quality_outcomes = aggregate.get("quality_outcomes") if isinstance(aggregate.get("quality_outcomes"), dict) else {}
     by_generation = aggregate.get("by_overlay_generation_id") if isinstance(aggregate.get("by_overlay_generation_id"), dict) else {}
     return {
         "episode_count": int(aggregate.get("episode_count") or 0),
@@ -256,6 +262,7 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
             "regressed": int(status_counts.get("regressed") or 0),
             "unknown": int(status_counts.get("unknown") or 0),
             "insufficient_window": int(status_counts.get("insufficient_window") or 0),
+            "quality_under_observation": int(quality_outcomes.get("quality_under_observation") or 0),
         },
         "overlay_generations": _overlay_generation_summary(by_generation),
         "aggregate_hash": aggregate.get("aggregate_hash"),

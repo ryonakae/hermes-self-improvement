@@ -468,6 +468,14 @@ Goal: prevent weak-positive thin-skill validation from being reported as proven 
 
 Result: positive scores with quality penalties and no stronger later positive signal now classify as `unknown` / under observation instead of `improved`; negative too-generic outcomes still classify as `regressed`.
 
+### Slice Y — Quality under-observation reporting
+
+**Status:** implemented in current change set.
+
+Goal: make thin-skill under-observation outcomes visible instead of blending them into generic unknown.
+
+Result: compact credit assignment summaries and CLI `Outcomes:` now include `quality_under_observation`, driven by quality penalty components.
+
 ---
 
 ## Progress Log
@@ -506,6 +514,7 @@ Result: positive scores with quality penalties and no stronger later positive si
 - Implemented skill quality weighted validation outcomes: passed readback is no longer uniformly positive; thin skills become weak positives under observation and memory-shaped skills become slightly negative despite validation success.
 - Implemented skill quality outcome score components: deterministic outcome scoring now applies penalties for `skill_quality_needs_patch` and `skill_quality_too_generic`, so credit assignment/calibration aggregates reflect those quality weaknesses.
 - Implemented skill quality weak-positive outcome status: thin skills with only weak positive validation remain `unknown`/under observation unless stronger later positive evidence appears, avoiding overclaiming them as improved.
+- Implemented quality under-observation reporting: compact credit assignment and CLI summaries now expose thin-skill quality holds as `quality_under_observation` instead of only generic `unknown`.
 
 ---
 
