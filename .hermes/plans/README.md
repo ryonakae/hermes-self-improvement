@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-operational-report-quality-under-observation.md`
+  - **Status:** implemented.
+  - Shows `quality under observation` in read-only operational report calibration sections when compact credit assignment contains quality-held unknown outcomes, so daily report inputs do not hide thin-skill holds.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-calibration-quality-under-observation-reporting.md`
   - **Status:** implemented.
   - Shows `Quality under observation` in calibration summaries when compact credit assignment contains quality-held unknown outcomes, so evaluator/GEPA review surfaces do not hide thin-skill holds.

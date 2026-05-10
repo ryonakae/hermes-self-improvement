@@ -112,3 +112,34 @@ def test_operational_report_sections_show_grouped_calibration_signals():
     assert "## Calibration summary" in text
     assert "- grouped actionable: patch_tool 71 -> safe-patch-usage" in text
     assert "- non-actionable volume: tool_error:terminal:terminal_nonzero_exit 493" in text
+
+
+def test_operational_report_sections_show_quality_under_observation():
+    mod = load_plugin_module()
+
+    lines = mod._render_operational_report_sections({
+        "calibration": {
+            "evidence_summary": {
+                "total_events": 10,
+                "disagreements": 0,
+                "bad_outcomes": 0,
+                "scorer_errors": 0,
+                "credit_assignment": {
+                    "outcomes": {
+                        "tracked": 4,
+                        "improved": 1,
+                        "recurring": 0,
+                        "regressed": 0,
+                        "unknown": 2,
+                        "insufficient_window": 1,
+                        "quality_under_observation": 2,
+                    }
+                },
+            },
+            "ledgers": [],
+        }
+    })
+    text = "\n".join(lines)
+
+    assert "## Calibration summary" in text
+    assert "- quality under observation: 2" in text

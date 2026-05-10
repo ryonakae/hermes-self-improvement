@@ -98,6 +98,7 @@ Overall: **about 7合目**.
 - **Human-readable daily / CLI reporting:** around 7.5合目.
   - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, and non-actionable diagnostic volume more clearly.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
+  - Quality-held unknown outcomes are visible in `improve`, `calibrate`, and read-only operational report calibration sections as `quality under observation`, so thin-skill holds do not blend into generic unknown.
   - Generic high-volume unmatched clusters such as `tool_error:terminal:terminal_nonzero_exit` are now separated from actionable `recurring_clusters` so reports do not overstate vague terminal failures as concrete skill gaps.
   - Patch tool failures are grouped as `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, so `patch:not_found` and `patch:unknown_error` are visible as one workflow area without hiding the raw counts.
   - Skill mutation tool failures are grouped as `actionable_cluster_groups.skill_mutation_tool` with suggested coverage `hermes-skill-management`, so self-improvement can inspect skill mutation reliability without spawning one-off skill names per error kind.
@@ -484,6 +485,14 @@ Goal: expose quality-held outcomes in calibration review surfaces, not only `imp
 
 Result: `calibrate` summaries now show `Quality under observation: N` when compact credit assignment reports quality-held unknown outcomes.
 
+### Slice AA — Operational report quality under-observation
+
+**Status:** implemented in current change set.
+
+Goal: carry quality-held outcome visibility into read-only operational reports and daily report inputs.
+
+Result: operational report calibration sections now show `- quality under observation: N` when compact credit assignment reports quality-held unknown outcomes, keeping thin-skill holds distinct from generic unknowns.
+
 ---
 
 ## Progress Log
@@ -524,6 +533,7 @@ Result: `calibrate` summaries now show `Quality under observation: N` when compa
 - Implemented skill quality weak-positive outcome status: thin skills with only weak positive validation remain `unknown`/under observation unless stronger later positive evidence appears, avoiding overclaiming them as improved.
 - Implemented quality under-observation reporting: compact credit assignment and CLI summaries now expose thin-skill quality holds as `quality_under_observation` instead of only generic `unknown`.
 - Implemented calibration quality under-observation reporting: `calibrate` summaries now surface quality-held outcomes directly for evaluator/GEPA review.
+- Implemented operational report quality under-observation: read-only operational report calibration sections now surface `quality under observation` counts, so daily report inputs preserve thin-skill holds instead of hiding them as generic unknown.
 
 ---
 

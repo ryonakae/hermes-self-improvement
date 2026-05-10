@@ -341,6 +341,11 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
             f"{int(evidence.get('bad_outcomes') or 0)} bad outcomes, "
             f"{int(evidence.get('scorer_errors') or 0)} scorer errors"
         )
+        credit = evidence.get("credit_assignment") if isinstance(evidence.get("credit_assignment"), dict) else {}
+        credit_outcomes = credit.get("outcomes") if isinstance(credit.get("outcomes"), dict) else {}
+        quality_under_observation = int(credit_outcomes.get("quality_under_observation") or 0)
+        if quality_under_observation:
+            lines.append(f"- quality under observation: {quality_under_observation}")
         signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else {}
         if signal_strength:
             lines.extend(_operational_grouped_signal_lines(signal_strength))
