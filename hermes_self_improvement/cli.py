@@ -280,6 +280,7 @@ def _build_operational_report_payloads(config: dict[str, Any]) -> dict[str, Any]
 def _operational_grouped_signal_lines(signal_strength: dict[str, Any]) -> list[str]:
     actionable = signal_strength.get("actionable_cluster_groups") if isinstance(signal_strength.get("actionable_cluster_groups"), dict) else {}
     non_actionable = signal_strength.get("non_actionable_clusters") if isinstance(signal_strength.get("non_actionable_clusters"), dict) else {}
+    under_observation = signal_strength.get("under_observation") if isinstance(signal_strength.get("under_observation"), dict) else {}
     lines: list[str] = []
     if actionable:
         parts = []
@@ -288,6 +289,10 @@ def _operational_grouped_signal_lines(signal_strength: dict[str, Any]) -> list[s
             coverage = str(payload.get("suggested_coverage") or "review") if isinstance(payload, dict) else "review"
             parts.append(f"{name} {count} -> {coverage}")
         lines.append("- grouped actionable: " + "; ".join(parts[:5]))
+    if under_observation:
+        parts = [f"{name} {int(count or 0)}" for name, count in sorted(under_observation.items()) if int(count or 0) > 0]
+        if parts:
+            lines.append("- under observation signal: " + "; ".join(parts[:5]))
     if non_actionable:
         parts = [f"{name} {int(count or 0)}" for name, count in sorted(non_actionable.items(), key=lambda item: (-int(item[1] or 0), str(item[0])))]
         lines.append("- non-actionable volume: " + "; ".join(parts[:5]))
@@ -621,7 +626,8 @@ def _evaluator_component(evaluator_update: dict[str, Any], regression: dict[str,
 def _calibration_grouped_signal_lines(signal_strength: dict[str, Any]) -> list[str]:
     actionable = signal_strength.get("actionable_cluster_groups") if isinstance(signal_strength.get("actionable_cluster_groups"), dict) else {}
     non_actionable = signal_strength.get("non_actionable_clusters") if isinstance(signal_strength.get("non_actionable_clusters"), dict) else {}
-    if not actionable and not non_actionable:
+    under_observation = signal_strength.get("under_observation") if isinstance(signal_strength.get("under_observation"), dict) else {}
+    if not actionable and not non_actionable and not any(int(count or 0) > 0 for count in under_observation.values()):
         return []
     lines = ["Grouped signals:"]
     if actionable:
@@ -634,6 +640,10 @@ def _calibration_grouped_signal_lines(signal_strength: dict[str, Any]) -> list[s
             else:
                 parts.append(f"{name} {int(payload or 0)}")
         lines.append("- actionable: " + "; ".join(parts[:5]))
+    if under_observation:
+        parts = [f"{name} {int(count or 0)}" for name, count in sorted(under_observation.items()) if int(count or 0) > 0]
+        if parts:
+            lines.append("- under observation: " + "; ".join(parts[:5]))
     if non_actionable:
         parts = []
         for name, count in sorted(non_actionable.items(), key=lambda item: (-int(item[1] or 0), str(item[0]))):

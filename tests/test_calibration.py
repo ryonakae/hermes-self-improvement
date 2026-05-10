@@ -232,6 +232,28 @@ def test_calibration_does_not_trigger_gepa_for_sparse_weak_signal(tmp_path):
     assert "insufficient_signal" in evidence["gepa_trigger"]["reasons"]
 
 
+def test_calibration_signal_strength_counts_under_observation_as_weak_only():
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+
+    signal = calibration._signal_strength_summary(
+        {
+            "credit_assignment": {
+                "outcomes": {
+                    "quality_under_observation": 2,
+                    "skill_usage_under_observation": 1,
+                }
+            },
+            "outcome_prepass": {"unmatched_observation_count": 1, "unmatched_summary": {}},
+        },
+        overlay_case_count=0,
+    )
+
+    assert signal["weak"] == 4
+    assert signal["medium"] == 0
+    assert signal["strong"] == 0
+    assert signal["under_observation"] == {"quality": 2, "skill_usage": 1}
+
+
 def test_calibration_preview_does_not_write_active_pointer(tmp_path):
     mod = load_plugin_module()
     cfg = base_config(tmp_path)
@@ -413,12 +435,14 @@ def test_calibration_summary_reports_grouped_actionable_and_non_actionable_signa
                     "long_running_tool_execution": {"count": 85, "suggested_coverage": "timeout-workflow"},
                 },
                 "non_actionable_clusters": {"tool_error:terminal:terminal_nonzero_exit": 493},
+                "under_observation": {"quality": 2, "skill_usage": 1},
             },
         },
     })
 
     assert "Grouped signals:" in text
     assert "- actionable: long_running_tool_execution 85 -> timeout-workflow; patch_tool 71 -> safe-patch-usage" in text
+    assert "- under observation: quality 2; skill_usage 1" in text
     assert "- non-actionable volume: tool_error:terminal:terminal_nonzero_exit 493" in text
 
 

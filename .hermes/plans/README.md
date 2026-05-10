@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-calibration-under-observation-signal-strength.md`
+  - **Status:** implemented.
+  - Adds `signal_strength.under_observation` for quality-held and skill-usage-held weak positives, counts them only as weak calibration material, and renders the detail in calibrate / operational report summaries.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-compactness-diagnostics.md`
   - **Status:** implemented.
   - Adds conservative `content_too_short` / `content_too_long` post-validation diagnostics and carries them through episode ledgers, outcome observations, scoring, and skill-quality summaries as light under-observation quality issues.

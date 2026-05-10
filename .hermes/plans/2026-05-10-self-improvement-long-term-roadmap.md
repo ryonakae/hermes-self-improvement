@@ -54,10 +54,10 @@ Overall: **about 7合目**.
   - Recent planner correctly selected `create_skill` for recurring workflow gaps.
   - The apparent failure was not planner quality; it was mutation harness/accounting.
 
-- **Runtime-private prompt overlays / GEPA:** around 7合目.
+- **Runtime-private prompt overlays / GEPA:** around 7.2合目.
   - `calibrate` can generate and promote planner/editor/evaluator overlay sets.
   - Recent active overlay generation `overlay-set-b8335b6c61af` was selected by GEPA and promoted from the inspected candidate-set artifact.
-  - Calibration signal strength now receives actionable cluster groups, so grouped workflow areas can guide overlay material without being dominated by non-actionable raw volume.
+  - Calibration signal strength now receives actionable cluster groups and under-observation quality/usage counts, so grouped workflow areas and weak held outcomes can guide overlay material without being dominated by non-actionable raw volume.
 
 - **Boundaries:** around 7.5合目.
   - Built-in / hub / plugin-bundled / external-dir skills are not mutation targets.
@@ -101,6 +101,7 @@ Overall: **about 7合目**.
   - Duplicate/coverage no-op credit is visible separately from proven mutation improvement as `duplicate no-op credited`, so duplicate prevention is not hidden inside the generic improved bucket.
   - Usage-only weak positives are visible as `skill usage under observation`, so later skill views contribute evidence without being reported as proven improvement by themselves.
   - Quality-held unknown outcomes are visible in `improve`, `calibrate`, and read-only operational report calibration sections as `quality under observation`, so thin-skill holds do not blend into generic unknown.
+  - Calibration signal strength now includes an `under_observation` detail, so quality-held and usage-held weak positives can be seen as weak evaluator material without becoming medium/strong signals.
   - Generic high-volume unmatched clusters such as `tool_error:terminal:terminal_nonzero_exit` are now separated from actionable `recurring_clusters` so reports do not overstate vague terminal failures as concrete skill gaps.
   - Patch tool failures are grouped as `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, so `patch:not_found` and `patch:unknown_error` are visible as one workflow area without hiding the raw counts.
   - Skill mutation tool failures are grouped as `actionable_cluster_groups.skill_mutation_tool` with suggested coverage `hermes-skill-management`, so self-improvement can inspect skill mutation reliability without spawning one-off skill names per error kind.
@@ -549,6 +550,14 @@ Goal: make `content_chars` actionable without overfitting to exact skill length.
 
 Result: post-validation now emits conservative `content_too_short` / `content_too_long` flags, preserves them into episodes, carries them into immediate outcome observations, applies a light compactness penalty in outcome scoring, and includes compactness problems in `needs_patch` skill-quality summaries.
 
+### Slice AH — Calibration under-observation signal strength
+
+**Status:** implemented in current change set.
+
+Goal: ensure held weak-positive outcomes can inform calibration without becoming medium/strong evidence.
+
+Result: calibration signal strength now reads compact credit-assignment `quality_under_observation` and `skill_usage_under_observation` counts, adds them to weak signal volume, exposes an `under_observation` detail, and renders that detail in calibrate / operational report grouped-signal summaries.
+
 ---
 
 ## Progress Log
@@ -596,6 +605,7 @@ Result: post-validation now emits conservative `content_too_short` / `content_to
 - Implemented skill usage outcome scoring: `skill_used_after_mutation` now contributes the weak `skill_used_without_correction` score component, so later-use observations affect credit assignment instead of remaining raw-only evidence.
 - Implemented skill usage under-observation reporting: usage-only weak positives now remain `unknown` with a dedicated `skill_usage_under_observation` count in improve, calibrate, and read-only operational report surfaces.
 - Implemented skill compactness diagnostics: post-validation now emits `content_too_short` / `content_too_long`, persists them through episodes and outcome observations, applies a light compactness quality penalty, and classifies compactness issues as `needs_patch` in skill-quality summaries.
+- Implemented calibration under-observation signal strength: quality-held and usage-held weak positives now enter `signal_strength.under_observation` and weak signal volume without becoming medium/strong signals, and the detail is rendered in calibrate / operational report summaries.
 
 ---
 

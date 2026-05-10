@@ -190,15 +190,23 @@ def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: in
         parts = str(cluster_id).split(":")
         if len(parts) >= 3 and parts[0] == "tool_error":
             weak_by_tool[parts[1]] = weak_by_tool.get(parts[1], 0) + int(count or 0)
+    credit = evidence.get("credit_assignment") if isinstance(evidence.get("credit_assignment"), dict) else {}
+    credit_outcomes = credit.get("outcomes") if isinstance(credit.get("outcomes"), dict) else {}
+    under_observation = {
+        "quality": int(credit_outcomes.get("quality_under_observation") or 0),
+        "skill_usage": int(credit_outcomes.get("skill_usage_under_observation") or 0),
+    }
+    under_observation_total = sum(under_observation.values())
     strong = int(evidence.get("bad_outcomes") or 0) + int(evidence.get("scorer_errors") or 0) + int(evidence.get("disagreements") or 0)
     strong += int((outcome_prepass.get("signals") or {}).get("user_correction_recurrence") or 0) if isinstance(outcome_prepass.get("signals"), dict) else 0
     medium = len(recurring_clusters) + len(actionable_groups) + int(evidence.get("planner_prompt_signals") or 0)
     return {
-        "weak": unmatched_count,
+        "weak": unmatched_count + under_observation_total,
         "medium": medium,
         "strong": strong,
         "recurring_clusters": recurring_clusters,
         "actionable_cluster_groups": actionable_groups,
+        "under_observation": under_observation,
         "weak_by_tool": weak_by_tool,
         "overlay_runtime_eval_cases": overlay_case_count,
     }
