@@ -10,15 +10,21 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
-- `2026-05-10-report-actual-mutation-summary.md`
+- `2026-05-10-created-skill-quality-evaluator.md`
   - **Status:** implemented.
-  - Adds an `Actual results` section to non-dry-run improve summaries, separating skill created/patched counts, memory mutations, post-validation pass/reject counts, trace-recovered accounting, duplicate/no-op counts, and prompt overlay/evaluator change status.
+  - Adds compact skill-quality signals to post-validation and shows a `Skill quality` summary for changed skills: good, needs patch, duplicate, too generic, unsafe, and follow-up candidates.
 
 The current active implementation slice is:
 
-- `2026-05-10-created-skill-quality-evaluator.md`
+- `2026-05-10-outcome-scoring-credit-assignment.md`
   - **Status:** planned / next.
-  - Reviews created or updated skills for quality and evidence fit, classifying them as good, needs patch, duplicate, too generic, or unsafe before later outcome scoring work.
+  - Connects changed skills, memory mutations, and overlay generations to later recurrence/improvement signals so executed changes stay unproven until outcomes are observed.
+
+The previous completed implementation plan is:
+
+- `2026-05-10-report-actual-mutation-summary.md`
+  - **Status:** implemented.
+  - Adds an `Actual results` section to non-dry-run improve summaries, separating skill created/patched counts, memory mutations, post-validation pass/reject counts, trace-recovered accounting, duplicate/no-op counts, and prompt overlay/evaluator change status.
 
 The previous completed implementation plan is:
 

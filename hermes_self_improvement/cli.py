@@ -1179,6 +1179,46 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
     return lines
 
 
+def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_decisions: list[dict[str, Any]]) -> list[str]:
+    reviewed = 0
+    counts = {"good": 0, "needs_patch": 0, "duplicate": 0, "too_generic": 0, "unsafe": 0}
+    follow_up: list[str] = []
+    duplicate_targets = {str(item.get("covered_by_existing_skill") or item.get("covered_by_reference_skill") or item.get("skill") or "") for item in planner_decisions if isinstance(item, dict) and item.get("noop_outcome")}
+    for item in skill_decisions:
+        if not isinstance(item, dict) or item.get("decision") != "accepted" or not item.get("changed"):
+            continue
+        result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
+        targets = [str(name) for name in (result_payload.get("created_skills") or []) + (result_payload.get("changed_skills") or []) if str(name)]
+        if not targets:
+            continue
+        post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
+        for target in targets:
+            reviewed += 1
+            if target in duplicate_targets:
+                category = "duplicate"
+            elif post_validation.get("status") != "passed":
+                category = "unsafe"
+            elif not post_validation.get("has_frontmatter"):
+                category = "too_generic"
+            elif not post_validation.get("has_pitfalls") or not post_validation.get("has_verification"):
+                category = "needs_patch"
+            else:
+                category = "good"
+            counts[category] += 1
+            if category in {"needs_patch", "too_generic", "unsafe"}:
+                follow_up.append(target)
+    if not reviewed:
+        return []
+    lines = [
+        "Skill quality:",
+        f"- reviewed: {reviewed}",
+        f"- good: {counts['good']}, needs patch: {counts['needs_patch']}, duplicate: {counts['duplicate']}, too generic: {counts['too_generic']}, unsafe: {counts['unsafe']}",
+    ]
+    if follow_up:
+        lines.append("- follow-up candidates: " + ", ".join(sorted(set(follow_up))[:5]))
+    return lines
+
+
 def _memory_placement_summary_lines(decisions: list[dict[str, Any]]) -> list[str]:
     duplicate_count = 0
     diagnostic_count = 0
@@ -1424,6 +1464,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         memory_decisions=memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [],
         planner_decisions=planner_decisions,
     )
+    skill_quality_lines = _skill_quality_summary_lines(skill_decisions, planner_decisions)
     if target_resolution_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = target_resolution_lines
@@ -1439,6 +1480,9 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     if not result.get("dry_run"):
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = actual_result_lines
+        if skill_quality_lines:
+            insert_at = lines.index("Skill planner:")
+            lines[insert_at:insert_at] = skill_quality_lines
         insert_at = lines.index("Skill planner:")
         executed_lines = [
             "Executed:",

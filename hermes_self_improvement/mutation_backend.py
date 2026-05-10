@@ -131,7 +131,10 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
     ok = bool(isinstance(result, dict) and result.get("success"))
     content = result.get("content") if isinstance(result, dict) else ""
     content_text = str(content or "")
+    content_lower = content_text.lower()
     has_frontmatter = content_text.lstrip().startswith("---")
+    has_pitfalls = "pitfall" in content_lower or "注意" in content_text or "落とし穴" in content_text
+    has_verification = "verification" in content_lower or "verify" in content_lower or "検証" in content_text
     passed = ok and (task_kind != "skill_create" or has_frontmatter)
     return {
         "status": "passed" if passed else "failed",
@@ -139,6 +142,8 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
         "target": target,
         "read_success": ok,
         "has_frontmatter": has_frontmatter,
+        "has_pitfalls": has_pitfalls,
+        "has_verification": has_verification,
         "content_chars": len(content_text),
         "error": result.get("error") if isinstance(result, dict) else "skill_view_returned_invalid_result",
     }

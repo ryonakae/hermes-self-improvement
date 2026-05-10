@@ -510,8 +510,8 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
                     {"decision": "skip", "noop_outcome": "duplicate_prevented", "covered_by_existing_skill": "timeout-workflow"},
                 ]},
                 "decisions": [
-                    {"decision": "accepted", "changed": True, "result": {"created_skills": ["timeout-workflow"], "created_skills_inferred_from_trace": True, "post_validation": {"status": "passed"}}},
-                    {"decision": "accepted", "changed": True, "result": {"changed_skills": ["sandbox-permission-workflow"], "post_validation": {"status": "passed"}}},
+                    {"decision": "accepted", "changed": True, "result": {"created_skills": ["timeout-workflow"], "created_skills_inferred_from_trace": True, "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True}}},
+                    {"decision": "accepted", "changed": True, "result": {"changed_skills": ["sandbox-permission-workflow"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": False, "has_verification": True}}},
                     {"decision": "rejected", "changed": False, "result": {"error": "mutation_agent_post_validation_failed", "post_validation": {"status": "failed"}}},
                 ],
             },
@@ -528,6 +528,10 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- recovered accounting: created skills inferred from trace 1" in text
     assert "- duplicate/no-op: covered by existing skill 1, duplicate prevented 1" in text
     assert "- prompt overlay/evaluator: changed" in text
+    assert "Skill quality:" in text
+    assert "- reviewed: 2" in text
+    assert "- good: 0, needs patch: 1, duplicate: 1, too generic: 0, unsafe: 0" in text
+    assert "- follow-up candidates: sandbox-permission-workflow" in text
 
 
 def test_improve_summary_shows_memory_placement_routing():

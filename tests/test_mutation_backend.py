@@ -280,7 +280,7 @@ def test_native_backend_post_validates_created_skill():
 
     def fake_skill_view(**kwargs):
         viewed.append(kwargs)
-        return {"success": True, "content": "---\nname: demo-created-skill\ndescription: Demo.\n---\n\n# Demo"}
+        return {"success": True, "content": "---\nname: demo-created-skill\ndescription: Demo.\n---\n\n# Demo\n\n## Pitfalls\n\n- Avoid stale traces.\n\n## Verification\n\n- Read it back."}
 
     backend = NativeSkillToolEditorBackend(
         tool_executor=SkillToolExecutor(
@@ -298,6 +298,8 @@ def test_native_backend_post_validates_created_skill():
     assert result["post_validation"]["status"] == "passed"
     assert result["post_validation"]["target"] == "demo-created-skill"
     assert result["post_validation"]["tool"] == "skill_view"
+    assert result["post_validation"]["has_pitfalls"] is True
+    assert result["post_validation"]["has_verification"] is True
     assert viewed[-1] == {"name": "demo-created-skill"}
 
 

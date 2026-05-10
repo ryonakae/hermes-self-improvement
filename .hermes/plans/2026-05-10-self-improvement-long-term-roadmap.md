@@ -293,13 +293,15 @@ Result: non-dry-run improve summaries now include an `Actual results` section fo
 
 ### Slice D — Created skill quality evaluator
 
-**Status:** next implementation slice.
+**Status:** implemented in current change set.
 
 Goal: score and patch new skills based on evidence fit and class-level usefulness.
 
+Result: post-validation now records compact skill-quality signals (`has_pitfalls`, `has_verification`), and improve summaries classify changed skills as good, needs patch, duplicate, too generic, or unsafe with follow-up candidates.
+
 ### Slice E — Outcome scoring hardening
 
-**Status:** after validation/reporting surfaces are trustworthy.
+**Status:** next implementation slice.
 
 Goal: connect created/updated knowledge and overlay generations to later observed outcomes.
 
@@ -314,10 +316,11 @@ Goal: connect created/updated knowledge and overlay generations to later observe
 - Fixed native editor tool-call history.
 - Dogfood run created `timeout-workflow` and `sandbox-permission-workflow` but artifact accounting initially rejected them.
 - Fixed natural-language outcome normalization and same-run trace-backed `created_skills` inference.
-- Current next gap: created skill quality evaluation, then outcome scoring hardening.
+- Current next gap: outcome scoring hardening / credit assignment.
 - Implemented Slice A: native skill mutation results now post-validate changed/created skill targets through official `skill_view`; failures are recorded as `mutation_agent_post_validation_failed` instead of accepted mutation accounting.
 - Implemented Slice B: hard create-skill duplicates now carry no-op metadata, so duplicate prevention / reference skill coverage can be summarized instead of appearing as a generic rejection.
 - Implemented Slice C: improve summaries now expose actual mutations, validation pass/reject counts, trace-recovered accounting, duplicate/no-op counts, and prompt overlay/evaluator change status.
+- Implemented Slice D: post-validation records compact skill-quality signals and summaries classify changed skills as good / needs patch / duplicate / too generic / unsafe.
 
 ---
 
