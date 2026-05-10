@@ -116,6 +116,14 @@ def test_score_episode_outcomes_applies_duplicate_noop_component():
     assert scored["components"]["duplicate_noop_prevented"] == 0.08
 
 
+def test_score_episode_outcomes_applies_skill_usage_component():
+    scored = score_episode_outcomes(episode_payload("skill-used"), [
+        outcome_payload("skill-used", window="short", signals={"skill_used_after_mutation": True}, confidence=0.35),
+    ])
+
+    assert scored["windows"]["short"]["score"] == 0.15
+    assert scored["components"]["skill_used_without_correction"] == 0.15
+
 
 def test_build_outcome_score_aggregate_groups_by_prompt_and_target(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}

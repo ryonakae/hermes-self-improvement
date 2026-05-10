@@ -106,7 +106,7 @@ def _signal_components(signals: dict[str, Any]) -> dict[str, float]:
 
     if signals.get("prompt_size_regression") is True or signals.get("tool_result_size_regression") is True:
         components["prompt_size_regression_penalty"] = COMPONENT_WEIGHTS["prompt_size_regression_penalty"]
-    if signals.get("skill_used_after_edit_without_correction") is True:
+    if signals.get("skill_used_after_mutation") is True or signals.get("skill_used_after_edit_without_correction") is True:
         components["skill_used_without_correction"] = COMPONENT_WEIGHTS["skill_used_without_correction"]
     if signals.get("memory_retrieved_and_useful") is True:
         components["memory_retrieved_useful"] = COMPONENT_WEIGHTS["memory_retrieved_useful"]

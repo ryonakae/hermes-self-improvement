@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-usage-outcome-scoring.md`
+  - **Status:** implemented.
+  - Maps `skill_used_after_mutation` observations to the weak `skill_used_without_correction` score component, so later skill usage contributes to credit assignment without becoming strong proof.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-usage-positive-outcome.md`
   - **Status:** implemented.
   - Adds weak positive `skill_used_after_mutation` outcome observations when a changed skill is later successfully viewed with `skill_view(name=<target>)`, while ignoring pre-mutation usage, unrelated skills, and broad `skills_list` calls.
