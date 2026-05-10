@@ -80,6 +80,33 @@ def test_validate_create_skill_success_uses_tool_trace_not_natural_language_outc
     assert result["reported_outcome"] == "created safe-patch-usage skill with compact guidance"
 
 
+def test_validate_create_skill_infers_created_skill_from_successful_create_trace():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "created timeout-workflow skill with compact guidance",
+            "used_tools": [
+                {"tool": "skills_list", "success": True},
+                {"tool": "skill_manage", "action": "create", "name": "timeout-workflow", "success": True},
+            ],
+            "changed_skills": [],
+            "created_skills": [],
+            "deleted_skills": [],
+            "verification_notes": ["skill_manage create returned success"],
+            "rollback_hints": ["delete timeout-workflow if incorrect"],
+            "_task_kind": "skill_create",
+            "_expected_target": "timeout-workflow",
+            "_allowed_targets": ["timeout-workflow"],
+        }
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["reported_outcome"] == "created timeout-workflow skill with compact guidance"
+    assert result["created_skills"] == ["timeout-workflow"]
+    assert result["created_skills_inferred_from_trace"] is True
+
+
 def test_validate_create_skill_rejects_natural_language_outcome_without_created_skill_trace():
     result = validate_backend_success_result(
         {
@@ -99,6 +126,36 @@ def test_validate_create_skill_rejects_natural_language_outcome_without_created_
 
     assert result["success"] is False
     assert result["error"] == "mutation_agent_result_created_skill_missing"
+    assert result["expected_target"] == "safe-patch-usage"
+    assert result["created_skills"] == []
+    assert result["used_tools"][0]["action"] == "patch"
+
+
+def test_validate_create_skill_does_not_infer_created_skill_without_create_trace():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "created timeout-workflow skill with compact guidance",
+            "used_tools": [
+                {"tool": "skills_list", "success": True},
+                {"tool": "skill_view", "name": "timeout-workflow", "success": True},
+            ],
+            "changed_skills": [],
+            "created_skills": [],
+            "deleted_skills": [],
+            "verification_notes": ["skill existed when viewed"],
+            "rollback_hints": [],
+            "_task_kind": "skill_create",
+            "_expected_target": "timeout-workflow",
+            "_allowed_targets": ["timeout-workflow"],
+        }
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "mutation_agent_result_created_skill_missing"
+    assert result["expected_target"] == "timeout-workflow"
+    assert result["created_skills"] == []
+    assert result["used_tools"][1]["tool"] == "skill_view"
 
 
 def test_validate_skill_improve_rejects_changed_outcome_without_target_change_trace():

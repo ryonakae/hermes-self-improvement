@@ -70,6 +70,15 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     for key in _REQUIRED_SUCCESS_FIELDS:
         if key not in result or not isinstance(result.get(key), list):
             return {"success": False, "error": f"mutation_agent_result_{key}_missing"}
+    allowed_targets = set(result.get("_allowed_targets") or [])
+    expected_target = str(result.get("_expected_target") or "").strip()
+    task_kind = str(result.get("_task_kind") or "").strip()
+    if task_kind == "skill_create" and expected_target:
+        created_list = [str(name) for name in result.get("created_skills") or []]
+        has_create_trace = _tool_trace_has_skill_manage(result.get("used_tools") or [], action="create", name=expected_target)
+        if has_create_trace and expected_target not in created_list:
+            result["created_skills"] = created_list + [expected_target]
+            result["created_skills_inferred_from_trace"] = True
     changed = [str(name) for key in ("changed_skills", "created_skills", "deleted_skills") for name in (result.get(key) or [])]
     if changed and not result.get("verification_notes"):
         return {"success": False, "error": "mutation_agent_result_verification_notes_missing"}
@@ -78,9 +87,6 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
         result["outcome"] = "applied" if changed else outcome
     elif outcome == "changed":
         result["outcome"] = "applied"
-    allowed_targets = set(result.get("_allowed_targets") or [])
-    expected_target = str(result.get("_expected_target") or "").strip()
-    task_kind = str(result.get("_task_kind") or "").strip()
     if allowed_targets:
         escaped = sorted(name for name in changed if name not in allowed_targets)
         if escaped:
