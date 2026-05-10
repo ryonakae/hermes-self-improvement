@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-quality-weighted-validation-outcomes.md`
+  - **Status:** implemented.
+  - Weights immediate post-validation outcome observations by deterministic skill quality flags: good validation remains lightly positive, thin skills are weak positives under observation, and memory-shaped skills become slightly negative despite readback success.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-operational-report-grouped-signal-surface.md`
   - **Status:** implemented.
   - Extends read-only operational reports with grouped actionable/non-actionable calibration signal lines and updates the daily Slack template guidance so morning reports keep those meanings separate.

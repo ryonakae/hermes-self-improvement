@@ -443,9 +443,59 @@ def test_collect_post_validation_observations_records_immediate_validation_signa
     assert by_episode["episode-1"]["signals"]["skill_quality_has_trigger_conditions"] is False
     assert by_episode["episode-1"]["signals"]["skill_quality_has_concrete_steps"] is True
     assert by_episode["episode-1"]["signals"]["skill_quality_memory_shaped"] is False
-    assert by_episode["episode-1"]["confidence"] == 0.7
+    assert by_episode["episode-1"]["signals"]["skill_quality_needs_patch"] is True
+    assert by_episode["episode-1"]["outcome_score"] == 0.05
+    assert by_episode["episode-1"]["confidence"] == 0.65
     assert by_episode["episode-2"]["signals"]["validation_passed"] is False
     assert by_episode["episode-2"]["confidence"] == 0.8
+
+
+def test_post_validation_observation_weights_thin_and_memory_shaped_skills_lower():
+    episodes = [
+        episode_payload(
+            "good-skill",
+            created_at="2026-05-05T09:00:00+00:00",
+            target_id="good-skill",
+            post_validation_status="passed",
+            post_validation_has_pitfalls=True,
+            post_validation_has_verification=True,
+            post_validation_has_trigger_conditions=True,
+            post_validation_has_concrete_steps=True,
+            post_validation_memory_shaped=False,
+        ),
+        episode_payload(
+            "thin-skill",
+            created_at="2026-05-05T09:01:00+00:00",
+            target_id="thin-skill",
+            post_validation_status="passed",
+            post_validation_has_pitfalls=True,
+            post_validation_has_verification=True,
+            post_validation_has_trigger_conditions=False,
+            post_validation_has_concrete_steps=False,
+            post_validation_memory_shaped=False,
+        ),
+        episode_payload(
+            "memory-shaped",
+            created_at="2026-05-05T09:02:00+00:00",
+            target_id="memory-shaped",
+            post_validation_status="passed",
+            post_validation_has_pitfalls=True,
+            post_validation_has_verification=True,
+            post_validation_has_trigger_conditions=False,
+            post_validation_has_concrete_steps=False,
+            post_validation_memory_shaped=True,
+        ),
+    ]
+    window = {"start": "2026-05-05T08:00:00+00:00", "end": "2026-05-05T11:00:00+00:00"}
+
+    candidates, _ = collect_post_validation_observations(episodes=episodes, window=window)
+
+    by_episode = {item["episode_id"]: item for item in candidates}
+    assert by_episode["good-skill"]["outcome_score"] == 0.2
+    assert by_episode["thin-skill"]["outcome_score"] == 0.05
+    assert by_episode["thin-skill"]["signals"]["skill_quality_needs_patch"] is True
+    assert by_episode["memory-shaped"]["outcome_score"] == -0.05
+    assert by_episode["memory-shaped"]["signals"]["skill_quality_too_generic"] is True
 
 
 def test_run_outcome_prepass_writes_target_reedit_observation_and_compact_artifact(tmp_path):

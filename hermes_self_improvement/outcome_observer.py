@@ -285,6 +285,30 @@ def _event_cluster_id(event: dict[str, Any]) -> str | None:
     return None
 
 
+def _post_validation_score_and_confidence(*, passed: bool, signals: dict[str, Any]) -> tuple[float, float]:
+    if not passed:
+        return -0.25, 0.8
+    too_generic = bool(signals.get("skill_quality_memory_shaped"))
+    needs_patch = any(
+        signals.get(key) is False
+        for key in (
+            "skill_quality_has_pitfalls",
+            "skill_quality_has_verification",
+            "skill_quality_has_trigger_conditions",
+            "skill_quality_has_concrete_steps",
+        )
+    )
+    if too_generic:
+        signals["skill_quality_too_generic"] = True
+        if needs_patch:
+            signals["skill_quality_needs_patch"] = True
+        return -0.05, 0.75
+    if needs_patch:
+        signals["skill_quality_needs_patch"] = True
+        return 0.05, 0.65
+    return 0.2, 0.7
+
+
 def collect_post_validation_observations(*, episodes: list[dict[str, Any]], window: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     candidates: list[dict[str, Any]] = []
     for episode in episodes:
@@ -308,6 +332,7 @@ def collect_post_validation_observations(*, episodes: list[dict[str, Any]], wind
             signals["skill_quality_has_concrete_steps"] = bool(episode.get("post_validation_has_concrete_steps"))
         if episode.get("post_validation_memory_shaped") is not None:
             signals["skill_quality_memory_shaped"] = bool(episode.get("post_validation_memory_shaped"))
+        outcome_score, confidence = _post_validation_score_and_confidence(passed=passed, signals=signals)
         candidates.append({
             "schema_name": "self_improvement_outcome_observation",
             "schema_version": "1.0",
@@ -315,8 +340,8 @@ def collect_post_validation_observations(*, episodes: list[dict[str, Any]], wind
             "observed_at": _iso(episode_time),
             "window": "immediate",
             "signals": signals,
-            "outcome_score": 0.2 if passed else -0.25,
-            "confidence": 0.7 if passed else 0.8,
+            "outcome_score": outcome_score,
+            "confidence": confidence,
             "source": {
                 "kind": "automatic_observation",
                 "signal": "validation_passed",

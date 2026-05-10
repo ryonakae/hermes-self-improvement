@@ -91,8 +91,8 @@ Overall: **about 7合目**.
 - **Duplicate / existing coverage decisions:** around 5合目.
   - `patch-tool-workflow` was not created and the agent inspected `safe-patch-usage`, which was probably good, but the artifact still expressed it as a rejection rather than a meaningful no-op such as `covered_by_existing_skill`.
 
-- **Outcome / credit assignment:** around 6.5–7合目.
-  - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations can score executed skill mutations, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
+- **Outcome / credit assignment:** around 7合目.
+  - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
   - Actual later positive observations are intentionally conservative; absence alone is not proof of improvement, and stronger evidence such as useful skill use without correction is still future work.
 
 - **Human-readable daily / CLI reporting:** around 7.5合目.
@@ -444,6 +444,14 @@ Goal: carry grouped signal meaning into read-only report and daily Slack report 
 
 Result: operational report calibration sections now show grouped actionable and non-actionable signal lines, and the daily Slack template guidance tells the report writer to keep actionable workflow areas separate from diagnostic noise.
 
+### Slice V — Skill quality weighted validation outcomes
+
+**Status:** implemented in current change set.
+
+Goal: avoid treating every passed post-validation readback as equally positive when the skill is thin or memory-shaped.
+
+Result: immediate post-validation outcome observations now weight skill quality: complete-looking skills stay lightly positive, missing trigger/procedure guidance becomes weak positive with `skill_quality_needs_patch`, and memory-shaped skills become slightly negative with `skill_quality_too_generic`.
+
 ---
 
 ## Progress Log
@@ -479,6 +487,7 @@ Result: operational report calibration sections now show grouped actionable and 
 - Implemented skill quality outcome signals: richer post-validation quality diagnostics now flow into episode ledgers and immediate outcome observations so later credit assignment/evaluator material can see thin or memory-shaped skills.
 - Implemented calibration grouped signal reporting: `calibrate` summaries now expose actionable workflow groups and non-actionable diagnostic volume separately, reducing the need to inspect JSON artifacts for signal meaning.
 - Implemented operational report grouped signal surface: read-only operational report sections and the daily Slack template now preserve the distinction between actionable workflow groups and non-actionable diagnostic volume.
+- Implemented skill quality weighted validation outcomes: passed readback is no longer uniformly positive; thin skills become weak positives under observation and memory-shaped skills become slightly negative despite validation success.
 
 ---
 
