@@ -476,6 +476,14 @@ Goal: make thin-skill under-observation outcomes visible instead of blending the
 
 Result: compact credit assignment summaries and CLI `Outcomes:` now include `quality_under_observation`, driven by quality penalty components.
 
+### Slice Z — Calibration quality under-observation reporting
+
+**Status:** implemented in current change set.
+
+Goal: expose quality-held outcomes in calibration review surfaces, not only `improve` summaries.
+
+Result: `calibrate` summaries now show `Quality under observation: N` when compact credit assignment reports quality-held unknown outcomes.
+
 ---
 
 ## Progress Log
@@ -515,6 +523,7 @@ Result: compact credit assignment summaries and CLI `Outcomes:` now include `qua
 - Implemented skill quality outcome score components: deterministic outcome scoring now applies penalties for `skill_quality_needs_patch` and `skill_quality_too_generic`, so credit assignment/calibration aggregates reflect those quality weaknesses.
 - Implemented skill quality weak-positive outcome status: thin skills with only weak positive validation remain `unknown`/under observation unless stronger later positive evidence appears, avoiding overclaiming them as improved.
 - Implemented quality under-observation reporting: compact credit assignment and CLI summaries now expose thin-skill quality holds as `quality_under_observation` instead of only generic `unknown`.
+- Implemented calibration quality under-observation reporting: `calibrate` summaries now surface quality-held outcomes directly for evaluator/GEPA review.
 
 ---
 

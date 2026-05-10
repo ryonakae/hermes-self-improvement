@@ -371,6 +371,27 @@ def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
     assert "planner: candidate yes, promoted yes" in text
 
 
+def test_calibration_summary_reports_quality_under_observation():
+    cli = load_cli_module()
+
+    text = cli._render_calibration_summary({
+        "current_status": "no_op",
+        "evidence_summary": {
+            "total_events": 20,
+            "disagreements": 0,
+            "bad_outcomes": 0,
+            "credit_assignment": {
+                "episode_count": 4,
+                "scored_episode_count": 3,
+                "overall": {"mean_outcome_score": 0.03, "confidence": 0.6},
+                "outcomes": {"tracked": 4, "improved": 1, "recurring": 0, "regressed": 0, "unknown": 2, "insufficient_window": 1, "quality_under_observation": 2},
+            },
+        },
+    })
+
+    assert "Quality under observation: 2" in text
+
+
 def test_calibration_summary_reports_grouped_actionable_and_non_actionable_signals():
     cli = load_cli_module()
 

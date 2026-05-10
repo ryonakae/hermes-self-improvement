@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-calibration-quality-under-observation-reporting.md`
+  - **Status:** implemented.
+  - Shows `Quality under observation` in calibration summaries when compact credit assignment contains quality-held unknown outcomes, so evaluator/GEPA review surfaces do not hide thin-skill holds.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-quality-under-observation-reporting.md`
   - **Status:** implemented.
   - Adds `quality_under_observation` to compact credit assignment summaries and CLI `Outcomes:` output, making thin-skill unknown outcomes visible instead of blending them into generic unknown.

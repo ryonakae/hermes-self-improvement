@@ -657,6 +657,10 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
         f"mean {credit_overall.get('mean_outcome_score') if credit_overall.get('mean_outcome_score') is not None else 'pending'}, "
         f"confidence {credit_overall.get('confidence') if credit_overall else 0.0}",
     ]
+    credit_outcomes = credit.get("outcomes") if isinstance(credit.get("outcomes"), dict) else {}
+    quality_under_observation = int(credit_outcomes.get("quality_under_observation") or 0)
+    if quality_under_observation:
+        lines.append(f"Quality under observation: {quality_under_observation}")
     signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else {}
     if signal_strength:
         lines.append(
