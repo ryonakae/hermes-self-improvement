@@ -34,6 +34,11 @@ ACTIONABLE_CLUSTER_GROUPS = {
         "suggested_coverage": "hermes-skill-management",
         "reason": "skill_manage failures should be reviewed as official skill mutation workflow/tooling evidence",
     },
+    "long_running_tool_execution": {
+        "suffixes": (":timeout",),
+        "suggested_coverage": "timeout-workflow",
+        "reason": "timeout failures across tools should be reviewed as long-running execution guidance",
+    },
 }
 
 
@@ -583,10 +588,15 @@ def _cluster_groups(by_cluster: dict[str, int]) -> dict[str, dict[str, Any]]:
     groups: dict[str, dict[str, Any]] = {}
     for group_name, spec in ACTIONABLE_CLUSTER_GROUPS.items():
         prefixes = tuple(str(item) for item in spec.get("prefixes", ()) if str(item))
+        suffixes = tuple(str(item) for item in spec.get("suffixes", ()) if str(item))
         clusters = {
             cluster_id: count
             for cluster_id, count in sorted(by_cluster.items())
-            if cluster_id not in NON_ACTIONABLE_UNMATCHED_CLUSTERS and any(cluster_id.startswith(prefix) for prefix in prefixes)
+            if cluster_id not in NON_ACTIONABLE_UNMATCHED_CLUSTERS
+            and (
+                any(cluster_id.startswith(prefix) for prefix in prefixes)
+                or any(cluster_id.endswith(suffix) for suffix in suffixes)
+            )
         }
         if not clusters:
             continue

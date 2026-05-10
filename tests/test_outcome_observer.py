@@ -198,6 +198,30 @@ def test_unmatched_summary_groups_skill_manage_clusters_by_mutation_tool_area():
     }
 
 
+def test_unmatched_summary_groups_timeout_clusters_by_long_running_tool_execution_area():
+    unmatched = [
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:terminal:timeout"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:terminal:timeout"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:execute_code:timeout"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:skill_manage:timeout"},
+        {"signal": "same_failure_cluster_recurrence", "cluster_id": "tool_error:browser_navigate:timeout"},
+    ]
+
+    summary = _unmatched_summary(unmatched)
+
+    assert summary["actionable_cluster_groups"]["long_running_tool_execution"] == {
+        "count": 5,
+        "clusters": {
+            "tool_error:browser_navigate:timeout": 1,
+            "tool_error:execute_code:timeout": 1,
+            "tool_error:skill_manage:timeout": 1,
+            "tool_error:terminal:timeout": 2,
+        },
+        "suggested_coverage": "timeout-workflow",
+        "reason": "timeout failures across tools should be reviewed as long-running execution guidance",
+    }
+
+
 def test_collect_target_reedit_observations_attributes_weak_negative_to_prior_episode():
     episodes = [
         episode_payload("episode-1", created_at="2026-05-05T09:00:00+00:00", target_id="demo-skill"),
