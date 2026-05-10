@@ -130,6 +130,38 @@ def _tool_trace_has_skill_manage(trace: list[Any], *, action: str | None, name: 
     return False
 
 
+def _skill_post_validation_failure_reason(validation: dict[str, Any]) -> str | None:
+    if validation.get("read_success") is False:
+        return "skill_readback_failed"
+    check = str(validation.get("intended_change_check") or "")
+    if check in {"patch_new_string_missing", "edit_content_mismatch"}:
+        return "skill_intended_change_missing"
+    if validation.get("has_frontmatter") is False:
+        return "skill_frontmatter_missing"
+    if validation.get("status") == "failed":
+        return "skill_post_validation_failed"
+    return None
+
+
+def _attach_skill_post_validation_diagnostics(validation: dict[str, Any]) -> dict[str, Any]:
+    if validation.get("status") != "failed":
+        return validation
+    reason = _skill_post_validation_failure_reason(validation) or "skill_post_validation_failed"
+    validation.setdefault("reason", reason)
+    validation.setdefault("next_action", "inspect_skill_tool_trace_and_retry_or_defer")
+    observed_keys = (
+        "read_success",
+        "has_frontmatter",
+        "intended_change_verified",
+        "intended_change_check",
+        "content_chars",
+        "content_too_short",
+        "content_too_long",
+    )
+    validation.setdefault("observed", {key: validation.get(key) for key in observed_keys if key in validation})
+    return validation
+
+
 def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, task_kind: str, used_tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     result = executor.call("skill_view", {"name": target})
     ok = bool(isinstance(result, dict) and result.get("success"))
@@ -147,7 +179,7 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
     memory_shaped = _looks_memory_shaped_skill(content_text, has_trigger_conditions=has_trigger_conditions, has_concrete_steps=has_concrete_steps)
     intended_check = _verify_skill_intended_change(content_text, target=target, task_kind=task_kind, used_tools=used_tools or [])
     passed = ok and (task_kind != "skill_create" or has_frontmatter) and intended_check.get("passed", True)
-    return {
+    validation = {
         "status": "passed" if passed else "failed",
         "tool": "skill_view",
         "target": target,
@@ -164,6 +196,7 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
         **{key: value for key, value in intended_check.items() if key != "passed"},
         "error": result.get("error") if isinstance(result, dict) else "skill_view_returned_invalid_result",
     }
+    return _attach_skill_post_validation_diagnostics(validation)
 
 
 def _looks_memory_shaped_skill(content_text: str, *, has_trigger_conditions: bool, has_concrete_steps: bool) -> bool:

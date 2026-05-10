@@ -173,7 +173,10 @@ def test_memory_tool_operation_rejects_success_when_builtin_state_did_not_change
     assert result["success"] is False
     assert result["error"] == "memory_tool_post_validation_failed"
     assert result["post_validation"]["status"] == "failed"
+    assert result["post_validation"]["reason"] == "memory_state_unchanged"
     assert result["post_validation"]["state_changed"] is False
+    assert result["post_validation"]["observed"]["state_changed"] is False
+    assert result["post_validation"]["next_action"] == "treat_memory_mutation_as_unverified_and_replan"
 
 
 def test_provider_tool_loader_uses_active_memory_provider_tool_surface(monkeypatch):

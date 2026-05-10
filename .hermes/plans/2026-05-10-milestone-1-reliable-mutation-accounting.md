@@ -35,6 +35,8 @@
 
 ### Phase 1.1 — Normalize post-validation diagnostics
 
+**Status:** implemented.
+
 **Objective:** Give every validation failure a compact reason code, target, observed state, and next action.
 
 **Files:**
@@ -95,6 +97,20 @@
 
 - Memory providers can have very different readback semantics; avoid pretending write-only providers are fully validated. Use an explicit unverified accounting bucket for write-only success.
 - Too much detail in daily reports will recreate the original ambiguity; keep diagnostics bounded and artifact-backed.
+
+## Result
+
+Skill and built-in memory post-validation failures now carry compact diagnostics:
+
+- `reason`
+- `observed`
+- `next_action`
+
+Covered cases in this slice:
+
+- skill readback failure: `skill_readback_failed`
+- patch/edit intended change missing: `skill_intended_change_missing`
+- memory tool success with unchanged built-in memory state: `memory_state_unchanged`
 
 ## Exit criteria
 

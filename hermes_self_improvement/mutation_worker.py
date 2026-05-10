@@ -186,7 +186,7 @@ def _memory_post_validation(*, config: dict[str, Any] | None, target: str, befor
     before_hash = before.get("state_hash")
     after_hash = after.get("state_hash")
     changed = bool(before_hash and after_hash and before_hash != after_hash)
-    return {
+    validation = {
         "status": "passed" if changed else "failed",
         "tool": "memory_state_hash",
         "target": target,
@@ -195,6 +195,13 @@ def _memory_post_validation(*, config: dict[str, Any] | None, target: str, befor
         "after_state_hash": after_hash,
         "cache_invalidation_verified": bool(after.get("cache_invalidation_verified")),
     }
+    if not changed:
+        validation.update({
+            "reason": "memory_state_unchanged",
+            "observed": {"state_changed": False, "before_state_hash": before_hash, "after_state_hash": after_hash},
+            "next_action": "treat_memory_mutation_as_unverified_and_replan",
+        })
+    return validation
 
 
 def execute_memory_tool_operation(tool_args: dict[str, Any], *, memory_fn: Callable[..., str] | None = None, config: dict[str, Any] | None = None) -> dict[str, Any]:

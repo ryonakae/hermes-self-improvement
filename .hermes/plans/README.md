@@ -20,6 +20,12 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-milestone-1-reliable-mutation-accounting.md`
+  - **Status:** partially implemented / phase 1.1 implemented.
+  - Adds compact post-validation failure diagnostics (`reason`, `observed`, `next_action`) for skill readback failure, intended skill patch/edit mismatch, and built-in memory no-state-change rejection.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-actual-results-created-skill-names.md`
   - **Status:** implemented.
   - Adds bounded created/patched skill names to `Actual results:` summaries so daily reports can answer which skills actually changed, not just how many.

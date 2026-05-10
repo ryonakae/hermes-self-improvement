@@ -371,7 +371,10 @@ def test_native_backend_rejects_create_when_post_validation_readback_fails():
     assert result["success"] is False
     assert result["error"] == "mutation_agent_post_validation_failed"
     assert result["post_validation"]["status"] == "failed"
+    assert result["post_validation"]["reason"] == "skill_readback_failed"
     assert result["post_validation"]["target"] == "demo-created-skill"
+    assert result["post_validation"]["observed"]["read_success"] is False
+    assert result["post_validation"]["next_action"] == "inspect_skill_tool_trace_and_retry_or_defer"
 
 
 def test_native_backend_post_validates_patch_intended_new_text():
@@ -447,8 +450,11 @@ def test_native_backend_rejects_patch_when_new_text_missing_after_readback():
     assert result["success"] is False
     assert result["error"] == "mutation_agent_post_validation_failed"
     assert result["post_validation"]["status"] == "failed"
+    assert result["post_validation"]["reason"] == "skill_intended_change_missing"
     assert result["post_validation"]["intended_change_verified"] is False
     assert result["post_validation"]["intended_change_check"] == "patch_new_string_missing"
+    assert result["post_validation"]["observed"]["intended_change_check"] == "patch_new_string_missing"
+    assert result["post_validation"]["next_action"] == "inspect_skill_tool_trace_and_retry_or_defer"
 
 
 def test_native_backend_sends_tool_results_as_plain_user_context_only():

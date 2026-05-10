@@ -154,7 +154,7 @@ Done:
 
 Remaining:
 
-- Validation errors include enough compact diagnostics.
+- Validation errors include enough compact diagnostics — implemented for skill readback failure, intended skill patch/edit mismatch, and built-in memory no-state-change failures.
 - Report accepted/recovered/skipped/blocked distinctions clearly.
 
 Implemented in current slice:
@@ -165,6 +165,7 @@ Implemented in current slice:
 - Fail-closed `mutation_agent_post_validation_failed` when skill readback fails.
 - Fail-closed `memory_tool_post_validation_failed` when memory tool success has no observable state change.
 - Post-patch intended-change verification for native skill `patch` / `edit` traces using official `skill_view` readback.
+- Compact post-validation failure diagnostics (`reason`, `observed`, `next_action`) for skill readback failure, intended-change mismatch, and built-in memory unchanged-state rejection.
 
 Exit criteria:
 
@@ -743,6 +744,7 @@ Result: `Knowledge maintenance:` summaries now include source buckets for `failu
 - Implemented knowledge maintenance source breakdown: `Knowledge maintenance:` summaries now show whether candidates are failure-driven, inventory-driven, or knowledge-coverage driven when source metadata exists.
 - Implemented operational report knowledge maintenance sources: read-only operational reports now reuse the latest-run `Knowledge maintenance:` source/action summary so daily report inputs can distinguish failure-driven proposals from inventory/coverage work without opening run artifacts.
 - Implemented actual-results skill name reporting: `Actual results:` now includes bounded created/patched skill-name lists when run artifacts contain them, so reports answer which skills changed as well as how many.
+- Implemented post-validation failure diagnostics: failed skill readback, missing intended skill patch/edit text, and built-in memory no-state-change rejection now include compact `reason`, `observed`, and `next_action` fields for artifact/report consumers.
 
 ---
 
