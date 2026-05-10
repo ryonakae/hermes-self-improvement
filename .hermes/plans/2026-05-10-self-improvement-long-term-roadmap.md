@@ -85,8 +85,8 @@ Overall: **about 7合目**.
   - Trace-backed accounting exists, skill create/improve mutations are read back through `skill_view`, built-in memory mutations use before/after state-hash checks, and skill patch/edit readback now verifies the intended changed text where available.
   - Remaining gaps are mostly richer diagnostics and broader provider-specific memory readback beyond the built-in store hash path.
 
-- **Skill quality evaluation:** around 6.9合目.
-  - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, and compactness signals (`content_too_short` / `content_too_long`). These diagnostics are preserved into episodes and immediate outcome observations, scored conservatively, and summarized with compact reason counts in CLI/daily-facing output. Evidence-fit and low-risk auto-patch generation still need deeper evaluator work.
+- **Skill quality evaluation:** around 7.0合目.
+  - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, and compactness signals (`content_too_short` / `content_too_long`). These diagnostics are preserved into episodes and immediate outcome observations, scored conservatively, and summarized with compact reason counts in CLI/daily-facing output and latest-run operational reports. Evidence-fit and low-risk auto-patch generation still need deeper evaluator work.
 
 - **Duplicate / existing coverage decisions:** around 6合目.
   - `patch-tool-workflow` style duplicates are now recorded as meaningful no-ops such as `covered_by_existing_skill` / `duplicate_prevented`, shown in summaries, preserved into episodes, and given a conservative positive outcome component when duplicate creation is prevented.
@@ -98,8 +98,8 @@ Overall: **about 7合目**.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
   - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, credit assignment keeps usage-only positives under observation, and read-only operational reports now surface latest-run outcome status without opening the run JSON artifact.
 
-- **Human-readable daily / CLI reporting:** around 7.8合目.
-  - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, non-actionable diagnostic volume, knowledge-inventory reason counts, latest-run actual results, and latest-run outcome status more clearly.
+- **Human-readable daily / CLI reporting:** around 7.9合目.
+  - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, non-actionable diagnostic volume, knowledge-inventory reason counts, latest-run actual results, latest-run outcome status, and latest-run skill-quality reason counts more clearly.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
   - Duplicate/coverage no-op credit is visible separately from proven mutation improvement as `duplicate no-op credited`, so duplicate prevention is not hidden inside the generic improved bucket.
   - Usage-only weak positives are visible as `skill usage under observation`, so later skill views contribute evidence without being reported as proven improvement by themselves.
@@ -602,6 +602,14 @@ Goal: make read-only operational reports show whether latest-run changes are pro
 
 Result: recent run artifact rows now retain compact `credit_assignment`, and operational reports render latest-run `Outcomes` lines using the same summary logic as `improve`.
 
+### Slice AN — Operational report latest-run skill quality
+
+**Status:** implemented in current change set.
+
+Goal: make read-only operational reports show latest-run skill-quality classification and reason counts.
+
+Result: operational report latest-run sections now reuse skill-quality summary logic, showing reviewed counts, quality categories, bounded reason counts, and follow-up candidates from recent run `step_decisions`.
+
 ---
 
 ## Progress Log
@@ -655,6 +663,7 @@ Result: recent run artifact rows now retain compact `credit_assignment`, and ope
 - Implemented operational report inventory reasons: read-only operational reports now surface the latest evidence-pack knowledge-inventory reason counts, so daily report inputs preserve skill overlap/staleness and memory duplicate/stale-pair distinctions.
 - Implemented operational report actual results: recent run rows now retain compact `step_decisions`, and read-only operational reports show actual mutations, post-validation pass/reject counts, duplicate/no-op counts, and overlay/evaluator change status for the latest run.
 - Implemented operational report latest-run outcomes: recent run rows now retain compact `credit_assignment`, and read-only operational reports show latest-run proven/recurring/unknown/under-observation outcome status without opening the run artifact.
+- Implemented operational report latest-run skill quality: read-only operational reports now show latest-run skill-quality reviewed counts, categories, bounded reason counts, and follow-up candidates from run `step_decisions`.
 
 ---
 

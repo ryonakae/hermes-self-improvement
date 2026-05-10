@@ -330,6 +330,12 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
             outcome_lines = _outcome_summary_lines(latest_run.get("credit_assignment") if isinstance(latest_run.get("credit_assignment"), dict) else {})
             if outcome_lines:
                 lines.extend(outcome_lines[:6])
+            skill_quality_lines = _skill_quality_summary_lines(
+                skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else [],
+                (skill_step.get("planner") or {}).get("decisions") if isinstance(skill_step.get("planner"), dict) and isinstance((skill_step.get("planner") or {}).get("decisions"), list) else [],
+            )
+            if skill_quality_lines:
+                lines.extend(skill_quality_lines[:6])
             lifecycle = latest_run.get("skill_lifecycle") if isinstance(latest_run.get("skill_lifecycle"), dict) else {}
             if lifecycle:
                 lines.append(

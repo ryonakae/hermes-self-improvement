@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-operational-report-latest-run-skill-quality.md`
+  - **Status:** implemented.
+  - Shows latest-run skill-quality reviewed counts, categories, reason counts, and follow-up candidates inside read-only operational reports.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-operational-report-latest-run-outcomes.md`
   - **Status:** implemented.
   - Carries compact `credit_assignment` from recent run artifacts into read-only operational reports and shows latest-run `Outcomes` lines for proven/recurring/unknown/under-observation status.
