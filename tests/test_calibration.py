@@ -249,7 +249,7 @@ def test_calibration_signal_strength_counts_under_observation_as_weak_only():
         overlay_case_count=0,
     )
 
-    assert signal["weak"] == 5
+    assert signal["weak"] == 4
     assert signal["medium"] == 0
     assert signal["strong"] == 0
     assert signal["under_observation"] == {"quality": 2, "skill_usage": 1, "missing_evidence": 1}

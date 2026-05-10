@@ -197,7 +197,9 @@ def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: in
         "skill_usage": int(credit_outcomes.get("skill_usage_under_observation") or 0),
         "missing_evidence": int(credit_outcomes.get("missing_evidence_under_observation") or 0),
     }
-    under_observation_total = sum(under_observation.values())
+    # `missing_evidence` is a reason detail within the aggregate `quality` hold.
+    # Keep it visible, but do not double-count it in weak signal volume.
+    under_observation_total = int(under_observation.get("quality") or 0) + int(under_observation.get("skill_usage") or 0)
     strong = int(evidence.get("bad_outcomes") or 0) + int(evidence.get("scorer_errors") or 0) + int(evidence.get("disagreements") or 0)
     strong += int((outcome_prepass.get("signals") or {}).get("user_correction_recurrence") or 0) if isinstance(outcome_prepass.get("signals"), dict) else 0
     medium = len(recurring_clusters) + len(actionable_groups) + int(evidence.get("planner_prompt_signals") or 0)

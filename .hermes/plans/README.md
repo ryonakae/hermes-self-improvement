@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-calibration-under-observation-deduplication.md`
+  - **Status:** implemented.
+  - Keeps missing-evidence visible as a calibration under-observation detail while avoiding double-counting it in weak signal volume.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-calibration-missing-evidence-under-observation.md`
   - **Status:** implemented.
   - Carries missing-evidence under-observation into calibration signal strength and calibration/read-only operational summaries as weak-only material.

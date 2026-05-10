@@ -57,7 +57,7 @@ Overall: **about 7合目**.
 - **Runtime-private prompt overlays / GEPA:** around 7.3合目.
   - `calibrate` can generate and promote planner/editor/evaluator overlay sets.
   - Recent active overlay generation `overlay-set-b8335b6c61af` was selected by GEPA and promoted from the inspected candidate-set artifact.
-  - Calibration signal strength now receives actionable cluster groups and under-observation quality/usage/missing-evidence counts, so grouped workflow areas and weak held outcomes can guide overlay material without being dominated by non-actionable raw volume.
+  - Calibration signal strength now receives actionable cluster groups and under-observation quality/usage/missing-evidence counts, so grouped workflow areas and weak held outcomes can guide overlay material without being dominated by non-actionable raw volume. Missing-evidence remains a visible reason detail inside quality holds and is not double-counted in weak signal volume.
 
 - **Boundaries:** around 7.5合目.
   - Built-in / hub / plugin-bundled / external-dir skills are not mutation targets.
@@ -652,6 +652,14 @@ Goal: carry missing-evidence holds into calibration signal-strength and calibrat
 
 Result: calibration signal strength now includes `under_observation.missing_evidence` as weak-only material, and calibration/read-only operational summaries render missing-evidence under-observation alongside quality and skill-usage holds.
 
+### Slice AT — Calibration under-observation deduplication
+
+**Status:** implemented in current change set.
+
+Goal: keep missing-evidence under-observation visible without double-counting it in weak signal strength.
+
+Result: `under_observation.missing_evidence` remains visible as a detail, but weak signal volume counts aggregate `quality` plus `skill_usage` only, because missing evidence is already included in quality holds.
+
 ---
 
 ## Progress Log
@@ -711,6 +719,7 @@ Result: calibration signal strength now includes `under_observation.missing_evid
 - Implemented skill evidence attachment outcome signal: attached/missing evidence counts now persist into skill episodes, and immediate post-validation observations emit `skill_quality_missing_attached_evidence` as a conservative needs-patch signal.
 - Implemented missing evidence under-observation reporting: outcome scoring now preserves a dedicated missing-evidence component, and compact `Outcomes` summaries count `missing_evidence_under_observation` separately from generic quality holds.
 - Implemented calibration missing-evidence under-observation surface: calibration signal strength now carries missing-evidence holds as weak-only material, and calibration/read-only operational summaries render them explicitly.
+- Implemented calibration under-observation deduplication: missing-evidence remains visible as a reason detail, but weak signal volume now counts aggregate quality plus skill usage only to avoid double-counting the same hold.
 
 ---
 
