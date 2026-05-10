@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-knowledge-maintenance-source-breakdown.md`
+  - **Status:** implemented.
+  - Adds source buckets to `Knowledge maintenance:` summaries so failure-driven, inventory-driven, and knowledge-coverage-driven candidates are visibly separated.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-calibration-under-observation-deduplication.md`
   - **Status:** implemented.
   - Keeps missing-evidence visible as a calibration under-observation detail while avoiding double-counting it in weak signal volume.

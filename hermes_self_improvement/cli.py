@@ -1226,14 +1226,41 @@ def _top_count_map(counts: dict[str, int], *, limit: int = 3) -> dict[str, int]:
     return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit])
 
 
+def _maintenance_source_bucket(item: dict[str, Any]) -> str:
+    values = [
+        str(item.get("source") or ""),
+        str(item.get("candidate_source") or ""),
+        str(item.get("evidence_kind") or ""),
+        str(item.get("kind") or ""),
+        str(item.get("reason") or ""),
+    ]
+    inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
+    if inventory:
+        values.append(str(inventory.get("group_kind") or ""))
+    joined = " ".join(value.lower() for value in values if value)
+    if "knowledge_coverage" in joined:
+        return "knowledge_coverage"
+    if "inventory" in joined or "memory_placement" in joined or "stale" in joined or "duplicate" in joined or "similar" in joined:
+        return "inventory"
+    if "failure" in joined or "cluster" in joined or "tool_error" in joined or "diagnostic" in joined:
+        return "failure_driven"
+    return "unknown"
+
+
 def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], maintenance_candidates: list[dict[str, Any]] | None = None) -> list[str]:
     buckets: dict[str, dict[str, int]] = {"patch": {}, "merge": {}, "archive": {}, "create": {}, "unresolved": {}}
+    source_counts: dict[str, int] = {}
+    def note_source(item: dict[str, Any]) -> None:
+        source = _maintenance_source_bucket(item)
+        if source != "unknown":
+            source_counts[source] = source_counts.get(source, 0) + 1
     for item in decisions:
         if not isinstance(item, dict):
             continue
         skill = str(item.get("skill") or item.get("proposed_skill_name") or "").strip()
         if not skill:
             continue
+        note_source(item)
         decision = str(item.get("decision") or "")
         maintenance_action = str(item.get("maintenance_action") or "")
         if maintenance_action == "patch_skill" or decision == "patch_skill":
@@ -1254,10 +1281,13 @@ def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], mainte
         affordance = item.get("maintenance_affordance") if isinstance(item.get("maintenance_affordance"), dict) else {}
         label = str(affordance.get("workflow_boundary") or item.get("theme") or item.get("kind") or "unknown").strip()
         if label:
+            note_source(item)
             buckets["unresolved"][label] = buckets["unresolved"].get(label, 0) + 1
     lines = []
     if any(buckets.values()):
         lines.append("Knowledge maintenance:")
+    if source_counts:
+        lines.append(f"- sources: {_format_count_map(_top_count_map(source_counts))}")
     if buckets["patch"]:
         lines.append(f"- patch candidates: {_format_count_map(_top_count_map(buckets['patch']))}")
     if buckets["merge"]:

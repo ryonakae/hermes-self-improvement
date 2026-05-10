@@ -466,16 +466,17 @@ def test_improve_summary_shows_knowledge_maintenance_decisions():
         "dry_run": True,
         "summary": {},
         "step_decisions": {"skill": {"planner": {"decisions": [
-            {"skill": "safe-patch-usage", "decision": "run_editor", "maintenance_action": "patch_skill"},
-            {"skill": "old-skill", "decision": "run_editor", "maintenance_action": "merge_skills", "target_skill": "new-skill"},
-            {"skill": "obsolete-skill", "decision": "archive_skill"},
-            {"skill": "patch-tool-workflow", "decision": "create_skill"},
-            {"skill": "timeout-workflow", "decision": "defer"},
+            {"skill": "safe-patch-usage", "decision": "run_editor", "maintenance_action": "patch_skill", "candidate_source": "skill_inventory_candidate"},
+            {"skill": "old-skill", "decision": "run_editor", "maintenance_action": "merge_skills", "target_skill": "new-skill", "candidate_source": "skill_inventory_candidate"},
+            {"skill": "obsolete-skill", "decision": "archive_skill", "candidate_source": "skill_inventory_candidate"},
+            {"skill": "patch-tool-workflow", "decision": "create_skill", "candidate_source": "tool_error_cluster"},
+            {"skill": "timeout-workflow", "decision": "defer", "candidate_source": "knowledge_coverage_candidate"},
         ]}}},
         "evidence_pack": {"summary": {}},
     })
 
     assert "Knowledge maintenance:" in text
+    assert "- sources: failure_driven 1, inventory 3, knowledge_coverage 1" in text
     assert "- patch candidates: safe-patch-usage 1" in text
     assert "- merge candidates: old-skill -> new-skill 1" in text
     assert "- archive candidates: obsolete-skill 1" in text
@@ -489,13 +490,14 @@ def test_improve_summary_shows_unresolved_maintenance_candidates_from_digest():
         "dry_run": True,
         "summary": {},
         "step_decisions": {"skill": {"planner": {"decisions": []}, "planner_digest": {"knowledge_maintenance": {"maintenance_candidates": [
-            {"maintenance_affordance": {"workflow_boundary": "patch tool workflow"}},
-            {"maintenance_affordance": {"workflow_boundary": "timeout workflow"}},
+            {"maintenance_affordance": {"workflow_boundary": "patch tool workflow"}, "source": "inventory"},
+            {"maintenance_affordance": {"workflow_boundary": "timeout workflow"}, "source": "knowledge_coverage"},
         ]}}}},
         "evidence_pack": {"summary": {}},
     })
 
     assert "Knowledge maintenance:" in text
+    assert "- sources: inventory 1, knowledge_coverage 1" in text
     assert "- unresolved: patch tool workflow 1, timeout workflow 1" in text
 
 
