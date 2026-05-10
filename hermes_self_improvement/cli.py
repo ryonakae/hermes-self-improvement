@@ -16,6 +16,7 @@ from .config import (
     get_hermes_home,
     load_config,
 )
+from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
 from .conversation_memory import (
     build_conversation_memory_windows,
     build_memory_gap_digest,
@@ -839,6 +840,8 @@ def run_improve(
     result_payload["artifact_path"] = str(artifact_path)
     episode_summary = record_run_episodes(config=config, run_result=result_payload)
     result_payload["episodes"] = episode_summary
+    credit_aggregate = build_credit_assignment_aggregate(config=config, limit=1000)
+    result_payload["credit_assignment"] = compact_credit_assignment_summary(credit_aggregate)
     if dry_run:
         result_payload["next_actions"] = [
             {
@@ -1179,6 +1182,25 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
     return lines
 
 
+def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
+    outcomes = credit_assignment.get("outcomes") if isinstance(credit_assignment.get("outcomes"), dict) else {}
+    tracked = int(outcomes.get("tracked") or credit_assignment.get("episode_count") or 0)
+    if not tracked:
+        return []
+    improved = int(outcomes.get("improved") or 0)
+    recurring = int(outcomes.get("recurring") or 0)
+    regressed = int(outcomes.get("regressed") or 0)
+    unknown = int(outcomes.get("unknown") or 0)
+    insufficient = int(outcomes.get("insufficient_window") or 0)
+    lines = [
+        "Outcomes:",
+        f"- tracked: {tracked}, proven improved: {improved}, recurring: {recurring}, regressed: {regressed}, unknown: {unknown}, insufficient window: {insufficient}",
+    ]
+    if unknown or insufficient:
+        lines.append("- unproven changes remain under observation")
+    return lines
+
+
 def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_decisions: list[dict[str, Any]]) -> list[str]:
     reviewed = 0
     counts = {"good": 0, "needs_patch": 0, "duplicate": 0, "too_generic": 0, "unsafe": 0}
@@ -1465,6 +1487,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         planner_decisions=planner_decisions,
     )
     skill_quality_lines = _skill_quality_summary_lines(skill_decisions, planner_decisions)
+    outcome_lines = _outcome_summary_lines(result.get("credit_assignment") if isinstance(result.get("credit_assignment"), dict) else {})
     if target_resolution_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = target_resolution_lines
@@ -1483,6 +1506,9 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         if skill_quality_lines:
             insert_at = lines.index("Skill planner:")
             lines[insert_at:insert_at] = skill_quality_lines
+        if outcome_lines:
+            insert_at = lines.index("Skill planner:")
+            lines[insert_at:insert_at] = outcome_lines
         insert_at = lines.index("Skill planner:")
         executed_lines = [
             "Executed:",

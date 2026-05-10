@@ -97,6 +97,46 @@ def _window_rows(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
     return buckets
 
 
+def _first_scored_window(row: dict[str, Any]) -> str | None:
+    windows = row.get("windows") if isinstance(row.get("windows"), dict) else {}
+    for window in WINDOWS:
+        data = windows.get(window) if isinstance(windows.get(window), dict) else {}
+        if data.get("score") is not None:
+            return window
+    return None
+
+
+def _outcome_status(row: dict[str, Any]) -> str:
+    if int(row.get("observation_count") or 0) <= 0:
+        return "insufficient_window" if row.get("executed") or row.get("changed") else "unknown"
+    components = row.get("components") if isinstance(row.get("components"), dict) else {}
+    if any(key in components for key in ("cluster_reappeared_penalty", "repeat_fix_penalty", "user_correction_penalty")):
+        return "recurring"
+    score = row.get("score")
+    if isinstance(score, (int, float)) and not isinstance(score, bool):
+        if float(score) > 0:
+            return "improved"
+        if float(score) < 0:
+            return "regressed"
+    return "unknown"
+
+
+def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int], dict[str, int], dict[str, list[str]]]:
+    counts = {"improved": 0, "recurring": 0, "regressed": 0, "unknown": 0, "insufficient_window": 0}
+    credit_windows = {window: 0 for window in WINDOWS}
+    related: dict[str, list[str]] = {key: [] for key in counts}
+    for row in rows:
+        status = _outcome_status(row)
+        counts[status] = counts.get(status, 0) + 1
+        episode_id = str(row.get("episode_id") or "")
+        if episode_id:
+            related.setdefault(status, []).append(episode_id)
+        window = _first_scored_window(row)
+        if window:
+            credit_windows[window] = credit_windows.get(window, 0) + 1
+    return counts, credit_windows, related
+
+
 def _archive_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [row for row in rows if row.get("decision") == "archive_skill" or row.get("action") == "skill_archive"]
 
@@ -132,6 +172,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
     rows = _score_rows(config=config, limit=limit)
     scored = [row for row in rows if row.get("score") is not None]
     window_buckets = _window_rows(rows)
+    outcome_status_counts, credit_windows, related_episode_ids = _outcome_status_summary(rows)
     aggregate = {
         "schema_name": "self_improvement_credit_assignment_aggregate",
         "schema_version": "1.0",
@@ -147,6 +188,9 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
         "by_action": _group(rows, lambda row: row.get("action")),
         "by_evidence_strength": _group(rows, lambda row: row.get("evidence_strength")),
         "by_window": {window: _bucket_summary(window_rows) for window, window_rows in window_buckets.items()},
+        "outcome_status_counts": outcome_status_counts,
+        "credit_windows": credit_windows,
+        "related_episode_ids": related_episode_ids,
     }
     aggregate.update(_archive_groups(rows))
     aggregate["aggregate_hash"] = _hash_payload({key: value for key, value in aggregate.items() if key != "aggregate_hash"})
@@ -155,6 +199,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
 
 def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, Any]:
     overall = aggregate.get("overall") if isinstance(aggregate.get("overall"), dict) else {}
+    status_counts = aggregate.get("outcome_status_counts") if isinstance(aggregate.get("outcome_status_counts"), dict) else {}
     return {
         "episode_count": int(aggregate.get("episode_count") or 0),
         "scored_episode_count": int(aggregate.get("scored_episode_count") or 0),
@@ -165,6 +210,14 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
             "executed_rate": float(overall.get("executed_rate") or 0.0),
             "weak_only_selected_rate": float(overall.get("weak_only_selected_rate") or 0.0),
             "repeat_fix_rate": float(overall.get("repeat_fix_rate") or 0.0),
+        },
+        "outcomes": {
+            "tracked": int(aggregate.get("episode_count") or 0),
+            "improved": int(status_counts.get("improved") or 0),
+            "recurring": int(status_counts.get("recurring") or 0),
+            "regressed": int(status_counts.get("regressed") or 0),
+            "unknown": int(status_counts.get("unknown") or 0),
+            "insufficient_window": int(status_counts.get("insufficient_window") or 0),
         },
         "aggregate_hash": aggregate.get("aggregate_hash"),
     }

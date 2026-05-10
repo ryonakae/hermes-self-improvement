@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from hermes_self_improvement.credit_assignment import build_credit_assignment_aggregate
+from hermes_self_improvement.credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
 
 
 def write_json(path: Path, payload: dict) -> None:
@@ -86,6 +86,13 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert aggregate["by_evidence_strength"]["weak"]["weak_only_selected_rate"] == 1.0
     assert aggregate["by_window"]["immediate"]["mean_outcome_score"] > 0
     assert aggregate["by_window"]["short"]["mean_outcome_score"] < 0
+    assert aggregate["outcome_status_counts"]["improved"] == 1
+    assert aggregate["outcome_status_counts"]["recurring"] == 1
+    assert aggregate["credit_windows"]["immediate"] == 1
+    assert aggregate["credit_windows"]["short"] == 1
+    assert "episode-1" in aggregate["related_episode_ids"]["improved"]
+    compact = compact_credit_assignment_summary(aggregate)
+    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0}
 
 
 def test_credit_assignment_keeps_unobserved_and_ambiguous_links_low_confidence(tmp_path):

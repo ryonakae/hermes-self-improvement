@@ -301,9 +301,11 @@ Result: post-validation now records compact skill-quality signals (`has_pitfalls
 
 ### Slice E — Outcome scoring hardening
 
-**Status:** next implementation slice.
+**Status:** implemented in current change set.
 
 Goal: connect created/updated knowledge and overlay generations to later observed outcomes.
+
+Result: credit assignment now classifies outcome status (`improved`, `recurring`, `regressed`, `unknown`, `insufficient_window`), tracks first scored credit windows, records related episode ids, and exposes compact outcome summaries in improve results.
 
 ---
 
@@ -316,11 +318,12 @@ Goal: connect created/updated knowledge and overlay generations to later observe
 - Fixed native editor tool-call history.
 - Dogfood run created `timeout-workflow` and `sandbox-permission-workflow` but artifact accounting initially rejected them.
 - Fixed natural-language outcome normalization and same-run trace-backed `created_skills` inference.
-- Current next gap: outcome scoring hardening / credit assignment.
+- Current next gap: autonomous steady-state dogfood and calibration from outcome/quality summaries.
 - Implemented Slice A: native skill mutation results now post-validate changed/created skill targets through official `skill_view`; failures are recorded as `mutation_agent_post_validation_failed` instead of accepted mutation accounting.
 - Implemented Slice B: hard create-skill duplicates now carry no-op metadata, so duplicate prevention / reference skill coverage can be summarized instead of appearing as a generic rejection.
 - Implemented Slice C: improve summaries now expose actual mutations, validation pass/reject counts, trace-recovered accounting, duplicate/no-op counts, and prompt overlay/evaluator change status.
 - Implemented Slice D: post-validation records compact skill-quality signals and summaries classify changed skills as good / needs patch / duplicate / too generic / unsafe.
+- Implemented Slice E: credit assignment now classifies outcomes and keeps unproven changes under observation rather than treating execution as success.
 
 ---
 

@@ -2,7 +2,7 @@
 
 > **For Hermes:** This is Slice E from `2026-05-10-self-improvement-long-term-roadmap.md`. Start here after mutation accounting, duplicate no-ops, reporting, and skill-quality summaries are trustworthy.
 
-**Status:** planned / next.
+**Status:** implemented in current change set.
 
 **Goal:** Connect self-improvement changes to later outcomes, so executed mutations and prompt-overlay generations are treated as unproven until recurrence or improvement signals are observed.
 

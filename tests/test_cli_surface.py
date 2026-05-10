@@ -520,6 +520,7 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
             ]},
         },
         "evidence_pack": {"summary": {}},
+        "credit_assignment": {"outcomes": {"tracked": 3, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 1, "insufficient_window": 0}},
     })
 
     assert "Actual results:" in text
@@ -532,6 +533,9 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- reviewed: 2" in text
     assert "- good: 0, needs patch: 1, duplicate: 1, too generic: 0, unsafe: 0" in text
     assert "- follow-up candidates: sandbox-permission-workflow" in text
+    assert "Outcomes:" in text
+    assert "- tracked: 3, proven improved: 1, recurring: 1, regressed: 0, unknown: 1, insufficient window: 0" in text
+    assert "- unproven changes remain under observation" in text
 
 
 def test_improve_summary_shows_memory_placement_routing():

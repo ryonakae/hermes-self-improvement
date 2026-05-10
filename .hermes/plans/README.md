@@ -10,15 +10,21 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
-- `2026-05-10-created-skill-quality-evaluator.md`
+- `2026-05-10-outcome-scoring-credit-assignment.md`
   - **Status:** implemented.
-  - Adds compact skill-quality signals to post-validation and shows a `Skill quality` summary for changed skills: good, needs patch, duplicate, too generic, unsafe, and follow-up candidates.
+  - Adds outcome status counts, credit windows, related episode ids, and compact `Outcomes` summaries so execution is not treated as proven improvement until observations exist.
 
 The current active implementation slice is:
 
-- `2026-05-10-outcome-scoring-credit-assignment.md`
+- `2026-05-10-autonomous-steady-state-dogfood.md`
   - **Status:** planned / next.
-  - Connects changed skills, memory mutations, and overlay generations to later recurrence/improvement signals so executed changes stay unproven until outcomes are observed.
+  - Dogfoods the full loop now that accounting, post-validation, no-op classification, quality summaries, and credit assignment are present.
+
+The previous completed implementation plan is:
+
+- `2026-05-10-created-skill-quality-evaluator.md`
+  - **Status:** implemented.
+  - Adds compact skill-quality signals to post-validation and shows a `Skill quality` summary for changed skills: good, needs patch, duplicate, too generic, unsafe, and follow-up candidates.
 
 The previous completed implementation plan is:
 
