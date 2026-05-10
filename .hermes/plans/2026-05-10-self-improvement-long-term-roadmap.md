@@ -38,7 +38,7 @@ The key product promise is not “make many changes.” It is:
 
 ## Current Position — 2026-05-10
 
-Overall: **about 6.5–7合目**.
+Overall: **about 7合目**.
 
 ### Strong areas
 
@@ -81,9 +81,9 @@ Overall: **about 6.5–7合目**.
 
 ### Weak areas
 
-- **Post-validation / accounting:** around 6.5合目.
-  - Trace-backed accounting exists, and skill create/improve mutations are now read back through `skill_view` before accepted accounting.
-  - Memory mutation readback and richer intended-change verification are still future work.
+- **Post-validation / accounting:** around 7.5合目.
+  - Trace-backed accounting exists, skill create/improve mutations are read back through `skill_view`, built-in memory mutations use before/after state-hash checks, and skill patch/edit readback now verifies the intended changed text where available.
+  - Remaining gaps are mostly richer diagnostics and broader provider-specific memory readback beyond the built-in store hash path.
 
 - **Skill quality evaluation:** around 5合目.
   - New skills can be created, but evaluator review of quality, duplication, and evidence fit is shallow.
@@ -133,7 +133,6 @@ Done:
 
 Remaining:
 
-- Post-patch intended-change verification beyond readability.
 - Validation errors include enough compact diagnostics.
 - Report accepted/recovered/skipped/blocked distinctions clearly.
 
@@ -144,6 +143,7 @@ Implemented in current slice:
 - Compact `post_validation` object in backend results.
 - Fail-closed `mutation_agent_post_validation_failed` when skill readback fails.
 - Fail-closed `memory_tool_post_validation_failed` when memory tool success has no observable state change.
+- Post-patch intended-change verification for native skill `patch` / `edit` traces using official `skill_view` readback.
 
 Exit criteria:
 
@@ -404,6 +404,14 @@ Goal: validate built-in memory mutations by observable post-state rather than tr
 
 Result: built-in memory tool execution now captures before/after memory store hashes when config is available, records compact `post_validation`, and fails closed if a reported success has no observable state change.
 
+### Slice Q — Skill patch intended-change verification
+
+**Status:** implemented in current change set.
+
+Goal: verify that successful skill patch/edit mutations changed the readback content in the intended way, not merely that the skill remains readable.
+
+Result: native skill mutation traces now preserve bounded patch/edit intent, and `skill_view` post-validation requires traced `new_string` patch content or full edit content to appear/match. Missing intended text fails closed with compact `intended_change_*` diagnostics.
+
 ---
 
 ## Progress Log
@@ -434,6 +442,7 @@ Result: built-in memory tool execution now captures before/after memory store ha
 - Implemented timeout cluster actionability grouping: clusters ending in `:timeout` are grouped under `actionable_cluster_groups.long_running_tool_execution` with suggested coverage `timeout-workflow`, preserving subcluster counts while making cross-tool timeout behavior easier to report and review.
 - Implemented calibration signal-strength use of actionable groups: grouped workflow areas now enter `signal_strength.actionable_cluster_groups` and count as medium signals, while non-actionable high-volume clusters remain excluded from medium-signal counts.
 - Implemented memory mutation post-validation: built-in memory tool execution now captures before/after memory store hashes when config is available, records compact `post_validation`, and fails closed when a reported success has no observable state change.
+- Implemented skill patch intended-change verification: native skill mutation traces now keep bounded patch/edit intent, and official `skill_view` post-validation fails closed when the readback content does not contain the traced patch `new_string` or does not match traced edit content.
 
 ---
 

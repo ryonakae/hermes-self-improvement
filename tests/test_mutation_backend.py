@@ -238,7 +238,7 @@ def test_native_backend_executes_skill_tools_and_finalizer():
     backend = NativeSkillToolEditorBackend(
         tool_executor=SkillToolExecutor(
             skills_list_fn=lambda **kwargs: {"success": True, "skills": []},
-            skill_view_fn=lambda **kwargs: {"success": True, "content": "demo"},
+            skill_view_fn=lambda **kwargs: {"success": True, "content": "demo b"},
             skill_manage_fn=lambda **kwargs: {"success": True},
         ),
         llm_call=lambda messages, **kwargs: captured_messages.append([dict(message) for message in messages]) or next(responses),
@@ -335,6 +335,83 @@ def test_native_backend_rejects_create_when_post_validation_readback_fails():
     assert result["error"] == "mutation_agent_post_validation_failed"
     assert result["post_validation"]["status"] == "failed"
     assert result["post_validation"]["target"] == "demo-created-skill"
+
+
+def test_native_backend_post_validates_patch_intended_new_text():
+    responses = iter([
+        _tool_response(
+            "skill_manage",
+            {"action": "patch", "name": "demo-skill", "old_string": "old guidance", "new_string": "new durable guidance"},
+            call_id="call_patch",
+        ),
+        _tool_response(
+            "submit_mutation_result",
+            {
+                "success": True,
+                "outcome": "applied",
+                "changed_skills": ["demo-skill"],
+                "created_skills": [],
+                "deleted_skills": [],
+                "verification_notes": ["patched demo-skill"],
+                "rollback_hints": [],
+            },
+            call_id="call_final",
+        ),
+    ])
+    backend = NativeSkillToolEditorBackend(
+        tool_executor=SkillToolExecutor(
+            skills_list_fn=lambda **_: {"success": True, "skills": []},
+            skill_view_fn=lambda **_: {"success": True, "content": "# Demo\n\nnew durable guidance\n\n## Verification\n- Read back."},
+            skill_manage_fn=lambda **_: {"success": True},
+        ),
+        llm_call=lambda messages, **kwargs: next(responses),
+    )
+
+    result = backend.run("prompt", {"targets": {"primary_skill": "demo-skill"}, "task_kind": "skill_improve"}, {})
+
+    assert result["success"] is True
+    assert result["post_validation"]["status"] == "passed"
+    assert result["post_validation"]["intended_change_verified"] is True
+    assert result["post_validation"]["intended_change_check"] == "patch_new_string_present"
+
+
+def test_native_backend_rejects_patch_when_new_text_missing_after_readback():
+    responses = iter([
+        _tool_response(
+            "skill_manage",
+            {"action": "patch", "name": "demo-skill", "old_string": "old guidance", "new_string": "new durable guidance"},
+            call_id="call_patch",
+        ),
+        _tool_response(
+            "submit_mutation_result",
+            {
+                "success": True,
+                "outcome": "applied",
+                "changed_skills": ["demo-skill"],
+                "created_skills": [],
+                "deleted_skills": [],
+                "verification_notes": ["patched demo-skill"],
+                "rollback_hints": [],
+            },
+            call_id="call_final",
+        ),
+    ])
+    backend = NativeSkillToolEditorBackend(
+        tool_executor=SkillToolExecutor(
+            skills_list_fn=lambda **_: {"success": True, "skills": []},
+            skill_view_fn=lambda **_: {"success": True, "content": "# Demo\n\nold guidance\n\n## Verification\n- Read back."},
+            skill_manage_fn=lambda **_: {"success": True},
+        ),
+        llm_call=lambda messages, **kwargs: next(responses),
+    )
+
+    result = backend.run("prompt", {"targets": {"primary_skill": "demo-skill"}, "task_kind": "skill_improve"}, {})
+
+    assert result["success"] is False
+    assert result["error"] == "mutation_agent_post_validation_failed"
+    assert result["post_validation"]["status"] == "failed"
+    assert result["post_validation"]["intended_change_verified"] is False
+    assert result["post_validation"]["intended_change_check"] == "patch_new_string_missing"
 
 
 def test_native_backend_sends_tool_results_as_plain_user_context_only():

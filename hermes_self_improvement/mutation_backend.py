@@ -126,7 +126,7 @@ def _tool_trace_has_skill_manage(trace: list[Any], *, action: str | None, name: 
     return False
 
 
-def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, task_kind: str) -> dict[str, Any]:
+def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, task_kind: str, used_tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     result = executor.call("skill_view", {"name": target})
     ok = bool(isinstance(result, dict) and result.get("success"))
     content = result.get("content") if isinstance(result, dict) else ""
@@ -135,7 +135,8 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
     has_frontmatter = content_text.lstrip().startswith("---")
     has_pitfalls = "pitfall" in content_lower or "注意" in content_text or "落とし穴" in content_text
     has_verification = "verification" in content_lower or "verify" in content_lower or "検証" in content_text
-    passed = ok and (task_kind != "skill_create" or has_frontmatter)
+    intended_check = _verify_skill_intended_change(content_text, target=target, task_kind=task_kind, used_tools=used_tools or [])
+    passed = ok and (task_kind != "skill_create" or has_frontmatter) and intended_check.get("passed", True)
     return {
         "status": "passed" if passed else "failed",
         "tool": "skill_view",
@@ -145,8 +146,41 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
         "has_pitfalls": has_pitfalls,
         "has_verification": has_verification,
         "content_chars": len(content_text),
+        **{key: value for key, value in intended_check.items() if key != "passed"},
         "error": result.get("error") if isinstance(result, dict) else "skill_view_returned_invalid_result",
     }
+
+
+def _verify_skill_intended_change(content_text: str, *, target: str, task_kind: str, used_tools: list[dict[str, Any]]) -> dict[str, Any]:
+    if task_kind != "skill_improve":
+        return {}
+    for item in reversed(used_tools):
+        if str(item.get("tool") or "") != "skill_manage" or str(item.get("name") or "") != target:
+            continue
+        action = str(item.get("action") or "")
+        if action == "patch":
+            new_string = str(item.get("new_string") or "")
+            if not new_string:
+                return {"intended_change_verified": None, "intended_change_check": "patch_new_string_unavailable"}
+            found = new_string in content_text
+            return {
+                "passed": found,
+                "intended_change_verified": found,
+                "intended_change_check": "patch_new_string_present" if found else "patch_new_string_missing",
+                "intended_change_chars": len(new_string),
+            }
+        if action == "edit":
+            expected_content = str(item.get("content") or "")
+            if not expected_content:
+                return {"intended_change_verified": None, "intended_change_check": "edit_content_unavailable"}
+            matched = expected_content.strip() == content_text.strip()
+            return {
+                "passed": matched,
+                "intended_change_verified": matched,
+                "intended_change_check": "edit_content_matches" if matched else "edit_content_mismatch",
+                "intended_change_chars": len(expected_content),
+            }
+    return {"intended_change_verified": None, "intended_change_check": "no_mutating_skill_manage_trace"}
 
 
 def _needs_skill_post_validation(result: dict[str, Any], *, task_kind: str, expected_target: str) -> bool:
@@ -533,6 +567,7 @@ class NativeSkillToolEditorBackend:
             {"role": "user", "content": user_context},
         ]
         actual_used: list[dict[str, Any]] = []
+        mutation_intents: list[dict[str, Any]] = []
         tool_calls = 0
         for _iteration in range(self.limits.max_iterations):
             try:
@@ -555,6 +590,8 @@ class NativeSkillToolEditorBackend:
                     final = dict(args)
                     final["used_tools"] = list(actual_used)
                     final["tool_trace"] = list(actual_used)
+                    if mutation_intents:
+                        final["mutation_intents"] = list(mutation_intents)
                     allowed_targets = _task_allowed_targets(task)
                     if allowed_targets:
                         final["_allowed_targets"] = sorted(allowed_targets)
@@ -565,7 +602,7 @@ class NativeSkillToolEditorBackend:
                     final["_expected_target"] = expected_target
                     validated = validate_backend_success_result(final)
                     if _needs_skill_post_validation(validated, task_kind=task_kind, expected_target=expected_target):
-                        post_validation = _post_validate_skill_target(self.tool_executor, target=expected_target, task_kind=task_kind)
+                        post_validation = _post_validate_skill_target(self.tool_executor, target=expected_target, task_kind=task_kind, used_tools=validated.get("mutation_intents") or validated.get("used_tools") or [])
                         validated["post_validation"] = post_validation
                         if post_validation.get("status") != "passed":
                             return {
@@ -590,6 +627,13 @@ class NativeSkillToolEditorBackend:
                 }
                 if tool == "skill_manage" and args.get("action"):
                     trace_entry["action"] = args.get("action")
+                    intent_entry = dict(trace_entry)
+                    for text_key in ("old_string", "new_string", "content"):
+                        if isinstance(args.get(text_key), str) and args.get(text_key):
+                            intent_entry[text_key] = str(args.get(text_key))[:2000]
+                    if args.get("name"):
+                        intent_entry["name"] = args.get("name")
+                    mutation_intents.append(intent_entry)
                 if args.get("name"):
                     trace_entry["name"] = args.get("name")
                 actual_used.append(trace_entry)
