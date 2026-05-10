@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-actual-results-created-skill-names.md`
+  - **Status:** implemented.
+  - Adds bounded created/patched skill names to `Actual results:` summaries so daily reports can answer which skills actually changed, not just how many.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-operational-report-knowledge-maintenance-sources.md`
   - **Status:** implemented.
   - Reuses the knowledge-maintenance summary renderer in read-only operational reports so latest-run source buckets and maintenance actions are visible to daily report inputs.

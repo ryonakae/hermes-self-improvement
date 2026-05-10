@@ -115,6 +115,7 @@ def test_run_pipeline_report_includes_runner_and_calibration_summaries(tmp_path)
     assert "## Recent runner artifacts" in report
     assert "Actual results:" in report
     assert "- actual mutations: skill created 1, skill patched 0, memory 1" in report
+    assert "- created skills: timeout-workflow" in report
     assert "- validation: post-validated 1, rejected 1" in report
     assert "Outcomes:" in report
     assert "- tracked: 4, proven improved: 1, recurring: 1, regressed: 0, unknown: 1, insufficient window: 1" in report

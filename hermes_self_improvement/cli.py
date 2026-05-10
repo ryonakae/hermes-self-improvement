@@ -1311,16 +1311,27 @@ def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], mainte
 def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: list[dict[str, Any]], memory_decisions: list[dict[str, Any]], planner_decisions: list[dict[str, Any]]) -> list[str]:
     created = 0
     patched = 0
+    created_names: list[str] = []
+    patched_names: list[str] = []
     post_validated = 0
     validation_rejected = 0
     trace_recovered = 0
+    def note_names(target: list[str], values: Any) -> None:
+        for value in values or []:
+            name = str(value or "").strip()
+            if name and name not in target:
+                target.append(name)
     for item in skill_decisions:
         if not isinstance(item, dict):
             continue
         result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
         if item.get("decision") == "accepted" and item.get("changed"):
-            created += len(result_payload.get("created_skills") or [])
-            patched += len(result_payload.get("changed_skills") or [])
+            created_values = result_payload.get("created_skills") or []
+            patched_values = result_payload.get("changed_skills") or []
+            created += len(created_values)
+            patched += len(patched_values)
+            note_names(created_names, created_values)
+            note_names(patched_names, patched_values)
         post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
         if post_validation.get("status") == "passed":
             post_validated += 1
@@ -1341,8 +1352,14 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
     lines = [
         "Actual results:",
         f"- actual mutations: skill created {created}, skill patched {patched}, memory {memory_changed}",
-        f"- validation: post-validated {post_validated}, rejected {validation_rejected}",
     ]
+    if created_names:
+        suffix = f", ... {len(created_names) - 5} more" if len(created_names) > 5 else ""
+        lines.append(f"- created skills: {', '.join(created_names[:5])}{suffix}")
+    if patched_names:
+        suffix = f", ... {len(patched_names) - 5} more" if len(patched_names) > 5 else ""
+        lines.append(f"- patched skills: {', '.join(patched_names[:5])}{suffix}")
+    lines.append(f"- validation: post-validated {post_validated}, rejected {validation_rejected}")
     if trace_recovered:
         lines.append(f"- recovered accounting: created skills inferred from trace {trace_recovered}")
     if noop_counts:

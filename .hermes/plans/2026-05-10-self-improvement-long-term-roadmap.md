@@ -100,7 +100,7 @@ Overall: **about 7合目**.
   - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, credit assignment keeps usage-only positives under observation, and read-only operational reports now surface latest-run outcome status without opening the run JSON artifact.
 
 - **Human-readable daily / CLI reporting:** around 8.0合目.
-  - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, non-actionable diagnostic volume, knowledge-inventory reason counts, latest-run actual results, latest-run outcome status, and latest-run skill-quality reason counts more clearly.
+  - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, created/patched skill names, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, non-actionable diagnostic volume, knowledge-inventory reason counts, latest-run actual results, latest-run outcome status, and latest-run skill-quality reason counts more clearly.
   - Skill-quality reason labels now describe deficiencies (`missing_*`) instead of exposing positive boolean field names, so daily-facing summaries are harder to misread.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
   - Duplicate/coverage no-op credit is visible separately from proven mutation improvement as `duplicate no-op credited`, so duplicate prevention is not hidden inside the generic improved bucket.
@@ -719,7 +719,7 @@ Result: `Knowledge maintenance:` summaries now include source buckets for `failu
 - Implemented skill quality reason summary: CLI/daily-facing skill-quality sections now include bounded reason counts from post-validation flags, making follow-up candidates actionable without inspecting JSON artifacts.
 - Implemented knowledge inventory reason summary: inventory health now carries skill overlap/staleness group counts, and improve summaries show `similar`, `possible stale`, and `stale singleton` skill groups next to memory duplicate/stale-pair counts.
 - Implemented operational report inventory reasons: read-only operational reports now surface the latest evidence-pack knowledge-inventory reason counts, so daily report inputs preserve skill overlap/staleness and memory duplicate/stale-pair distinctions.
-- Implemented operational report actual results: recent run rows now retain compact `step_decisions`, and read-only operational reports show actual mutations, post-validation pass/reject counts, duplicate/no-op counts, and overlay/evaluator change status for the latest run.
+- Implemented operational report actual results: recent run rows now retain compact `step_decisions`, and read-only operational reports show actual mutations, created/patched skill names, post-validation pass/reject counts, duplicate/no-op counts, and overlay/evaluator change status for the latest run.
 - Implemented operational report latest-run outcomes: recent run rows now retain compact `credit_assignment`, and read-only operational reports show latest-run proven/recurring/unknown/under-observation outcome status without opening the run artifact.
 - Implemented operational report latest-run skill quality: read-only operational reports now show latest-run skill-quality reviewed counts, categories, bounded reason counts, and follow-up candidates from run `step_decisions`.
 - Implemented skill quality negative reason labels: CLI and operational report skill-quality summaries now use `missing_*` labels for deficiencies, avoiding misleading positive-looking labels such as raw `has_concrete_steps` when the signal means the guidance is absent.
@@ -730,6 +730,7 @@ Result: `Knowledge maintenance:` summaries now include source buckets for `failu
 - Implemented calibration under-observation deduplication: missing-evidence remains visible as a reason detail, but weak signal volume now counts aggregate quality plus skill usage only to avoid double-counting the same hold.
 - Implemented knowledge maintenance source breakdown: `Knowledge maintenance:` summaries now show whether candidates are failure-driven, inventory-driven, or knowledge-coverage driven when source metadata exists.
 - Implemented operational report knowledge maintenance sources: read-only operational reports now reuse the latest-run `Knowledge maintenance:` source/action summary so daily report inputs can distinguish failure-driven proposals from inventory/coverage work without opening run artifacts.
+- Implemented actual-results skill name reporting: `Actual results:` now includes bounded created/patched skill-name lists when run artifacts contain them, so reports answer which skills changed as well as how many.
 
 ---
 

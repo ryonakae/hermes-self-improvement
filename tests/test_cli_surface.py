@@ -528,6 +528,8 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
 
     assert "Actual results:" in text
     assert "- actual mutations: skill created 1, skill patched 1, memory 1" in text
+    assert "- created skills: timeout-workflow" in text
+    assert "- patched skills: sandbox-permission-workflow" in text
     assert "- validation: post-validated 2, rejected 1" in text
     assert "- recovered accounting: created skills inferred from trace 1" in text
     assert "- duplicate/no-op: covered by existing skill 1, duplicate prevented 1" in text
