@@ -251,6 +251,8 @@ def _recent_json_files(root: Path, pattern: str = "*.json", limit: int = 5) -> l
         row = {"path": str(path), "schema_name": payload.get("schema_name"), "created_at": payload.get("created_at"), "summary": payload.get("summary"), "run_id": payload.get("run_id")}
         if isinstance(payload.get("step_decisions"), dict):
             row["step_decisions"] = payload.get("step_decisions")
+        if isinstance(payload.get("credit_assignment"), dict):
+            row["credit_assignment"] = payload.get("credit_assignment")
         lifecycle = _summarize_run_skill_lifecycle(payload)
         if lifecycle:
             row["skill_lifecycle"] = lifecycle
@@ -325,6 +327,9 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
             )
             if len(actual_lines) > 1:
                 lines.extend(actual_lines[:6])
+            outcome_lines = _outcome_summary_lines(latest_run.get("credit_assignment") if isinstance(latest_run.get("credit_assignment"), dict) else {})
+            if outcome_lines:
+                lines.extend(outcome_lines[:6])
             lifecycle = latest_run.get("skill_lifecycle") if isinstance(latest_run.get("skill_lifecycle"), dict) else {}
             if lifecycle:
                 lines.append(

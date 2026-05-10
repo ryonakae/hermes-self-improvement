@@ -94,12 +94,12 @@ Overall: **about 7合目**.
 - **Knowledge inventory beyond tool failures:** around 6.2合目.
   - Inventory health now reports skill overlap/staleness reason counts and memory duplicate/stale-pair counts in CLI/daily-facing summaries, so knowledge maintenance work is not only raw candidate volume. Deeper stale/overlap planning and low-risk maintenance execution still need expansion.
 
-- **Outcome / credit assignment:** around 7.2合目.
+- **Outcome / credit assignment:** around 7.3合目.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
-  - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, and credit assignment keeps usage-only positives under observation instead of counting them as proven improvement.
+  - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, credit assignment keeps usage-only positives under observation, and read-only operational reports now surface latest-run outcome status without opening the run JSON artifact.
 
-- **Human-readable daily / CLI reporting:** around 7.7合目.
-  - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, non-actionable diagnostic volume, knowledge-inventory reason counts, and latest-run actual results more clearly.
+- **Human-readable daily / CLI reporting:** around 7.8合目.
+  - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, non-actionable diagnostic volume, knowledge-inventory reason counts, latest-run actual results, and latest-run outcome status more clearly.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
   - Duplicate/coverage no-op credit is visible separately from proven mutation improvement as `duplicate no-op credited`, so duplicate prevention is not hidden inside the generic improved bucket.
   - Usage-only weak positives are visible as `skill usage under observation`, so later skill views contribute evidence without being reported as proven improvement by themselves.
@@ -594,6 +594,14 @@ Goal: make read-only operational reports answer what the latest self-improvement
 
 Result: recent run artifact rows now retain `step_decisions`, and operational reports render actual mutations, post-validation pass/reject counts, duplicate/no-op counts, and prompt overlay/evaluator change status using the same summary logic as `improve`.
 
+### Slice AM — Operational report latest-run outcomes
+
+**Status:** implemented in current change set.
+
+Goal: make read-only operational reports show whether latest-run changes are proven, recurring/regressed, or still under observation.
+
+Result: recent run artifact rows now retain compact `credit_assignment`, and operational reports render latest-run `Outcomes` lines using the same summary logic as `improve`.
+
 ---
 
 ## Progress Log
@@ -646,6 +654,7 @@ Result: recent run artifact rows now retain `step_decisions`, and operational re
 - Implemented knowledge inventory reason summary: inventory health now carries skill overlap/staleness group counts, and improve summaries show `similar`, `possible stale`, and `stale singleton` skill groups next to memory duplicate/stale-pair counts.
 - Implemented operational report inventory reasons: read-only operational reports now surface the latest evidence-pack knowledge-inventory reason counts, so daily report inputs preserve skill overlap/staleness and memory duplicate/stale-pair distinctions.
 - Implemented operational report actual results: recent run rows now retain compact `step_decisions`, and read-only operational reports show actual mutations, post-validation pass/reject counts, duplicate/no-op counts, and overlay/evaluator change status for the latest run.
+- Implemented operational report latest-run outcomes: recent run rows now retain compact `credit_assignment`, and read-only operational reports show latest-run proven/recurring/unknown/under-observation outcome status without opening the run artifact.
 
 ---
 

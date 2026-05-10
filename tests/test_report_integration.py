@@ -45,6 +45,16 @@ def create_runner_artifacts(config: dict) -> None:
         "schema_name": "self_improvement_run",
         "run_id": "run-test",
         "summary": {"proposal_count": 2, "memory_changes": 1, "scorer_evaluator_changed": True},
+        "credit_assignment": {"outcomes": {
+            "tracked": 4,
+            "improved": 1,
+            "recurring": 1,
+            "regressed": 0,
+            "unknown": 1,
+            "insufficient_window": 1,
+            "quality_under_observation": 1,
+            "skill_usage_under_observation": 1,
+        }},
         "step_decisions": {
             "skill": {
                 "planner": {"decisions": [
@@ -101,6 +111,10 @@ def test_run_pipeline_report_includes_runner_and_calibration_summaries(tmp_path)
     assert "Actual results:" in report
     assert "- actual mutations: skill created 1, skill patched 0, memory 1" in report
     assert "- validation: post-validated 1, rejected 1" in report
+    assert "Outcomes:" in report
+    assert "- tracked: 4, proven improved: 1, recurring: 1, regressed: 0, unknown: 1, insufficient window: 1" in report
+    assert "- quality under observation: 1" in report
+    assert "- skill usage under observation: 1" in report
     assert "- duplicate/no-op: covered by existing skill 1" in report
     assert "Knowledge inventory: skill groups similar 1, possible stale 2, stale singletons 3; memory duplicates exact 4, near 5, stale pairs 6" in report
     assert "## Calibration summary" in report
