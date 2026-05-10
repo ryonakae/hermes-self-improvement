@@ -214,6 +214,11 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
         episode["defer_reason"] = decision.get("defer_reason")
     if decision.get("reason"):
         episode["reason"] = str(decision.get("reason"))[:240]
+    if decision.get("noop_outcome"):
+        episode["noop_outcome"] = str(decision.get("noop_outcome"))[:120]
+    covered_by = decision.get("covered_by_existing_skill") or decision.get("covered_by_reference_skill")
+    if covered_by:
+        episode["covered_by_existing_skill"] = str(covered_by)[:120]
     if decision.get("archive_reason"):
         episode["archive_reason"] = str(decision.get("archive_reason"))[:120]
     if normalized_decision == "archive_skill":

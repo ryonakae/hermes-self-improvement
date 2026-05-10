@@ -6,6 +6,7 @@ from pathlib import Path
 
 from hermes_self_improvement.outcome_observer import (
     _unmatched_summary,
+    collect_duplicate_noop_observations,
     collect_failure_cluster_recurrence_observations,
     collect_failure_cluster_stability_observations,
     collect_post_validation_observations,
@@ -136,6 +137,30 @@ def test_write_outcome_observations_skips_invalid_candidates(tmp_path):
     assert summary["written_observation_count"] == 0
     assert summary["invalid_observation_count"] == 1
     assert load_outcome_observations(config=config, limit=10) == []
+
+
+def test_collect_duplicate_noop_observations_scores_meaningful_duplicate_prevention():
+    window = {"start": "2026-05-05T00:00:00+00:00", "end": "2026-05-06T00:00:00+00:00"}
+    episode = episode_payload(
+        "episode-duplicate-noop",
+        created_at="2026-05-05T08:00:00+00:00",
+        changed=False,
+        action="no_op",
+        decision="skip",
+        noop_outcome="covered_by_existing_skill",
+        covered_by_existing_skill="safe-patch-usage",
+    )
+
+    candidates, unmatched = collect_duplicate_noop_observations(episodes=[episode], window=window)
+
+    assert unmatched == []
+    assert len(candidates) == 1
+    assert candidates[0]["episode_id"] == "episode-duplicate-noop"
+    assert candidates[0]["signals"] == {"duplicate_noop_prevented": True, "noop_outcome": "covered_by_existing_skill"}
+    assert candidates[0]["outcome_score"] == 0.08
+    assert candidates[0]["confidence"] == 0.55
+    assert candidates[0]["source"]["covered_by_existing_skill"] == "safe-patch-usage"
+
 
 
 def test_unmatched_summary_separates_generic_terminal_nonzero_exit_from_actionable_recurring_clusters():

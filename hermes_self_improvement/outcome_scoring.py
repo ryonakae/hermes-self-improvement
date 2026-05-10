@@ -26,6 +26,7 @@ COMPONENT_WEIGHTS = {
     "memory_retrieved_useful": 0.15,
     "low_evidence_penalty": -0.10,
     "no_op_strong_evidence_penalty": -0.20,
+    "duplicate_noop_prevented": 0.08,
     "skill_quality_needs_patch_penalty": -0.15,
     "skill_quality_too_generic_penalty": -0.25,
 }
@@ -113,6 +114,8 @@ def _signal_components(signals: dict[str, Any]) -> dict[str, float]:
         components["low_evidence_penalty"] = COMPONENT_WEIGHTS["low_evidence_penalty"]
     if signals.get("editor_no_op_despite_strong_evidence") is True:
         components["no_op_strong_evidence_penalty"] = COMPONENT_WEIGHTS["no_op_strong_evidence_penalty"]
+    if signals.get("duplicate_noop_prevented") is True:
+        components["duplicate_noop_prevented"] = COMPONENT_WEIGHTS["duplicate_noop_prevented"]
     if signals.get("skill_quality_needs_patch") is True:
         components["skill_quality_needs_patch_penalty"] = COMPONENT_WEIGHTS["skill_quality_needs_patch_penalty"]
     if signals.get("skill_quality_too_generic") is True:

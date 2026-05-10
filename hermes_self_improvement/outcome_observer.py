@@ -309,6 +309,40 @@ def _post_validation_score_and_confidence(*, passed: bool, signals: dict[str, An
     return 0.2, 0.7
 
 
+def collect_duplicate_noop_observations(*, episodes: list[dict[str, Any]], window: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    candidates: list[dict[str, Any]] = []
+    for episode in episodes:
+        noop_outcome = str(episode.get("noop_outcome") or "").strip()
+        if noop_outcome not in {"duplicate_prevented", "covered_by_existing_skill", "existing_skill_sufficient"}:
+            continue
+        episode_time = _parse_time(episode.get("created_at"))
+        if episode_time is None or not _window_contains(window, episode_time):
+            continue
+        candidates.append({
+            "schema_name": "self_improvement_outcome_observation",
+            "schema_version": "1.0",
+            "episode_id": episode.get("episode_id"),
+            "observed_at": _iso(episode_time),
+            "window": "immediate",
+            "signals": {"duplicate_noop_prevented": True, "noop_outcome": noop_outcome},
+            "outcome_score": 0.08,
+            "confidence": 0.55,
+            "source": {
+                "kind": "automatic_observation",
+                "signal": "duplicate_noop_prevented",
+                "source_path": episode.get("path") or episode.get("artifact_path"),
+                "source_id": episode.get("episode_id"),
+                "match_kind": "noop_outcome",
+                "target_kind": episode.get("target_kind"),
+                "target_id": episode.get("target_id"),
+                "noop_outcome": noop_outcome,
+                "covered_by_existing_skill": episode.get("covered_by_existing_skill"),
+            },
+        })
+    return candidates, []
+
+
+
 def collect_post_validation_observations(*, episodes: list[dict[str, Any]], window: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     candidates: list[dict[str, Any]] = []
     for episode in episodes:
@@ -603,6 +637,7 @@ def _signal_counts(candidates: list[dict[str, Any]]) -> dict[str, int]:
                 "same_failure_cluster_recurrence",
                 "target_reedit_shortly_after_mutation",
                 "validation_passed",
+                "duplicate_noop_prevented",
                 "observation_window_completed",
             }:
                 counts[key] = counts.get(key, 0) + 1
@@ -696,6 +731,7 @@ def run_outcome_prepass(*, config: dict[str, Any], now: datetime | None = None) 
     episodes = load_recent_episodes(config=config, limit=1000)
     collector_results = [
         collect_post_validation_observations(episodes=episodes, window=window),
+        collect_duplicate_noop_observations(episodes=episodes, window=window),
         collect_target_reedit_observations(episodes=episodes, window=window),
         collect_failure_cluster_recurrence_observations(config=config, episodes=episodes, window=window),
         collect_failure_cluster_stability_observations(config=config, episodes=episodes, window=window),

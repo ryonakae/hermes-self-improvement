@@ -107,6 +107,16 @@ def test_score_episode_outcomes_applies_skill_quality_penalties_to_validation_si
     assert memory_shaped["components"]["skill_quality_too_generic_penalty"] == -0.25
 
 
+def test_score_episode_outcomes_applies_duplicate_noop_component():
+    scored = score_episode_outcomes(episode_payload("noop", action="no_op", executed=False, changed=False), [
+        outcome_payload("noop", signals={"duplicate_noop_prevented": True, "noop_outcome": "covered_by_existing_skill"}, confidence=0.55),
+    ])
+
+    assert scored["windows"]["immediate"]["score"] == 0.08
+    assert scored["components"]["duplicate_noop_prevented"] == 0.08
+
+
+
 def test_build_outcome_score_aggregate_groups_by_prompt_and_target(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])

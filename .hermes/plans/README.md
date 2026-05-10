@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-duplicate-noop-credit-assignment.md`
+  - **Status:** implemented.
+  - Preserves duplicate/coverage no-op metadata into skill episodes and emits conservative `duplicate_noop_prevented` outcome observations/components, so avoiding redundant skill creation can be credited without treating arbitrary skips as improvements.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-operational-report-quality-under-observation.md`
   - **Status:** implemented.
   - Shows `quality under observation` in read-only operational report calibration sections when compact credit assignment contains quality-held unknown outcomes, so daily report inputs do not hide thin-skill holds.

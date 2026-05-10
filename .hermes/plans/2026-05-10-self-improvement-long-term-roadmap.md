@@ -88,8 +88,8 @@ Overall: **about 7合目**.
 - **Skill quality evaluation:** around 6.5合目.
   - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, and compactness signals. These diagnostics are now also preserved into episodes and immediate outcome observations. Evidence-fit and low-risk auto-patch generation still need deeper evaluator work.
 
-- **Duplicate / existing coverage decisions:** around 5合目.
-  - `patch-tool-workflow` was not created and the agent inspected `safe-patch-usage`, which was probably good, but the artifact still expressed it as a rejection rather than a meaningful no-op such as `covered_by_existing_skill`.
+- **Duplicate / existing coverage decisions:** around 6合目.
+  - `patch-tool-workflow` style duplicates are now recorded as meaningful no-ops such as `covered_by_existing_skill` / `duplicate_prevented`, shown in summaries, preserved into episodes, and given a conservative positive outcome component when duplicate creation is prevented.
 
 - **Outcome / credit assignment:** around 7合目.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
@@ -154,22 +154,28 @@ Exit criteria:
 
 ### Milestone 2 — Meaningful duplicate / existing coverage handling
 
-**Status:** planned.
+**Status:** partially implemented / expand.
 
 Goal: if a proposed new skill is already covered by an existing skill, record that as a useful no-op, not a generic rejection.
 
 Target outcomes:
 
-- `covered_by_existing_skill`
-- `existing_skill_sufficient`
+- `covered_by_existing_skill` — implemented for create duplicates / reference coverage
+- `existing_skill_sufficient` — supported as no-op outcome and outcome signal when present
 - `patch_existing_skill_candidate`
 - `merge_into_existing_skill`
-- `duplicate_prevented`
+- `duplicate_prevented` — implemented for mutable existing skill duplicates
 
 Exit criteria:
 
 - `patch-tool-workflow -> safe-patch-usage` style cases are visible in artifacts and summaries.
 - Duplicate prevention is credited as successful maintenance when appropriate.
+
+Implemented in current slice:
+
+- Duplicate/coverage no-op metadata is preserved into skill episodes.
+- Outcome prepass emits `duplicate_noop_prevented` observations for meaningful duplicate/coverage no-ops.
+- Outcome scoring gives duplicate prevention a conservative positive component weaker than validated mutations.
 
 ### Milestone 3 — Skill quality evaluator
 
@@ -493,6 +499,14 @@ Goal: carry quality-held outcome visibility into read-only operational reports a
 
 Result: operational report calibration sections now show `- quality under observation: N` when compact credit assignment reports quality-held unknown outcomes, keeping thin-skill holds distinct from generic unknowns.
 
+### Slice AB — Duplicate no-op credit assignment
+
+**Status:** implemented in current change set.
+
+Goal: make meaningful duplicate/coverage no-ops feed the outcome loop instead of only appearing in immediate summaries.
+
+Result: skill episodes now preserve `noop_outcome` / covering skill metadata, outcome prepass emits `duplicate_noop_prevented`, and outcome scoring gives duplicate prevention a conservative positive component weaker than a validated mutation.
+
 ---
 
 ## Progress Log
@@ -534,6 +548,7 @@ Result: operational report calibration sections now show `- quality under observ
 - Implemented quality under-observation reporting: compact credit assignment and CLI summaries now expose thin-skill quality holds as `quality_under_observation` instead of only generic `unknown`.
 - Implemented calibration quality under-observation reporting: `calibrate` summaries now surface quality-held outcomes directly for evaluator/GEPA review.
 - Implemented operational report quality under-observation: read-only operational report calibration sections now surface `quality under observation` counts, so daily report inputs preserve thin-skill holds instead of hiding them as generic unknown.
+- Implemented duplicate no-op credit assignment: duplicate/coverage no-op decisions now persist into episodes and produce conservative `duplicate_noop_prevented` outcome observations/components, so avoiding redundant skill creation can be credited without treating arbitrary skips as improvements.
 
 ---
 

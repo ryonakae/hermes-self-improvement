@@ -90,6 +90,26 @@ def test_record_run_episodes_writes_append_only_skill_and_memory_episodes(tmp_pa
     assert "Do not store in episode" not in serialized
 
 
+def test_record_run_episodes_preserves_duplicate_noop_metadata(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = sample_run_result(tmp_path)
+    result["step_decisions"]["skill"]["decisions"][0].update({
+        "decision": "skip",
+        "reason": "create_skill_covered_by_existing_skill",
+        "noop_outcome": "covered_by_existing_skill",
+        "covered_by_existing_skill": "safe-patch-usage",
+    })
+
+    record_run_episodes(config=config, run_result=result)
+
+    episode = [item for item in load_recent_episodes(config=config, limit=10) if item["target_id"] == "demo-skill"][0]
+    assert episode["decision"] == "skip"
+    assert episode["action"] == "no_op"
+    assert episode["noop_outcome"] == "covered_by_existing_skill"
+    assert episode["covered_by_existing_skill"] == "safe-patch-usage"
+
+
+
 def test_record_run_episodes_is_append_only_for_repeated_recording(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = sample_run_result(tmp_path)
