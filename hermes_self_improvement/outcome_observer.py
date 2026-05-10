@@ -342,6 +342,81 @@ def collect_duplicate_noop_observations(*, episodes: list[dict[str, Any]], windo
     return candidates, []
 
 
+def _event_skill_view_name(event: dict[str, Any]) -> str:
+    if str(event.get("event") or "") != "post_tool_call":
+        return ""
+    if str(event.get("tool_name") or "") != "skill_view":
+        return ""
+    if str(event.get("status") or "").lower() not in {"success", "ok", "completed"}:
+        return ""
+    args = event.get("args_preview")
+    if isinstance(args, str):
+        try:
+            parsed = json.loads(args)
+        except Exception:
+            parsed = {}
+        args = parsed
+    if not isinstance(args, dict):
+        return ""
+    return str(args.get("name") or "").strip()
+
+
+def collect_skill_usage_observations(*, config: dict[str, Any], episodes: list[dict[str, Any]], window: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    candidates: list[dict[str, Any]] = []
+    skill_episodes: dict[str, list[dict[str, Any]]] = {}
+    for episode in episodes:
+        if not _is_executed_mutation(episode):
+            continue
+        if str(episode.get("target_kind") or "") != "skill":
+            continue
+        target_id = str(episode.get("target_id") or "").strip()
+        if not target_id:
+            continue
+        skill_episodes.setdefault(target_id, []).append(episode)
+    for episode_list in skill_episodes.values():
+        episode_list.sort(key=lambda item: _parse_time(item.get("created_at")) or datetime.min.replace(tzinfo=UTC), reverse=True)
+
+    for event in _load_event_log(config):
+        if not _event_in_window(event, window):
+            continue
+        skill_name = _event_skill_view_name(event)
+        if not skill_name:
+            continue
+        event_time = _event_time(event)
+        if event_time is None:
+            continue
+        matched_episode = None
+        for episode in skill_episodes.get(skill_name, []):
+            episode_time = _parse_time(episode.get("created_at"))
+            if episode_time is not None and event_time > episode_time:
+                matched_episode = episode
+                break
+        if matched_episode is None:
+            continue
+        episode_time = _parse_time(matched_episode.get("created_at"))
+        if episode_time is None:
+            continue
+        candidates.append({
+            "schema_name": "self_improvement_outcome_observation",
+            "schema_version": "1.0",
+            "episode_id": matched_episode.get("episode_id"),
+            "observed_at": _iso(event_time),
+            "window": _outcome_window(episode_time, event_time),
+            "signals": {"skill_used_after_mutation": True},
+            "outcome_score": 0.15,
+            "confidence": 0.35,
+            "source": {
+                "kind": "automatic_observation",
+                "signal": "skill_used_after_mutation",
+                "source_path": event.get("source_path"),
+                "source_id": event.get("tool_call_id") or event.get("session_id"),
+                "match_kind": "skill_view_target",
+                "target_kind": "skill",
+                "target_id": skill_name,
+            },
+        })
+    return candidates, []
+
 
 def collect_post_validation_observations(*, episodes: list[dict[str, Any]], window: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     candidates: list[dict[str, Any]] = []
@@ -638,6 +713,7 @@ def _signal_counts(candidates: list[dict[str, Any]]) -> dict[str, int]:
                 "target_reedit_shortly_after_mutation",
                 "validation_passed",
                 "duplicate_noop_prevented",
+                "skill_used_after_mutation",
                 "observation_window_completed",
             }:
                 counts[key] = counts.get(key, 0) + 1
@@ -732,6 +808,7 @@ def run_outcome_prepass(*, config: dict[str, Any], now: datetime | None = None) 
     collector_results = [
         collect_post_validation_observations(episodes=episodes, window=window),
         collect_duplicate_noop_observations(episodes=episodes, window=window),
+        collect_skill_usage_observations(config=config, episodes=episodes, window=window),
         collect_target_reedit_observations(episodes=episodes, window=window),
         collect_failure_cluster_recurrence_observations(config=config, episodes=episodes, window=window),
         collect_failure_cluster_stability_observations(config=config, episodes=episodes, window=window),

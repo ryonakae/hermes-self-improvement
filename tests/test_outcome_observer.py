@@ -10,6 +10,7 @@ from hermes_self_improvement.outcome_observer import (
     collect_failure_cluster_recurrence_observations,
     collect_failure_cluster_stability_observations,
     collect_post_validation_observations,
+    collect_skill_usage_observations,
     collect_target_reedit_observations,
     collect_user_correction_recurrence_observations,
     determine_collection_window,
@@ -245,6 +246,77 @@ def test_unmatched_summary_groups_timeout_clusters_by_long_running_tool_executio
         "suggested_coverage": "timeout-workflow",
         "reason": "timeout failures across tools should be reviewed as long-running execution guidance",
     }
+
+
+def test_collect_skill_usage_observations_attributes_weak_positive_to_prior_skill_mutation(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    episode = episode_payload("episode-skill", created_at="2026-05-05T09:00:00+00:00", target_id="demo-skill")
+    event = {
+        "ts": "2026-05-05T12:00:00+00:00",
+        "event": "post_tool_call",
+        "status": "success",
+        "tool_name": "skill_view",
+        "tool_call_id": "tool-1",
+        "args_preview": {"name": "demo-skill"},
+        "result_preview": "loaded demo skill",
+        "session_id": "session-1",
+    }
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text(json.dumps(event, sort_keys=True) + "\n", encoding="utf-8")
+    window = {"start": "2026-05-05T10:00:00+00:00", "end": "2026-05-05T13:00:00+00:00"}
+
+    candidates, unmatched = collect_skill_usage_observations(config=config, episodes=[episode], window=window)
+
+    assert unmatched == []
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate["episode_id"] == "episode-skill"
+    assert candidate["signals"] == {"skill_used_after_mutation": True}
+    assert candidate["outcome_score"] == 0.15
+    assert candidate["confidence"] == 0.35
+    assert candidate["source"]["match_kind"] == "skill_view_target"
+    assert candidate["source"]["target_id"] == "demo-skill"
+
+
+def test_collect_skill_usage_observations_ignores_unrelated_and_pre_mutation_usage(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    episode = episode_payload("episode-skill", created_at="2026-05-05T09:00:00+00:00", target_id="demo-skill")
+    events = [
+        {
+            "ts": "2026-05-05T08:00:00+00:00",
+            "event": "post_tool_call",
+            "status": "success",
+            "tool_name": "skill_view",
+            "args_preview": {"name": "demo-skill"},
+            "tool_call_id": "tool-before",
+        },
+        {
+            "ts": "2026-05-05T12:00:00+00:00",
+            "event": "post_tool_call",
+            "status": "success",
+            "tool_name": "skill_view",
+            "args_preview": json.dumps({"name": "other-skill"}),
+            "tool_call_id": "tool-other",
+        },
+        {
+            "ts": "2026-05-05T12:30:00+00:00",
+            "event": "post_tool_call",
+            "status": "success",
+            "tool_name": "skills_list",
+            "args_preview": {},
+            "tool_call_id": "tool-list",
+        },
+    ]
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text("".join(json.dumps(event, sort_keys=True) + "\n" for event in events), encoding="utf-8")
+    window = {"start": "2026-05-05T07:00:00+00:00", "end": "2026-05-05T13:00:00+00:00"}
+
+    candidates, unmatched = collect_skill_usage_observations(config=config, episodes=[episode], window=window)
+
+    assert candidates == []
+    assert unmatched == []
 
 
 def test_collect_target_reedit_observations_attributes_weak_negative_to_prior_episode():

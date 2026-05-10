@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-usage-positive-outcome.md`
+  - **Status:** implemented.
+  - Adds weak positive `skill_used_after_mutation` outcome observations when a changed skill is later successfully viewed with `skill_view(name=<target>)`, while ignoring pre-mutation usage, unrelated skills, and broad `skills_list` calls.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-duplicate-noop-reporting.md`
   - **Status:** implemented.
   - Adds `duplicate_noop_credited` to compact credit assignment and shows duplicate no-op credit separately in `improve` / `calibrate` summaries, so duplicate prevention does not hide inside generic improved counts.

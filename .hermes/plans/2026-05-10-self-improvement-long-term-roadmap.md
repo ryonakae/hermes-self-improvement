@@ -91,9 +91,9 @@ Overall: **about 7合目**.
 - **Duplicate / existing coverage decisions:** around 6合目.
   - `patch-tool-workflow` style duplicates are now recorded as meaningful no-ops such as `covered_by_existing_skill` / `duplicate_prevented`, shown in summaries, preserved into episodes, and given a conservative positive outcome component when duplicate creation is prevented.
 
-- **Outcome / credit assignment:** around 7合目.
+- **Outcome / credit assignment:** around 7.2合目.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
-  - Actual later positive observations are intentionally conservative; absence alone is not proof of improvement, and stronger evidence such as useful skill use without correction is still future work.
+  - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. This is intentionally low-confidence and distinct from proof of long-term improvement.
 
 - **Human-readable daily / CLI reporting:** around 7.5合目.
   - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, and non-actionable diagnostic volume more clearly.
@@ -232,7 +232,7 @@ Signals:
 - same failure cluster recurrence after mutation
 - user correction recurrence
 - same-target re-edit shortly after mutation
-- skill loaded/viewed/used later
+- skill loaded/viewed/used later — successful later `skill_view` for the changed skill now emits weak positive usage observations
 - failure reduced after skill creation
 - prompt overlay generation id associated with better/worse decisions
 
@@ -516,6 +516,14 @@ Goal: expose duplicate no-op credit separately from proven mutation improvement.
 
 Result: compact credit assignment now includes `duplicate_noop_credited`, and `improve` / `calibrate` summaries show duplicate no-op credit as its own line when present.
 
+### Slice AD — Skill usage positive outcome
+
+**Status:** implemented in current change set.
+
+Goal: add a cautious later-use positive signal that is stronger than immediate readback but weaker than proven long-term improvement.
+
+Result: successful later `skill_view(name=<target_id>)` events now attach to prior executed skill mutation episodes and emit weak `skill_used_after_mutation` observations. Pre-mutation usage, unrelated skills, and broad `skills_list` calls do not count.
+
 ---
 
 ## Progress Log
@@ -559,6 +567,7 @@ Result: compact credit assignment now includes `duplicate_noop_credited`, and `i
 - Implemented operational report quality under-observation: read-only operational report calibration sections now surface `quality under observation` counts, so daily report inputs preserve thin-skill holds instead of hiding them as generic unknown.
 - Implemented duplicate no-op credit assignment: duplicate/coverage no-op decisions now persist into episodes and produce conservative `duplicate_noop_prevented` outcome observations/components, so avoiding redundant skill creation can be credited without treating arbitrary skips as improvements.
 - Implemented duplicate no-op reporting: compact credit assignment and `improve` / `calibrate` summaries now expose `duplicate_noop_credited` separately from the generic improved bucket.
+- Implemented skill usage positive outcomes: successful later `skill_view(name=<target_id>)` events now emit weak `skill_used_after_mutation` observations for prior executed skill mutation episodes, while pre-mutation usage, unrelated skills, and broad `skills_list` calls do not count.
 
 ---
 
