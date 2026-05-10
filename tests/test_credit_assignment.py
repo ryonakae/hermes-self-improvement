@@ -95,7 +95,7 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert aggregate["credit_windows"]["short"] == 1
     assert "episode-1" in aggregate["related_episode_ids"]["improved"]
     compact = compact_credit_assignment_summary(aggregate)
-    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0}
+    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0}
     assert compact["overlay_generations"]["tracked"] == 2
     assert compact["overlay_generations"]["best"]["overlay_generation_id"] == "overlay-set-good"
     assert compact["overlay_generations"]["worst"]["overlay_generation_id"] == "overlay-set-risky"
@@ -150,6 +150,25 @@ def test_credit_assignment_counts_duplicate_noop_credit_separately(tmp_path):
     assert aggregate["quality_outcomes"]["duplicate_noop_credited"] == 1
     assert compact["outcomes"]["duplicate_noop_credited"] == 1
 
+
+def test_credit_assignment_keeps_skill_usage_only_under_observation(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "episodes" / "2026-05-03" / "skill-used.json", episode_payload("skill-used"))
+    write_json(root / "outcomes" / "2026-05-03" / "skill-used-outcome.json", outcome_payload(
+        "skill-used",
+        "short",
+        {"skill_used_after_mutation": True},
+        confidence=0.35,
+    ))
+
+    aggregate = build_credit_assignment_aggregate(config=config, limit=100)
+    compact = compact_credit_assignment_summary(aggregate)
+
+    assert aggregate["outcome_status_counts"]["improved"] == 0
+    assert aggregate["outcome_status_counts"]["unknown"] == 1
+    assert aggregate["quality_outcomes"]["skill_usage_under_observation"] == 1
+    assert compact["outcomes"]["skill_usage_under_observation"] == 1
 
 
 def test_credit_assignment_keeps_thin_skill_validation_under_observation(tmp_path):

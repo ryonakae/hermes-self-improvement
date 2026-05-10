@@ -93,12 +93,13 @@ Overall: **about 7合目**.
 
 - **Outcome / credit assignment:** around 7.2合目.
   - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
-  - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, so usage evidence affects credit assignment without becoming strong proof.
+  - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, and credit assignment keeps usage-only positives under observation instead of counting them as proven improvement.
 
 - **Human-readable daily / CLI reporting:** around 7.5合目.
   - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, and non-actionable diagnostic volume more clearly.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
   - Duplicate/coverage no-op credit is visible separately from proven mutation improvement as `duplicate no-op credited`, so duplicate prevention is not hidden inside the generic improved bucket.
+  - Usage-only weak positives are visible as `skill usage under observation`, so later skill views contribute evidence without being reported as proven improvement by themselves.
   - Quality-held unknown outcomes are visible in `improve`, `calibrate`, and read-only operational report calibration sections as `quality under observation`, so thin-skill holds do not blend into generic unknown.
   - Generic high-volume unmatched clusters such as `tool_error:terminal:terminal_nonzero_exit` are now separated from actionable `recurring_clusters` so reports do not overstate vague terminal failures as concrete skill gaps.
   - Patch tool failures are grouped as `actionable_cluster_groups.patch_tool` with suggested coverage `safe-patch-usage`, so `patch:not_found` and `patch:unknown_error` are visible as one workflow area without hiding the raw counts.
@@ -532,6 +533,14 @@ Goal: make the new later-use observation affect deterministic outcome scoring an
 
 Result: `skill_used_after_mutation` now maps to the existing weak `skill_used_without_correction` component, preserving compatibility with older `skill_used_after_edit_without_correction` observations while ensuring usage observations are not scoreless.
 
+### Slice AF — Skill usage under-observation reporting
+
+**Status:** implemented in current change set.
+
+Goal: prevent usage-only weak positives from being reported as proven improvement.
+
+Result: credit assignment now keeps `skill_used_without_correction`-only positive rows as `unknown` and counts them as `skill_usage_under_observation`; improve, calibrate, and read-only operational reports surface that count explicitly.
+
 ---
 
 ## Progress Log
@@ -577,6 +586,7 @@ Result: `skill_used_after_mutation` now maps to the existing weak `skill_used_wi
 - Implemented duplicate no-op reporting: compact credit assignment and `improve` / `calibrate` summaries now expose `duplicate_noop_credited` separately from the generic improved bucket.
 - Implemented skill usage positive outcomes: successful later `skill_view(name=<target_id>)` events now emit weak `skill_used_after_mutation` observations for prior executed skill mutation episodes, while pre-mutation usage, unrelated skills, and broad `skills_list` calls do not count.
 - Implemented skill usage outcome scoring: `skill_used_after_mutation` now contributes the weak `skill_used_without_correction` score component, so later-use observations affect credit assignment instead of remaining raw-only evidence.
+- Implemented skill usage under-observation reporting: usage-only weak positives now remain `unknown` with a dedicated `skill_usage_under_observation` count in improve, calibrate, and read-only operational report surfaces.
 
 ---
 

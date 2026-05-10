@@ -346,6 +346,9 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
         quality_under_observation = int(credit_outcomes.get("quality_under_observation") or 0)
         if quality_under_observation:
             lines.append(f"- quality under observation: {quality_under_observation}")
+        skill_usage_under_observation = int(credit_outcomes.get("skill_usage_under_observation") or 0)
+        if skill_usage_under_observation:
+            lines.append(f"- skill usage under observation: {skill_usage_under_observation}")
         signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else {}
         if signal_strength:
             lines.extend(_operational_grouped_signal_lines(signal_strength))
@@ -669,6 +672,9 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     duplicate_noop_credited = int(credit_outcomes.get("duplicate_noop_credited") or 0)
     if duplicate_noop_credited:
         lines.append(f"Duplicate no-op credited: {duplicate_noop_credited}")
+    skill_usage_under_observation = int(credit_outcomes.get("skill_usage_under_observation") or 0)
+    if skill_usage_under_observation:
+        lines.append(f"Skill usage under observation: {skill_usage_under_observation}")
     signal_strength = evidence.get("signal_strength") if isinstance(evidence.get("signal_strength"), dict) else {}
     if signal_strength:
         lines.append(
@@ -1267,6 +1273,7 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
     insufficient = int(outcomes.get("insufficient_window") or 0)
     quality_under_observation = int(outcomes.get("quality_under_observation") or 0)
     duplicate_noop_credited = int(outcomes.get("duplicate_noop_credited") or 0)
+    skill_usage_under_observation = int(outcomes.get("skill_usage_under_observation") or 0)
     lines = [
         "Outcomes:",
         f"- tracked: {tracked}, proven improved: {improved}, recurring: {recurring}, regressed: {regressed}, unknown: {unknown}, insufficient window: {insufficient}",
@@ -1277,6 +1284,8 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
         lines.append(f"- quality under observation: {quality_under_observation}")
     if duplicate_noop_credited:
         lines.append(f"- duplicate no-op credited: {duplicate_noop_credited}")
+    if skill_usage_under_observation:
+        lines.append(f"- skill usage under observation: {skill_usage_under_observation}")
     return lines
 
 

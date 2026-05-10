@@ -107,6 +107,11 @@ def _first_scored_window(row: dict[str, Any]) -> str | None:
     return None
 
 
+def _has_only_weak_usage_positive(components: dict[str, Any]) -> bool:
+    positive_keys = {key for key, value in components.items() if isinstance(value, (int, float)) and not isinstance(value, bool) and float(value) > 0}
+    return positive_keys == {"skill_used_without_correction"}
+
+
 def _outcome_status(row: dict[str, Any]) -> str:
     if int(row.get("observation_count") or 0) <= 0:
         return "insufficient_window" if row.get("executed") or row.get("changed") else "unknown"
@@ -116,6 +121,8 @@ def _outcome_status(row: dict[str, Any]) -> str:
     score = row.get("score")
     if isinstance(score, (int, float)) and not isinstance(score, bool):
         if float(score) > 0:
+            if _has_only_weak_usage_positive(components):
+                return "unknown"
             quality_penalties = {"skill_quality_needs_patch_penalty", "skill_quality_too_generic_penalty"}
             stronger_positive = any(
                 key in components
@@ -133,13 +140,15 @@ def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int],
     counts = {"improved": 0, "recurring": 0, "regressed": 0, "unknown": 0, "insufficient_window": 0}
     credit_windows = {window: 0 for window in WINDOWS}
     related: dict[str, list[str]] = {key: [] for key in counts}
-    quality = {"quality_under_observation": 0, "duplicate_noop_credited": 0}
+    quality = {"quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0}
     for row in rows:
         status = _outcome_status(row)
         counts[status] = counts.get(status, 0) + 1
         components = row.get("components") if isinstance(row.get("components"), dict) else {}
         if status == "unknown" and components.get("skill_quality_needs_patch_penalty") is not None:
             quality["quality_under_observation"] += 1
+        if status == "unknown" and _has_only_weak_usage_positive(components):
+            quality["skill_usage_under_observation"] += 1
         if components.get("duplicate_noop_prevented") is not None:
             quality["duplicate_noop_credited"] += 1
         episode_id = str(row.get("episode_id") or "")
@@ -266,6 +275,7 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
             "insufficient_window": int(status_counts.get("insufficient_window") or 0),
             "quality_under_observation": int(quality_outcomes.get("quality_under_observation") or 0),
             "duplicate_noop_credited": int(quality_outcomes.get("duplicate_noop_credited") or 0),
+            "skill_usage_under_observation": int(quality_outcomes.get("skill_usage_under_observation") or 0),
         },
         "overlay_generations": _overlay_generation_summary(by_generation),
         "aggregate_hash": aggregate.get("aggregate_hash"),

@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-usage-under-observation-reporting.md`
+  - **Status:** implemented.
+  - Keeps skill-usage-only weak positives as `unknown` with a dedicated `skill_usage_under_observation` count in improve, calibrate, and operational report surfaces, so later views do not become proven improvement by themselves.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-usage-outcome-scoring.md`
   - **Status:** implemented.
   - Maps `skill_used_after_mutation` observations to the weak `skill_used_without_correction` score component, so later skill usage contributes to credit assignment without becoming strong proof.

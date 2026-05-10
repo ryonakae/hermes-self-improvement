@@ -384,13 +384,14 @@ def test_calibration_summary_reports_quality_under_observation():
                 "episode_count": 4,
                 "scored_episode_count": 3,
                 "overall": {"mean_outcome_score": 0.03, "confidence": 0.6},
-                "outcomes": {"tracked": 4, "improved": 1, "recurring": 0, "regressed": 0, "unknown": 2, "insufficient_window": 1, "quality_under_observation": 2, "duplicate_noop_credited": 1},
+                "outcomes": {"tracked": 4, "improved": 1, "recurring": 0, "regressed": 0, "unknown": 2, "insufficient_window": 1, "quality_under_observation": 2, "duplicate_noop_credited": 1, "skill_usage_under_observation": 1},
             },
         },
     })
 
     assert "Quality under observation: 2" in text
     assert "Duplicate no-op credited: 1" in text
+    assert "Skill usage under observation: 1" in text
 
 
 def test_calibration_summary_reports_grouped_actionable_and_non_actionable_signals():
