@@ -2,7 +2,25 @@
 
 ## Current source of truth
 
-As of 2026-05-09, the current active implementation plan is:
+As of 2026-05-10, the long-term roadmap is:
+
+- `2026-05-10-self-improvement-long-term-roadmap.md`
+  - **Status:** active long-term source of truth.
+  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 6.5–7合目. The active milestone is reliable mutation accounting and post-validation.
+
+The current active implementation slice is:
+
+- `2026-05-10-skill-mutation-post-validation-readback.md`
+  - **Status:** planned / next.
+  - Extends the existing native skill-tool editor harness so successful skill create/patch mutations are read back through official `skill_view` and recorded with compact `post_validation` status. This follows the trace-backed accounting fix and avoids direct filesystem fallback, duplicate creation, or new lanes.
+
+The latest completed implementation plan is:
+
+- `2026-05-10-post-state-created-skill-accounting.md`
+  - **Status:** implemented.
+  - Fixed create-skill accounting so same-run `skill_manage(action="create")` traces can infer `created_skills` when the LLM finalizer omits it, while still failing closed for `skill_view`-only pre-existing skills. Also preserves natural-language finalizer output as `reported_outcome`.
+
+The previous active implementation plan is:
 
 - `2026-05-09_134424-memory-placement-planner-actions.md`
   - **Status:** implemented.
