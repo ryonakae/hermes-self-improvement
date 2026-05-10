@@ -538,6 +538,25 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- unproven changes remain under observation" in text
 
 
+def test_improve_summary_skill_quality_uses_trigger_steps_and_memory_shape():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 2},
+        "step_decisions": {"skill": {"planner": {"decisions": []}, "decisions": [
+            {"decision": "accepted", "changed": True, "result": {"created_skills": ["workflow-thin"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": False}}},
+            {"decision": "accepted", "changed": True, "result": {"changed_skills": ["memory-shaped"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": False, "memory_shaped": True}}},
+        ]}},
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Skill quality:" in text
+    assert "- reviewed: 2" in text
+    assert "- good: 0, needs patch: 1, duplicate: 0, too generic: 1, unsafe: 0" in text
+    assert "memory-shaped" in text
+    assert "workflow-thin" in text
+
+
 def test_improve_dry_run_summary_shows_outcomes_without_claiming_success():
     cli = load_cli_module()
     text = cli._render_improve_summary({

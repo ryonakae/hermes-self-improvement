@@ -135,6 +135,9 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
     has_frontmatter = content_text.lstrip().startswith("---")
     has_pitfalls = "pitfall" in content_lower or "注意" in content_text or "落とし穴" in content_text
     has_verification = "verification" in content_lower or "verify" in content_lower or "検証" in content_text
+    has_trigger_conditions = any(marker in content_lower for marker in ("when to use", "use when", "trigger", "triggers")) or any(marker in content_text for marker in ("使う場面", "使うとき", "適用条件", "発動条件"))
+    has_concrete_steps = any(marker in content_lower for marker in ("procedure", "steps", "workflow", "checklist")) or any(marker in content_text for marker in ("手順", "進め方", "確認項目", "チェックリスト"))
+    memory_shaped = _looks_memory_shaped_skill(content_text, has_trigger_conditions=has_trigger_conditions, has_concrete_steps=has_concrete_steps)
     intended_check = _verify_skill_intended_change(content_text, target=target, task_kind=task_kind, used_tools=used_tools or [])
     passed = ok and (task_kind != "skill_create" or has_frontmatter) and intended_check.get("passed", True)
     return {
@@ -145,10 +148,30 @@ def _post_validate_skill_target(executor: "SkillToolExecutor", *, target: str, t
         "has_frontmatter": has_frontmatter,
         "has_pitfalls": has_pitfalls,
         "has_verification": has_verification,
+        "has_trigger_conditions": has_trigger_conditions,
+        "has_concrete_steps": has_concrete_steps,
+        "memory_shaped": memory_shaped,
         "content_chars": len(content_text),
         **{key: value for key, value in intended_check.items() if key != "passed"},
         "error": result.get("error") if isinstance(result, dict) else "skill_view_returned_invalid_result",
     }
+
+
+def _looks_memory_shaped_skill(content_text: str, *, has_trigger_conditions: bool, has_concrete_steps: bool) -> bool:
+    body = "\n".join(line.strip() for line in content_text.splitlines() if line.strip() and not line.strip().startswith("---"))
+    body_lower = body.lower()
+    memory_markers = (
+        "user prefers",
+        "user likes",
+        "user is",
+        "user has",
+        "remember that",
+        "preference",
+        "profile",
+    )
+    japanese_memory_markers = ("ユーザーは", "好み", "覚えて", "誕生日", "プロフィール")
+    marker_hit = any(marker in body_lower for marker in memory_markers) or any(marker in body for marker in japanese_memory_markers)
+    return bool(marker_hit and not has_trigger_conditions and not has_concrete_steps)
 
 
 def _verify_skill_intended_change(content_text: str, *, target: str, task_kind: str, used_tools: list[dict[str, Any]]) -> dict[str, Any]:

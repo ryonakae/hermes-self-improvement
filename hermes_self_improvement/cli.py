@@ -1234,9 +1234,14 @@ def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_
                 category = "duplicate"
             elif post_validation.get("status") != "passed":
                 category = "unsafe"
-            elif not post_validation.get("has_frontmatter"):
+            elif not post_validation.get("has_frontmatter") or post_validation.get("memory_shaped"):
                 category = "too_generic"
-            elif not post_validation.get("has_pitfalls") or not post_validation.get("has_verification"):
+            elif (
+                not post_validation.get("has_pitfalls")
+                or not post_validation.get("has_verification")
+                or post_validation.get("has_trigger_conditions") is False
+                or post_validation.get("has_concrete_steps") is False
+            ):
                 category = "needs_patch"
             else:
                 category = "good"

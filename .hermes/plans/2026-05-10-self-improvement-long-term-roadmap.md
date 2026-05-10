@@ -85,8 +85,8 @@ Overall: **about 7合目**.
   - Trace-backed accounting exists, skill create/improve mutations are read back through `skill_view`, built-in memory mutations use before/after state-hash checks, and skill patch/edit readback now verifies the intended changed text where available.
   - Remaining gaps are mostly richer diagnostics and broader provider-specific memory readback beyond the built-in store hash path.
 
-- **Skill quality evaluation:** around 5合目.
-  - New skills can be created, but evaluator review of quality, duplication, and evidence fit is shallow.
+- **Skill quality evaluation:** around 6合目.
+  - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, and compactness signals. Evidence-fit and low-risk auto-patch generation still need deeper evaluator work.
 
 - **Duplicate / existing coverage decisions:** around 5合目.
   - `patch-tool-workflow` was not created and the agent inspected `safe-patch-usage`, which was probably good, but the artifact still expressed it as a rejection rather than a meaningful no-op such as `covered_by_existing_skill`.
@@ -178,14 +178,14 @@ Goal: created/updated skills are reviewed for quality and evidence fit.
 
 Evaluator should check:
 
-- clear trigger conditions
-- concrete steps
-- pitfalls
-- verification checklist
-- not memory-shaped
-- not duplicate of existing skills
-- aligned with evidence
-- compact enough to load usefully
+- clear trigger conditions — deterministic signal implemented
+- concrete steps — deterministic signal implemented
+- pitfalls — deterministic signal implemented
+- verification checklist — deterministic signal implemented
+- not memory-shaped — deterministic signal implemented
+- not duplicate of existing skills — duplicate/no-op checks implemented for create proposals
+- aligned with evidence — still needs deeper evaluator work
+- compact enough to load usefully — basic content length signal exists; thresholds still need tuning
 
 Exit criteria:
 
@@ -412,6 +412,14 @@ Goal: verify that successful skill patch/edit mutations changed the readback con
 
 Result: native skill mutation traces now preserve bounded patch/edit intent, and `skill_view` post-validation requires traced `new_string` patch content or full edit content to appear/match. Missing intended text fails closed with compact `intended_change_*` diagnostics.
 
+### Slice R — Skill quality diagnostics
+
+**Status:** implemented in current change set.
+
+Goal: deepen created/updated skill quality review without adding a separate evaluator lane.
+
+Result: post-validation now records `has_trigger_conditions`, `has_concrete_steps`, and `memory_shaped`; CLI quality summaries classify missing trigger/procedure guidance as `needs_patch` and memory-shaped skill content as `too_generic`.
+
 ---
 
 ## Progress Log
@@ -443,6 +451,7 @@ Result: native skill mutation traces now preserve bounded patch/edit intent, and
 - Implemented calibration signal-strength use of actionable groups: grouped workflow areas now enter `signal_strength.actionable_cluster_groups` and count as medium signals, while non-actionable high-volume clusters remain excluded from medium-signal counts.
 - Implemented memory mutation post-validation: built-in memory tool execution now captures before/after memory store hashes when config is available, records compact `post_validation`, and fails closed when a reported success has no observable state change.
 - Implemented skill patch intended-change verification: native skill mutation traces now keep bounded patch/edit intent, and official `skill_view` post-validation fails closed when the readback content does not contain the traced patch `new_string` or does not match traced edit content.
+- Implemented skill quality diagnostics: post-validation now records trigger-condition, concrete-step, and memory-shaped signals, and CLI quality summaries use them to separate `needs_patch` from `too_generic`.
 
 ---
 

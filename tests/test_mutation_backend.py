@@ -303,6 +303,41 @@ def test_native_backend_post_validates_created_skill():
     assert viewed[-1] == {"name": "demo-created-skill"}
 
 
+def test_native_backend_post_validation_records_trigger_step_and_memory_shape_quality():
+    responses = iter([
+        _tool_response("skill_manage", {"action": "create", "name": "thin-skill", "content": "---\nname: thin-skill\ndescription: Demo.\n---\n\n# Demo"}, call_id="call_create"),
+        _tool_response(
+            "submit_mutation_result",
+            {
+                "success": True,
+                "outcome": "applied",
+                "changed_skills": [],
+                "created_skills": ["thin-skill"],
+                "deleted_skills": [],
+                "verification_notes": ["created thin-skill"],
+                "rollback_hints": [],
+            },
+            call_id="call_final",
+        ),
+    ])
+    backend = NativeSkillToolEditorBackend(
+        tool_executor=SkillToolExecutor(
+            skills_list_fn=lambda **_: {"success": True, "skills": []},
+            skill_view_fn=lambda **_: {"success": True, "content": "---\nname: thin-skill\ndescription: Demo.\n---\n\n# Demo\n\nUser prefers concise replies.\n\n## Pitfalls\n- None.\n\n## Verification\n- Read back."},
+            skill_manage_fn=lambda **_: {"success": True},
+        ),
+        llm_call=lambda messages, **kwargs: next(responses),
+    )
+
+    result = backend.run("prompt", {"targets": {"new_skill": "thin-skill"}, "task_kind": "skill_create"}, {})
+
+    assert result["success"] is True
+    assert result["post_validation"]["status"] == "passed"
+    assert result["post_validation"]["has_trigger_conditions"] is False
+    assert result["post_validation"]["has_concrete_steps"] is False
+    assert result["post_validation"]["memory_shaped"] is True
+
+
 def test_native_backend_rejects_create_when_post_validation_readback_fails():
     responses = iter([
         _tool_response("skill_manage", {"action": "create", "name": "demo-created-skill", "content": "---\nname: demo-created-skill\ndescription: Demo.\n---\n\n# Demo"}, call_id="call_create"),

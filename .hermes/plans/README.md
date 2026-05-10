@@ -6,9 +6,15 @@ As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`
   - **Status:** active long-term source of truth.
-  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 7合目. The active milestone is moving from reliable mutation accounting/post-validation into deeper skill quality and knowledge inventory maintenance.
+  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 7合目. The active milestone is deeper skill quality and knowledge inventory maintenance.
 
 The latest completed implementation plan is:
+
+- `2026-05-10-skill-quality-diagnostics.md`
+  - **Status:** implemented.
+  - Extends post-validation quality diagnostics with trigger-condition, concrete-step, and memory-shaped signals. CLI skill quality summaries now classify missing trigger/procedure guidance as `needs_patch` and memory-shaped skill content as `too_generic`.
+
+The previous completed implementation plan is:
 
 - `2026-05-10-skill-patch-intended-change-verification.md`
   - **Status:** implemented.
