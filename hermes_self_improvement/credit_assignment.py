@@ -116,6 +116,13 @@ def _outcome_status(row: dict[str, Any]) -> str:
     score = row.get("score")
     if isinstance(score, (int, float)) and not isinstance(score, bool):
         if float(score) > 0:
+            quality_penalties = {"skill_quality_needs_patch_penalty", "skill_quality_too_generic_penalty"}
+            stronger_positive = any(
+                key in components
+                for key in ("failure_reduction", "repeat_fix_absent", "user_correction_absent", "cluster_absent", "skill_used_without_correction", "memory_retrieved_useful")
+            )
+            if components.keys() & quality_penalties and not stronger_positive:
+                return "unknown"
             return "improved"
         if float(score) < 0:
             return "regressed"

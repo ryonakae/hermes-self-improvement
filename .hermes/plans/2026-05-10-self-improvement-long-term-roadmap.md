@@ -92,7 +92,7 @@ Overall: **about 7合目**.
   - `patch-tool-workflow` was not created and the agent inspected `safe-patch-usage`, which was probably good, but the artifact still expressed it as a rejection rather than a meaningful no-op such as `covered_by_existing_skill`.
 
 - **Outcome / credit assignment:** around 7合目.
-  - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations and deterministic outcome-score components can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
+  - Episodes exist, outcome status buckets exist, credit assignment groups by overlay generation, immediate post-validation observations, deterministic outcome-score components, and outcome-status classification can score executed skill mutations with quality weighting, recurring timeout/permission/patch clusters can attach to relevant coverage-skill episodes with low-confidence recurrence observations, and mature quiet windows can emit weak positive stability observations when later telemetry exists and the related cluster did not reappear.
   - Actual later positive observations are intentionally conservative; absence alone is not proof of improvement, and stronger evidence such as useful skill use without correction is still future work.
 
 - **Human-readable daily / CLI reporting:** around 7.5合目.
@@ -460,6 +460,14 @@ Goal: make the deterministic outcome scorer and downstream credit/calibration ag
 
 Result: `score_episode_outcomes` now applies `skill_quality_needs_patch_penalty` and `skill_quality_too_generic_penalty`, so thin or memory-shaped validated skills no longer score as full validation success.
 
+### Slice X — Skill quality weak-positive outcome status
+
+**Status:** implemented in current change set.
+
+Goal: prevent weak-positive thin-skill validation from being reported as proven improvement.
+
+Result: positive scores with quality penalties and no stronger later positive signal now classify as `unknown` / under observation instead of `improved`; negative too-generic outcomes still classify as `regressed`.
+
 ---
 
 ## Progress Log
@@ -497,6 +505,7 @@ Result: `score_episode_outcomes` now applies `skill_quality_needs_patch_penalty`
 - Implemented operational report grouped signal surface: read-only operational report sections and the daily Slack template now preserve the distinction between actionable workflow groups and non-actionable diagnostic volume.
 - Implemented skill quality weighted validation outcomes: passed readback is no longer uniformly positive; thin skills become weak positives under observation and memory-shaped skills become slightly negative despite validation success.
 - Implemented skill quality outcome score components: deterministic outcome scoring now applies penalties for `skill_quality_needs_patch` and `skill_quality_too_generic`, so credit assignment/calibration aggregates reflect those quality weaknesses.
+- Implemented skill quality weak-positive outcome status: thin skills with only weak positive validation remain `unknown`/under observation unless stronger later positive evidence appears, avoiding overclaiming them as improved.
 
 ---
 

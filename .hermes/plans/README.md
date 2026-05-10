@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-skill-quality-weak-positive-outcome-status.md`
+  - **Status:** implemented.
+  - Keeps weak-positive validation outcomes for thin skills under observation instead of counting them as `improved`; stronger later positive signals can still promote the status, while too-generic/memory-shaped skills remain negative.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-skill-quality-outcome-score-components.md`
   - **Status:** implemented.
   - Adds deterministic outcome-scoring components for `skill_quality_needs_patch` and `skill_quality_too_generic`, so credit assignment and calibration aggregates actually reflect thin or memory-shaped validated skills.
