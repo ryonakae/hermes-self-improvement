@@ -83,7 +83,10 @@ PY
 - `hermes_self_improvement/prompt_cache.py`: 各 LLM 呼び出しに anthropic `cache_control` 注入と OpenAI/Codex 用 `prompt_cache_key` を付与する `apply_caching` ヘルパー
 - `hermes_self_improvement/evidence.py`: event aggregation / evidence extraction / context windows / unmatched improvement candidates
 - `hermes_self_improvement/target_resolver.py`: LLM target resolution for unmatched evidence
-- `hermes_self_improvement/conversation_memory.py`: conversation window ranking and memory gap candidates
+- `hermes_self_improvement/memory_extractor.py`: conversation window ranking and memory gap candidates (LLM site `memory_extractor`)
+- `hermes_self_improvement/improvement_planner.py`: planner that ranks skill candidates and routes memory/evaluator decisions (LLM site `improvement_planner`)
+- `hermes_self_improvement/skill_agent.py`: skill mutation agent runner / prompt builder / result parser (LLM site `skill_agent`)
+- `hermes_self_improvement/skill_agent_backend.py`: native skill agent backend, tool executor, limits (LLM site `skill_agent`)
 - `hermes_self_improvement/calibration.py`: evaluator overlay calibration
 - `hermes_self_improvement/runtime_eval_cases.py`: runtime-private eval cases for episodes, unmatched observations, and improve run artifacts
 - `hermes_self_improvement/mutation_policy.py`: memory provider capability / strategy helpers
