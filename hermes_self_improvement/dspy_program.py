@@ -94,7 +94,7 @@ def build_hermes_auxiliary_lm(*, lm_config: dict[str, Any] | None = None, dspy_m
                     return msgs, {}
 
             request_messages = messages or [{"role": "user", "content": prompt or ""}]
-            request_messages, cache_extras = apply_caching(request_messages, site="dspy_gepa_bridge")
+            request_messages, cache_extras = apply_caching(request_messages, site="prompt_optimizer")
             merged_extra: dict[str, Any] = {}
             if isinstance(extra_body, dict):
                 merged_extra.update(extra_body)
@@ -114,7 +114,7 @@ def build_hermes_auxiliary_lm(*, lm_config: dict[str, Any] | None = None, dspy_m
             )
             response_text = str(extract_content_or_reasoning(response) or "")
             record_llm_call(
-                site="dspy_gepa_bridge",
+                site="prompt_optimizer",
                 messages=request_messages,
                 response_text=response_text,
                 config=None,

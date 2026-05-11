@@ -8,8 +8,8 @@ from typing import Any
 from .config import get_hermes_home
 from .observer import _redact_text, _sha256_text, _stable_json
 
-ALLOWED_PROMPT_ROLES = {"planner", "editor", "evaluator"}
-DEFAULT_PROMPT_SEED_ROLES = ("planner", "editor", "evaluator")
+ALLOWED_PROMPT_ROLES = {"improvement_planner", "skill_agent", "memory_agent", "evaluator"}
+DEFAULT_PROMPT_SEED_ROLES = ("improvement_planner", "skill_agent", "memory_agent", "evaluator")
 MAX_ADDENDUM_LINES = 150
 MAX_ADDENDUM_CHARS = 12000
 PLUGIN_NAME = "hermes-self-improvement"

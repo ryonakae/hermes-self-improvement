@@ -69,7 +69,7 @@ def _iso(value: datetime) -> str:
 
 
 def _is_calibration_episode(episode: dict[str, Any]) -> bool:
-    return str(episode.get("target_kind") or "") in {"planner_prompt", "editor_prompt", "evaluator"} or str(episode.get("episode_kind") or "") in {
+    return str(episode.get("target_kind") or "") in {"improvement_planner_prompt", "skill_agent_prompt", "memory_agent_prompt", "evaluator"} or str(episode.get("episode_kind") or "") in {
         "prompt_candidate",
         "prompt_promotion",
         "calibration_update",
