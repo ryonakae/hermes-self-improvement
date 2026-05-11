@@ -1,5 +1,5 @@
 from hermes_self_improvement.evidence import make_knowledge_coverage_candidate
-from hermes_self_improvement.planner import build_skill_planner_digest, run_skill_planner
+from hermes_self_improvement.improvement_planner import build_improvement_planner_digest, run_improvement_planner
 from hermes_self_improvement.prompts import render_planner_messages
 from hermes_self_improvement.runner_steps import run_skill_improvement_step
 
@@ -32,7 +32,7 @@ def test_planner_digest_exposes_knowledge_maintenance_inventory_without_mutating
         }]},
     }
 
-    digest = build_skill_planner_digest(pack)
+    digest = build_improvement_planner_digest(pack)
 
     maintenance = digest["knowledge_maintenance"]
     assert maintenance["editable_skills"][0]["name"] == "local-patch-workflow"
@@ -59,7 +59,7 @@ def test_planner_prompt_exposes_knowledge_maintenance_candidates():
         "skill_candidates": [{"name": "unrelated-skill", "mutable": True, "state": "active", "provenance": "agent_created"}],
     }
 
-    rendered = render_planner_messages(digest=build_skill_planner_digest(pack))
+    rendered = render_planner_messages(digest=build_improvement_planner_digest(pack))
     user_content = rendered["messages"][1]["content"]
 
     assert "## Knowledge maintenance candidates" in user_content
@@ -83,7 +83,7 @@ def test_planner_normalizes_patch_and_merge_maintenance_decisions():
             {"name": "old-patch-workflow", "mutable": True, "state": "stale", "provenance": "agent_created"},
         ],
     }
-    digest = build_skill_planner_digest(evidence_pack)
+    digest = build_improvement_planner_digest(evidence_pack)
 
     def planner(*, digest, config):
         return {"decisions": [
@@ -91,7 +91,7 @@ def test_planner_normalizes_patch_and_merge_maintenance_decisions():
             {"skill": "old-patch-workflow", "decision": "merge_skills", "target_skill": "local-patch-workflow", "evidence_ids": ["ev_merge"], "risk": "medium", "editor_instructions": "Merge useful guidance into local-patch-workflow."},
         ]}
 
-    result = run_skill_planner(digest, config={"_skill_planner_func": planner})
+    result = run_improvement_planner(digest, config={"_improvement_planner_func": planner})
     decisions = {row["skill"]: row for row in result["decisions"]}
 
     assert decisions["local-patch-workflow"]["decision"] == "run_editor"
@@ -118,12 +118,12 @@ def test_planner_rejects_create_skill_that_duplicates_reference_skill():
             {"name": "safe-patch-usage", "mutable": False, "state": "active", "provenance": "builtin"},
         ],
     }
-    digest = build_skill_planner_digest(evidence_pack)
+    digest = build_improvement_planner_digest(evidence_pack)
 
     def planner(*, digest, config):
         return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "safe-patch-usage", "evidence_ids": [candidate["id"]]}]}
 
-    result = run_skill_planner(digest, config={"_skill_planner_func": planner})
+    result = run_improvement_planner(digest, config={"_improvement_planner_func": planner})
 
     decision = result["decisions"][0]
     assert decision["decision"] == "skip"
@@ -155,7 +155,7 @@ def test_skill_step_dry_run_maps_merge_skill_to_editor_preview():
             "editor_instructions": "Merge durable guidance into local-patch-workflow; do not archive yet.",
         }]}
 
-    result = run_skill_improvement_step(evidence_pack=evidence_pack, config={"_target_resolver_func": resolver, "_skill_planner_func": planner}, mutate=False)
+    result = run_skill_improvement_step(evidence_pack=evidence_pack, config={"_target_resolver_func": resolver, "_improvement_planner_func": planner}, mutate=False)
 
     decision = result["decisions"][0]
     assert decision["decision"] == "run_editor_preview"

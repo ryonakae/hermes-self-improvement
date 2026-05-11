@@ -1,22 +1,22 @@
 from hermes_self_improvement.runner_steps import run_memory_improvement_step
-from hermes_self_improvement.conversation_memory import (
-    MEMORY_GAP_SYSTEM,
+from hermes_self_improvement.memory_extractor import (
+    MEMORY_EXTRACTOR_SYSTEM,
     build_conversation_memory_windows,
-    build_memory_gap_messages,
-    make_conversation_memory_gap_candidate,
-    normalize_memory_gap_payload,
-    reconcile_memory_gap_payload_with_existing_memories,
-    run_memory_gap_extractor,
+    build_memory_extractor_messages,
+    make_conversation_memory_candidate,
+    normalize_memory_extractor_payload,
+    reconcile_memory_extractor_payload_with_existing_memories,
+    run_memory_extractor,
 )
 
 
-def test_build_memory_gap_messages_splits_system_and_user():
+def test_build_memory_extractor_messages_splits_system_and_user():
     digest = {"windows": [{"center_index": 0}], "existing_memories": []}
 
-    messages = build_memory_gap_messages(digest)
+    messages = build_memory_extractor_messages(digest)
 
     assert [m["role"] for m in messages] == ["system", "user"]
-    assert messages[0]["content"] == MEMORY_GAP_SYSTEM
+    assert messages[0]["content"] == MEMORY_EXTRACTOR_SYSTEM
     assert "Return JSON only" in messages[0]["content"]
     assert "Return JSON only" not in messages[1]["content"]
     assert "center_index" in messages[1]["content"]
@@ -54,7 +54,7 @@ def test_conversation_window_includes_surrounding_context():
     assert windows[0]["center_index"] == 1
 
 
-def test_normalize_memory_gap_payload_allows_add_and_replace():
+def test_normalize_memory_extractor_payload_allows_add_and_replace():
     payload = {
         "candidates": [
             {
@@ -69,14 +69,14 @@ def test_normalize_memory_gap_payload_allows_add_and_replace():
         ]
     }
 
-    out = normalize_memory_gap_payload(payload)
+    out = normalize_memory_extractor_payload(payload)
 
     assert out["candidates"][0]["action"] == "replace"
     assert out["candidates"][0]["target"] == "user"
 
 
-def test_make_conversation_memory_gap_candidate_has_memory_operation_for_add():
-    candidate = make_conversation_memory_gap_candidate(
+def test_make_conversation_memory_candidate_has_memory_operation_for_add():
+    candidate = make_conversation_memory_candidate(
         candidate_id="m1",
         target="user",
         action="add",
@@ -95,7 +95,7 @@ def test_make_conversation_memory_gap_candidate_has_memory_operation_for_add():
 def test_conversation_memory_gap_add_applies_with_memory_tool():
     calls = []
 
-    candidate = make_conversation_memory_gap_candidate(
+    candidate = make_conversation_memory_candidate(
         candidate_id="m1",
         target="user",
         action="add",
@@ -126,7 +126,7 @@ def test_reconcile_memory_gap_payload_skips_near_duplicate_add():
         "confidence": "high",
     }]}
 
-    out = reconcile_memory_gap_payload_with_existing_memories(
+    out = reconcile_memory_extractor_payload_with_existing_memories(
         payload,
         existing_memories=[{"target": "memory", "text": "Hermes runtime root is ~/.hermes."}],
     )
@@ -145,7 +145,7 @@ def test_reconcile_memory_gap_payload_skips_semantic_duplicate_browser_guidance(
         "relation_to_existing": "missing",
     }]}
 
-    out = reconcile_memory_gap_payload_with_existing_memories(
+    out = reconcile_memory_extractor_payload_with_existing_memories(
         payload,
         existing_memories=[{"target": "memory", "text": "Hermes browser はデフォルト browser tool interface を前提にする。現 backend が agent-browser の場合でも通常は直叩きせず、backend troubleshooting時だけ `AGENT_BROWSER_ARGS`/`AGENT_BROWSER_PROFILE` 等を扱う。"}],
     )
@@ -166,7 +166,7 @@ def test_reconcile_memory_gap_payload_replaces_related_stale_memory_instead_of_a
         "confidence": "high",
     }]}
 
-    out = reconcile_memory_gap_payload_with_existing_memories(
+    out = reconcile_memory_extractor_payload_with_existing_memories(
         payload,
         existing_memories=[{"target": "memory", "text": "Hermes runtime root is /opt/data."}],
     )
@@ -187,7 +187,7 @@ def test_reconcile_memory_gap_payload_defers_add_that_claims_existing_relation_w
         "relation_to_existing": "extends existing herm-tui footer guidance",
     }]}
 
-    out = reconcile_memory_gap_payload_with_existing_memories(payload, existing_memories=[])
+    out = reconcile_memory_extractor_payload_with_existing_memories(payload, existing_memories=[])
 
     candidate = out["candidates"][0]
     assert candidate["action"] == "defer"
@@ -198,7 +198,7 @@ def test_memory_gap_extractor_returns_empty_candidates_on_llm_parse_failure():
     def broken_extractor(**_kwargs):
         raise ValueError("bad llm json")
 
-    out = run_memory_gap_extractor({"windows": []}, config={"_memory_gap_extractor_func": broken_extractor})
+    out = run_memory_extractor({"windows": []}, config={"_memory_extractor_func": broken_extractor})
 
     assert out["candidates"] == []
     assert out["extractor_error"] == "bad llm json"

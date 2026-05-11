@@ -15,8 +15,8 @@ def weak_case() -> dict:
         "schema_name": "self_improvement_runtime_eval_case",
         "schema_version": "1.0",
         "case_family": "planner_editor",
-        "case_type": "planner_weak_only_skip",
-        "role": "planner",
+        "case_type": "improvement_planner_weak_only_skip",
+        "role": "improvement_planner",
         "source": {"kind": "episode", "episode_id": "episode-weak"},
         "input": {"decision": "run_editor", "action": "no_op", "evidence_strength": "weak", "evidence_ids": ["ev1"]},
         "expected": {"decision": "skip", "allowed_decisions": ["skip", "defer"]},
@@ -29,8 +29,8 @@ def exact_case() -> dict:
         "schema_name": "self_improvement_runtime_eval_case",
         "schema_version": "1.0",
         "case_family": "planner_editor",
-        "case_type": "planner_exact_evidence_run_editor",
-        "role": "planner",
+        "case_type": "improvement_planner_exact_evidence_run_editor",
+        "role": "improvement_planner",
         "source": {"kind": "episode", "episode_id": "episode-exact"},
         "input": {"decision": "run_editor", "action": "skill_patch", "evidence_strength": "strong", "evidence_ids": ["ev2"]},
         "expected": {"decision": "run_editor", "requires_evidence_ids": True},
@@ -43,8 +43,8 @@ def editor_case() -> dict:
         "schema_name": "self_improvement_runtime_eval_case",
         "schema_version": "1.0",
         "case_family": "planner_editor",
-        "case_type": "editor_target_mismatch_skip",
-        "role": "editor",
+        "case_type": "skill_agent_target_mismatch_skip",
+        "role": "skill_agent",
         "source": {"kind": "episode", "episode_id": "episode-editor"},
         "input": {"decision": "run_editor", "action": "no_op", "evidence_strength": "medium"},
         "expected": {"mutation": "skip", "reason_contains": "target_mismatch"},
@@ -54,14 +54,14 @@ def editor_case() -> dict:
 
 def test_candidate_with_better_weak_only_behavior_promotes():
     result = evaluate_prompt_candidate(
-        role="planner",
+        role="improvement_planner",
         candidate={
             "candidate_hash": "sha256:candidate",
             "candidate_prompt": {"system_addendum": "Prefer skip for weak-only evidence.", "replacement": None},
-            "case_behaviors": {"planner_weak_only_skip": {"decision": "skip"}},
+            "case_behaviors": {"improvement_planner_weak_only_skip": {"decision": "skip"}},
         },
-        current_identity={"planner_prompt_hash": "sha256:current", "editor_prompt_hash": "sha256:editor", "evaluator_hash": "sha256:evaluator"},
-        candidate_identity={"planner_prompt_hash": "sha256:candidate", "editor_prompt_hash": "sha256:editor", "evaluator_hash": "sha256:evaluator"},
+        current_identity={"improvement_planner_prompt_hash": "sha256:current", "skill_agent_prompt_hash": "sha256:editor", "evaluator_hash": "sha256:evaluator"},
+        candidate_identity={"improvement_planner_prompt_hash": "sha256:candidate", "skill_agent_prompt_hash": "sha256:editor", "evaluator_hash": "sha256:evaluator"},
         cases=[weak_case(), exact_case()],
         outcome_aggregate={"aggregate_hash": "sha256:outcomes"},
         threshold=0.2,
@@ -70,16 +70,16 @@ def test_candidate_with_better_weak_only_behavior_promotes():
 
     assert result["decision"] == "promote"
     assert result["candidate_score"] > result["current_score"]
-    assert result["baseline"]["planner_prompt_hash"] == "sha256:current"
+    assert result["baseline"]["improvement_planner_prompt_hash"] == "sha256:current"
     assert result["baseline"]["outcome_aggregate_hash"] == "sha256:outcomes"
 
 
 def test_candidate_with_schema_violation_rejects():
     result = evaluate_prompt_candidate(
-        role="planner",
+        role="improvement_planner",
         candidate={"candidate_hash": "sha256:candidate", "schema_valid": False},
-        current_identity={"planner_prompt_hash": "sha256:current"},
-        candidate_identity={"planner_prompt_hash": "sha256:candidate"},
+        current_identity={"improvement_planner_prompt_hash": "sha256:current"},
+        candidate_identity={"improvement_planner_prompt_hash": "sha256:candidate"},
         cases=[weak_case()],
     )
 
@@ -89,10 +89,10 @@ def test_candidate_with_schema_violation_rejects():
 
 def test_candidate_with_insufficient_confidence_keeps_observing():
     result = evaluate_prompt_candidate(
-        role="planner",
-        candidate={"candidate_hash": "sha256:candidate", "case_behaviors": {"planner_weak_only_skip": {"decision": "skip"}}},
-        current_identity={"planner_prompt_hash": "sha256:current"},
-        candidate_identity={"planner_prompt_hash": "sha256:candidate"},
+        role="improvement_planner",
+        candidate={"candidate_hash": "sha256:candidate", "case_behaviors": {"improvement_planner_weak_only_skip": {"decision": "skip"}}},
+        current_identity={"improvement_planner_prompt_hash": "sha256:current"},
+        candidate_identity={"improvement_planner_prompt_hash": "sha256:candidate"},
         cases=[weak_case()],
         threshold=0.2,
         min_confidence=0.9,
@@ -104,10 +104,10 @@ def test_candidate_with_insufficient_confidence_keeps_observing():
 
 def test_candidate_that_increases_prompt_size_above_budget_rejects():
     result = evaluate_prompt_candidate(
-        role="planner",
+        role="improvement_planner",
         candidate={"candidate_hash": "sha256:candidate", "candidate_prompt": {"system_addendum": "x" * 200, "replacement": None}},
-        current_identity={"planner_prompt_hash": "sha256:current"},
-        candidate_identity={"planner_prompt_hash": "sha256:candidate"},
+        current_identity={"improvement_planner_prompt_hash": "sha256:current"},
+        candidate_identity={"improvement_planner_prompt_hash": "sha256:candidate"},
         cases=[weak_case()],
         max_prompt_chars=50,
     )
@@ -122,10 +122,10 @@ def test_editor_candidate_evaluation_does_not_mutate_skills(tmp_path):
     skill_file.write_text("original\n", encoding="utf-8")
 
     result = evaluate_prompt_candidate(
-        role="editor",
-        candidate={"candidate_hash": "sha256:candidate", "case_behaviors": {"editor_target_mismatch_skip": {"mutation": "skip", "reason": "target_mismatch"}}},
-        current_identity={"editor_prompt_hash": "sha256:current"},
-        candidate_identity={"editor_prompt_hash": "sha256:candidate"},
+        role="skill_agent",
+        candidate={"candidate_hash": "sha256:candidate", "case_behaviors": {"skill_agent_target_mismatch_skip": {"mutation": "skip", "reason": "target_mismatch"}}},
+        current_identity={"skill_agent_prompt_hash": "sha256:current"},
+        candidate_identity={"skill_agent_prompt_hash": "sha256:candidate"},
         cases=[editor_case()],
         min_confidence=0.5,
     )
@@ -136,10 +136,10 @@ def test_editor_candidate_evaluation_does_not_mutate_skills(tmp_path):
 
 def test_compact_summary_excludes_case_details_and_prompts():
     result = evaluate_prompt_candidate(
-        role="planner",
+        role="improvement_planner",
         candidate={"candidate_hash": "sha256:candidate", "candidate_prompt": {"system_addendum": "Prefer skip for weak-only evidence.", "replacement": None}},
-        current_identity={"planner_prompt_hash": "sha256:current"},
-        candidate_identity={"planner_prompt_hash": "sha256:candidate"},
+        current_identity={"improvement_planner_prompt_hash": "sha256:current"},
+        candidate_identity={"improvement_planner_prompt_hash": "sha256:candidate"},
         cases=[weak_case()],
     )
 
@@ -159,28 +159,36 @@ def overlay_candidate_set(tmp_path: Path, *, gepa_result: str = "selected", plan
         "candidate_set_id": "overlay-set-001",
         "gepa_result": gepa_result,
         "targets": {
-            "planner_overlay": {
-                "target": "planner_overlay",
-                "role": "planner",
+            "improvement_planner_overlay": {
+                "target": "improvement_planner_overlay",
+                "role": "improvement_planner",
                 "candidate_set_id": "overlay-set-001",
                 "change_status": planner_change,
                 "base_prompt_hash": "sha256:planner-base",
                 "candidate_prompt": {"system_addendum": "Prefer concrete evidence.", "replacement": replacement},
             },
-            "editor_overlay": {
-                "target": "editor_overlay",
-                "role": "editor",
+            "skill_agent_overlay": {
+                "target": "skill_agent_overlay",
+                "role": "skill_agent",
                 "candidate_set_id": "overlay-set-001",
                 "change_status": "unchanged",
                 "base_prompt_hash": "sha256:editor-base",
                 "candidate_prompt": {"system_addendum": None, "user_addendum": None, "replacement": None},
             },
-            "evaluator_overlay": {
-                "target": "evaluator_overlay",
-                "role": "scorer",
+            "memory_agent_overlay": {
+                "target": "memory_agent_overlay",
+                "role": "memory_agent",
                 "candidate_set_id": "overlay-set-001",
                 "change_status": "unchanged",
-                "base_prompt_hash": "sha256:scorer-base",
+                "base_prompt_hash": "sha256:memory-agent-base",
+                "candidate_prompt": {"system_addendum": None, "user_addendum": None, "replacement": None},
+            },
+            "evaluator_overlay": {
+                "target": "evaluator_overlay",
+                "role": "evaluator",
+                "candidate_set_id": "overlay-set-001",
+                "change_status": "unchanged",
+                "base_prompt_hash": "sha256:evaluator-base",
                 "candidate_prompt": {"system_addendum": None, "user_addendum": None, "replacement": None},
             },
         },
@@ -196,7 +204,7 @@ def test_overlay_candidate_set_selected_with_changed_target_promotes(tmp_path):
 
     assert result["decision"] == "promote"
     assert result["gepa_result"] == "selected"
-    assert result["changed_targets"] == ["planner_overlay"]
+    assert result["changed_targets"] == ["improvement_planner_overlay"]
     assert result["hard_violations"] == []
 
 

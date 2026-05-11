@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import hermes_self_improvement.planner as planner
-from hermes_self_improvement.planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
+import hermes_self_improvement.improvement_planner as planner
+from hermes_self_improvement.improvement_planner import build_improvement_planner_quality_report, build_improvement_planner_digest, run_improvement_planner
 from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from hermes_self_improvement.prompts import base_prompt_hash, render_planner_messages
 
@@ -36,8 +36,8 @@ def pack():
     }
 
 
-def test_build_skill_planner_digest_attaches_evidence_and_caps_previews():
-    digest = build_skill_planner_digest(pack())
+def test_build_improvement_planner_digest_attaches_evidence_and_caps_previews():
+    digest = build_improvement_planner_digest(pack())
 
     by_name = {item["name"]: item for item in digest["skill_candidates"]}
     assert by_name["demo-skill"]["attached_evidence_count"] == 1
@@ -51,7 +51,7 @@ def test_build_skill_planner_digest_attaches_evidence_and_caps_previews():
 
 
 def test_render_planner_messages_uses_markdown_context_not_digest_dump():
-    digest = build_skill_planner_digest(pack())
+    digest = build_improvement_planner_digest(pack())
 
     rendered = render_planner_messages(digest=digest)
     user_content = rendered["messages"][1]["content"]
@@ -84,7 +84,7 @@ def test_skill_planner_digest_attaches_inventory_candidate_to_all_group_targets(
         ],
     }
 
-    digest = build_skill_planner_digest(pack_data)
+    digest = build_improvement_planner_digest(pack_data)
 
     rows = {row["name"]: row for row in digest["skill_candidates"]}
     assert rows["alpha-main"]["attached_evidence_count"] == 1
@@ -112,7 +112,7 @@ def test_planner_allows_run_editor_with_inventory_evidence():
     def fake_planner(*, digest, config):
         return {"decisions": [{"skill": "alpha-main", "decision": "run_editor", "evidence_ids": ["inv-1"], "risk": "low"}]}
 
-    result = run_skill_planner(build_skill_planner_digest(pack_data), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack_data), config={"_improvement_planner_func": fake_planner})
 
     assert result["decisions"][0]["decision"] == "run_editor"
     assert result["decisions"][0]["evidence_ids"] == ["inv-1"]
@@ -131,7 +131,7 @@ def test_skill_planner_digest_filters_immutable_candidates_before_llm_input():
         ],
     }
 
-    digest = build_skill_planner_digest(pack_data)
+    digest = build_improvement_planner_digest(pack_data)
 
     assert [item["name"] for item in digest["skill_candidates"]] == ["hermes-made"]
     assert digest["filtered_skill_candidate_count_by_reason"] == {
@@ -156,7 +156,7 @@ def test_planner_allows_create_skill_for_missing_reusable_workflow():
             ]
         }
 
-    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config={"_improvement_planner_func": fake_planner})
     decision = result["decisions"][0]
 
     assert decision["decision"] == "create_skill"
@@ -177,7 +177,7 @@ def test_planner_rejects_create_skill_when_existing_hermes_skill_matches_name():
             ]
         }
 
-    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config={"_improvement_planner_func": fake_planner})
     decision = result["decisions"][0]
 
     assert decision["decision"] == "skip"
@@ -186,7 +186,7 @@ def test_planner_rejects_create_skill_when_existing_hermes_skill_matches_name():
     assert decision["covered_by_existing_skill"] == "demo-skill"
 
 
-def test_run_skill_planner_uses_injected_planner_and_normalizes_decisions():
+def test_run_improvement_planner_uses_injected_planner_and_normalizes_decisions():
     calls = []
 
     def fake_planner(*, digest, config):
@@ -207,7 +207,7 @@ def test_run_skill_planner_uses_injected_planner_and_normalizes_decisions():
             ]
         }
 
-    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config={"_improvement_planner_func": fake_planner})
 
     assert calls
     assert result["status"] == "completed"
@@ -217,11 +217,11 @@ def test_run_skill_planner_uses_injected_planner_and_normalizes_decisions():
     assert all(item["skill"] != "not-a-candidate" for item in result["decisions"])
 
 
-def test_run_skill_planner_fails_closed_on_invalid_planner_output():
+def test_run_improvement_planner_fails_closed_on_invalid_planner_output():
     def bad_planner(*, digest, config):
         return "not json"
 
-    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": bad_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config={"_improvement_planner_func": bad_planner})
 
     assert result["status"] == "planner_error"
     assert result["decisions"] == []
@@ -229,17 +229,17 @@ def test_run_skill_planner_fails_closed_on_invalid_planner_output():
 
 
 def test_llm_planner_uses_active_prompt_overlay(monkeypatch, tmp_path):
-    cfg = {"_self_improvement_root": str(tmp_path / "self-improvement"), "model": {"planner": {"provider": "auto"}}}
+    cfg = {"_self_improvement_root": str(tmp_path / "self-improvement"), "model": {"improvement_planner": {"provider": "auto"}}}
     candidate_path = write_prompt_candidate(
         cfg,
-        role="planner",
+        role="improvement_planner",
         candidate={
-            "role": "planner",
-            "base_prompt_hash": base_prompt_hash("planner"),
+            "role": "improvement_planner",
+            "base_prompt_hash": base_prompt_hash("improvement_planner"),
             "candidate_prompt": {"system_addendum": "Runtime planner overlay guidance."},
         },
     )
-    promote_prompt_candidate(cfg, role="planner", candidate_path=candidate_path, regression={"status": "passed"})
+    promote_prompt_candidate(cfg, role="improvement_planner", candidate_path=candidate_path, regression={"status": "passed"})
     seen = {}
 
     def fake_call_llm(**kwargs):
@@ -257,13 +257,14 @@ def test_llm_planner_uses_active_prompt_overlay(monkeypatch, tmp_path):
     sys.modules["agent"] = pkg
     sys.modules["agent.auxiliary_client"] = aux
 
-    result = run_skill_planner(build_skill_planner_digest(pack()), config=cfg)
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config=cfg)
 
     system_content = seen["messages"][0]["content"]
     # prompt_cache.apply_caching converts system content into a list of text blocks.
     system_text = "".join(block.get("text", "") for block in system_content) if isinstance(system_content, list) else system_content
     assert "Runtime planner overlay guidance." in system_text
-    assert result["prompt_source"]["planner"]["overlay_active"] is True
+    assert result["prompt_source"]["improvement_planner"]["overlay_active"] is True
+    assert result["prompt_source"]["improvement_planner"]["role"] == "improvement_planner"
 
 
 def test_llm_planner_accepts_archive_decision_from_fake_model(monkeypatch):
@@ -277,7 +278,7 @@ def test_llm_planner_accepts_archive_decision_from_fake_model(monkeypatch):
         "likely_targets": [{"target": "skill", "weight": 1.0}],
     })
     pack_data["views"]["skill"].append("ev_archive")
-    cfg = {"model": {"planner": {"provider": "auto", "model": "fake-planner"}}}
+    cfg = {"model": {"improvement_planner": {"provider": "auto", "model": "fake-planner"}}}
 
     def fake_call_llm(**kwargs):
         return {
@@ -301,7 +302,7 @@ def test_llm_planner_accepts_archive_decision_from_fake_model(monkeypatch):
     sys.modules["agent"] = pkg
     sys.modules["agent.auxiliary_client"] = aux
 
-    result = run_skill_planner(build_skill_planner_digest(pack_data), config=cfg)
+    result = run_improvement_planner(build_improvement_planner_digest(pack_data), config=cfg)
     decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
 
     assert result["planner_source"] == "llm"
@@ -311,8 +312,8 @@ def test_llm_planner_accepts_archive_decision_from_fake_model(monkeypatch):
     assert decision["evidence_ids"] == ["ev_archive"]
 
 
-def test_run_skill_planner_deterministic_fallback_skips_no_evidence_candidates_without_model_config():
-    result = run_skill_planner(build_skill_planner_digest(pack()), config={})
+def test_run_improvement_planner_deterministic_fallback_skips_no_evidence_candidates_without_model_config():
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config={})
 
     by_skill = {item["skill"]: item for item in result["decisions"]}
     assert by_skill["demo-skill"]["decision"] == "run_editor"
@@ -320,7 +321,7 @@ def test_run_skill_planner_deterministic_fallback_skips_no_evidence_candidates_w
     assert by_skill["unused-skill"]["reason"] == "no_attached_evidence"
 
 
-def test_run_skill_planner_deterministic_fallback_skips_weak_only_candidates():
+def test_run_improvement_planner_deterministic_fallback_skips_weak_only_candidates():
     pack_data = {
         "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},
         "evidence": [
@@ -335,7 +336,7 @@ def test_run_skill_planner_deterministic_fallback_skips_weak_only_candidates():
         "skill_candidates": [{"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}}],
     }
 
-    result = run_skill_planner(build_skill_planner_digest(pack_data), config={})
+    result = run_improvement_planner(build_improvement_planner_digest(pack_data), config={})
     decision = result["decisions"][0]
 
     assert decision["decision"] == "skip"
@@ -343,13 +344,13 @@ def test_run_skill_planner_deterministic_fallback_skips_weak_only_candidates():
 
 
 def test_skill_planner_falls_back_when_llm_planner_fails(monkeypatch):
-    digest = build_skill_planner_digest(pack())
+    digest = build_improvement_planner_digest(pack())
 
     def boom(**_kwargs):
         raise RuntimeError("planner down")
 
-    monkeypatch.setattr(planner, "_call_planner_llm", boom)
-    result = run_skill_planner(digest, config={"model": {"planner": {}}})
+    monkeypatch.setattr(planner, "_call_improvement_planner_llm", boom)
+    result = run_improvement_planner(digest, config={"model": {"improvement_planner": {}}})
 
     assert result["status"] == "completed"
     assert result["planner_source"] == "deterministic_fallback_after_error"
@@ -371,7 +372,7 @@ def test_skill_planner_treats_unsupported_review_decision_as_skip():
             ]
         }
 
-    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config={"_improvement_planner_func": fake_planner})
     decision = result["decisions"][0]
 
     assert decision["decision"] == "skip"
@@ -414,7 +415,7 @@ def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence
             ]
         }
 
-    result = run_skill_planner(build_skill_planner_digest(pack_data), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack_data), config={"_improvement_planner_func": fake_planner})
     decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
 
     assert decision["decision"] == "archive_skill"
@@ -428,7 +429,7 @@ def test_skill_planner_blocks_archive_without_attached_lifecycle_evidence():
     def fake_planner(*, digest, config):
         return {"decisions": [{"skill": "demo-skill", "decision": "archive_skill", "evidence_ids": ["ev1"]}]}
 
-    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config={"_improvement_planner_func": fake_planner})
     decision = {item["skill"]: item for item in result["decisions"]}["demo-skill"]
 
     assert decision["decision"] == "skip"
@@ -458,13 +459,13 @@ def test_skill_planner_blocks_archive_on_hard_invariants_only():
             ]
         }
 
-    result = run_skill_planner(build_skill_planner_digest(pack_data), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack_data), config={"_improvement_planner_func": fake_planner})
     by_skill = {item["skill"]: item for item in result["decisions"]}
 
     assert "pinned-skill" not in by_skill
     assert "external-skill" not in by_skill
     assert by_skill["referenced-skill"]["reason"] == "archive_blocked_by_active_reference"
-    digest = build_skill_planner_digest(pack_data)
+    digest = build_improvement_planner_digest(pack_data)
     digest_by_name = {item["name"]: item for item in digest["skill_candidates"]}
     assert set(digest_by_name) == {"referenced-skill"}
     assert digest_by_name["referenced-skill"]["active_reference_count"] == 1
@@ -490,7 +491,7 @@ def test_skill_planner_blocks_archive_with_invalid_successor():
         assert by_name["unused-skill"]["successor_validation"] == "invalid_successor"
         return {"decisions": [{"skill": "unused-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker", "successor": "missing-skill"}]}
 
-    result = run_skill_planner(build_skill_planner_digest(pack_data), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack_data), config={"_improvement_planner_func": fake_planner})
     decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
 
     assert decision["decision"] == "skip"
@@ -519,7 +520,7 @@ def test_planner_normalization_strips_action_fields_from_skips_and_requires_evid
             ]
         }
 
-    result = run_skill_planner(build_skill_planner_digest(pack()), config={"_skill_planner_func": fake_planner})
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config={"_improvement_planner_func": fake_planner})
     by_skill = {item["skill"]: item for item in result["decisions"]}
 
     assert by_skill["demo-skill"]["decision"] == "skip"
@@ -533,7 +534,7 @@ def test_planner_normalization_strips_action_fields_from_skips_and_requires_evid
 
 
 def test_planner_quality_report_counts_evidence_and_action_like_skips():
-    digest = build_skill_planner_digest(pack())
+    digest = build_improvement_planner_digest(pack())
     planner = {
         "decisions": [
             {"skill": "demo-skill", "decision": "run_editor", "evidence_ids": ["ev1"]},
@@ -541,7 +542,7 @@ def test_planner_quality_report_counts_evidence_and_action_like_skips():
             {"skill": "memory-ish", "decision": "memory_candidate", "evidence_ids": []},
         ]
     }
-    report = build_planner_quality_report(
+    report = build_improvement_planner_quality_report(
         digest=digest,
         planner=planner,
         runner_decisions=[{"task": {"instructions": "hello"}}],
@@ -554,7 +555,7 @@ def test_planner_quality_report_counts_evidence_and_action_like_skips():
     assert report["selected_with_evidence"] == 1
     assert report["action_like_skips"] == 0
     assert report["memory_candidates"] == 1
-    assert report["editor_prompt_chars"]["max"] == 5
+    assert report["skill_agent_prompt_chars"]["max"] == 5
 
 
 def test_planner_digest_attaches_tool_class_hints_to_existing_candidate():
@@ -574,7 +575,7 @@ def test_planner_digest_attaches_tool_class_hints_to_existing_candidate():
         ],
     }
 
-    digest = build_skill_planner_digest(pack_data)
+    digest = build_improvement_planner_digest(pack_data)
     row = digest["skill_candidates"][0]
 
     assert row["name"] == "hermes-development-maintenance"
@@ -625,7 +626,7 @@ def test_planner_digest_marks_explicit_path_and_cluster_strengths():
         ],
     }
 
-    digest = build_skill_planner_digest(pack_data)
+    digest = build_improvement_planner_digest(pack_data)
     by_name = {row["name"]: row for row in digest["skill_candidates"]}
 
     assert by_name["demo-skill"]["evidence_strength_counts"] == {"strong": 1}
@@ -648,8 +649,8 @@ def test_planner_quality_report_counts_hint_attachment_match_kinds():
         "views": {"skill": ["ev_patch"], "memory": [], "evaluator": []},
         "skill_candidates": [{"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}}],
     }
-    digest = build_skill_planner_digest(pack_data)
-    report = build_planner_quality_report(
+    digest = build_improvement_planner_digest(pack_data)
+    report = build_improvement_planner_quality_report(
         digest=digest,
         planner={"decisions": [{"skill": "hermes-development-maintenance", "decision": "run_editor", "evidence_ids": ["ev_patch"]}]},
         runner_decisions=[],

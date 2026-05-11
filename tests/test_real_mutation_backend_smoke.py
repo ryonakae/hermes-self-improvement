@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from types import SimpleNamespace
 
-from hermes_self_improvement.mutation_backend import NativeSkillToolEditorBackend, SkillToolExecutor, mutation_backend_status
+from hermes_self_improvement.skill_agent_backend import NativeSkillAgentBackend, SkillToolExecutor, skill_agent_backend_status
 
 
 def _sha256(text: str) -> str:
@@ -79,7 +79,7 @@ def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools
             "rollback_hints": ["Restore original SKILL.md content."],
         }, "call_final"),
     ])
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=fake_list, skill_view_fn=fake_view, skill_manage_fn=fake_manage),
         llm_call=lambda messages, **kwargs: next(responses),
     )
@@ -105,7 +105,7 @@ def test_live_mutation_backend_smoke_isolated_status_only(tmp_path, monkeypatch)
     hermes_home = tmp_path / "hermes-home"
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
     assert not Path.home().joinpath(".hermes", "skills").resolve().is_relative_to(tmp_path.resolve())
-    status = mutation_backend_status({"mutation": {"backend": "native_skill_tool_editor", "enabled": True}})
+    status = skill_agent_backend_status({"mutation": {"backend": "native_skill_tool_editor", "enabled": True}})
     if not status.get("available"):
         pytest.skip(f"mutation backend unavailable: {status.get('reason')}")
     assert status["available"] is True

@@ -135,7 +135,7 @@ def test_run_replay_improve_executes_dry_run_artifact_without_replanning(monkeyp
         },
     }), encoding="utf-8")
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    monkeypatch.setattr(cli, "build_mutation_backend", lambda config: object())
+    monkeypatch.setattr(cli, "build_skill_agent_backend", lambda config: object())
     monkeypatch.setattr(cli, "run_skill_agent_task", lambda task, *, config=None, backend=None: {"success": True, "created_skills": [task["skill_name"]]})
     monkeypatch.setattr(cli, "_execute_memory_context", lambda context, config, *, operation, external_provider=None: {"success": True})
     monkeypatch.setattr(cli, "record_run_episodes", lambda **kwargs: {"count": 0, "path": str(tmp_path / "episodes")})

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from hermes_self_improvement.mutation_agent import (
-    MutationAgentRunner,
-    build_mutation_agent_prompt,
-    parse_mutation_agent_result,
+from hermes_self_improvement.skill_agent import (
+    SkillAgentRunner,
+    build_skill_agent_prompt,
+    parse_skill_agent_result,
     run_skill_agent_task,
     validate_reported_tools,
     validate_skill_agent_task,
@@ -56,7 +56,7 @@ def test_runner_builds_prompt_with_only_allowed_skill_names_and_constraints(tmp_
     write_skill(root)
     t = task()
 
-    prompt = build_mutation_agent_prompt(t)
+    prompt = build_skill_agent_prompt(t)
     validation = validate_skill_agent_task(t, config={"_mutable_local_skill_roots": [root]})
 
     assert validation["status"] == "ok"
@@ -94,28 +94,28 @@ def test_runner_fails_closed_if_bounded_agent_backend_unavailable(tmp_path):
     result = run_skill_agent_task(task(), config={"_mutable_local_skill_roots": [root]})
 
     assert result["success"] is False
-    assert result["error"] == "mutation_agent_unavailable"
+    assert result["error"] == "skill_agent_unavailable"
     assert "bounded_skills_only_agent_backend_unavailable" in result["reasons"]
 
 
 def test_runner_parses_structured_result_and_rejects_text_or_invalid_schema():
-    assert parse_mutation_agent_result("not json")["error"] == "mutation_agent_result_text_unsupported"
-    assert parse_mutation_agent_result({"ok": True})["error"] == "mutation_agent_result_missing_success"
-    parsed = parse_mutation_agent_result(success_result())
+    assert parse_skill_agent_result("not json")["error"] == "skill_agent_result_text_unsupported"
+    assert parse_skill_agent_result({"ok": True})["error"] == "skill_agent_result_missing_success"
+    parsed = parse_skill_agent_result(success_result())
     assert parsed["success"] is True
 
 
-def test_parse_mutation_agent_result_accepts_changed_as_applied_alias_only_with_full_contract():
+def test_parse_skill_agent_result_accepts_changed_as_applied_alias_only_with_full_contract():
     payload = success_result()
     payload["outcome"] = "changed"
 
-    parsed = parse_mutation_agent_result(payload)
+    parsed = parse_skill_agent_result(payload)
 
     assert parsed["success"] is True
     assert parsed["outcome"] == "applied"
 
     incomplete = {"success": True, "outcome": "changed"}
-    assert parse_mutation_agent_result(incomplete)["error"] == "mutation_agent_result_used_tools_missing"
+    assert parse_skill_agent_result(incomplete)["error"] == "skill_agent_result_used_tools_missing"
 
 
 def test_runner_rejects_self_reported_disallowed_tools(tmp_path):
@@ -127,7 +127,7 @@ def test_runner_rejects_self_reported_disallowed_tools(tmp_path):
     def backend(prompt, task_payload, config):
         return result_payload
 
-    result = MutationAgentRunner(backend=backend).run(task(), config={"_mutable_local_skill_roots": [root]})
+    result = SkillAgentRunner(backend=backend).run(task(), config={"_mutable_local_skill_roots": [root]})
 
     assert result["success"] is False
     assert result["error"] == "disallowed_tool_reported"
@@ -139,10 +139,10 @@ def test_validate_reported_tools_allows_only_skill_tools():
     assert validate_reported_tools({"used_tools": [{"tool": "file"}]})["status"] == "failed"
 
 
-def test_mutation_agent_prompt_includes_native_tool_editor_contract(tmp_path):
-    from hermes_self_improvement.mutation_agent import build_mutation_agent_prompt
+def test_skill_agent_prompt_includes_native_tool_editor_contract(tmp_path):
+    from hermes_self_improvement.skill_agent import build_skill_agent_prompt
 
-    prompt = build_mutation_agent_prompt({
+    prompt = build_skill_agent_prompt({
         "type": "skill_agent_task",
         "task_kind": "skill_improve",
         "targets": {"primary_skill": "demo-skill"},
@@ -160,10 +160,10 @@ def test_mutation_agent_prompt_includes_native_tool_editor_contract(tmp_path):
     assert "Return only JSON" not in prompt
 
 
-def test_parse_mutation_agent_result_accepts_non_mutating_stop_outcome():
-    from hermes_self_improvement.mutation_agent import parse_mutation_agent_result
+def test_parse_skill_agent_result_accepts_non_mutating_stop_outcome():
+    from hermes_self_improvement.skill_agent import parse_skill_agent_result
 
-    parsed = parse_mutation_agent_result({
+    parsed = parse_skill_agent_result({
         "success": True,
         "outcome": "stopped_stale_target",
         "used_tools": [{"tool": "skill_view", "target": "demo-skill"}],

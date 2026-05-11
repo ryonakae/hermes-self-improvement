@@ -89,19 +89,19 @@ def test_build_skill_agent_task_uses_active_editor_prompt_overlay(tmp_path):
     cfg = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     candidate_path = write_prompt_candidate(
         cfg,
-        role="editor",
+        role="skill_agent",
         candidate={
             "role": "editor",
-            "base_prompt_hash": base_prompt_hash("editor"),
+            "base_prompt_hash": base_prompt_hash("skill_agent"),
             "candidate_prompt": {"system_addendum": "Runtime editor overlay guidance."},
         },
     )
-    promote_prompt_candidate(cfg, role="editor", candidate_path=candidate_path, regression={"status": "passed"})
+    promote_prompt_candidate(cfg, role="skill_agent", candidate_path=candidate_path, regression={"status": "passed"})
 
     task = build_skill_agent_task(skill_name="demo-skill", evidence=[], config=cfg)
 
     assert "Runtime editor overlay guidance." in task["instructions"]
-    assert task["prompt_source"]["editor"]["overlay_active"] is True
+    assert task["prompt_source"]["skill_agent"]["overlay_active"] is True
 
 
 def test_skill_step_dry_run_records_planner_editor_preview_without_mutating(tmp_path):
@@ -111,11 +111,11 @@ def test_skill_step_dry_run_records_planner_editor_preview_without_mutating(tmp_
     assert result["status"] == "completed"
     assert result["changed"] == 0
     assert result["planner"]["summary"]["selected_for_editor"] == 1
-    assert result["prompt_sources"]["planner"]["overlay_active"] is False
-    assert result["prompt_sources"]["editor"]["overlay_active"] is False
+    assert result["prompt_sources"]["improvement_planner"]["overlay_active"] is False
+    assert result["prompt_sources"]["skill_agent"]["overlay_active"] is False
     assert result["planner_quality"]["selected_with_evidence"] == 1
     assert result["planner_quality"]["action_like_skips"] == 0
-    assert result["planner_quality"]["editor_prompt_chars"]["max"] > 0
+    assert result["planner_quality"]["skill_agent_prompt_chars"]["max"] > 0
     assert result["decisions"][0]["decision"] == "run_editor_preview"
     assert result["decisions"][0]["reason"] == "planner_run_editor_preview"
     assert result["decisions"][0]["candidate_source"] == "curator"
@@ -140,7 +140,7 @@ def test_skill_step_dry_run_records_create_skill_preview_without_existing_candid
             ]
         }
 
-    result = run_skill_improvement_step(evidence_pack=pack, config={"_skill_planner_func": fake_planner, "_skills_root": str(tmp_path / "skills")}, mutate=False)
+    result = run_skill_improvement_step(evidence_pack=pack, config={"_improvement_planner_func": fake_planner, "_skills_root": str(tmp_path / "skills")}, mutate=False)
 
     assert result["status"] == "completed"
     decision = result["decisions"][0]
@@ -163,7 +163,7 @@ def test_skill_step_skips_create_skill_when_local_skill_already_exists(tmp_path)
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_skill_planner_func": fake_planner, "_skills_root": str(skills_root)},
+        config={"_improvement_planner_func": fake_planner, "_skills_root": str(skills_root)},
         mutate=False,
     )
 
@@ -186,7 +186,7 @@ def test_skill_step_skips_create_skill_when_existing_alias_covers_workflow(tmp_p
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_skill_planner_func": fake_planner, "_skills_root": str(skills_root)},
+        config={"_improvement_planner_func": fake_planner, "_skills_root": str(skills_root)},
         mutate=False,
     )
 
@@ -221,7 +221,7 @@ def test_skill_step_executes_create_skill_through_skill_agent_when_mutating():
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_skill_planner_func": fake_planner, "_mutation_agent_backend": FakeBackend(), "_skills_root": str(Path("/tmp/hermes-self-improvement-test-empty-skills"))},
+        config={"_improvement_planner_func": fake_planner, "_skill_agent_backend": FakeBackend(), "_skills_root": str(Path("/tmp/hermes-self-improvement-test-empty-skills"))},
         mutate=True,
     )
 
@@ -236,7 +236,7 @@ def test_skill_step_dry_run_records_archive_preview_without_mutating():
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
-        config={"_skill_planner_func": fake_planner},
+        config={"_improvement_planner_func": fake_planner},
         mutate=False,
     )
 
@@ -259,7 +259,7 @@ def test_skill_step_executes_archive_with_curator_primitive_when_mutating():
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
-        config={"_skill_planner_func": fake_planner, "_skill_archive_fn": fake_archive},
+        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive},
         mutate=True,
     )
 
@@ -292,7 +292,7 @@ def test_skill_step_converts_planner_defer_without_evidence_to_skip():
     def fake_planner(*, digest, config):
         return {"decisions": [{"skill": "thin-skill", "decision": "defer", "reason": "target_uncertain_and_insufficient_evidence", "evidence_ids": []}]}
 
-    result = run_skill_improvement_step(evidence_pack=pack, config={"_skill_planner_func": fake_planner}, mutate=False)
+    result = run_skill_improvement_step(evidence_pack=pack, config={"_improvement_planner_func": fake_planner}, mutate=False)
 
     assert result["status"] == "completed"
     decision = result["decisions"][0]
@@ -404,7 +404,7 @@ def test_skill_step_executes_only_mutable_local_skill_via_backend(tmp_path):
 
     result = run_skill_improvement_step(
         evidence_pack=evidence_pack_for("demo-skill"),
-        config={"_mutable_local_skill_roots": [root], "_mutation_agent_backend": backend},
+        config={"_mutable_local_skill_roots": [root], "_skill_agent_backend": backend},
         mutate=True,
     )
 
@@ -430,7 +430,7 @@ def test_skill_step_rejects_external_skill_before_backend(tmp_path):
 
     result = run_skill_improvement_step(
         evidence_pack=evidence_pack_for("external-skill"),
-        config={"_mutable_local_skill_roots": [root], "_mutation_agent_backend": backend},
+        config={"_mutable_local_skill_roots": [root], "_skill_agent_backend": backend},
         mutate=True,
     )
 

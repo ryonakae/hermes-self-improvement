@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hermes_self_improvement import gepa_adapter, mutation_agent, mutation_policy
+from hermes_self_improvement import gepa_adapter, mutation_policy, skill_agent
 from hermes_self_improvement.prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK, skill_memory_classification_context
 
 
@@ -12,7 +12,7 @@ def test_shared_skill_memory_classification_block_is_single_source():
 
 
 def test_skill_mutation_prompt_includes_shared_classification_block():
-    prompt = mutation_agent.build_mutation_agent_prompt(
+    prompt = skill_agent.build_skill_agent_prompt(
         {
             "task_kind": "skill_improve",
             "targets": {"skill": "demo"},

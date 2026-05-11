@@ -1,5 +1,5 @@
 from hermes_self_improvement.evidence import make_knowledge_coverage_candidate
-from hermes_self_improvement.planner import build_skill_planner_digest
+from hermes_self_improvement.improvement_planner import build_improvement_planner_digest
 from hermes_self_improvement.target_resolver import (
     TARGET_RESOLVER_SYSTEM,
     build_target_resolution_digest,
@@ -133,7 +133,7 @@ def test_planner_digest_attaches_llm_resolved_unmatched_candidate():
         },
     }
 
-    digest = build_skill_planner_digest(evidence_pack)
+    digest = build_improvement_planner_digest(evidence_pack)
 
     row = digest["skill_candidates"][0]
     assert row["attached_evidence_count"] == 1
@@ -174,7 +174,7 @@ def test_planner_digest_records_unresolved_no_existing_skill_fit_observations():
         },
     }
 
-    digest = build_skill_planner_digest(evidence_pack)
+    digest = build_improvement_planner_digest(evidence_pack)
 
     row = digest["unresolved_observations"][0]
     assert row["evidence_id"] == "u1"
