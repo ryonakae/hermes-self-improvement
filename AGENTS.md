@@ -79,6 +79,8 @@ PY
 - `hermes_self_improvement/schemas.py`: plugin tool schema
 - `hermes_self_improvement/tool_handlers.py`: plugin tool handlers
 - `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry
+- `hermes_self_improvement/llm_telemetry.py`: plugin 自身の LLM 呼び出し計測 (`self_improvement_llm_call` を `state/events.jsonl` に追記)
+- `hermes_self_improvement/prompt_cache.py`: 各 LLM 呼び出しに anthropic `cache_control` 注入と OpenAI/Codex 用 `prompt_cache_key` を付与する `apply_caching` ヘルパー
 - `hermes_self_improvement/evidence.py`: event aggregation / evidence extraction / context windows / unmatched improvement candidates
 - `hermes_self_improvement/target_resolver.py`: LLM target resolution for unmatched evidence
 - `hermes_self_improvement/conversation_memory.py`: conversation window ranking and memory gap candidates

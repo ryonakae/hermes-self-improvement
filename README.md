@@ -155,7 +155,7 @@ ${HERMES_HOME}/self-improvement/
   cache/dspy/
 ```
 
-主なファイルは次の通りです。`state/events.jsonl` はフックイベント、`runs/` は実行アーティファクト、`evidence/` は証拠パック、`evaluator/active.json` は active evaluator pointer、`evaluator/active-prompts.json` は active overlay pointer です。`evaluator/prompt-candidates/` には materialized seed や role-level candidate、`evaluator/prompt-candidate-sets/` には DSPy/GEPA の overlay 候補セット、`evaluator/runtime-eval-cases/` にはユーザー固有の評価ケース、`cache/dspy/` には DSPy/GEPA キャッシュを置きます。full prompt text は runtime artifact / 明示的な `--json` に置き、compact tool result には source/hash/path だけを出します。
+主なファイルは次の通りです。`state/events.jsonl` はフックイベントと plugin 自身の LLM 呼び出し計測 (`self_improvement_llm_call`)、`runs/` は実行アーティファクト、`evidence/` は証拠パック、`evaluator/active.json` は active evaluator pointer、`evaluator/active-prompts.json` は active overlay pointer です。`evaluator/prompt-candidates/` には materialized seed や role-level candidate、`evaluator/prompt-candidate-sets/` には DSPy/GEPA の overlay 候補セット、`evaluator/runtime-eval-cases/` にはユーザー固有の評価ケース、`cache/dspy/` には DSPy/GEPA キャッシュを置きます。full prompt text は runtime artifact / 明示的な `--json` に置き、compact tool result には source/hash/path だけを出します。
 
 ### 開発時の確認
 

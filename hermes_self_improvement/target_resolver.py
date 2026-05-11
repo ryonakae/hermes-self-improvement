@@ -150,6 +150,29 @@ def _target_fit_signals(item: dict[str, Any], skill_candidates: list[dict[str, A
     }
 
 
+def _skill_has_evidence_relevance(skill: dict[str, Any], unresolved: list[dict[str, Any]]) -> bool:
+    """Return True when this skill plausibly fits at least one unresolved candidate.
+
+    Mirrors the "name_theme_overlap" branch of ``_target_fit_signals`` so that the
+    detailed/names-only split keeps the same skills surfaced as positive fits.
+    """
+    name = str(skill.get("name") or "").lower()
+    desc = str(skill.get("description") or skill.get("summary") or "").lower()
+    haystack = f"{name} {desc}"
+    haystack_tokens = {token for token in haystack.replace("_", "-").split("-") if token}
+    for item in unresolved:
+        theme = str(item.get("theme") or "")
+        if not theme:
+            continue
+        theme_norm = theme.replace("_", "-")
+        if theme_norm and theme_norm in name:
+            return True
+        theme_tokens = {token for token in theme_norm.split("-") if token}
+        if theme_tokens and len(theme_tokens & haystack_tokens) >= 2:
+            return True
+    return False
+
+
 def build_target_resolution_digest(
     evidence_pack: dict[str, Any],
     *,
@@ -177,42 +200,65 @@ def build_target_resolution_digest(
             **({"coverage": item.get("coverage")} if isinstance(item.get("coverage"), dict) else {}),
         }
         unresolved.append(row)
+    detailed_targets: list[dict[str, Any]] = []
+    names_only_targets: list[dict[str, Any]] = []
+    for item in skill_candidates:
+        if not isinstance(item, dict) or not item.get("name"):
+            continue
+        is_mutable = bool(item.get("mutable", True))
+        if not is_mutable:
+            # Non-mutable skills are never attach candidates; drop entirely.
+            continue
+        name = str(item.get("name") or "")
+        if _skill_has_evidence_relevance(item, unresolved):
+            detailed_targets.append({
+                "name": name,
+                "description": _redact_text(str(item.get("description") or item.get("summary") or ""), max_chars=180),
+                "state": item.get("state"),
+                "mutable": True,
+                "pinned": bool(item.get("pinned")),
+                "provenance": item.get("provenance") or item.get("source"),
+            })
+        else:
+            names_only_targets.append({"name": name})
     return {
         "schema_name": "self_improvement_target_resolution_digest",
         "schema_version": "1.0",
         "candidates": unresolved[:20],
-        "skill_targets": [
-            {
-                "name": str(item.get("name") or ""),
-                "description": _redact_text(str(item.get("description") or item.get("summary") or ""), max_chars=180),
-                "state": item.get("state"),
-                "mutable": bool(item.get("mutable", True)),
-                "pinned": bool(item.get("pinned")),
-                "provenance": item.get("provenance") or item.get("source"),
-            }
-            for item in skill_candidates
-            if isinstance(item, dict) and item.get("name")
-        ],
+        "skill_targets": detailed_targets,
+        "skill_targets_other_names": names_only_targets,
         "memory_context": memory_context or {},
     }
 
 
+TARGET_RESOLVER_SYSTEM = (
+    "You are resolving Hermes self-improvement observation targets. Return JSON only: "
+    "{\"resolutions\":[{\"candidate_id\":str,"
+    "\"resolution_kind\":\"attach_existing_skill|memory_candidate|unresolved|skip_noise\","
+    "\"target_kind\":\"skill|memory|none\",\"target\":str,"
+    "\"confidence\":\"low|medium|high\",\"suggested_action\":\"apply|defer|skip|block\","
+    "\"unresolved_reason\":\"no_existing_skill_fit|unclear_target|insufficient_context|out_of_scope\","
+    "\"suggested_boundary\":str,\"reason\":str}]}. "
+    "Your job is attachment only: attach_existing_skill only for a listed mutable skill with positive fit; "
+    "memory_candidate only for durable facts, preferences, or environment details; "
+    "unresolved when evidence may be useful but has no existing skill fit or needs planner judgment; "
+    "skip_noise for one-off, transient, or already-handled noise. "
+    "Two skill lists are provided: 'skill_targets' carry full descriptions for skills that already look related to one or more candidates; "
+    "'skill_targets_other_names' carry only mutable skill names for everything else. "
+    "You may still attach to a name from skill_targets_other_names if the skill name itself clearly fits a candidate; otherwise prefer skill_targets. "
+    "Do not decide skill creation, editing, archive, or execution actions; the planner owns mutation decisions."
+)
+
+
 def build_target_resolver_prompt(digest: dict[str, Any]) -> str:
-    return (
-        "You are resolving Hermes self-improvement observation targets. Return JSON only: "
-        "{\"resolutions\":[{\"candidate_id\":str,"
-        "\"resolution_kind\":\"attach_existing_skill|memory_candidate|unresolved|skip_noise\","
-        "\"target_kind\":\"skill|memory|none\",\"target\":str,"
-        "\"confidence\":\"low|medium|high\",\"suggested_action\":\"apply|defer|skip|block\","
-        "\"unresolved_reason\":\"no_existing_skill_fit|unclear_target|insufficient_context|out_of_scope\","
-        "\"suggested_boundary\":str,\"reason\":str}]}. "
-        "Your job is attachment only: attach_existing_skill only for a listed mutable skill with positive fit; "
-        "memory_candidate only for durable facts, preferences, or environment details; "
-        "unresolved when evidence may be useful but has no existing skill fit or needs planner judgment; "
-        "skip_noise for one-off, transient, or already-handled noise. "
-        "Do not decide skill creation, editing, archive, or execution actions; the planner owns mutation decisions.\n\n"
-        + json.dumps(digest, ensure_ascii=False, sort_keys=True)
-    )
+    return TARGET_RESOLVER_SYSTEM + "\n\n" + json.dumps(digest, ensure_ascii=False, sort_keys=True)
+
+
+def build_target_resolver_messages(digest: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"role": "system", "content": TARGET_RESOLVER_SYSTEM},
+        {"role": "user", "content": json.dumps(digest, ensure_ascii=False, sort_keys=True)},
+    ]
 
 
 def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
@@ -222,29 +268,50 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
     model = resolver_config.get("model") or None
     timeout = _coerce_int(resolver_config.get("timeout"), default=60)
     max_tokens = _coerce_int(resolver_config.get("max_tokens"), default=1800)
-    prompt = build_target_resolver_prompt(digest)
+    messages = build_target_resolver_messages(digest)
     _ensure_hermes_agent_on_path()
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+    from .llm_telemetry import record_llm_call
+    from .prompt_cache import apply_caching
 
+    messages, cache_extras = apply_caching(messages, site="target_resolver")
     response = call_llm(
         task="skills_hub",
         provider=provider,
         model=model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         temperature=None,
         max_tokens=max_tokens,
         timeout=timeout,
+        extra_body=cache_extras,
     )
-    return _extract_json_object(extract_content_or_reasoning(response))
+    response_text = extract_content_or_reasoning(response)
+    record_llm_call(
+        site="target_resolver",
+        messages=messages,
+        response_text=response_text,
+        config=config,
+        model=model,
+        provider=provider,
+        task="skills_hub",
+        max_tokens=max_tokens,
+    )
+    return _extract_json_object(response_text)
 
 
 def run_target_resolver(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
-    known = {
-        str(item.get("name") or ""): item
-        for item in digest.get("skill_targets") or []
-        if isinstance(item, dict) and item.get("name")
-    }
+    known: dict[str, dict[str, Any]] = {}
+    for tier_key in ("skill_targets", "skill_targets_other_names"):
+        for item in digest.get(tier_key) or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "")
+            if not name or name in known:
+                continue
+            # names-only entries omit mutable/pinned/state/provenance; default to
+            # mutable=True so the attachment block_reason check accepts them.
+            known[name] = {"mutable": item.get("mutable", True), **item}
     resolver_func = cfg.get("_target_resolver_func") if isinstance(cfg, dict) else None
     if callable(resolver_func):
         payload = resolver_func(digest=digest, config=cfg)

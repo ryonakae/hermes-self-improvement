@@ -34,6 +34,7 @@ def build_conversation_memory_windows(
     *,
     radius: int = 3,
     limit: int = 40,
+    full_radius: int | None = 1,
 ) -> list[dict[str, Any]]:
     windows: list[dict[str, Any]] = []
     for index, ev in enumerate(events):
@@ -42,7 +43,7 @@ def build_conversation_memory_windows(
         if not ev.get("user_message_preview"):
             continue
         reason = _rank_reason(ev)
-        window = build_context_window(events, center_index=index, radius=radius)
+        window = build_context_window(events, center_index=index, radius=radius, full_radius=full_radius)
         window["rank_reason"] = reason
         windows.append(window)
     priority = {"correction_like": 0, "preference_like": 1, "sampled_context": 2}
@@ -270,6 +271,21 @@ def build_memory_gap_digest(
     }
 
 
+MEMORY_GAP_SYSTEM = (
+    "Extract durable Hermes memory gap candidates from conversation windows. Return JSON only: "
+    "{\"candidates\":[{\"candidate_id\":str,\"target\":\"user|memory\",\"action\":\"add|replace|skip|defer|block\","
+    "\"candidate_fact\":str,\"old_text\":str,\"confidence\":\"low|medium|high\",\"relation_to_existing\":str,\"reason\":str}]}. "
+    "Do not store temporary task progress, secrets, or unsupported deletes."
+)
+
+
+def build_memory_gap_messages(digest: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {"role": "system", "content": MEMORY_GAP_SYSTEM},
+        {"role": "user", "content": json.dumps(digest, ensure_ascii=False, sort_keys=True)},
+    ]
+
+
 def _call_memory_gap_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
     gap_config = model_config.get("memory_gap_extractor") if isinstance(model_config.get("memory_gap_extractor"), dict) else {}
@@ -277,26 +293,35 @@ def _call_memory_gap_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> d
     model = gap_config.get("model") or None
     timeout = _coerce_int(gap_config.get("timeout"), default=60)
     max_tokens = _coerce_int(gap_config.get("max_tokens"), default=1800)
-    prompt = (
-        "Extract durable Hermes memory gap candidates from conversation windows. Return JSON only: "
-        "{\"candidates\":[{\"candidate_id\":str,\"target\":\"user|memory\",\"action\":\"add|replace|skip|defer|block\","
-        "\"candidate_fact\":str,\"old_text\":str,\"confidence\":\"low|medium|high\",\"relation_to_existing\":str,\"reason\":str}]}. "
-        "Do not store temporary task progress, secrets, or unsupported deletes.\n\n"
-        + json.dumps(digest, ensure_ascii=False, sort_keys=True)
-    )
+    messages = build_memory_gap_messages(digest)
     _ensure_hermes_agent_on_path()
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+    from .llm_telemetry import record_llm_call
+    from .prompt_cache import apply_caching
 
+    messages, cache_extras = apply_caching(messages, site="memory_gap_extractor")
     response = call_llm(
         task="skills_hub",
         provider=provider,
         model=model,
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         temperature=None,
         max_tokens=max_tokens,
         timeout=timeout,
+        extra_body=cache_extras,
     )
-    return _extract_json_object(extract_content_or_reasoning(response))
+    response_text = extract_content_or_reasoning(response)
+    record_llm_call(
+        site="memory_gap_extractor",
+        messages=messages,
+        response_text=response_text,
+        config=config,
+        model=model,
+        provider=provider,
+        task="skills_hub",
+        max_tokens=max_tokens,
+    )
+    return _extract_json_object(response_text)
 
 
 def run_memory_gap_extractor(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:

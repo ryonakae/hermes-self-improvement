@@ -320,10 +320,24 @@ def _call_memory_capacity_planner_llm(*, failed_operation: dict[str, Any], failu
     ]
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
     from .scoring import _ensure_hermes_agent_on_path, _extract_json_object
+    from .llm_telemetry import record_llm_call
+    from .prompt_cache import apply_caching
 
     _ensure_hermes_agent_on_path()
-    response = call_llm(task="memory", provider=provider, model=model, messages=messages, temperature=None, max_tokens=max_tokens, timeout=timeout)
-    payload = _extract_json_object(extract_content_or_reasoning(response))
+    messages, cache_extras = apply_caching(messages, site="memory_capacity_planner")
+    response = call_llm(task="memory", provider=provider, model=model, messages=messages, temperature=None, max_tokens=max_tokens, timeout=timeout, extra_body=cache_extras)
+    response_text = extract_content_or_reasoning(response)
+    record_llm_call(
+        site="memory_capacity_planner",
+        messages=messages,
+        response_text=response_text,
+        config=config,
+        model=model,
+        provider=provider,
+        task="memory",
+        max_tokens=max_tokens,
+    )
+    payload = _extract_json_object(response_text)
     operations = payload.get("operations") if isinstance(payload, dict) else None
     return operations if isinstance(operations, list) else []
 
@@ -655,10 +669,24 @@ def _call_memory_inventory_planner_llm(*, evidence: list[dict[str, Any]], config
     ]
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
     from .scoring import _ensure_hermes_agent_on_path, _extract_json_object
+    from .llm_telemetry import record_llm_call
+    from .prompt_cache import apply_caching
 
     _ensure_hermes_agent_on_path()
-    response = call_llm(task="memory", provider=provider, model=model, messages=messages, temperature=None, max_tokens=max_tokens, timeout=timeout)
-    payload = _extract_json_object(extract_content_or_reasoning(response))
+    messages, cache_extras = apply_caching(messages, site="memory_inventory_planner")
+    response = call_llm(task="memory", provider=provider, model=model, messages=messages, temperature=None, max_tokens=max_tokens, timeout=timeout, extra_body=cache_extras)
+    response_text = extract_content_or_reasoning(response)
+    record_llm_call(
+        site="memory_inventory_planner",
+        messages=messages,
+        response_text=response_text,
+        config=config,
+        model=model,
+        provider=provider,
+        task="memory",
+        max_tokens=max_tokens,
+    )
+    payload = _extract_json_object(response_text)
     operations = payload.get("operations") if isinstance(payload, dict) else None
     return operations if isinstance(operations, list) else []
 

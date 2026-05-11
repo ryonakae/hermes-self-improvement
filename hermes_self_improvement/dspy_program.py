@@ -83,8 +83,23 @@ def build_hermes_auxiliary_lm(*, lm_config: dict[str, Any] | None = None, dspy_m
         def forward(self, prompt: str | None = None, messages: list[dict[str, Any]] | None = None, **kwargs):
             _ensure_hermes_agent_on_path()
             from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+            try:
+                from .llm_telemetry import record_llm_call
+                from .prompt_cache import apply_caching
+            except ImportError:
+                def record_llm_call(**_kwargs):
+                    return
+
+                def apply_caching(msgs, **_kwargs):
+                    return msgs, {}
 
             request_messages = messages or [{"role": "user", "content": prompt or ""}]
+            request_messages, cache_extras = apply_caching(request_messages, site="dspy_gepa_bridge")
+            merged_extra: dict[str, Any] = {}
+            if isinstance(extra_body, dict):
+                merged_extra.update(extra_body)
+            merged_extra.update(cache_extras)
+            effective_max_tokens = _coerce_int_config(kwargs.get("max_tokens"), default=max_tokens)
             response = call_llm(
                 task="self_improvement_gepa",
                 provider=provider,
@@ -93,12 +108,23 @@ def build_hermes_auxiliary_lm(*, lm_config: dict[str, Any] | None = None, dspy_m
                 api_key=api_key,
                 messages=request_messages,
                 temperature=None,
-                max_tokens=_coerce_int_config(kwargs.get("max_tokens"), default=max_tokens),
+                max_tokens=effective_max_tokens,
                 timeout=_coerce_int_config(kwargs.get("timeout"), default=timeout),
-                extra_body=extra_body,
+                extra_body=merged_extra or None,
+            )
+            response_text = str(extract_content_or_reasoning(response) or "")
+            record_llm_call(
+                site="dspy_gepa_bridge",
+                messages=request_messages,
+                response_text=response_text,
+                config=None,
+                model=model or None,
+                provider=provider,
+                task="self_improvement_gepa",
+                max_tokens=effective_max_tokens,
             )
             return _openai_chat_response(
-                content=str(extract_content_or_reasoning(response) or ""),
+                content=response_text,
                 model=model or "hermes-auxiliary",
             )
 

@@ -1,11 +1,25 @@
 from hermes_self_improvement.runner_steps import run_memory_improvement_step
 from hermes_self_improvement.conversation_memory import (
+    MEMORY_GAP_SYSTEM,
     build_conversation_memory_windows,
+    build_memory_gap_messages,
     make_conversation_memory_gap_candidate,
     normalize_memory_gap_payload,
     reconcile_memory_gap_payload_with_existing_memories,
     run_memory_gap_extractor,
 )
+
+
+def test_build_memory_gap_messages_splits_system_and_user():
+    digest = {"windows": [{"center_index": 0}], "existing_memories": []}
+
+    messages = build_memory_gap_messages(digest)
+
+    assert [m["role"] for m in messages] == ["system", "user"]
+    assert messages[0]["content"] == MEMORY_GAP_SYSTEM
+    assert "Return JSON only" in messages[0]["content"]
+    assert "Return JSON only" not in messages[1]["content"]
+    assert "center_index" in messages[1]["content"]
 
 
 def _pack(evidence):

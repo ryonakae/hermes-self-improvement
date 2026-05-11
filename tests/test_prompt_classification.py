@@ -62,7 +62,15 @@ def test_scorer_and_gepa_rubrics_include_shared_classification_block(monkeypatch
     sys.modules["agent.auxiliary_client"] = auxiliary_client
 
     scoring._call_llm_scorer(proposals=[], findings=[], config={"model": {"planner": {}}})
-    joined = "\n".join(message["content"] for message in captured["messages"])
+
+    def _flatten(content):
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "".join(block.get("text", "") for block in content if isinstance(block, dict))
+        return ""
+
+    joined = "\n".join(_flatten(message["content"]) for message in captured["messages"])
 
     assert '"skill_memory_classification"' in joined
     assert "Memory is factual" in joined

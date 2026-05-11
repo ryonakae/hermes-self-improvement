@@ -498,6 +498,7 @@ def _call_hermes_auxiliary_native(
     tools: list[dict[str, Any]],
     config: dict[str, Any] | None,
     task_name: str,
+    extra_body: dict[str, Any] | None = None,
 ) -> Any:
     try:
         try:
@@ -509,6 +510,12 @@ def _call_hermes_auxiliary_native(
     except Exception as exc:
         raise RuntimeError(f"mutation_agent_unavailable:{exc}") from exc
     cfg = _model_editor_config(config)
+    merged_extra: dict[str, Any] = {}
+    cfg_extra = cfg.get("extra_body") if isinstance(cfg.get("extra_body"), dict) else None
+    if cfg_extra:
+        merged_extra.update(cfg_extra)
+    if extra_body:
+        merged_extra.update(extra_body)
     return call_llm(
         task=task_name,
         provider=cfg.get("provider") or "auto",
@@ -520,7 +527,7 @@ def _call_hermes_auxiliary_native(
         max_tokens=_coerce_int(cfg.get("max_tokens"), 1000),
         tools=tools,
         timeout=_coerce_int(cfg.get("timeout"), 45),
-        extra_body=cfg.get("extra_body") if isinstance(cfg.get("extra_body"), dict) else None,
+        extra_body=merged_extra or None,
     )
 
 
@@ -586,7 +593,7 @@ class NativeSkillToolEditorBackend:
     llm_call: Callable[..., Any] | None = None
     limits: MutationBackendLimits = field(default_factory=MutationBackendLimits)
 
-    def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None) -> Any:
+    def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None, extra_body: dict[str, Any] | None = None) -> Any:
         if self.llm_call is not None:
             return self.llm_call(
                 messages,
@@ -595,7 +602,7 @@ class NativeSkillToolEditorBackend:
                 timeout=self.limits.timeout_seconds,
                 max_tokens=_coerce_int(_model_editor_config(config).get("max_tokens"), 1000),
             )
-        return _call_hermes_auxiliary_native(messages, tools=tools, config=config, task_name="self_improvement_mutation_agent")
+        return _call_hermes_auxiliary_native(messages, tools=tools, config=config, task_name="self_improvement_mutation_agent", extra_body=extra_body)
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
         limit_check = self.limits.check()
@@ -634,13 +641,57 @@ class NativeSkillToolEditorBackend:
         actual_used: list[dict[str, Any]] = []
         mutation_intents: list[dict[str, Any]] = []
         tool_calls = 0
+        from .llm_telemetry import record_llm_call
+        from .prompt_cache import apply_caching
+
+        editor_cfg = _model_editor_config(config)
+        cached_initial, cache_extras = apply_caching(messages, site="mutation_agent")
+        messages = cached_initial
         for _iteration in range(self.limits.max_iterations):
             try:
-                response = self._llm(messages, tools=tools, config=config)
+                response = self._llm(messages, tools=tools, config=config, extra_body=cache_extras)
             except RuntimeError as exc:
+                record_llm_call(
+                    site="mutation_agent",
+                    messages=messages,
+                    response_text=None,
+                    config=config,
+                    model=editor_cfg.get("model"),
+                    provider=editor_cfg.get("provider"),
+                    task="self_improvement_mutation_agent",
+                    max_tokens=_coerce_int(editor_cfg.get("max_tokens"), 1000),
+                    tools=tools,
+                    iteration=_iteration,
+                    error=f"mutation_agent_unavailable:{exc}",
+                )
                 return {"success": False, "error": "mutation_agent_unavailable", "reasons": [str(exc)]}
             except Exception as exc:
+                record_llm_call(
+                    site="mutation_agent",
+                    messages=messages,
+                    response_text=None,
+                    config=config,
+                    model=editor_cfg.get("model"),
+                    provider=editor_cfg.get("provider"),
+                    task="self_improvement_mutation_agent",
+                    max_tokens=_coerce_int(editor_cfg.get("max_tokens"), 1000),
+                    tools=tools,
+                    iteration=_iteration,
+                    error=f"mutation_agent_llm_failed:{exc}",
+                )
                 return {"success": False, "error": "mutation_agent_llm_failed", "reasons": [str(exc)]}
+            record_llm_call(
+                site="mutation_agent",
+                messages=messages,
+                response_text=response,
+                config=config,
+                model=editor_cfg.get("model"),
+                provider=editor_cfg.get("provider"),
+                task="self_improvement_mutation_agent",
+                max_tokens=_coerce_int(editor_cfg.get("max_tokens"), 1000),
+                tools=tools,
+                iteration=_iteration,
+            )
             calls = _extract_native_tool_calls(response)
             if calls is None:
                 return {"success": False, "error": "native_tool_call_unsupported"}

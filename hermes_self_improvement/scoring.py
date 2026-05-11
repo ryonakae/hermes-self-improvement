@@ -233,7 +233,10 @@ def _call_llm_scorer(
     ]
     _ensure_hermes_agent_on_path()
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+    from .llm_telemetry import record_llm_call
+    from .prompt_cache import apply_caching
 
+    messages, cache_extras = apply_caching(messages, site="llm_scorer")
     response = call_llm(
         task="skills_hub",
         provider=provider,
@@ -242,5 +245,17 @@ def _call_llm_scorer(
         temperature=None,
         max_tokens=max_tokens,
         timeout=timeout,
+        extra_body=cache_extras,
     )
-    return _extract_json_object(extract_content_or_reasoning(response))
+    response_text = extract_content_or_reasoning(response)
+    record_llm_call(
+        site="llm_scorer",
+        messages=messages,
+        response_text=response_text,
+        config=config,
+        model=model,
+        provider=provider,
+        task="skills_hub",
+        max_tokens=max_tokens,
+    )
+    return _extract_json_object(response_text)

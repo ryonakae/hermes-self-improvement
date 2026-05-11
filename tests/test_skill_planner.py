@@ -259,7 +259,10 @@ def test_llm_planner_uses_active_prompt_overlay(monkeypatch, tmp_path):
 
     result = run_skill_planner(build_skill_planner_digest(pack()), config=cfg)
 
-    assert "Runtime planner overlay guidance." in seen["messages"][0]["content"]
+    system_content = seen["messages"][0]["content"]
+    # prompt_cache.apply_caching converts system content into a list of text blocks.
+    system_text = "".join(block.get("text", "") for block in system_content) if isinstance(system_content, list) else system_content
+    assert "Runtime planner overlay guidance." in system_text
     assert result["prompt_source"]["planner"]["overlay_active"] is True
 
 

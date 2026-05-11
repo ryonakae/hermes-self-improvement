@@ -1,6 +1,12 @@
 from hermes_self_improvement.evidence import make_knowledge_coverage_candidate
 from hermes_self_improvement.planner import build_skill_planner_digest
-from hermes_self_improvement.target_resolver import build_target_resolution_digest, build_target_resolver_prompt, normalize_target_resolver_payload
+from hermes_self_improvement.target_resolver import (
+    TARGET_RESOLVER_SYSTEM,
+    build_target_resolution_digest,
+    build_target_resolver_messages,
+    build_target_resolver_prompt,
+    normalize_target_resolver_payload,
+)
 
 
 def test_normalize_target_resolver_payload_keeps_known_mutable_targets():
@@ -283,6 +289,92 @@ def test_target_resolver_prompt_keeps_attachment_only_guidance():
     assert "approval" not in prompt.lower()
     assert "lane" not in prompt.lower()
     assert "queue" not in prompt.lower()
+
+
+def test_build_target_resolver_messages_splits_system_and_user():
+    digest = {"candidates": [{"id": "c1"}], "skill_targets": [{"name": "s1"}]}
+
+    messages = build_target_resolver_messages(digest)
+
+    assert [m["role"] for m in messages] == ["system", "user"]
+    assert messages[0]["content"] == TARGET_RESOLVER_SYSTEM
+    assert "attach_existing_skill" in messages[0]["content"]
+    # user content is digest JSON, not instruction text
+    assert "attach_existing_skill" not in messages[1]["content"]
+    assert "c1" in messages[1]["content"]
+    assert "s1" in messages[1]["content"]
+
+
+def test_build_target_resolution_digest_splits_skill_targets_into_two_tiers():
+    pack = {
+        "evidence": [
+            {
+                "id": "ev_patch",
+                "kind": "unmatched_improvement_candidate",
+                "theme": "patch_tool_workflow",
+                "count": 4,
+            }
+        ]
+    }
+    skill_candidates = [
+        {"name": "patch-tool-helper", "description": "guides patch fixes", "mutable": True},
+        {"name": "unrelated-skill", "description": "covers something else", "mutable": True},
+        {"name": "patch-archived", "description": "obsolete", "mutable": False},
+    ]
+
+    digest = build_target_resolution_digest(pack, skill_candidates=skill_candidates)
+
+    detailed_names = [item["name"] for item in digest["skill_targets"]]
+    other_names = [item["name"] for item in digest["skill_targets_other_names"]]
+
+    # Relevant mutable skill goes to the detailed tier with full metadata.
+    assert "patch-tool-helper" in detailed_names
+    assert digest["skill_targets"][0]["description"]
+    # Unrelated mutable skill falls back to names-only.
+    assert "unrelated-skill" in other_names
+    assert digest["skill_targets_other_names"][0].keys() == {"name"}
+    # Non-mutable skills are dropped entirely (cannot be attached anyway).
+    assert "patch-archived" not in detailed_names
+    assert "patch-archived" not in other_names
+
+
+def test_run_target_resolver_accepts_attach_target_from_names_only_tier(monkeypatch):
+    digest = {
+        "candidates": [{"id": "c1"}],
+        "skill_targets": [],
+        "skill_targets_other_names": [{"name": "names-only-skill"}],
+    }
+
+    def fake_resolver(*, digest, config):
+        return {
+            "resolutions": [
+                {
+                    "candidate_id": "c1",
+                    "resolution_kind": "attach_existing_skill",
+                    "target_kind": "skill",
+                    "target": "names-only-skill",
+                    "confidence": "high",
+                    "suggested_action": "apply",
+                }
+            ]
+        }
+
+    from hermes_self_improvement.target_resolver import run_target_resolver
+
+    result = run_target_resolver(digest, config={"_target_resolver_func": fake_resolver})
+
+    # The names-only tier still authorizes attachment (no block_reason).
+    assert result["resolutions"][0]["decision_hint"] != "block"
+
+
+def test_build_target_resolver_messages_is_stable_across_runs():
+    digest = {"candidates": [], "skill_targets": []}
+
+    a = build_target_resolver_messages(digest)
+    b = build_target_resolver_messages(digest)
+
+    assert a[0]["content"] == b[0]["content"]
+    assert a[1]["content"] == b[1]["content"]
 
 
 def test_target_fit_signals_keep_generic_repeated_failure_deferred_without_boundary():

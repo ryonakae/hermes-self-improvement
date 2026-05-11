@@ -703,7 +703,11 @@ def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict
     messages = rendered_prompt["messages"]
     _ensure_hermes_agent_on_path()
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+    from .llm_telemetry import record_llm_call
+    from .prompt_cache import apply_caching
 
+    overlay_hash = overlay.get("candidate_hash") if isinstance(overlay, dict) else None
+    messages, cache_extras = apply_caching(messages, site="planner", overlay_hash=overlay_hash)
     response = call_llm(
         task="skills_hub",
         provider=provider,
@@ -712,8 +716,20 @@ def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict
         temperature=None,
         max_tokens=max_tokens,
         timeout=timeout,
+        extra_body=cache_extras,
     )
-    payload = _extract_json_object(extract_content_or_reasoning(response))
+    response_text = extract_content_or_reasoning(response)
+    record_llm_call(
+        site="planner",
+        messages=messages,
+        response_text=response_text,
+        config=config,
+        model=model,
+        provider=provider,
+        task="skills_hub",
+        max_tokens=max_tokens,
+    )
+    payload = _extract_json_object(response_text)
     payload["_prompt_source"] = rendered_prompt["prompt_source"]
     return payload
 

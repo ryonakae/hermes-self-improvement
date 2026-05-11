@@ -36,6 +36,28 @@ def test_build_unmatched_candidate_groups_patch_failures_with_context():
     assert item["context_windows"]
 
 
+def test_build_unmatched_candidate_caps_representative_failures_and_keeps_count():
+    events = [
+        {
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "patch",
+            "status": "error",
+            "error_kind": "unknown_error",
+            "result_preview": f"failure-{idx}",
+        }
+        for idx in range(6)
+    ]
+
+    candidates = build_unmatched_improvement_candidates(events, existing_candidate_names=[])
+
+    item = candidates[0]
+    # representative_failures is capped at 2 (was 5 before optimization)
+    assert len(item["representative_failures"]) == 2
+    # count still reflects the full cluster size
+    assert item["count"] == 6
+
+
 def test_build_unmatched_candidate_groups_permission_denied_as_sandbox_workflow():
     events = [
         {

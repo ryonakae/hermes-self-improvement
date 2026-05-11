@@ -81,7 +81,62 @@ def _compact_event(ev: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def build_context_window(events: list[dict[str, Any]], *, center_index: int, radius: int = 3) -> dict[str, Any]:
+def dedup_context_windows(
+    windows: list[dict[str, Any]],
+    *,
+    omit_indices: set[int] | list[int] | tuple[int, ...] | None = None,
+) -> list[dict[str, Any]]:
+    """Drop duplicate events across windows and optionally strip given indices.
+
+    Each context window built with overlapping radius emits the same event
+    multiple times. We keep window structure (so the consumer can still see
+    centers and per-window grouping) but ensure each event appears at most once
+    across the list. Indices listed in ``omit_indices`` are removed entirely —
+    use this to skip events already carried in ``representative_failures``.
+    """
+    seen: set[int] = set()
+    drop: set[int] = set(omit_indices) if omit_indices else set()
+    out: list[dict[str, Any]] = []
+    for window in windows or []:
+        if not isinstance(window, dict):
+            continue
+        kept = []
+        for ev in window.get("events") or []:
+            if not isinstance(ev, dict):
+                continue
+            idx = ev.get("index")
+            if isinstance(idx, int):
+                if idx in drop or idx in seen:
+                    continue
+                seen.add(idx)
+            kept.append(ev)
+        out.append({**window, "events": kept})
+    return out
+
+
+_ULTRA_COMPACT_KEYS = ("ts", "event", "session_id", "tool_name", "status", "error_kind")
+
+
+def _ultra_compact_event(ev: dict[str, Any]) -> dict[str, Any]:
+    """Compact representation for window edges where preview text is not needed."""
+    return {key: ev.get(key) for key in _ULTRA_COMPACT_KEYS if ev.get(key) is not None}
+
+
+def build_context_window(
+    events: list[dict[str, Any]],
+    *,
+    center_index: int,
+    radius: int = 3,
+    full_radius: int | None = None,
+) -> dict[str, Any]:
+    """Build a context window centered on ``center_index``.
+
+    When ``full_radius`` is set to a non-negative int below ``radius``, events
+    within that inner radius keep the full ``_compact_event`` representation
+    (with preview text), while the outer edges fall back to ``_ultra_compact_event``
+    (timestamps and metadata only). Passing ``None`` keeps the original behavior
+    of using ``_compact_event`` for every event in the window.
+    """
     if not events:
         return {"center_index": center_index, "session_id": "", "events": []}
     bounded_index = max(0, min(center_index, len(events) - 1))
@@ -89,12 +144,16 @@ def build_context_window(events: list[dict[str, Any]], *, center_index: int, rad
     session_id = str(center.get("session_id") or "")
     start = max(0, bounded_index - max(radius, 0))
     end = min(len(events), bounded_index + max(radius, 0) + 1)
+    effective_full = radius if full_radius is None else max(0, min(full_radius, radius))
     window_events: list[dict[str, Any]] = []
     for index in range(start, end):
         ev = events[index]
         if session_id and str(ev.get("session_id") or "") != session_id:
             continue
-        compact = _compact_event(ev)
+        if abs(index - bounded_index) <= effective_full:
+            compact = _compact_event(ev)
+        else:
+            compact = _ultra_compact_event(ev)
         compact["index"] = index
         window_events.append(compact)
     return {
@@ -395,8 +454,12 @@ def build_unmatched_improvement_candidates(
     for theme, indices in sorted(theme_indices.items(), key=lambda item: (-len(item[1]), item[0])):
         if len(indices) < 2:
             continue
-        representative = [_compact_event(events[index]) for index in indices[:5]]
-        context_windows = [build_context_window(events, center_index=index, radius=2) for index in indices[:3]]
+        representative = [_compact_event(events[index]) for index in indices[:2]]
+        raw_windows = [
+            build_context_window(events, center_index=index, radius=2, full_radius=1)
+            for index in indices[:3]
+        ]
+        context_windows = dedup_context_windows(raw_windows, omit_indices=indices[:2])
         payload = {"theme": theme, "events": representative}
         out.append({
             "id": _stable_id("unmatched", payload),
