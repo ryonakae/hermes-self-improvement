@@ -383,6 +383,11 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     })
 
     assert "Self-improvement result" in text
+    assert "概要:" in text
+    assert "実変更あり。skill/memory を合計 3 件更新しました。" in text
+    assert "観測 5 件、inventory 2 件、coverage gap 3 件。" in text
+    assert "判断: apply 2 / defer 1 / skip 1 / block 1。" in text
+    assert "次に見る点:" in text
     assert "Skill improvements:" in text
     assert "- changed 2 skills" in text
     assert "editor stopped/rejected: skipped_superseded 1, submit_result_missing 2" in text

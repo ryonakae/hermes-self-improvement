@@ -1663,11 +1663,50 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     title = "Self-improvement dry run" if result.get("dry_run") else "Self-improvement result"
     calibration = result.get("calibration") if isinstance(result.get("calibration"), dict) else {}
     runtime_eval_cases = calibration.get("runtime_eval_cases") if isinstance(calibration.get("runtime_eval_cases"), dict) else {}
+    top_line = "実変更なし。候補を観測・分類したうえで、今回は安全に見送りました。"
+    if execution_changed:
+        top_line = f"実変更あり。skill/memory を合計 {execution_changed} 件更新しました。"
+    elif int(action_summary.get("apply") or 0):
+        top_line = f"適用候補 {int(action_summary.get('apply') or 0)} 件を検出しましたが、実変更は確認されていません。"
+    elif execution_rejected:
+        top_line = f"実変更なし。候補はありましたが {execution_rejected} 件が検証・容量・実行条件で止まりました。"
+    observation_line = (
+        f"観測 {int(evidence_summary.get('evidence_count') or 0)} 件、"
+        f"inventory {inventory_count} 件、coverage gap {int(evidence_summary.get('coverage_candidate_count') or 0)} 件。"
+    )
+    action_line = (
+        f"判断: apply {int(action_summary.get('apply') or 0)} / "
+        f"defer {int(action_summary.get('defer') or 0)} / "
+        f"skip {int(action_summary.get('skip') or 0)} / "
+        f"block {int(action_summary.get('block') or 0)}。"
+    )
+    prompt_line = (
+        f"prompt/evaluator: calibration `{calibration.get('current_status') or 'unknown'}`, "
+        f"active changed {bool(summary.get('scorer_evaluator_changed') or calibration.get('active_changed'))}, "
+        f"private eval cases {int(runtime_eval_cases.get('count') or 0)} {runtime_eval_cases.get('status') or 'not_built'}。"
+    )
+    next_focus: list[str] = []
+    if rejected_reason_counts:
+        next_focus.append("rejected reason を確認")
+    if int(action_summary.get("block") or 0):
+        next_focus.append("blocked 候補の境界条件を確認")
+    if int(evidence_summary.get("coverage_candidate_count") or 0):
+        next_focus.append("coverage gap の受け皿を確認")
+    if inventory_count:
+        next_focus.append("skill/memory 棚卸し候補を確認")
+    next_focus_line = "次に見る点: " + ("、".join(next_focus[:3]) if next_focus else "今のところ追加確認なし") + "。"
     inventory_parts = f"skill {skill_inventory_count}, memory {memory_inventory_count}"
     if memory_placement_count:
         inventory_parts += f", placement {memory_placement_count}"
     lines = [
         title,
+        "",
+        "概要:",
+        f"- {top_line}",
+        f"- {observation_line}",
+        f"- {action_line}",
+        f"- {prompt_line}",
+        f"- {next_focus_line}",
         "",
         "Curator telemetry:",
         f"- available: {'yes' if curator.get('available') else 'no'}",
