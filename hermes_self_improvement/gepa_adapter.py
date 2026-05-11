@@ -70,7 +70,7 @@ def _model_config(config: dict[str, Any], key: str) -> dict[str, Any]:
 
 
 def _redact_config_summary(config: dict[str, Any]) -> dict[str, Any]:
-    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    gepa_config = config.get("gepa_evaluator") if isinstance(config.get("gepa_evaluator"), dict) else {}
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
     allowed_keys = {
         "enabled",
@@ -263,7 +263,7 @@ def optimize_gepa(
     mutate skills, memories, runner artifacts, or the active evaluator pointer.
     """
     ts = datetime.now(UTC)
-    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    gepa_config = config.get("gepa_evaluator") if isinstance(config.get("gepa_evaluator"), dict) else {}
     budget = int(max_full_evals if max_full_evals is not None else gepa_config.get("max_full_evals", 0) or 0)
     if budget <= 0:
         raise RuntimeError("gepa-optimize requires --max-full-evals greater than 0")
@@ -359,7 +359,7 @@ def build_gepa_payload(
     config: dict[str, Any],
 ) -> dict[str, Any]:
     """Build the stable input contract for GEPA/DSPy candidate comparison."""
-    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    gepa_config = config.get("gepa_evaluator") if isinstance(config.get("gepa_evaluator"), dict) else {}
     return {
         "adapter_version": ADAPTER_VERSION,
         "mode": gepa_config.get("mode") or "candidate_comparison",
@@ -388,20 +388,20 @@ def score_with_gepa(
     scaffold. The offline scorer remains available only through
     ``evaluate_offline_program`` for regression tests and fixture validation.
     """
-    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    gepa_config = config.get("gepa_evaluator") if isinstance(config.get("gepa_evaluator"), dict) else {}
     if not bool(gepa_config.get("enabled", False)):
-        raise RuntimeError("GEPA scorer is disabled; set gepa_scorer.enabled=true for evaluator scoring")
+        raise RuntimeError("GEPA evaluator is disabled; set gepa_evaluator.enabled=true for evaluator scoring")
 
     mode = str(gepa_config.get("mode") or "dspy_program_eval")
     if mode == "offline_program_eval":
         raise RuntimeError(
-            "offline_program_eval is a regression fixture, not a runtime GEPA scorer; use gepa-eval for fixture checks or configure dspy_program_eval/compiled_program_eval"
+            "offline_program_eval is a regression fixture, not a runtime GEPA evaluator; use gepa-eval for fixture checks or configure dspy_program_eval/compiled_program_eval"
         )
 
     if mode == "compiled_program_eval":
         compiled_path = _resolve_compiled_program_path(config, gepa_config)
         if compiled_path is None:
-            raise RuntimeError("compiled_program_eval requires gepa_scorer.compiled_program_path or an active evaluator pointer")
+            raise RuntimeError("compiled_program_eval requires gepa_evaluator.compiled_program_path or an active evaluator pointer")
         if not compiled_path.exists():
             raise RuntimeError(f"compiled GEPA artifact not found: {compiled_path}")
         dspy = require_dspy()
@@ -482,8 +482,8 @@ def _score_with_offline_program(
 
 
 def evaluate_offline_program(*, config: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Run bundled proposal eval cases against the offline GEPA scorer."""
-    cfg = config or {"gepa_scorer": {"enabled": True, "max_iterations": 0}}
+    """Run bundled proposal eval cases against the offline GEPA evaluator."""
+    cfg = config or {"gepa_evaluator": {"enabled": True, "max_iterations": 0}}
     rubric = load_rubric()
     cases = load_eval_cases()
     results: list[dict[str, Any]] = []

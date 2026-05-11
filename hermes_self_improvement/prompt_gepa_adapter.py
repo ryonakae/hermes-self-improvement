@@ -156,7 +156,7 @@ def _examples_from_cases(cases: list[dict[str, Any]], *, evidence: dict[str, Any
     current_overlays_json = _json_dumps({
         "planner_overlay": {"base_prompt_hash": base_prompt_hash("planner")},
         "editor_overlay": {"base_prompt_hash": base_prompt_hash("editor")},
-        "evaluator_overlay": {"base_prompt_hash": base_prompt_hash("scorer")},
+        "evaluator_overlay": {"base_prompt_hash": base_prompt_hash("evaluator")},
     })
     expected_json = _json_dumps({"targets": {target: {"change_status": "changed"} for target in OVERLAY_TARGETS}})
     return [
@@ -274,7 +274,7 @@ def optimize_overlay_candidate_set(
     cases: list[dict[str, Any]],
     dspy_module: Any | None = None,
 ) -> dict[str, Any]:
-    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    gepa_config = config.get("gepa_evaluator") if isinstance(config.get("gepa_evaluator"), dict) else {}
     budget = int(gepa_config.get("max_full_evals") or 0)
     if budget <= 0 or not cases:
         return {"optimizer": "dspy.GEPA", "gepa_result": "insufficient_data", "targets": {}}
@@ -304,7 +304,7 @@ def optimize_overlay_candidate_set(
         current_overlays_json = _json_dumps({
             "planner_overlay": {"base_prompt_hash": base_prompt_hash("planner")},
             "editor_overlay": {"base_prompt_hash": base_prompt_hash("editor")},
-            "evaluator_overlay": {"base_prompt_hash": base_prompt_hash("scorer")},
+            "evaluator_overlay": {"base_prompt_hash": base_prompt_hash("evaluator")},
         })
         prediction = compiled(evidence_markdown=evidence_markdown, evidence_json=evidence_json, cases_json=cases_json, current_overlays_json=current_overlays_json)
     raw = _loads_object(_prediction_text(prediction, "candidate_set_json"))

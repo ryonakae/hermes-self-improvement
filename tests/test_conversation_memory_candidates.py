@@ -24,7 +24,7 @@ def test_build_memory_gap_messages_splits_system_and_user():
 
 def _pack(evidence):
     return {
-        "views": {"memory": [item["id"] for item in evidence], "skill": [], "scorer": [], "evaluator": []},
+        "views": {"memory": [item["id"] for item in evidence], "skill": [], "evaluator": []},
         "evidence": evidence,
     }
 

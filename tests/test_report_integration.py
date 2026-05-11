@@ -104,7 +104,7 @@ def test_run_pipeline_report_includes_runner_and_calibration_summaries(tmp_path)
     create_runner_artifacts(config)
     create_calibration_ledger(tmp_path, config)
 
-    out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")
+    out = mod.run_pipeline(config, since_hours=1, write_report=False)
     report = out["report"]
 
     assert out["operational_reports"]["calibration"]["ledger_count"] == 1
@@ -139,7 +139,7 @@ def test_report_integration_is_quiet_when_no_artifacts(tmp_path):
     mod = load_plugin_module()
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
 
-    out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")
+    out = mod.run_pipeline(config, since_hours=1, write_report=False)
 
     assert out["operational_reports"]["calibration"]["ledger_count"] == 0
     assert "recent_plans" not in out["operational_reports"]
@@ -152,7 +152,7 @@ def test_report_does_not_include_removed_review_outcome_surface(tmp_path):
     mod = load_plugin_module()
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
 
-    out = mod.run_pipeline(config, since_hours=1, write_report=False, scorer="heuristic")
+    out = mod.run_pipeline(config, since_hours=1, write_report=False)
 
     assert "review_outcomes" not in out["operational_reports"]
     assert "## Review outcomes" not in out["report"]

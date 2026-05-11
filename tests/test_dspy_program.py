@@ -93,7 +93,7 @@ def test_score_with_dspy_program_returns_plugin_scorer_payload_and_forces_auto_a
         proposals=[{"id": "proposal-1", "risk": "low", "confidence": "high", "auto_apply": True}],
         findings=[{"kind": "tool_failure_cluster", "count": 4}],
         rubric={"version": "proposal-eval-v0.1"},
-        config={"gepa_scorer": {"mode": "dspy_program_eval"}},
+        config={"gepa_evaluator": {"mode": "dspy_program_eval"}},
         dspy_module=FakeDspy,
     )
 
@@ -238,7 +238,7 @@ def test_dspy_program_invalid_json_fails_closed():
             proposals=[{"id": "proposal-1"}],
             findings=[],
             rubric={},
-            config={"gepa_scorer": {"mode": "dspy_program_eval"}},
+            config={"gepa_evaluator": {"mode": "dspy_program_eval"}},
             dspy_module=BadDspy,
         )
     except ValueError as exc:

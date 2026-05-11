@@ -354,7 +354,7 @@ def test_build_gepa_payload_includes_eval_assets_and_program_name():
     payload = adapter.build_gepa_payload(
         proposals=[{"id": "proposal-1", "risk": "low", "confidence": "medium", "auto_apply": False}],
         findings=[{"kind": "tool_failure_cluster", "count": 2}],
-        config={"gepa_scorer": {"mode": "candidate_comparison"}},
+        config={"gepa_evaluator": {"mode": "candidate_comparison"}},
     )
 
     assert payload["mode"] == "candidate_comparison"

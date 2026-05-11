@@ -28,7 +28,7 @@ def pack():
                 "likely_targets": [{"target": "skill", "weight": 0.8}],
             },
         ],
-        "views": {"skill": ["ev1", "ev2"], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": ["ev1", "ev2"], "memory": [], "evaluator": []},
         "skill_candidates": [
             {"name": "demo-skill", "state": "active", "source": "curator", "usage": {"use_count": 3}},
             {"name": "unused-skill", "state": "active", "source": "curator", "usage": {}},
@@ -67,7 +67,7 @@ def test_render_planner_messages_uses_markdown_context_not_digest_dump():
 def test_skill_planner_digest_attaches_inventory_candidate_to_all_group_targets():
     pack_data = {
         "summary": {"event_count": 0, "evidence_count": 1, "ignored_count": 0},
-        "views": {"skill": ["inv-1"], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": ["inv-1"], "memory": [], "evaluator": []},
         "evidence": [{
             "id": "inv-1",
             "kind": "skill_inventory_candidate",
@@ -97,7 +97,7 @@ def test_skill_planner_digest_attaches_inventory_candidate_to_all_group_targets(
 def test_planner_allows_run_editor_with_inventory_evidence():
     pack_data = {
         "summary": {"event_count": 0, "evidence_count": 1, "ignored_count": 0},
-        "views": {"skill": ["inv-1"], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": ["inv-1"], "memory": [], "evaluator": []},
         "evidence": [{
             "id": "inv-1",
             "kind": "skill_inventory_candidate",
@@ -121,7 +121,7 @@ def test_planner_allows_run_editor_with_inventory_evidence():
 def test_skill_planner_digest_filters_immutable_candidates_before_llm_input():
     pack_data = {
         "summary": {"event_count": 0, "evidence_count": 0, "ignored_count": 0},
-        "views": {"skill": [], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": [], "memory": [], "evaluator": []},
         "evidence": [],
         "skill_candidates": [
             {"name": "hermes-made", "mutable": True, "state": "active", "provenance": "curator_agent_created"},
@@ -331,7 +331,7 @@ def test_run_skill_planner_deterministic_fallback_skips_weak_only_candidates():
                 "likely_targets": [{"target": "skill", "weight": 0.5}],
             }
         ],
-        "views": {"skill": ["ev_patch"], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": ["ev_patch"], "memory": [], "evaluator": []},
         "skill_candidates": [{"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}}],
     }
 
@@ -568,7 +568,7 @@ def test_planner_digest_attaches_tool_class_hints_to_existing_candidate():
                 "likely_targets": [{"target": "skill", "weight": 0.5}],
             }
         ],
-        "views": {"skill": ["ev_patch"], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": ["ev_patch"], "memory": [], "evaluator": []},
         "skill_candidates": [
             {"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}},
         ],
@@ -617,7 +617,7 @@ def test_planner_digest_marks_explicit_path_and_cluster_strengths():
                 ],
             },
         ],
-        "views": {"skill": ["ev_explicit", "ev_path", "cluster_patch"], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": ["ev_explicit", "ev_path", "cluster_patch"], "memory": [], "evaluator": []},
         "skill_candidates": [
             {"name": "demo-skill", "state": "active", "source": "curator", "usage": {}},
             {"name": "gmail-newsletter-observer", "state": "active", "source": "curator", "usage": {}},
@@ -645,7 +645,7 @@ def test_planner_quality_report_counts_hint_attachment_match_kinds():
                 "likely_targets": [{"target": "skill", "weight": 0.5}],
             }
         ],
-        "views": {"skill": ["ev_patch"], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": ["ev_patch"], "memory": [], "evaluator": []},
         "skill_candidates": [{"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}}],
     }
     digest = build_skill_planner_digest(pack_data)

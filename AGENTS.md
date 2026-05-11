@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`hermes-self-improvement` は、Hermes runtime の観測イベントから skill / memory / scorer / evaluator の改善材料を作る user plugin です。hook は観測専用です。mutation は `improve` / `calibrate` runner で扱います。初めて触るときは、まず `README.md` で全体像を確認してください。
+`hermes-self-improvement` は、Hermes runtime の観測イベントから skill / memory / evaluator の改善材料を作る user plugin です。hook は観測専用です。mutation は `improve` / `calibrate` runner で扱います。初めて触るときは、まず `README.md` で全体像を確認してください。
 
 ## 着手前チェック
 
@@ -60,7 +60,7 @@ PY
 ## 安全境界
 
 - Runtime hook 内で LLM call、GEPA optimizer、skill patch、memory edit、重い集計を動かさない。
-- 改善対象は `skill`, `memory`, `scorer`, `evaluator` だけ。
+- 改善対象は `skill`, `memory`, `evaluator` だけ。
 - `improve` の semantic decision は `apply / defer / skip / block` に寄せる。内部互換の `run_editor` などは残してよいが、新しい apply mode、承認キュー、別 lane は増やさない。
 - Conversation-derived memory gap は改善対象。キーワードは window ranking にだけ使い、semantic gate にしない。
 - plugin 自身の README / AGENTS / config / plans / bundled skill、Hermes core、任意 docs/config は自己改善対象にしない。
@@ -84,7 +84,7 @@ PY
 - `hermes_self_improvement/evidence.py`: event aggregation / evidence extraction / context windows / unmatched improvement candidates
 - `hermes_self_improvement/target_resolver.py`: LLM target resolution for unmatched evidence
 - `hermes_self_improvement/conversation_memory.py`: conversation window ranking and memory gap candidates
-- `hermes_self_improvement/calibration.py`: scorer/evaluator calibration
+- `hermes_self_improvement/calibration.py`: evaluator overlay calibration
 - `hermes_self_improvement/runtime_eval_cases.py`: runtime-private eval cases for episodes, unmatched observations, and improve run artifacts
 - `hermes_self_improvement/mutation_policy.py`: memory provider capability / strategy helpers
 - `hermes_self_improvement/mutation_worker.py`: tool-mediated mutation executor

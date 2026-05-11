@@ -176,7 +176,7 @@ def _active_prompt_status(config: dict[str, Any], layout: dict[str, Path]) -> di
     roles: dict[str, Any] = {}
     ready = True
     sources: dict[str, int] = {}
-    for role in ("planner", "editor", "scorer"):
+    for role in ("planner", "editor", "evaluator"):
         overlay = load_active_prompt_overlay(config, role=role, base_hash=base_prompt_hash(role))
         if overlay is None:
             roles[role] = {"status": "missing"}

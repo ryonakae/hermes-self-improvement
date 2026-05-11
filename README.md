@@ -46,7 +46,7 @@
 | `status` | 実行時ディレクトリ、観測、評価器の状態を見る | しない |
 | `report` | 直近の観測を読み取り、改善材料を要約する | しない |
 | `improve` | 観測からスキル / メモリの改善案を選び、実行する | する |
-| `calibrate` | 改善判断に使う scorer / evaluator / プロンプト overlay を調整する | する |
+| `calibrate` | 改善判断に使う evaluator / プロンプト overlay を調整する | する |
 
 `improve` と `calibrate` は既定で変更可能です。確認だけしたいときは `--dry-run` を付けます。`improve` の判断は、利用者向けには `apply / defer / skip / block` の4つの意味に寄せます。内部互換のため `run_editor` などの既存名がアーティファクトに残ることはありますが、新しい apply mode や承認キューは増やしません。`apply` した変更は常に ledger / artifact に残します。
 
@@ -104,7 +104,7 @@ hermes cron create '0 4 * * *' \
   --name self-improvement-maintenance \
   --deliver local \
   --workdir ~/.hermes/plugins/hermes-self-improvement \
-  '`bin/hermes-self-improve status` で状態を確認し、`bin/hermes-self-improve calibrate`、`bin/hermes-self-improve improve --scorer llm`、`bin/hermes-self-improve report --since-hours 24` を順に実行する。出力は短い要約とアーティファクトのパスだけにする。'
+  '`bin/hermes-self-improve status` で状態を確認し、`bin/hermes-self-improve calibrate`、`bin/hermes-self-improve improve`、`bin/hermes-self-improve report --since-hours 24` を順に実行する。出力は短い要約とアーティファクトのパスだけにする。'
 ```
 
 `improve` と `calibrate` は既定で変更可能です。最初は手元で `calibrate --dry-run` と `improve --dry-run` を確認してから cron に入れてください。読み取り専用の監視だけが欲しい場合は、`status` と `report --since-hours 24` だけを別 job にしてもかまいません。

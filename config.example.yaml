@@ -10,7 +10,7 @@
 #   enabled: false
 
 # Optional: customize models only when auto routing is not enough.
-# planner scores/evaluates and plans proposals, editor powers mutation agents, and evaluator
+# planner plans skill/memory proposals, editor powers mutation agents, and evaluator
 # powers DSPy/GEPA evaluator calibration.
 # model:
 #   planner:
@@ -34,9 +34,3 @@
 #     min_evidence_events: 20
 #     min_disagreements: 5
 #     min_bad_outcomes: 2
-
-# Optional: override scorer comparison thresholds only when supervised runs show
-# repeated false blocks or false approvals.
-# scorer_comparison_policy:
-#   default:
-#     score_delta_block_threshold: 15

@@ -10,7 +10,7 @@ from .observer import _analysis_events, _redact_text, _sha256_text
 from .target_hints import extract_target_hints
 SCHEMA_NAME = "self_improvement_evidence_pack"
 SCHEMA_VERSION = "1.0"
-LIKELY_TARGETS = {"skill", "memory", "scorer", "evaluator"}
+LIKELY_TARGETS = {"skill", "memory", "evaluator"}
 SECRET_MARKERS = (
     "api_key",
     "apikey",
@@ -329,13 +329,13 @@ def _classify_event(ev: dict[str, Any]) -> tuple[str | None, list[dict[str, Any]
         return "llm_api_evidence", _targets(("scorer", 0.5), ("evaluator", 0.4), ("skill", 0.2)), False, None
 
     if event in {"scorer_evaluator_disagreement", "calibration_result"} or ev.get("scorer_disagreements"):
-        return "scorer_evaluator_evidence", _targets(("scorer", 0.7), ("evaluator", 0.7)), False, None
+        return "evaluator_evidence", _targets(("evaluator", 0.7)), False, None
 
     return None, [], True, "low_signal"
 
 
 def _views_for_evidence(evidence: list[dict[str, Any]]) -> dict[str, list[str]]:
-    views = {"skill": [], "memory": [], "scorer": [], "evaluator": []}
+    views = {"skill": [], "memory": [], "evaluator": []}
     for item in evidence:
         evidence_id = str(item.get("id") or "")
         for target in item.get("likely_targets") or []:

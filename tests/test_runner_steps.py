@@ -24,7 +24,7 @@ def evidence_pack_for(skill_name=None, *, candidates=None, rejected=None):
         candidates = [{"name": skill_name, "state": "active", "source": "curator", "usage": {}}]
     return {
         "evidence": evidence,
-        "views": {"skill": ["ev1"], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": ["ev1"], "memory": [], "evaluator": []},
         "skill_candidates": candidates or [],
         "rejected_skill_candidates": rejected or [],
     }
@@ -42,7 +42,7 @@ def archive_evidence_pack():
                 "likely_targets": [{"target": "skill", "weight": 1.0}],
             }
         ],
-        "views": {"skill": ["ev_archive"], "memory": [], "scorer": [], "evaluator": []},
+        "views": {"skill": ["ev_archive"], "memory": [], "evaluator": []},
         "skill_candidates": [{"name": "old-skill", "state": "stale", "source": "curator", "usage": {}}],
         "rejected_skill_candidates": [],
     }
@@ -273,7 +273,7 @@ def test_skill_step_executes_archive_with_curator_primitive_when_mutating():
 
 
 def test_skill_step_skips_curator_candidate_without_hook_evidence():
-    pack = {"evidence": [], "views": {"skill": [], "memory": [], "scorer": [], "evaluator": []}, "skill_candidates": [{"name": "candidate-skill", "state": "stale", "source": "curator", "usage": {"use_count": 0}}]}
+    pack = {"evidence": [], "views": {"skill": [], "memory": [], "evaluator": []}, "skill_candidates": [{"name": "candidate-skill", "state": "stale", "source": "curator", "usage": {"use_count": 0}}]}
 
     result = run_skill_improvement_step(evidence_pack=pack, config={}, mutate=False)
 
@@ -287,7 +287,7 @@ def test_skill_step_skips_curator_candidate_without_hook_evidence():
 
 
 def test_skill_step_converts_planner_defer_without_evidence_to_skip():
-    pack = {"evidence": [], "views": {"skill": [], "memory": [], "scorer": [], "evaluator": []}, "skill_candidates": [{"name": "thin-skill", "state": "active", "source": "curator", "usage": {}}]}
+    pack = {"evidence": [], "views": {"skill": [], "memory": [], "evaluator": []}, "skill_candidates": [{"name": "thin-skill", "state": "active", "source": "curator", "usage": {}}]}
 
     def fake_planner(*, digest, config):
         return {"decisions": [{"skill": "thin-skill", "decision": "defer", "reason": "target_uncertain_and_insufficient_evidence", "evidence_ids": []}]}
@@ -443,7 +443,7 @@ def test_skill_step_rejects_external_skill_before_backend(tmp_path):
 def memory_evidence_pack(operation):
     event = {"event": "post_tool_call", "tool_name": "memory", "status": "error", "args_preview": json.dumps(operation)}
     evidence = [{"id": "mem1", "kind": "memory_evidence", "event": event, "likely_targets": [{"target": "memory", "weight": 0.8}]}]
-    return {"evidence": evidence, "views": {"skill": [], "memory": ["mem1"], "scorer": [], "evaluator": []}}
+    return {"evidence": evidence, "views": {"skill": [], "memory": ["mem1"], "evaluator": []}}
 
 
 def test_memory_step_dry_run_records_executable_built_in_context():
@@ -635,7 +635,7 @@ def test_memory_step_missing_target_does_not_default_to_hindsight():
     }
     pack = {
         "evidence": [{"id": "mem1", "kind": "memory_evidence", "event": event, "likely_targets": [{"target": "memory", "weight": 0.8}]}],
-        "views": {"skill": [], "memory": ["mem1"], "scorer": [], "evaluator": []},
+        "views": {"skill": [], "memory": ["mem1"], "evaluator": []},
     }
     result = run_memory_improvement_step(
         evidence_pack=pack,
@@ -658,7 +658,7 @@ def test_memory_step_rejects_raw_tool_output_as_memory_payload():
     }
     pack = {
         "evidence": [{"id": "mem1", "kind": "memory_evidence", "event": event, "likely_targets": [{"target": "memory", "weight": 0.8}]}],
-        "views": {"skill": [], "memory": ["mem1"], "scorer": [], "evaluator": []},
+        "views": {"skill": [], "memory": ["mem1"], "evaluator": []},
     }
 
     result = run_memory_improvement_step(evidence_pack=pack, config={"memory": {"provider": "hindsight"}}, mutate=False)
@@ -679,7 +679,7 @@ def test_memory_step_rejects_execute_code_run_artifact_output_as_memory_payload(
     }
     pack = {
         "evidence": [{"id": "mem1", "kind": "memory_evidence", "event": event, "likely_targets": [{"target": "memory", "weight": 0.8}]}],
-        "views": {"skill": [], "memory": ["mem1"], "scorer": [], "evaluator": []},
+        "views": {"skill": [], "memory": ["mem1"], "evaluator": []},
     }
 
     result = run_memory_improvement_step(evidence_pack=pack, config={"memory": {"provider": "hindsight"}}, mutate=False)
@@ -700,7 +700,7 @@ def test_memory_step_extracts_external_target_from_provider_tool_evidence():
     }
     pack = {
         "evidence": [{"id": "mem1", "kind": "memory_evidence", "event": event, "likely_targets": [{"target": "memory", "weight": 0.8}]}],
-        "views": {"skill": [], "memory": ["mem1"], "scorer": [], "evaluator": []},
+        "views": {"skill": [], "memory": ["mem1"], "evaluator": []},
     }
 
     result = run_memory_improvement_step(evidence_pack=pack, config={"memory": {"provider": "hindsight"}}, mutate=False)

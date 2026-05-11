@@ -209,7 +209,7 @@ def test_default_overlay_candidate_set_uses_gepa_adapter_when_enabled(monkeypatc
     monkeypatch.setattr(optimizer_module, "build_overlay_set_runtime_eval_cases", fake_build_cases)
     monkeypatch.setitem(__import__("sys").modules, "hermes_self_improvement.prompt_gepa_adapter", type("FakeAdapter", (), {"optimize_overlay_candidate_set": staticmethod(fake_optimize_overlay_candidate_set), "select_overlay_eval_cases": staticmethod(fake_select_overlay_eval_cases), "_case_signal_score": staticmethod(lambda case: 0)}))
 
-    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "gepa_scorer": {"enabled": True, "max_full_evals": 2, "overlay_max_cases": 7}}
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "gepa_evaluator": {"enabled": True, "max_full_evals": 2, "overlay_max_cases": 7}}
     candidate_set = generate_overlay_candidate_set(config=config, evidence={"total_events": 1})
 
     assert calls

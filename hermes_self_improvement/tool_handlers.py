@@ -54,7 +54,7 @@ def _list_count(value: Any) -> int:
 
 def _count_views(raw: Any) -> dict[str, int]:
     views = raw if isinstance(raw, dict) else {}
-    return {name: _list_count(views.get(name)) for name in ("skill", "memory", "scorer", "evaluator")}
+    return {name: _list_count(views.get(name)) for name in ("skill", "memory", "evaluator")}
 
 
 def _related_lookup_counts(memory_step: dict[str, Any]) -> dict[str, int]:
@@ -200,7 +200,6 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
                 },
             },
             "memory": _compact_step("memory", step_decisions.get("memory")),
-            "scorer": _compact_step("scorer", step_decisions.get("scorer")),
             "evaluator": _compact_step("evaluator", step_decisions.get("evaluator")),
         },
         "next_actions": result.get("next_actions") if isinstance(result.get("next_actions"), list) else [],
@@ -280,7 +279,6 @@ def _compact_calibrate_tool_result(result: dict[str, Any], *, dry_run: bool) -> 
             "total_events": int(evidence.get("total_events") or 0),
             "disagreements": int(evidence.get("disagreements") or 0),
             "bad_outcomes": int(evidence.get("bad_outcomes") or 0),
-            "scorer_errors": int(evidence.get("scorer_errors") or 0),
             "outcome_scores": evidence.get("outcome_scores") if isinstance(evidence.get("outcome_scores"), dict) else {},
             "credit_assignment": evidence.get("credit_assignment") if isinstance(evidence.get("credit_assignment"), dict) else {},
         },
@@ -329,7 +327,6 @@ def _handle_self_improvement_report_tool(args: dict[str, Any] | None = None, **_
         config,
         since_hours=_coerce_int(args.get("since_hours"), 24, 1),
         write_report=False,
-        scorer=str(args.get("scorer") or "llm"),
     )
     out = {k: v for k, v in out.items() if k != "report"}
     out["schema_name"] = "self_improvement_report"
@@ -360,7 +357,6 @@ def _handle_self_improvement_improve_tool(args: dict[str, Any] | None = None, **
             config=_config_from_args(args),
             since_hours=_coerce_int(args.get("since_hours"), 24, 1),
             dry_run=bool(args.get("dry_run", False)),
-            scorer=str(args.get("scorer") or "llm"),
         )
         return tool_result(_compact_improve_tool_result(result))
     except Exception as exc:

@@ -93,10 +93,10 @@ def test_overlay_candidate_set_promotion_updates_changed_targets_and_generation(
             },
             "evaluator_overlay": {
                 "target": "evaluator_overlay",
-                "role": "scorer",
+                "role": "evaluator",
                 "candidate_set_id": "overlay-set-001",
                 "change_status": "unchanged",
-                "base_prompt_hash": base_prompt_hash("scorer"),
+                "base_prompt_hash": base_prompt_hash("evaluator"),
                 "candidate_prompt": {"system_addendum": None, "user_addendum": None, "replacement": None},
             },
         },

@@ -22,10 +22,10 @@ def test_default_prompt_overlay_seeds_are_markdown_and_within_limits():
     required_terms = {
         "planner": ["apply", "defer", "USER", "MEMORY", "Skill", "create_skill"],
         "editor": ["skill_view", "skill_manage", "submit_mutation_result", "minimal"],
-        "scorer": ["evaluate", "memory", "overlay", "defer"],
+        "evaluator": ["evaluate", "memory", "overlay", "defer"],
     }
     for role in DEFAULT_PROMPT_SEED_ROLES:
-        path = DEFAULT_PROMPT_SEED_DIR / ("evaluator.md" if role == "scorer" else f"{role}.md")
+        path = DEFAULT_PROMPT_SEED_DIR / f"{role}.md"
         text = path.read_text(encoding="utf-8")
         assert path.suffix == ".md"
         assert len(text.splitlines()) <= MAX_ADDENDUM_LINES
@@ -40,7 +40,7 @@ def test_materialize_default_prompt_overlays_creates_active_runtime_seed(tmp_pat
     result = materialize_default_prompt_overlays(cfg)
 
     assert result["status"] == "materialized"
-    assert set(result["roles"].keys()) == {"planner", "editor", "scorer"}
+    assert set(result["roles"].keys()) == {"planner", "editor", "evaluator"}
     for role in DEFAULT_PROMPT_SEED_ROLES:
         overlay = load_active_prompt_overlay(cfg, role=role, base_hash=base_prompt_hash(role))
         assert overlay is not None

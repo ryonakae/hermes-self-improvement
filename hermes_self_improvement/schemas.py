@@ -2,7 +2,6 @@ from __future__ import annotations
 
 STRING = {"type": "string"}
 CONFIG_PATH_PROPERTY = {"type": "string", "description": "Explicit config YAML path; same precedence as CLI --config."}
-SCORER_PROPERTY = {"type": "string", "enum": ["heuristic", "llm"], "default": "llm"}
 
 SELF_IMPROVEMENT_STATUS_SCHEMA = {
     "name": "self_improvement_status",
@@ -21,7 +20,6 @@ SELF_IMPROVEMENT_REPORT_SCHEMA = {
         "properties": {
             "config_path": CONFIG_PATH_PROPERTY,
             "since_hours": {"type": "integer", "default": 24},
-            "scorer": SCORER_PROPERTY,
         },
     },
 }
@@ -34,7 +32,6 @@ SELF_IMPROVEMENT_IMPROVE_SCHEMA = {
         "properties": {
             "config_path": CONFIG_PATH_PROPERTY,
             "since_hours": {"type": "integer", "default": 24},
-            "scorer": SCORER_PROPERTY,
             "dry_run": {"type": "boolean", "default": False},
         },
     },

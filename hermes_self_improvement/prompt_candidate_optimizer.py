@@ -31,7 +31,7 @@ OVERLAY_TARGETS = ("planner_overlay", "editor_overlay", "evaluator_overlay")
 OVERLAY_TARGET_ROLES = {
     "planner_overlay": "planner",
     "editor_overlay": "editor",
-    "evaluator_overlay": "scorer",
+    "evaluator_overlay": "evaluator",
 }
 VALID_CHANGE_STATUSES = {"changed", "unchanged"}
 
@@ -100,7 +100,7 @@ def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
             "and keep exact mutable-local skill evidence eligible for run_editor."
             + suffix
         )
-    if role == "scorer":
+    if role == "evaluator":
         return (
             "Runtime eval cases indicate evaluator recommendations should track actual outcomes. "
             "Prefer defer for insufficient confidence, keep successful low-risk mutations eligible, and do not override mutation scope."
@@ -280,7 +280,7 @@ def _run_overlay_set_optimizer(
 ) -> tuple[str, dict[str, Any]]:
     if optimizer is not None:
         return "gepa", optimizer(evidence=evidence, cases=cases, config=config)
-    gepa_config = config.get("gepa_scorer") if isinstance(config.get("gepa_scorer"), dict) else {}
+    gepa_config = config.get("gepa_evaluator") if isinstance(config.get("gepa_evaluator"), dict) else {}
     if not bool(gepa_config.get("enabled", True)) or int(gepa_config.get("max_full_evals") or 0) <= 0 or not cases:
         return "rule_fallback", {}
     max_cases = int(gepa_config.get("overlay_max_cases") or 3)

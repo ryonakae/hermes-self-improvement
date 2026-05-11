@@ -66,7 +66,6 @@ def test_improve_cli_handler_writes_run_artifact_without_apply_command(monkeypat
             "config": {"_self_improvement_root": str(tmp_path / "self-improvement")},
             "since_hours": 24,
             "dry_run": True,
-            "scorer": "llm",
         }
     ]
     out = capsys.readouterr().out

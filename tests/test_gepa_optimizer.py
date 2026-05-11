@@ -121,7 +121,7 @@ def test_optimize_gepa_calls_dspy_gepa_compile_and_writes_artifact(tmp_path):
     FakeGEPA.calls.clear()
     config = {
         "_self_improvement_root": str(tmp_path / "self-improvement"),
-        "gepa_scorer": {
+        "gepa_evaluator": {
             "enabled": True,
             "mode": "dspy_program_eval",
             "max_full_evals": 2,
@@ -161,7 +161,7 @@ def test_optimize_gepa_uses_model_evaluator_for_student_and_reflection_lm(tmp_pa
                 "max_tokens": 321,
             }
         },
-        "gepa_scorer": {"enabled": True, "mode": "dspy_program_eval", "max_full_evals": 2},
+        "gepa_evaluator": {"enabled": True, "mode": "dspy_program_eval", "max_full_evals": 2},
     }
 
     payload = adapter.optimize_gepa(config=config, max_full_evals=2, dspy_module=FakeDspy)

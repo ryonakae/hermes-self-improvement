@@ -66,7 +66,7 @@ def _overlay_hash(prompt_sources: dict[str, Any], role: str) -> str:
 
 def _overlay_generation_id(run_result: dict[str, Any], prompt_sources: dict[str, Any]) -> str | None:
     sources: list[dict[str, Any]] = [run_result, prompt_sources]
-    for role in ("planner", "editor", "scorer", "evaluator"):
+    for role in ("planner", "editor", "evaluator"):
         role_source = prompt_sources.get(role) if isinstance(prompt_sources.get(role), dict) else None
         if role_source is not None:
             sources.append(role_source)
@@ -373,13 +373,13 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
         "editor_prompt_hash": base_prompt_hash("editor"),
         "evaluator_hash": evaluator_hash,
     }
-    for role in ("planner", "editor", "scorer"):
+    for role in ("planner", "editor", "evaluator"):
         item = prompt_overlays.get(role) if isinstance(prompt_overlays.get(role), dict) else {}
         if not item.get("candidate"):
             continue
         promoted = bool(item.get("promoted"))
         action = "prompt_overlay_promote" if promoted else "no_op"
-        target_kind = f"{role}_prompt" if role in {"planner", "editor"} else "scorer"
+        target_kind = f"{role}_prompt" if role in {"planner", "editor"} else "evaluator"
         seed = {"kind": "calibration", "role": role, "candidate_hash": item.get("candidate_hash"), "created_at": stamp}
         episode = {
             "schema_name": "self_improvement_episode",

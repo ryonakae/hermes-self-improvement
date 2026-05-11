@@ -39,34 +39,29 @@ def test_primary_cli_surface_parses_dry_run_boundaries():
     assert calibrate.dry_run is True
 
 
-def test_primary_cli_surface_defaults_to_llm_scorer():
+def test_primary_cli_surface_does_not_expose_scorer_flag():
     parser = build_parser()
 
     improve = parser.parse_args(["improve"])
     report = parser.parse_args(["report"])
 
-    assert improve.scorer == "llm"
+    assert not hasattr(improve, "scorer")
     assert improve.dry_run is False
-    assert report.scorer == "llm"
-
-
-def test_primary_cli_surface_rejects_gepa_and_compare_scorers():
-    parser = build_parser()
+    assert not hasattr(report, "scorer")
 
     rejected = [
-        ["improve", "--scorer", "gepa"],
-        ["improve", "--scorer", "compare"],
-        ["report", "--scorer", "gepa"],
-        ["report", "--scorer", "compare"],
+        ["improve", "--scorer", "heuristic"],
+        ["improve", "--scorer", "llm"],
+        ["report", "--scorer", "heuristic"],
+        ["report", "--scorer", "llm"],
     ]
-
     for argv in rejected:
         try:
             parser.parse_args(argv)
         except SystemExit as exc:
             assert exc.code == 2
         else:  # pragma: no cover
-            raise AssertionError(f"removed scorer should not parse: {argv}")
+            raise AssertionError(f"removed scorer flag should not parse: {argv}")
 
 
 def test_status_and_setup_accept_json_flags_as_full_status_output():
@@ -337,7 +332,7 @@ def test_run_improve_does_not_run_calibration_optimizer(monkeypatch, tmp_path):
     result = cli.run_improve(config=config, dry_run=True)
 
     assert result["calibration"]["current_status"] == "calibrate_only"
-    assert result["step_decisions"]["scorer"]["status"] == "calibration_only"
+    assert "scorer" not in result["step_decisions"]
     assert result["step_decisions"]["evaluator"]["status"] == "calibration_only"
 
 

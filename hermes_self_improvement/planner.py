@@ -7,7 +7,7 @@ from typing import Any
 from .autonomous_loop import normalize_autonomous_decision
 from .evidence import filter_llm_skill_candidates
 from .observer import _redact_text
-from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
+from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 from .target_hints import extract_target_hints
 from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_planner_messages

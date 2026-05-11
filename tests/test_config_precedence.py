@@ -241,7 +241,7 @@ def test_code_defaults_are_used_when_repo_yaml_is_absent(tmp_path):
     config = mod.load_config(tmp_path / "config.yaml")
 
     assert config["retention_days"] == 30
-    assert config["gepa_scorer"]["enabled"] is True
+    assert config["gepa_evaluator"]["enabled"] is True
     assert list(config["model"].keys()) == ["planner", "editor", "evaluator"]
     assert {"llm", "mutation", "gepa", "old_planner"}.isdisjoint(config["model"])
     assert "unsupported_policy" not in config

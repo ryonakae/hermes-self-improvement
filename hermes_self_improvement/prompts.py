@@ -152,11 +152,11 @@ def base_prompt_spec(role: str) -> dict[str, Any]:
             "role": "editor",
             "sections": EDITOR_BASE_SECTIONS + EDITOR_ALLOWED_TOOLS_AND_STOPS,
         }
-    if role == "scorer":
+    if role == "evaluator":
         return {
             "schema_name": "self_improvement_base_prompt_spec",
             "schema_version": PROMPT_SCHEMA_VERSION,
-            "role": "scorer",
+            "role": "evaluator",
             "classification_guidance": SKILL_MEMORY_CLASSIFICATION_BLOCK,
         }
     raise ValueError(f"unknown prompt role: {role}")

@@ -54,7 +54,7 @@ def test_gepa_adapter_runtime_scorer_requires_real_dspy_path_when_not_installed(
                 }
             ],
             findings=[{"kind": "tool_failure_cluster", "tool_name": "skill_view", "count": 4}],
-            config={"gepa_scorer": {"enabled": True, "mode": "dspy_program_eval"}},
+            config={"gepa_evaluator": {"enabled": True, "mode": "dspy_program_eval"}},
         )
     except ModuleNotFoundError as exc:
         assert "pip install -e" in str(exc)
@@ -95,7 +95,7 @@ def test_gepa_adapter_runtime_scorer_uses_real_dspy_program_boundary(monkeypatch
     payload = adapter.score_with_gepa(
         proposals=[{"id": "proposal-1", "risk": "medium", "confidence": "medium", "auto_apply": False}],
         findings=[{"kind": "tool_failure_cluster", "count": 4}],
-        config={"gepa_scorer": {"enabled": True, "mode": "dspy_program_eval"}},
+        config={"gepa_evaluator": {"enabled": True, "mode": "dspy_program_eval"}},
     )
 
     assert payload["mode"] == "dspy_program_eval"
@@ -111,7 +111,7 @@ def test_gepa_adapter_keeps_disabled_config_as_closed_fallback_signal():
         adapter.score_with_gepa(
             proposals=[{"id": "proposal-1", "risk": "low", "confidence": "high"}],
             findings=[],
-            config={"gepa_scorer": {"enabled": False}},
+            config={"gepa_evaluator": {"enabled": False}},
         )
     except RuntimeError as exc:
         assert "disabled" in str(exc)
@@ -122,7 +122,7 @@ def test_gepa_adapter_keeps_disabled_config_as_closed_fallback_signal():
 def test_default_config_uses_real_dspy_gepa_mode():
     config = load_config_module().load_config(PLUGIN_DIR / "config.yaml")
 
-    gepa_config = config["gepa_scorer"]
+    gepa_config = config["gepa_evaluator"]
     assert gepa_config["enabled"] is True
     assert gepa_config["mode"] == "dspy_program_eval"
     assert gepa_config["max_iterations"] == 0
@@ -133,7 +133,7 @@ def test_default_config_uses_real_dspy_gepa_mode():
 def test_evaluate_offline_program_reports_eval_case_results():
     adapter = load_adapter()
 
-    result = adapter.evaluate_offline_program(config={"gepa_scorer": {"enabled": True, "max_iterations": 0}})
+    result = adapter.evaluate_offline_program(config={"gepa_evaluator": {"enabled": True, "max_iterations": 0}})
 
     assert result["adapter_version"] == "gepa-v0.1"
     assert result["rubric_version"] == "proposal-eval-v0.1"

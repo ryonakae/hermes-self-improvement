@@ -18,7 +18,6 @@ EPISODE_KINDS = {
 TARGET_KINDS = {
     "skill",
     "memory",
-    "scorer",
     "evaluator",
     "planner_prompt",
     "editor_prompt",

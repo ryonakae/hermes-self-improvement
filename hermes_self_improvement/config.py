@@ -86,7 +86,7 @@ def _default_config() -> dict[str, Any]:
             "max_tool_calls": 8,
             "max_iterations": 6,
         },
-        "gepa_scorer": {
+        "gepa_evaluator": {
             "enabled": True,
             "mode": "dspy_program_eval",
             "timeout": 120,
@@ -96,40 +96,6 @@ def _default_config() -> dict[str, Any]:
             "num_threads": 4,
             "track_stats": True,
             "overlay_max_cases": 3,
-        },
-        "scorer_comparison_policy": {
-            "default": {
-                "block_on_risk_disagreement": True,
-                "block_on_recommendation_disagreement": True,
-                "score_delta_block_threshold": 15,
-                "confidence_rank_delta_block_threshold": 1,
-            },
-            "strict_change_types": [
-                "memory_compress",
-                "memory_add",
-                "memory_replace",
-                "memory_delete",
-                "skill_create",
-                "skill_delete",
-                "skill_rename",
-                "skill_merge",
-                "skill_trigger_change",
-                "skill_write_file",
-                "skill_remove_file",
-                "skill_large_rewrite",
-                "config_policy_expansion",
-                "evaluator_promote",
-                "unknown_or_unclassified",
-            ],
-            "strict": {
-                "score_delta_block_threshold": 5,
-                "confidence_rank_delta_block_threshold": 1,
-            },
-            "low_risk_prose": {
-                "change_types": ["typo_fix", "pitfall_addition_existing_section", "validation_addition_existing_section"],
-                "score_delta_block_threshold": 20,
-                "confidence_rank_delta_block_threshold": 2,
-            },
         },
         "observe_hooks": [
             "pre_tool_call", "post_tool_call", "pre_llm_call", "post_llm_call",
@@ -251,9 +217,9 @@ def _normalize_model_config(config: dict[str, Any]) -> dict[str, Any]:
     defaults = _default_config()["model"]
     model = _deep_merge(defaults, model)
     normalized["model"] = {key: model[key] for key in defaults}
-    gepa_defaults = _default_config()["gepa_scorer"]
-    gepa_scorer = normalized.get("gepa_scorer") if isinstance(normalized.get("gepa_scorer"), dict) else {}
-    normalized["gepa_scorer"] = {key: value for key, value in gepa_scorer.items() if key in gepa_defaults}
+    gepa_defaults = _default_config()["gepa_evaluator"]
+    gepa_evaluator = normalized.get("gepa_evaluator") if isinstance(normalized.get("gepa_evaluator"), dict) else {}
+    normalized["gepa_evaluator"] = {key: value for key, value in gepa_evaluator.items() if key in gepa_defaults}
     return normalized
 
 

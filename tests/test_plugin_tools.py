@@ -258,7 +258,7 @@ def test_improve_tool_uses_core_loop_with_dry_run(monkeypatch, tmp_path):
     assert payload["dry_run"] is True
     assert calls[0]["since_hours"] == 2
     assert calls[0]["dry_run"] is True
-    assert calls[0]["scorer"] == "llm"
+    assert "scorer" not in calls[0]
 
 
 def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
@@ -281,11 +281,11 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
             "evidence_pack": {
                 "path": str(evidence),
                 "summary": {"event_count": 10, "evidence_count": 3, "ignored_count": 7},
-                "views": {"skill": ["ev1", "ev2"], "memory": ["ev3"], "scorer": [], "evaluator": []},
+                "views": {"skill": ["ev1", "ev2"], "memory": ["ev3"], "evaluator": []},
                 "skill_candidates": [{"name": "a"}, {"name": "b"}],
             },
             "step_decisions": {
-                "summary": {"total": 4, "skill": 2, "memory": 1, "scorer": 1, "evaluator": 0, "out_of_scope": 0},
+                "summary": {"total": 4, "skill": 2, "memory": 1, "evaluator": 0, "out_of_scope": 0},
                 "proposals_considered": [{"id": "p1", "details": large_instruction}],
                 "skill": {
                     "status": "completed",
@@ -312,7 +312,6 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                     {"evidence_id": "m1", "decision": "accepted", "reason": "dry_run_would_execute_memory_tool", "related_memory_lookup": {"status": "completed"}},
                     {"evidence_id": "m2", "decision": "rejected", "reason": "memory_sensitive_text", "related_memory_lookup": {"status": "skipped"}},
                 ]},
-                "scorer": {"status": "calibration_only", "changed": 0},
                 "evaluator": {"status": "calibration_only", "changed": 0},
             },
             "next_actions": [{"kind": "run_mutating_improve", "command": "bin/hermes-self-improve improve"}],
@@ -331,7 +330,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["dry_run"] is True
     assert payload["artifact_path"] == str(artifact)
     assert payload["full_payload"]["path"] == str(artifact)
-    assert payload["evidence"]["views"] == {"skill": 2, "memory": 1, "scorer": 0, "evaluator": 0}
+    assert payload["evidence"]["views"] == {"skill": 2, "memory": 1, "evaluator": 0}
     assert payload["steps"]["proposals_considered"] == 4
     assert payload["steps"]["skill"]["decision_count"] == 3
     assert payload["steps"]["prompt_sources"]["planner"]["overlay_active"] is False
@@ -355,7 +354,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert len(raw) < 6000
 
 
-def test_report_and_improve_tool_schemas_only_expose_current_scorers():
+def test_report_and_improve_tool_schemas_do_not_expose_scorer_selector():
     mod = load_plugin_module()
     ctx = RecordingContext()
 
@@ -363,8 +362,4 @@ def test_report_and_improve_tool_schemas_only_expose_current_scorers():
     schemas = {name: kwargs["schema"] for name, kwargs in ctx.tools}
 
     for name in ("self_improvement_report", "self_improvement_improve"):
-        scorer = schemas[name]["parameters"]["properties"]["scorer"]
-        assert scorer["enum"] == ["heuristic", "llm"]
-        assert scorer["default"] == "llm"
-        assert "gepa" not in scorer["enum"]
-        assert "compare" not in scorer["enum"]
+        assert "scorer" not in schemas[name]["parameters"]["properties"]

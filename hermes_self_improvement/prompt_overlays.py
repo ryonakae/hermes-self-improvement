@@ -8,8 +8,8 @@ from typing import Any
 from .config import get_hermes_home
 from .observer import _redact_text, _sha256_text, _stable_json
 
-ALLOWED_PROMPT_ROLES = {"planner", "editor", "scorer"}
-DEFAULT_PROMPT_SEED_ROLES = ("planner", "editor", "scorer")
+ALLOWED_PROMPT_ROLES = {"planner", "editor", "evaluator"}
+DEFAULT_PROMPT_SEED_ROLES = ("planner", "editor", "evaluator")
 MAX_ADDENDUM_LINES = 150
 MAX_ADDENDUM_CHARS = 12000
 PLUGIN_NAME = "hermes-self-improvement"
@@ -195,8 +195,7 @@ def load_active_prompt_overlay(config: dict[str, Any] | None, *, role: str, base
 
 def default_prompt_seed_path(role: str) -> Path:
     _validate_role(role)
-    filename = "evaluator.md" if role == "scorer" else f"{role}.md"
-    return DEFAULT_PROMPT_SEED_DIR / filename
+    return DEFAULT_PROMPT_SEED_DIR / f"{role}.md"
 
 
 def _active_overlay_ready(config: dict[str, Any], *, role: str) -> bool:

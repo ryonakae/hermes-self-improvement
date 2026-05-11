@@ -144,31 +144,17 @@ from .analysis import (
     scan_skill_lifecycle_candidates,
 )
 from . import scoring as _scoring
-from .scoring import (
-    _call_llm_scorer,
-    _coerce_int,
-    _ensure_hermes_agent_on_path,
-    _extract_json_object,
-    _fallback_with_scorer_error,
-    _merge_external_scores,
-    _merge_llm_scores,
-    _sanitize_score_breakdown,
-    _score_proposals_heuristic,
-)
+from .scoring import _score_proposals_heuristic, score_proposals_impl
+from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
+
+
 def score_proposals(
     proposals: list[dict[str, Any]],
     findings: list[dict[str, Any]] | None = None,
     *,
-    scorer: str = "heuristic",
     config: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    return _scoring.score_proposals_impl(
-        proposals,
-        findings,
-        scorer=scorer,
-        config=config,
-        llm_scorer_func=_call_llm_scorer,
-    )
+    return _scoring.score_proposals_impl(proposals, findings, config=config)
 
 from .cli import (
     _call_gepa_eval,

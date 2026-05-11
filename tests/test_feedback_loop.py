@@ -103,12 +103,12 @@ def overlay_candidate_set(tmp_path: Path, *, candidate_set_id: str = "overlay-se
             },
             "evaluator_overlay": {
                 "target": "evaluator_overlay",
-                "role": "scorer",
+                "role": "evaluator",
                 "candidate_set_id": candidate_set_id,
                 "change_status": "unchanged",
-                "base_prompt_hash": base_prompt_hash("scorer"),
+                "base_prompt_hash": base_prompt_hash("evaluator"),
                 "candidate_prompt": {"system_addendum": None, "replacement": None},
-                "candidate_hash": "sha256:scorer-candidate",
+                "candidate_hash": "sha256:evaluator-candidate",
             },
         },
     }

@@ -5,7 +5,7 @@ from hermes_self_improvement.runner_steps import run_memory_improvement_step
 
 def _pack(evidence):
     return {
-        "views": {"memory": [item["id"] for item in evidence], "skill": [], "scorer": [], "evaluator": []},
+        "views": {"memory": [item["id"] for item in evidence], "skill": [], "evaluator": []},
         "evidence": evidence,
     }
 

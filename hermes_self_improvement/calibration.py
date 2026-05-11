@@ -48,21 +48,6 @@ def _inside_window(payload: dict[str, Any], path: Path, *, window_days: int, now
     return _parse_created_at(payload, path) >= now - timedelta(days=window_days)
 
 
-def _count_scorer_errors(value: Any) -> int:
-    if isinstance(value, dict):
-        count = 0
-        for key, child in value.items():
-            if isinstance(key, str) and key.endswith("_scorer_error"):
-                count += 1
-            count += _count_scorer_errors(child)
-        return count
-    if isinstance(value, list):
-        return sum(_count_scorer_errors(child) for child in value)
-    if isinstance(value, str) and "scorer_error" in value:
-        return 1
-    return 0
-
-
 def _iter_recent_json(root: Path, *, window_days: int, now: datetime):
     if not root.exists():
         return
@@ -103,7 +88,6 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
         "total_events": 0,
         "disagreements": 0,
         "bad_outcomes": 0,
-        "scorer_errors": 0,
         "sources": [],
     }
 
@@ -138,12 +122,6 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
         schema = payload.get("schema_name")
         source_recorded = False
 
-        scorer_errors = _count_scorer_errors(payload)
-        if scorer_errors:
-            summary["scorer_errors"] += scorer_errors
-            summary["total_events"] += 1
-            source_recorded = True
-
         if source_recorded:
             summary["sources"].append(str(path))
 
@@ -175,7 +153,7 @@ def _empty_prompt_overlay_summary() -> dict[str, Any]:
     return {role: _prompt_overlay_summary(role) for role in ("planner", "editor")}
 
 
-OVERLAY_TARGET_TO_ROLE = {"planner_overlay": "planner", "editor_overlay": "editor", "evaluator_overlay": "scorer"}
+OVERLAY_TARGET_TO_ROLE = {"planner_overlay": "planner", "editor_overlay": "editor", "evaluator_overlay": "evaluator"}
 
 
 def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: int) -> dict[str, Any]:
@@ -200,7 +178,7 @@ def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: in
     # `missing_evidence` is a reason detail within the aggregate `quality` hold.
     # Keep it visible, but do not double-count it in weak signal volume.
     under_observation_total = int(under_observation.get("quality") or 0) + int(under_observation.get("skill_usage") or 0)
-    strong = int(evidence.get("bad_outcomes") or 0) + int(evidence.get("scorer_errors") or 0) + int(evidence.get("disagreements") or 0)
+    strong = int(evidence.get("bad_outcomes") or 0) + int(evidence.get("disagreements") or 0)
     strong += int((outcome_prepass.get("signals") or {}).get("user_correction_recurrence") or 0) if isinstance(outcome_prepass.get("signals"), dict) else 0
     medium = len(recurring_clusters) + len(actionable_groups) + int(evidence.get("planner_prompt_signals") or 0)
     return {
@@ -296,15 +274,13 @@ def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, An
         return None
     reason = None
     if int(evidence.get("disagreements") or 0) >= min_disagreements:
-        reason = "scorer_disagreements"
+        reason = "evaluator_disagreements"
     elif int(evidence.get("bad_outcomes") or 0) >= min_bad_outcomes:
         reason = "bad_outcomes"
-    elif int(evidence.get("scorer_errors") or 0) >= min_bad_outcomes:
-        reason = "scorer_errors"
     if reason is None:
         return None
     candidate = {
-        "type": "scorer_calibration_candidate",
+        "type": "evaluator_calibration_candidate",
         "reason": reason,
         "evidence_hash": _sha256_text(_stable_json(evidence)),
         "recommended_action": "review_or_optimize_evaluator",

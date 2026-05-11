@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from .observer import _redact_text
-from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
+from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
 ALLOWED_DECISIONS = {"apply", "defer", "skip", "block"}

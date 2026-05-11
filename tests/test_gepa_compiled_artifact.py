@@ -87,7 +87,7 @@ def test_dspy_program_loads_compiled_artifact_before_scoring(tmp_path):
         proposals=[{"id": "proposal-compiled", "risk": "medium", "confidence": "medium", "auto_apply": False}],
         findings=[{"kind": "tool_failure_cluster", "count": 4}],
         rubric={"version": "proposal-eval-v0.1"},
-        config={"gepa_scorer": {"compiled_program_path": str(artifact_path)}},
+        config={"gepa_evaluator": {"compiled_program_path": str(artifact_path)}},
         compiled_program_path=str(artifact_path),
         dspy_module=FakeDspy,
     )
@@ -137,7 +137,7 @@ def test_gepa_adapter_compiled_mode_uses_configured_artifact(monkeypatch, tmp_pa
     payload = adapter.score_with_gepa(
         proposals=[{"id": "proposal-compiled", "risk": "medium", "confidence": "medium", "auto_apply": False}],
         findings=[{"kind": "tool_failure_cluster", "count": 4}],
-        config={"gepa_scorer": {"enabled": True, "mode": "compiled_program_eval", "compiled_program_path": str(artifact_path)}},
+        config={"gepa_evaluator": {"enabled": True, "mode": "compiled_program_eval", "compiled_program_path": str(artifact_path)}},
     )
 
     assert payload["mode"] == "compiled_program_eval"
@@ -173,7 +173,7 @@ def test_gepa_adapter_compiled_mode_can_resolve_active_evaluator_pointer(monkeyp
         findings=[],
         config={
             "_self_improvement_root": str(tmp_path / "self-improvement"),
-            "gepa_scorer": {"enabled": True, "mode": "compiled_program_eval", "compiled_program_path": None},
+            "gepa_evaluator": {"enabled": True, "mode": "compiled_program_eval", "compiled_program_path": None},
         },
     )
 
@@ -190,7 +190,7 @@ def test_gepa_adapter_compiled_mode_rejects_missing_artifact(tmp_path):
         adapter.score_with_gepa(
             proposals=[{"id": "proposal-compiled", "risk": "medium", "confidence": "medium"}],
             findings=[],
-            config={"gepa_scorer": {"enabled": True, "mode": "compiled_program_eval", "compiled_program_path": str(missing)}},
+            config={"gepa_evaluator": {"enabled": True, "mode": "compiled_program_eval", "compiled_program_path": str(missing)}},
         )
     except RuntimeError as exc:
         assert "not found" in str(exc)

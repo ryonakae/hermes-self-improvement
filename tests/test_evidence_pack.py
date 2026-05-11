@@ -21,7 +21,7 @@ def test_evidence_pack_ignores_successful_skill_usage_as_curator_redundant():
     assert pack["summary"]["evidence_count"] == 0
     assert pack["summary"]["ignored_count"] == 2
     assert {item["ignored_reason"] for item in pack["ignored"]} == {"curator_redundant"}
-    assert pack["views"] == {"skill": [], "memory": [], "scorer": [], "evaluator": []}
+    assert pack["views"] == {"skill": [], "memory": [], "evaluator": []}
 
 
 def test_evidence_pack_keeps_tool_failures_and_memory_events():
@@ -55,8 +55,8 @@ def test_evidence_pack_routes_corrections_subagents_and_llm_failures():
     pack = build_evidence_pack(events, since, until)
     kinds = {item["kind"] for item in pack["evidence"]}
 
-    assert {"correction_evidence", "subagent_evidence", "llm_api_evidence", "scorer_evaluator_evidence"} <= kinds
-    assert pack["views"]["scorer"]
+    assert {"correction_evidence", "subagent_evidence", "llm_api_evidence", "evaluator_evidence"} <= kinds
+    assert pack["views"]["evaluator"]
     assert pack["views"]["evaluator"]
 
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from .evidence import build_context_window
 from .observer import _redact_text, _sha256_text
-from .scoring import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
+from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 
 ALLOWED_ACTIONS = {"add", "replace", "skip", "defer", "block"}
 ALLOWED_TARGETS = {"user", "memory"}

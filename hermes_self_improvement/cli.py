@@ -41,7 +41,7 @@ from .runner_steps import (
 from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
 from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
 from .recovery_engine import memory_rollback_status
-from .scoring import _call_llm_scorer, score_proposals_impl
+from .scoring import score_proposals_impl
 from .setup_runtime import check_runtime_setup, run_setup, runtime_layout
 from .verification import merge_verifier_status
 PLUGIN_NAME = "hermes-self-improvement"
@@ -389,14 +389,13 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
     calibration_payload = payloads.get("calibration") if isinstance(payloads.get("calibration"), dict) else {}
     evidence = calibration_payload.get("evidence_summary") if isinstance(calibration_payload.get("evidence_summary"), dict) else {}
     calibration_ledgers = calibration_payload.get("ledgers") if isinstance(calibration_payload.get("ledgers"), list) else []
-    evidence_has_signal = any(int(evidence.get(key) or 0) for key in ("total_events", "disagreements", "bad_outcomes", "scorer_errors"))
+    evidence_has_signal = any(int(evidence.get(key) or 0) for key in ("total_events", "disagreements", "bad_outcomes"))
     if evidence_has_signal or calibration_ledgers:
         lines.extend(["", "## Calibration summary"])
         lines.append(
             f"- evidence: {int(evidence.get('total_events') or 0)} events, "
             f"{int(evidence.get('disagreements') or 0)} disagreements, "
-            f"{int(evidence.get('bad_outcomes') or 0)} bad outcomes, "
-            f"{int(evidence.get('scorer_errors') or 0)} scorer errors"
+            f"{int(evidence.get('bad_outcomes') or 0)} bad outcomes"
         )
         credit = evidence.get("credit_assignment") if isinstance(evidence.get("credit_assignment"), dict) else {}
         credit_outcomes = credit.get("outcomes") if isinstance(credit.get("outcomes"), dict) else {}
@@ -471,8 +470,8 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operatio
             f"- score: {proposal.get('score')}",
             f"- recommendation: `{proposal.get('recommendation')}`",
         ])
-        if proposal.get("scorer"):
-            lines.append(f"- scorer: `{proposal.get('scorer')}`")
+        if proposal.get("scoring_method"):
+            lines.append(f"- scoring_method: `{proposal.get('scoring_method')}`")
         breakdown = _format_score_breakdown(proposal.get("score_breakdown"))
         if breakdown:
             lines.append(f"- score_breakdown: {breakdown}")
@@ -483,8 +482,8 @@ def render_report(result: AnalysisResult, scored: list[dict[str, Any]], operatio
     lines.extend(_render_operational_report_sections(operational_reports))
     lines.extend([
         "## 注意",
-        "- 採点は `--scorer llm`（既定）または `--scorer heuristic` で切り替えます。",
-        "- DSPy / GEPA は proposal scorer ではなく、`calibrate` で evaluator / prompt / rubric 改善に使います。",
+        "- 採点は決定論的な heuristic で行います (planner が mutation 判定を独立に行うため、report 用途のみ)。",
+        "- DSPy / GEPA は `calibrate` で evaluator / prompt overlay を改善するために使います。",
         "- plugin hook は観測専用で、skill / memory の変更は行いません。",
     ])
     return "\n".join(lines).rstrip() + "\n"
@@ -494,7 +493,6 @@ def run_pipeline(
     config: dict[str, Any],
     since_hours: int = 24,
     write_report: bool = False,
-    scorer: str = "heuristic",
 ) -> dict[str, Any]:
     until = datetime.now(UTC)
     since = until - timedelta(hours=since_hours)
@@ -503,9 +501,7 @@ def run_pipeline(
     scored = score_proposals_impl(
         result.proposals,
         result.findings,
-        scorer=scorer,
         config=config,
-        llm_scorer_func=_call_llm_scorer,
     )
     operational_reports = _build_operational_report_payloads(config)
     diagnostic_signals = build_diagnostic_signals(proposals=scored, findings=result.findings)
@@ -549,7 +545,7 @@ def _write_run_artifact(result: dict[str, Any], config: dict[str, Any]) -> Path:
 
 
 def _summarize_runner_decisions(proposals: list[dict[str, Any]]) -> dict[str, int]:
-    summary = {"total": 0, "skill": 0, "memory": 0, "scorer": 0, "evaluator": 0, "out_of_scope": 0}
+    summary = {"total": 0, "skill": 0, "memory": 0, "evaluator": 0, "out_of_scope": 0}
     for proposal in proposals:
         if not isinstance(proposal, dict):
             continue
@@ -560,8 +556,6 @@ def _summarize_runner_decisions(proposals: list[dict[str, Any]]) -> dict[str, in
             summary["skill"] += 1
         elif "memory" in target:
             summary["memory"] += 1
-        elif "scorer" in target or "scorer" in action:
-            summary["scorer"] += 1
         elif "evaluator" in target or "evaluator" in action:
             summary["evaluator"] += 1
         else:
@@ -807,7 +801,7 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     prompt_overlays = result.get("prompt_overlays") if isinstance(result.get("prompt_overlays"), dict) else {}
     if prompt_overlays:
         lines.append("Prompt overlays:")
-        for role in ("planner", "editor", "scorer"):
+        for role in ("planner", "editor", "evaluator"):
             item = prompt_overlays.get(role) if isinstance(prompt_overlays.get(role), dict) else None
             if not item:
                 continue
@@ -837,7 +831,6 @@ def run_improve(
     config: dict[str, Any],
     since_hours: int = 24,
     dry_run: bool = False,
-    scorer: str = "llm",
     from_report: str | None = None,
 ) -> dict[str, Any]:
     """Run the self-improvement loop.
@@ -922,7 +915,6 @@ def run_improve(
         config,
         since_hours=int(since_hours),
         write_report=False,
-        scorer=scorer,
     )
     proposals = pipeline.get("proposals") if isinstance(pipeline.get("proposals"), list) else []
     decisions_summary = _summarize_runner_decisions(proposals)
@@ -933,7 +925,6 @@ def run_improve(
         "proposals_considered": proposals,
         "skill": skill_step,
         "memory": memory_step,
-        "scorer": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
         "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
     }
     action_summary = _action_summary_from_result({}, step_decisions_payload)
@@ -1861,7 +1852,6 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 
     p_improve = sub.add_parser("improve", help="Run the full self-improvement loop; mutates by default")
     p_improve.add_argument("--since-hours", type=int, default=24)
-    p_improve.add_argument("--scorer", choices=["heuristic", "llm"], default="llm")
     p_improve.add_argument("--dry-run", action="store_true", help="Preview without mutation")
     p_improve.add_argument("--from-report", default=None, help="Use a report JSON artifact as reference-only diagnostic context")
     p_improve.add_argument("--from-run", default=None, help="Execute a previous dry-run artifact instead of replanning")
@@ -1884,7 +1874,6 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
 
     p_report = sub.add_parser("report", help="Analyze and write Markdown report")
     p_report.add_argument("--since-hours", type=int, default=24)
-    p_report.add_argument("--scorer", choices=["heuristic", "llm"], default="llm")
     p_report.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_report)
     p_report.set_defaults(func=_handle_cli)
@@ -1928,7 +1917,6 @@ def _handle_cli(args: argparse.Namespace) -> None:
                 "config": config,
                 "since_hours": int(getattr(args, "since_hours", 24)),
                 "dry_run": bool(getattr(args, "dry_run", False)),
-                "scorer": str(getattr(args, "scorer", "llm")),
             }
             if getattr(args, "from_report", None):
                 improve_kwargs["from_report"] = getattr(args, "from_report")
@@ -1952,7 +1940,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "retention_days": int(config.get("retention_days", DEFAULT_RETENTION_DAYS)),
             "event_count_sample": len(events),
             "last_event_ts": events[-1].get("ts") if events else None,
-            "gepa_scorer_mode": (config.get("gepa_scorer") or {}).get("mode") if isinstance(config.get("gepa_scorer"), dict) else None,
+            "gepa_evaluator_mode": (config.get("gepa_evaluator") or {}).get("mode") if isinstance(config.get("gepa_evaluator"), dict) else None,
             "dspy_available": importlib.util.find_spec("dspy") is not None,
             "mutation_backend": mutation_backend_status(config),
             "merge_verifier": merge_verifier_status(config),
@@ -1964,7 +1952,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "curator_integration": {
                 "skill_telemetry_source": "Hermes Curator",
                 "hook_mode": "observation_only",
-                "mutation_targets": ["skill", "memory", "scorer", "evaluator"],
+                "mutation_targets": ["skill", "memory", "evaluator"],
             },
             "curator_telemetry": {
                 "available": bool(curator_telemetry.get("available")) if isinstance(curator_telemetry, dict) else False,
@@ -2000,7 +1988,6 @@ def _handle_cli(args: argparse.Namespace) -> None:
             config,
             since_hours=int(getattr(args, "since_hours", 24)),
             write_report=True,
-            scorer=getattr(args, "scorer", "llm"),
         )
         if getattr(args, "as_json", False):
             print(json.dumps({k: v for k, v in out.items() if k != "report"}, ensure_ascii=False, indent=2, default=str))
@@ -2018,12 +2005,10 @@ def _handle_slash(raw_args: str = "") -> str:
     config = load_config()
     text = (raw_args or "").strip().lower()
     if text.startswith("analyze") or text.startswith("report") or text.startswith("run"):
-        use_heuristic = "--scorer heuristic" in text or "heuristic" in text.split()
         out = run_pipeline(
             config,
             since_hours=24,
             write_report=text.startswith(("report", "run")),
-            scorer="heuristic" if use_heuristic else "llm",
         )
         return out["report"][:3500]
     path = _event_path(config)

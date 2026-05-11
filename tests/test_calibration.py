@@ -77,12 +77,6 @@ def write_review_outcome(config: dict, payload: dict, name: str = "outcome.json"
     return path
 
 
-def write_scorer_error(config: dict, name: str = "scorer-error.json") -> Path:
-    path = Path(config["_self_improvement_root"]) / "runs" / name
-    write_json(path, {"schema_name": "self_improvement_run", "llm_scorer_error": "timeout", "created_at": "2026-04-30T00:00:00+00:00"})
-    return path
-
-
 def base_config(tmp_path: Path, **calibration_overrides):
     calibration = {
         "enabled": True,
@@ -117,20 +111,6 @@ def test_calibration_insufficient_evidence_returns_no_op(tmp_path):
     assert result["current_status"] == "no_op"
     assert result["evidence_summary"]["total_events"] == 0
     assert "insufficient_evidence" in result["reasons"]
-
-
-def test_calibration_scorer_error_threshold_requests_candidate(tmp_path):
-    mod = load_plugin_module()
-    cfg = base_config(tmp_path)
-    write_scorer_error(cfg, "one.json")
-    write_scorer_error(cfg, "two.json")
-
-    result = mod.run_calibration(config=cfg, execute=False)
-
-    assert result["current_status"] == "would_update"
-    assert result["evidence_summary"]["scorer_errors"] == 2
-    assert result["candidate"]["reason"] == "scorer_errors"
-    assert result["active_changed"] is False
 
 
 def test_calibration_bad_outcome_threshold_requests_candidate(tmp_path):
@@ -674,12 +654,12 @@ def overlay_candidate_set_payload(calibration, tmp_path: Path, *, candidate_set_
             },
             "evaluator_overlay": {
                 "target": "evaluator_overlay",
-                "role": "scorer",
+                "role": "evaluator",
                 "candidate_set_id": candidate_set_id,
                 "change_status": "unchanged",
-                "base_prompt_hash": base_prompt_hash("scorer"),
+                "base_prompt_hash": base_prompt_hash("evaluator"),
                 "candidate_prompt": {"system_addendum": None, "replacement": None},
-                "candidate_hash": "sha256:scorer-candidate",
+                "candidate_hash": "sha256:evaluator-candidate",
             },
         },
     }

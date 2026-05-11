@@ -7,7 +7,7 @@ from hermes_self_improvement.runner_steps import run_memory_improvement_step
 
 def _pack(operation):
     evidence = [{"id": "mem-1", "kind": "conversation_memory_gap_candidate", "memory_operation": operation}]
-    return {"views": {"memory": ["mem-1"], "skill": [], "scorer": [], "evaluator": []}, "evidence": evidence}
+    return {"views": {"memory": ["mem-1"], "skill": [], "evaluator": []}, "evidence": evidence}
 
 
 def test_memory_add_compacts_built_in_store_before_retrying_add():

@@ -166,7 +166,7 @@ def test_optimize_overlay_candidate_set_calls_dspy_gepa_and_returns_candidate_ta
     FakeGEPA.calls.clear()
     config = {
         "_self_improvement_root": str(tmp_path / "self-improvement"),
-        "gepa_scorer": {"enabled": True, "max_full_evals": 2, "num_threads": 2, "track_stats": True},
+        "gepa_evaluator": {"enabled": True, "max_full_evals": 2, "num_threads": 2, "track_stats": True},
     }
     cases = [overlay_case("planner_overlay"), overlay_case("editor_overlay"), overlay_case("evaluator_overlay")]
 
@@ -189,7 +189,7 @@ def test_optimize_overlay_candidate_set_calls_dspy_gepa_and_returns_candidate_ta
 
 def test_optimize_overlay_candidate_set_keeps_candidate_when_data_or_budget_missing(tmp_path):
     result = optimize_overlay_candidate_set(
-        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "gepa_scorer": {"max_full_evals": 0}},
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "gepa_evaluator": {"max_full_evals": 0}},
         evidence={},
         cases=[],
         dspy_module=FakeDspy,
