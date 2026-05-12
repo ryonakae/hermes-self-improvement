@@ -6,7 +6,7 @@ from hermes_self_improvement.runner_steps import run_memory_improvement_step
 
 
 def _pack(operation):
-    evidence = [{"id": "mem-1", "kind": "conversation_memory_gap_candidate", "memory_operation": operation}]
+    evidence = [{"id": "mem-1", "kind": "memory_gap_candidate", "memory_operation": operation}]
     return {"views": {"memory": ["mem-1"], "skill": [], "evaluator": []}, "evidence": evidence}
 
 

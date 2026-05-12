@@ -70,7 +70,7 @@ def test_render_candidate_markdown_includes_coverage_boundary_and_rationale():
 
 
 def test_render_planner_and_tool_result_markdown_are_human_context():
-    planner_text = render_planner_markdown({"decisions": [{"skill": "demo", "decision": "run_editor", "reason": "clear evidence"}]})
+    planner_text = render_planner_markdown({"decisions": [{"skill": "demo", "decision": "mutate_skill", "reason": "clear evidence"}]})
     result_text = render_tool_result_markdown({"success": True, "created_skills": ["demo"], "outcome": "created demo skill"})
 
     assert "# Planner notes" in planner_text

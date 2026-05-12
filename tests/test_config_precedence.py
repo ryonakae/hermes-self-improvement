@@ -258,7 +258,7 @@ def test_config_example_yaml_is_parseable(tmp_path):
     assert config["model"]["evaluator"]["timeout"] == 120
     assert config["model"]["editor"]["timeout"] == 45
     assert config["model"]["editor"]["max_tokens"] == 1000
-    assert config.get("mutation", {}).get("backend") == "native_skill_tool_editor"
+    assert config.get("mutation", {}).get("backend") == "native_skill_tool"
     assert config["calibration"]["evidence"]["min_evidence_events"] == 20
 
 

@@ -1,9 +1,9 @@
 from hermes_self_improvement.runner_steps import run_memory_improvement_step
 from hermes_self_improvement.memory_extractor import (
     MEMORY_EXTRACTOR_SYSTEM,
-    build_conversation_memory_windows,
+    build_memory_extractor_windows,
     build_memory_extractor_messages,
-    make_conversation_memory_candidate,
+    make_memory_extractor_candidate,
     normalize_memory_extractor_payload,
     reconcile_memory_extractor_payload_with_existing_memories,
     run_memory_extractor,
@@ -35,7 +35,7 @@ def test_rank_conversation_windows_prefers_user_correction_but_keeps_other_windo
         {"event": "post_llm_call", "session_id": "s2", "user_message_preview": "普通の相談"},
     ]
 
-    windows = build_conversation_memory_windows(events, limit=10)
+    windows = build_memory_extractor_windows(events, limit=10)
 
     assert len(windows) == 2
     assert windows[0]["rank_reason"] in {"correction_like", "preference_like"}
@@ -48,7 +48,7 @@ def test_conversation_window_includes_surrounding_context():
         {"event": "post_llm_call", "session_id": "s1", "assistant_response_preview": "了解、plugin側に絞ります"},
     ]
 
-    windows = build_conversation_memory_windows(events, radius=1, limit=5)
+    windows = build_memory_extractor_windows(events, radius=1, limit=5)
 
     assert len(windows[0]["events"]) == 3
     assert windows[0]["center_index"] == 1
@@ -76,8 +76,8 @@ def test_normalize_memory_extractor_payload_strips_action_and_preserves_candidat
     assert out["candidates"][0]["candidate_fact"].startswith("Ryo prefers")
 
 
-def test_make_conversation_memory_candidate_does_not_emit_memory_operation():
-    candidate = make_conversation_memory_candidate(
+def test_make_memory_extractor_candidate_does_not_emit_memory_operation():
+    candidate = make_memory_extractor_candidate(
         candidate_id="m1",
         target="user",
         candidate_fact="Ryo prefers simple apply/defer/skip/block decisions for self-improvement.",
@@ -88,7 +88,7 @@ def test_make_conversation_memory_candidate_does_not_emit_memory_operation():
         routing_hint="new",
     )
 
-    assert candidate["kind"] == "conversation_memory_gap_candidate"
+    assert candidate["kind"] == "memory_gap_candidate"
     assert candidate["memory"]["routing_hint"] == "new"
     assert "memory_operation" not in candidate
 

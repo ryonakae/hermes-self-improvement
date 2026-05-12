@@ -22,7 +22,7 @@ def episode_payload(episode_id: str, **extra):
         "improvement_planner_prompt_hash": "sha256:planner-a",
         "skill_agent_prompt_hash": "sha256:editor-a",
         "evaluator_hash": "sha256:evaluator-a",
-        "decision": "run_editor",
+        "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
         "learnable": True,
@@ -58,7 +58,7 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
         target_id="weak-skill",
         overlay_generation_id="overlay-set-risky",
         improvement_planner_prompt_hash="sha256:planner-b",
-        decision="run_editor",
+        decision="mutate_skill",
         action="no_op",
         executed=False,
         changed=False,
@@ -82,7 +82,7 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert aggregate["scored_episode_count"] == 2
     assert aggregate["by_improvement_planner_prompt_hash"]["sha256:planner-a"]["mean_outcome_score"] > 0
     assert aggregate["by_improvement_planner_prompt_hash"]["sha256:planner-b"]["mean_outcome_score"] < 0
-    assert aggregate["by_decision"]["run_editor"]["episodes"] == 2
+    assert aggregate["by_decision"]["mutate_skill"]["episodes"] == 2
     assert aggregate["by_target_kind"]["skill"]["episodes"] == 2
     assert aggregate["by_overlay_generation_id"]["overlay-set-good"]["mean_outcome_score"] > 0
     assert aggregate["by_overlay_generation_id"]["overlay-set-risky"]["mean_outcome_score"] < 0

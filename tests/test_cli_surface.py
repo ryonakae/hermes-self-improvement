@@ -284,8 +284,8 @@ def test_run_improve_reconciles_memory_gap_adds_against_existing_memories(monkey
     result = cli.run_improve(config=config, dry_run=True)
 
     assert captured["digest"]["existing_memories"] == [{"target": "memory", "text": "Hermes runtime root is ~/.hermes."}]
-    assert result["evidence_pack"]["summary"]["conversation_memory_gap_candidate_count"] == 0
-    assert not [item for item in captured["memory_evidence"] if item.get("kind") == "conversation_memory_gap_candidate"]
+    assert result["evidence_pack"]["summary"]["memory_gap_candidate_count"] == 0
+    assert not [item for item in captured["memory_evidence"] if item.get("kind") == "memory_gap_candidate"]
 
 
 
@@ -347,12 +347,12 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
         "step_decisions": {
             "summary": {"total": 4},
             "skill": {
-                "planner": {"summary": {"archive_candidates": 1, "candidate_count": 4, "selected_for_editor": 1, "skipped": 1, "deferred": 1}},
+                "planner": {"summary": {"archive_skill_count": 1, "candidate_count": 4, "mutate_skill_count": 1, "skipped": 1, "deferred": 1}},
                 "decisions": [
                     {"decision": "archive_skill_preview"},
-                    {"decision": "rejected", "reason": "Verbose natural-language reason that should not become a counter key", "result": {"outcome": "skipped_superseded"}, "planner_decision": {"decision": "run_editor"}},
-                    {"decision": "rejected", "reason": "submit_result_missing", "planner_decision": {"decision": "run_editor"}},
-                    {"decision": "rejected", "reason": "submit_result_missing", "planner_decision": {"decision": "run_editor"}},
+                    {"decision": "rejected", "reason": "Verbose natural-language reason that should not become a counter key", "result": {"outcome": "skipped_superseded"}, "planner_decision": {"decision": "mutate_skill"}},
+                    {"decision": "rejected", "reason": "submit_result_missing", "planner_decision": {"decision": "mutate_skill"}},
+                    {"decision": "rejected", "reason": "submit_result_missing", "planner_decision": {"decision": "mutate_skill"}},
                 ],
             },
             "memory": {"decisions": [{"related_memory_lookup": {"status": "completed"}}]},
@@ -448,13 +448,13 @@ def test_improve_summary_lists_deferred_target_resolution_themes():
             {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "unresolved"}},
             {"theme": "timeout_workflow", "target_fit_signals": {"recommendation": "unresolved"}},
             {"theme": "sandbox_permission_workflow", "target_fit_signals": {"recommendation": "unresolved"}},
-            {"theme": "stale_fact_pair", "target_fit_signals": {"recommendation": "memory_candidate"}},
+            {"theme": "stale_fact_pair", "target_fit_signals": {"recommendation": "mutate_memory"}},
             {"theme": "one_off_terminal_failure", "target_fit_signals": {"recommendation": "skip_noise"}},
         ]}}},
         "evidence_pack": {"summary": {}},
     })
 
-    assert "- recommendations: memory_candidate 1, skip_noise 1, unresolved 3" in text
+    assert "- recommendations: mutate_memory 1, skip_noise 1, unresolved 3" in text
     assert "- unresolved themes: sandbox_permission_workflow 1, timeout_workflow 2" in text
     assert "- memory leaning: stale_fact_pair 1" in text
     assert "- skip-noise leaning: one_off_terminal_failure 1" in text
@@ -466,8 +466,8 @@ def test_improve_summary_shows_knowledge_maintenance_decisions():
         "dry_run": True,
         "summary": {},
         "step_decisions": {"skill": {"planner": {"decisions": [
-            {"skill": "safe-patch-usage", "decision": "run_editor", "maintenance_action": "patch_skill", "candidate_source": "skill_inventory_candidate"},
-            {"skill": "old-skill", "decision": "run_editor", "maintenance_action": "merge_skills", "target_skill": "new-skill", "candidate_source": "skill_inventory_candidate"},
+            {"skill": "safe-patch-usage", "decision": "mutate_skill", "maintenance_action": "patch_skill", "candidate_source": "skill_inventory_candidate"},
+            {"skill": "old-skill", "decision": "mutate_skill", "maintenance_action": "merge_skills", "target_skill": "new-skill", "candidate_source": "skill_inventory_candidate"},
             {"skill": "obsolete-skill", "decision": "archive_skill", "candidate_source": "skill_inventory_candidate"},
             {"skill": "patch-tool-workflow", "decision": "create_skill", "candidate_source": "tool_error_cluster"},
             {"skill": "timeout-workflow", "decision": "defer", "candidate_source": "knowledge_coverage_candidate"},
@@ -712,7 +712,7 @@ def test_operational_report_sections_include_runner_artifact_summary():
             "path": "/tmp/run.json",
             "summary": {"skill_changes": 1},
             "skill_lifecycle": {
-                "archive_candidates": 2,
+                "archive_skill_count": 2,
                 "would_archive": 1,
                 "archived": 0,
                 "blocked": 1,

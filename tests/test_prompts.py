@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hermes_self_improvement.prompts import base_prompt_hash, base_prompt_spec, render_editor_instructions, render_planner_messages
+from hermes_self_improvement.prompts import base_prompt_hash, base_prompt_spec, render_skill_agent_instructions, render_planner_messages
 
 
 def test_base_prompt_specs_have_stable_role_and_hashes():
@@ -29,8 +29,8 @@ def test_render_planner_messages_applies_runtime_overlay_addendum():
     assert "Prefer explicit evidence over weak hints." in rendered["messages"][0]["content"]
 
 
-def test_render_editor_instructions_applies_runtime_overlay_addendum():
-    rendered = render_editor_instructions(
+def test_render_skill_agent_instructions_applies_runtime_overlay_addendum():
+    rendered = render_skill_agent_instructions(
         skill_name="demo-skill",
         candidate={},
         planner_decision={},

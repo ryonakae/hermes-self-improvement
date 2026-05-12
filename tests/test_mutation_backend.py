@@ -666,7 +666,7 @@ def test_skill_agent_backend_status_includes_tool_executor_source_and_readiness(
     status = skill_agent_backend_status({"mutation": {"enabled": True}})
 
     assert status["available"] is True
-    assert status["configured"] == "native_skill_tool_editor"
+    assert status["configured"] == "native_skill_tool"
     assert status["tool_executor"] == "hermes_tool_registry"
     assert status["readiness"] == "callables_resolved"
 

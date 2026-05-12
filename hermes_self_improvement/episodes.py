@@ -175,17 +175,17 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
         episode_kind = "executed_mutation" if executed else "preview_decision"
         normalized_decision = "archive_skill"
         action = "skill_archive" if executed else "no_op"
-    elif raw_decision == "run_editor_preview":
+    elif raw_decision == "mutate_skill_preview":
         episode_kind = "preview_decision"
-        normalized_decision = "run_editor"
+        normalized_decision = "mutate_skill"
         action = "no_op"
     elif raw_decision == "accepted":
         episode_kind = "executed_mutation"
-        normalized_decision = "run_editor"
+        normalized_decision = "mutate_skill"
         action = "skill_patch"
     elif raw_decision == "rejected":
         episode_kind = "executed_mutation" if executed else "preview_decision"
-        normalized_decision = "run_editor"
+        normalized_decision = "mutate_skill"
         action = "skill_patch" if executed else "no_op"
     elif raw_decision == "defer":
         episode_kind = "preview_decision"
@@ -299,7 +299,7 @@ def _memory_episode(run_result: dict[str, Any], step: dict[str, Any], decision: 
     executed = bool(run_result.get("execute")) and raw_decision in {"accepted", "rejected"}
     changed = bool(decision.get("changed"))
     episode_kind = "executed_mutation" if executed else "preview_decision"
-    normalized_decision = "memory_candidate" if raw_decision == "accepted" else "skip"
+    normalized_decision = "mutate_memory" if raw_decision == "accepted" else "skip"
     action = _memory_action(operation, executed=executed)
     seed = {"kind": "memory", "index": index, "evidence_id": evidence_id, "decision": raw_decision, "run_id": run_result.get("run_id")}
     episode = _base_episode(
@@ -391,7 +391,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "episode_kind": "prompt_promotion" if promoted else "prompt_candidate",
             "target_kind": target_kind,
             "target_id": str(item.get("candidate_hash") or role),
-            "decision": "evaluator_candidate",
+            "decision": "calibrate_evaluator",
             "action": action,
             "executed": promoted,
             "learnable": True,
@@ -416,8 +416,8 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "episode_id": _episode_id(seed, stamp),
             "episode_kind": "calibration_update" if promoted else "prompt_candidate",
             "target_kind": "evaluator",
-            "target_id": str(candidate.get("candidate_hash") or "evaluator_candidate"),
-            "decision": "evaluator_candidate",
+            "target_id": str(candidate.get("candidate_hash") or "calibrate_evaluator"),
+            "decision": "calibrate_evaluator",
             "action": action,
             "executed": promoted,
             "learnable": True,

@@ -26,7 +26,7 @@ def episode_payload(episode_id="episode-1", **extra):
         "improvement_planner_prompt_hash": "sha256:planner",
         "skill_agent_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
-        "decision": "run_editor",
+        "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
         "learnable": True,

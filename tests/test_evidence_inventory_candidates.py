@@ -163,7 +163,7 @@ def test_collect_memory_inventory_candidates_marks_stale_current_fact_pairs(tmp_
     assert any("replace" in hint or "stale" in hint for hint in item["inventory"]["hints"])
 
 
-def test_clear_stale_memory_pair_has_apply_leaning_memory_candidate_hint(tmp_path):
+def test_clear_stale_memory_pair_has_apply_leaning_memory_gap_candidate_hint(tmp_path):
     memory = tmp_path / "MEMORY.md"
     memory.write_text("Hermes runtime root is /opt/data.\n§\nHermes runtime root is ~/.hermes.\n", encoding="utf-8")
 
@@ -171,7 +171,7 @@ def test_clear_stale_memory_pair_has_apply_leaning_memory_candidate_hint(tmp_pat
 
     hint = item["target_resolution_hint"]
     assert item["inventory"]["group_kind"] == "stale_fact_pair"
-    assert hint["resolution_kind"] == "memory_candidate"
+    assert hint["resolution_kind"] == "mutate_memory"
     assert hint["suggested_action"] == "apply"
     assert hint["memory_operation_hint"]["operation"] == "memory_replace"
     assert hint["memory_operation_hint"]["old_text"] == "Hermes runtime root is /opt/data."
@@ -185,7 +185,7 @@ def test_ambiguous_stale_memory_pair_stays_deferred(tmp_path):
     item = collect_memory_inventory_candidates(memory_paths={"memory": memory})[0]
 
     assert item["inventory"]["group_kind"] == "stale_fact_pair"
-    assert item["target_resolution_hint"]["resolution_kind"] == "memory_candidate"
+    assert item["target_resolution_hint"]["resolution_kind"] == "mutate_memory"
     assert item["target_resolution_hint"]["suggested_action"] == "defer"
 
 

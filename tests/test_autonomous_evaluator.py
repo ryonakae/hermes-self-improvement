@@ -14,11 +14,11 @@ def weak_case() -> dict:
     return {
         "schema_name": "self_improvement_runtime_eval_case",
         "schema_version": "1.0",
-        "case_family": "planner_editor",
+        "case_family": "skill_agent",
         "case_type": "improvement_planner_weak_only_skip",
         "role": "improvement_planner",
         "source": {"kind": "episode", "episode_id": "episode-weak"},
-        "input": {"decision": "run_editor", "action": "no_op", "evidence_strength": "weak", "evidence_ids": ["ev1"]},
+        "input": {"decision": "mutate_skill", "action": "no_op", "evidence_strength": "weak", "evidence_ids": ["ev1"]},
         "expected": {"decision": "skip", "allowed_decisions": ["skip", "defer"]},
         "case_hash": "sha256:weak",
     }
@@ -28,12 +28,12 @@ def exact_case() -> dict:
     return {
         "schema_name": "self_improvement_runtime_eval_case",
         "schema_version": "1.0",
-        "case_family": "planner_editor",
-        "case_type": "improvement_planner_exact_evidence_run_editor",
+        "case_family": "skill_agent",
+        "case_type": "improvement_planner_exact_evidence_mutate_skill",
         "role": "improvement_planner",
         "source": {"kind": "episode", "episode_id": "episode-exact"},
-        "input": {"decision": "run_editor", "action": "skill_patch", "evidence_strength": "strong", "evidence_ids": ["ev2"]},
-        "expected": {"decision": "run_editor", "requires_evidence_ids": True},
+        "input": {"decision": "mutate_skill", "action": "skill_patch", "evidence_strength": "strong", "evidence_ids": ["ev2"]},
+        "expected": {"decision": "mutate_skill", "requires_evidence_ids": True},
         "case_hash": "sha256:exact",
     }
 
@@ -42,11 +42,11 @@ def editor_case() -> dict:
     return {
         "schema_name": "self_improvement_runtime_eval_case",
         "schema_version": "1.0",
-        "case_family": "planner_editor",
+        "case_family": "skill_agent",
         "case_type": "skill_agent_target_mismatch_skip",
         "role": "skill_agent",
         "source": {"kind": "episode", "episode_id": "episode-editor"},
-        "input": {"decision": "run_editor", "action": "no_op", "evidence_strength": "medium"},
+        "input": {"decision": "mutate_skill", "action": "no_op", "evidence_strength": "medium"},
         "expected": {"mutation": "skip", "reason_contains": "target_mismatch"},
         "case_hash": "sha256:editor",
     }

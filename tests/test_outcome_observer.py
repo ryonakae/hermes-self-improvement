@@ -48,7 +48,7 @@ def episode_payload(
         "planner_prompt_hash": "sha256:planner",
         "editor_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
-        "decision": "run_editor" if target_kind == "skill" else "memory_candidate",
+        "decision": "mutate_skill" if target_kind == "skill" else "mutate_memory",
         "action": action,
         "executed": executed,
         "learnable": True,

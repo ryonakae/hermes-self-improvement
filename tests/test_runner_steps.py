@@ -104,20 +104,20 @@ def test_build_skill_agent_task_uses_active_editor_prompt_overlay(tmp_path):
     assert task["prompt_source"]["skill_agent"]["overlay_active"] is True
 
 
-def test_skill_step_dry_run_records_planner_editor_preview_without_mutating(tmp_path):
+def test_skill_step_dry_run_records_skill_agent_preview_without_mutating(tmp_path):
     cfg = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = run_skill_improvement_step(evidence_pack=evidence_pack_for("demo-skill"), config=cfg, mutate=False)
 
     assert result["status"] == "completed"
     assert result["changed"] == 0
-    assert result["planner"]["summary"]["selected_for_editor"] == 1
+    assert result["planner"]["summary"]["mutate_skill_count"] == 1
     assert result["prompt_sources"]["improvement_planner"]["overlay_active"] is False
     assert result["prompt_sources"]["skill_agent"]["overlay_active"] is False
     assert result["planner_quality"]["selected_with_evidence"] == 1
     assert result["planner_quality"]["action_like_skips"] == 0
     assert result["planner_quality"]["skill_agent_prompt_chars"]["max"] > 0
-    assert result["decisions"][0]["decision"] == "run_editor_preview"
-    assert result["decisions"][0]["reason"] == "planner_run_editor_preview"
+    assert result["decisions"][0]["decision"] == "mutate_skill_preview"
+    assert result["decisions"][0]["reason"] == "planner_mutate_skill_preview"
     assert result["decisions"][0]["candidate_source"] == "curator"
     assert result["decisions"][0]["candidate_state"] == "active"
     assert result["decisions"][0]["evidence_ids"] == ["ev1"]
@@ -317,7 +317,7 @@ def test_skill_step_matches_qualified_evidence_to_bare_candidate_name():
 
     decision = result["decisions"][-1]
     assert decision["skill"] == "skill-name"
-    assert decision["decision"] == "run_editor_preview"
+    assert decision["decision"] == "mutate_skill_preview"
     assert decision["evidence_ids"] == ["ev1"]
     assert decision["evidence_match"] == "bare_name"
     assert decision["raw_evidence_skill"] == "dir-name-a:skill-name"
@@ -336,7 +336,7 @@ def test_skill_step_matches_bare_evidence_to_all_same_name_candidates():
         mutate=False,
     )
 
-    accepted = [decision for decision in result["decisions"] if decision.get("decision") == "run_editor_preview"]
+    accepted = [decision for decision in result["decisions"] if decision.get("decision") == "mutate_skill_preview"]
     assert {decision["skill"] for decision in accepted} == {"dir-name-a:skill-name", "dir-name-b:skill-name"}
     assert all(decision["evidence_ids"] == ["ev1"] for decision in accepted)
     assert all(decision["evidence_match"] == "bare_name" for decision in accepted)

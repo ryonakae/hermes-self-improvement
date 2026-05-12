@@ -24,15 +24,15 @@ TARGET_KINDS = {
     "memory_agent_prompt",
 }
 DECISIONS = {
-    "run_editor",
+    "mutate_skill",
     "patch_skill",
     "merge_skills",
     "archive_skill",
     "create_skill",
     "skip",
     "defer",
-    "memory_candidate",
-    "evaluator_candidate",
+    "mutate_memory",
+    "calibrate_evaluator",
 }
 ACTIONS = {
     "skill_patch",
@@ -65,7 +65,7 @@ FORBIDDEN_LARGE_CONTEXT_FIELDS = {
     "system_prompt",
     "user_prompt",
     "candidate_prompt",
-    "editor_instructions_full",
+    "skill_agent_instructions_full",
     "large_payload",
 }
 

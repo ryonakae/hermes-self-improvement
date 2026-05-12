@@ -33,11 +33,11 @@ def sample_run_result(tmp_path):
                 "decisions": [
                     {
                         "skill": "demo-skill",
-                        "decision": "run_editor_preview",
-                        "reason": "planner_run_editor_preview",
+                        "decision": "mutate_skill_preview",
+                        "reason": "planner_mutate_skill_preview",
                         "changed": False,
                         "evidence_ids": ["ev1"],
-                        "planner_decision": {"decision": "run_editor"},
+                        "planner_decision": {"decision": "mutate_skill"},
                         "task": {"instructions": "large prompt must not be copied"},
                     },
                     {
@@ -77,13 +77,13 @@ def test_record_run_episodes_writes_append_only_skill_and_memory_episodes(tmp_pa
     assert len(loaded) == 3
     by_target = {item["target_id"]: item for item in loaded}
     assert by_target["demo-skill"]["episode_kind"] == "preview_decision"
-    assert by_target["demo-skill"]["decision"] == "run_editor"
+    assert by_target["demo-skill"]["decision"] == "mutate_skill"
     assert by_target["demo-skill"]["action"] == "no_op"
     assert by_target["demo-skill"]["executed"] is False
     assert by_target["other-skill"]["decision"] == "defer"
     assert by_target["other-skill"]["original_decision"] == "defer"
     assert by_target["memory:mem1"]["target_kind"] == "memory"
-    assert by_target["memory:mem1"]["decision"] == "memory_candidate"
+    assert by_target["memory:mem1"]["decision"] == "mutate_memory"
     assert by_target["memory:mem1"]["action"] == "no_op"
     serialized = json.dumps(loaded, ensure_ascii=False)
     assert "large prompt must not be copied" not in serialized
@@ -211,7 +211,7 @@ def test_record_run_episodes_uses_mutation_metadata_for_executed_skill_change(tm
 
     episode = [item for item in load_recent_episodes(config=config, limit=10) if item["target_id"] == "demo-skill"][0]
     assert episode["episode_kind"] == "executed_mutation"
-    assert episode["decision"] == "run_editor"
+    assert episode["decision"] == "mutate_skill"
     assert episode["action"] == "skill_patch"
     assert episode["executed"] is True
     assert episode["changed"] is True

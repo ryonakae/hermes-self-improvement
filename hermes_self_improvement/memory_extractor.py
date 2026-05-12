@@ -29,7 +29,7 @@ def _rank_reason(ev: dict[str, Any]) -> str:
     return "sampled_context"
 
 
-def build_conversation_memory_windows(
+def build_memory_extractor_windows(
     events: list[dict[str, Any]],
     *,
     radius: int = 3,
@@ -80,7 +80,7 @@ def normalize_memory_extractor_payload(payload: Any) -> dict[str, Any]:
             item["reason"] = _redact_text(str(raw.get("reason")), max_chars=260)
         if _looks_secret(fact) or _looks_secret(old_text):
             item["routing_hint"] = "skip_sensitive"
-            item["skip_reason"] = "sensitive_memory_candidate"
+            item["skip_reason"] = "sensitive_memory_gap_candidate"
         candidates.append(item)
     return {"candidates": candidates}
 
@@ -200,7 +200,7 @@ def reconcile_memory_extractor_payload_with_existing_memories(payload: Any, *, e
     return normalized
 
 
-def make_conversation_memory_candidate(
+def make_memory_extractor_candidate(
     *,
     candidate_id: str | None = None,
     target: str,
@@ -224,8 +224,8 @@ def make_conversation_memory_candidate(
         normalized["routing_hint"] = routing_hint
     item = {
         "id": candidate_id or "mem_gap_" + _sha256_text(json.dumps(payload, ensure_ascii=False, sort_keys=True))[:12],
-        "kind": "conversation_memory_gap_candidate",
-        "source": "conversation_memory",
+        "kind": "memory_gap_candidate",
+        "source": "memory_extractor",
         "likely_targets": [{"target": "memory", "weight": 0.9}],
         "memory": normalized,
         "context_windows": context_windows[:5],

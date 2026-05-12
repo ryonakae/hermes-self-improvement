@@ -52,7 +52,7 @@ def write_review_outcome(config: dict, payload: dict, name: str = "outcome.json"
         "episode_kind": "executed_mutation",
         "target_kind": "skill",
         "target_id": f"target-{Path(name).stem}",
-        "decision": "run_editor",
+        "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
         "learnable": True,
@@ -565,7 +565,7 @@ def test_build_runtime_eval_cases_includes_role_episode_cases(tmp_path):
     cases = calibration.build_runtime_eval_cases(config)
 
     assert {case["case_type"] for case in cases} == {"improvement_planner_weak_only_skip"}
-    assert cases[0]["case_family"] == "planner_editor"
+    assert cases[0]["case_family"] == "skill_agent"
 
 
 def write_planner_quality_run(config: dict, payload: dict, name: str = "run.json") -> Path:
@@ -857,7 +857,7 @@ def test_collect_calibration_evidence_includes_windowed_outcome_scores(tmp_path)
         "improvement_planner_prompt_hash": "sha256:planner",
         "skill_agent_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
-        "decision": "run_editor",
+        "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
         "learnable": True,
@@ -899,7 +899,7 @@ def test_collect_calibration_evidence_runs_outcome_prepass_before_scoring(tmp_pa
         "improvement_planner_prompt_hash": "sha256:planner",
         "skill_agent_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
-        "decision": "run_editor",
+        "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
         "learnable": True,
