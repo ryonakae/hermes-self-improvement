@@ -8,8 +8,8 @@
 
 **Goal:** Determine whether changes helped over immediate, short, medium, and long windows, and feed those outcomes into calibration safely.
 
-**Current state:** Immediate validation, recurrence, quiet-window, duplicate-noop, skill-usage, quality-hold, missing-evidence, and overlay-generation grouping exist. More explicit time windows, user-correction signals, same-target re-edit signals, and stronger GEPA material remain.
-**Execution status:** Partially implemented; many weak/recurrence signals exist, explicit time windows and stronger correction/re-edit signals remain.
+**Current state:** Immediate validation, recurrence, quiet-window, duplicate-noop, skill-usage, quality-hold, missing-evidence, and overlay-generation grouping exist. Each observation already carries `window=immediate|short|medium|long` derived from the gap between the prior mutation and the later signal. Phase 5.1 surfaces those windows in the compact credit-assignment summary (`outcomes.credit_windows`) and in the CLI `Outcomes:` section as `- scored window coverage: immediate N, short M, medium K, long L`, so daily-facing output distinguishes early vs late credit rather than only "tracked". User-correction recurrence (5.2), same-target re-edit signal (5.3), and stronger GEPA material (5.4) still remain.
+**Execution status:** Partially implemented; phase 5.1 done, phases 5.2 / 5.3 / 5.4 remain.
 
 **Depends on:** Episode metadata from Milestones 1–4.
 
@@ -34,6 +34,8 @@
 ## Implementation phases
 
 ### Phase 5.1 — Explicit scoring windows
+
+**Status:** implemented.
 
 **Objective:** Make immediate/short/medium/long windows first-class in observations and summaries.
 

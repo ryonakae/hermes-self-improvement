@@ -20,6 +20,12 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-milestone-5-outcome-credit-assignment.md` (phase 5.1)
+  - **Status:** partially implemented / phase 5.1 done.
+  - Surfaces immediate / short / medium / long scoring windows in the compact credit-assignment summary as `outcomes.credit_windows` and renders them in the CLI `Outcomes:` section as `- scored window coverage: immediate N, short M, medium K, long L`. Each observation already carries the derived window field, so this phase wires the existing per-observation metadata through to daily-facing output.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-milestone-4-knowledge-inventory-maintenance.md` (phases 4.1 + 4.2 + 4.3)
   - **Status:** implemented (code) / phases 4.1, 4.2, 4.3 done. Phase 4.4 is operational dogfood, run in maintenance windows rather than as a code change.
   - Phase 4.1 enriches `make_skill_inventory_candidate` with deterministic safety metadata (`editable_targets` / `reference_matches` / `evidence_count` / `recommended_actions`).
