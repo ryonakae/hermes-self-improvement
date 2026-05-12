@@ -648,16 +648,24 @@ def _prompt_overlay_set_component(overlay_set: dict[str, Any]) -> str | None:
     if not overlay_set or overlay_set.get("status") == "not_built":
         return None
     changed = overlay_set.get("changed_targets") if isinstance(overlay_set.get("changed_targets"), list) else []
-    source = overlay_set.get("source")
-    source_suffix = f", source {source}" if source else ""
     action = _overlay_set_action_label(overlay_set)
-    return (
-        f"- prompt overlay set: {overlay_set.get('status')}, "
-        f"action {action}, "
-        f"GEPA {overlay_set.get('gepa_result')}, "
-        f"changed {len(changed)}"
-        f"{source_suffix}"
-    )
+    parts = [
+        f"- prompt overlay set: {overlay_set.get('status')}",
+        f"action {action}",
+        f"GEPA {overlay_set.get('gepa_result')}",
+        f"changed {len(changed)}",
+    ]
+    generation_id = str(overlay_set.get("overlay_generation_id") or "").strip()
+    if generation_id:
+        parts.append(f"generation {generation_id}")
+    regression = overlay_set.get("regression") if isinstance(overlay_set.get("regression"), dict) else {}
+    regression_status = str(regression.get("status") or "").strip()
+    if regression_status:
+        parts.append(f"regression {regression_status}")
+    source = overlay_set.get("source")
+    if source:
+        parts.append(f"source {source}")
+    return ", ".join(parts)
 
 
 def _evaluator_component(evaluator_update: dict[str, Any], regression: dict[str, Any] | None) -> str | None:
@@ -1584,6 +1592,86 @@ def _memory_placement_summary_lines(decisions: list[dict[str, Any]]) -> list[str
     return lines
 
 
+_UNRESOLVED_REASON_GROUPS = (
+    ("insufficient evidence", (
+        "insufficient_attached_evidence",
+        "create_skill_without_attached_evidence",
+        "mutate_skill_without_attached_evidence",
+        "memory_inventory_needs_planner",
+    )),
+    ("unsupported tool", (
+        "archive_blocked_no_official_tool",
+        "unsupported_skill_lifecycle_action",
+        "memory_provider_tool_unavailable",
+    )),
+    ("unsafe destructive action", (
+        "archive_blocked_by_pinned",
+        "archive_blocked_by_active_reference",
+        "archive_blocked_by_provenance",
+        "archive_blocked_by_already_archived",
+        "archive_blocked_by_lifecycle_state",
+        "archive_blocked_by_invalid_successor",
+        "merge_target_missing_or_not_editable",
+        "merge_target_same_as_source",
+    )),
+    ("duplicate prevented", (
+        "create_skill_duplicate_existing_skill",
+        "create_skill_duplicates_reference_skill",
+        "memory_duplicate_existing",
+    )),
+    ("needs planner review", (
+        "planner_defer_without_attached_evidence",
+        "memory_placement_needs_routing",
+        "no_existing_skill_fit",
+    )),
+)
+
+
+def _classify_unresolved_reason(reason: str) -> str:
+    if not reason:
+        return ""
+    for label, keys in _UNRESOLVED_REASON_GROUPS:
+        if reason in keys:
+            return label
+    return ""
+
+
+def _unresolved_summary_lines(
+    *,
+    skill_decisions: list[dict[str, Any]],
+    memory_decisions: list[dict[str, Any]],
+) -> list[str]:
+    buckets: dict[str, int] = {}
+    next_actions: dict[str, list[str]] = {}
+    for item in list(skill_decisions) + list(memory_decisions):
+        if not isinstance(item, dict):
+            continue
+        decision = str(item.get("decision") or "")
+        if decision in {"accepted"} and item.get("changed"):
+            continue
+        reason = str(item.get("reason") or item.get("defer_reason") or item.get("skip_detail") or "")
+        label = _classify_unresolved_reason(reason)
+        if not label:
+            continue
+        buckets[label] = buckets.get(label, 0) + 1
+        next_action = str(item.get("next_action") or "").strip()
+        if next_action:
+            next_actions.setdefault(label, [])
+            if next_action not in next_actions[label]:
+                next_actions[label].append(next_action)
+    if not buckets:
+        return []
+    lines = ["Unresolved:"]
+    for label, _ in _UNRESOLVED_REASON_GROUPS:
+        count = buckets.get(label)
+        if not count:
+            continue
+        lines.append(f"- {label}: {count}")
+        for action in next_actions.get(label, [])[:2]:
+            lines.append(f"  next action: {action}")
+    return lines
+
+
 def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[str]:
     buckets = {
         "unresolved": {},
@@ -1817,6 +1905,10 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     )
     skill_quality_lines = _skill_quality_summary_lines(skill_decisions, planner_decisions)
     outcome_lines = _outcome_summary_lines(result.get("credit_assignment") if isinstance(result.get("credit_assignment"), dict) else {})
+    unresolved_lines = _unresolved_summary_lines(
+        skill_decisions=skill_decisions,
+        memory_decisions=memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [],
+    )
     if target_resolution_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = target_resolution_lines
@@ -1832,6 +1924,9 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     if outcome_lines:
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = outcome_lines
+    if unresolved_lines:
+        insert_at = lines.index("Skill planner:")
+        lines[insert_at:insert_at] = unresolved_lines
     if not result.get("dry_run"):
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = actual_result_lines

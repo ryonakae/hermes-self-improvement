@@ -544,6 +544,69 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- scored window coverage: immediate" in text
 
 
+def test_prompt_overlay_set_component_renders_generation_id_and_regression_status():
+    cli = load_cli_module()
+    component = cli._prompt_overlay_set_component({
+        "status": "promoted",
+        "decision": "promote",
+        "gepa_result": "selected",
+        "changed_targets": ["improvement_planner_overlay", "skill_agent_overlay"],
+        "overlay_generation_id": "overlay-set-abc123",
+        "regression": {"status": "passed", "cases": 4},
+        "source": "candidate_set_artifact",
+    })
+
+    assert component is not None
+    assert "action promoted" in component
+    assert "generation overlay-set-abc123" in component
+    assert "regression passed" in component
+
+
+def test_prompt_overlay_set_component_renders_dry_run_would_promote_without_mutation():
+    cli = load_cli_module()
+    component = cli._prompt_overlay_set_component({
+        "status": "previewed",
+        "decision": "promote",
+        "gepa_result": "selected",
+        "changed_targets": ["improvement_planner_overlay"],
+        "overlay_generation_id": "overlay-set-pending",
+    })
+
+    assert component is not None
+    assert "action would promote" in component
+    assert "generation overlay-set-pending" in component
+    assert "promoted" not in component.replace("would promoted", "").replace("would promote", "")
+
+
+def test_improve_summary_renders_unresolved_section_with_next_actions():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 0, "memory_changes": 0},
+        "step_decisions": {
+            "skill": {
+                "planner": {"decisions": []},
+                "decisions": [
+                    {"decision": "skip", "reason": "insufficient_attached_evidence", "skill": "alpha", "next_action": "attach concrete evidence or keep as unresolved maintenance candidate"},
+                    {"decision": "archive_skill_preview", "reason": "archive_blocked_no_official_tool", "skill": "beta", "skip_detail": "no_official_archive_tool_available", "next_action": "defer_archive_until_official_skill_archive_tool_is_available"},
+                    {"decision": "skip", "reason": "archive_blocked_by_pinned", "skill": "gamma"},
+                    {"decision": "skip", "reason": "create_skill_duplicate_existing_skill", "skill": "delta", "noop_outcome": "duplicate_prevented"},
+                    {"decision": "skip", "reason": "planner_defer_without_attached_evidence", "skill": "epsilon"},
+                ],
+            },
+            "memory": {"decisions": []},
+        },
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Unresolved:" in text
+    assert "insufficient evidence" in text
+    assert "unsupported tool" in text
+    assert "unsafe destructive action" in text
+    assert "needs planner review" in text
+    assert "attach concrete evidence" in text
+
+
 def test_improve_summary_reports_quality_patch_candidates_and_quality_patched():
     cli = load_cli_module()
     text = cli._render_improve_summary({
