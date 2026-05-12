@@ -1418,6 +1418,13 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
     ]
     if unknown or insufficient:
         lines.append("- unproven changes remain under observation")
+    credit_windows = outcomes.get("credit_windows") if isinstance(outcomes.get("credit_windows"), dict) else {}
+    if any(int(credit_windows.get(window) or 0) for window in ("immediate", "short", "medium", "long")):
+        window_parts = [
+            f"{window} {int(credit_windows.get(window) or 0)}"
+            for window in ("immediate", "short", "medium", "long")
+        ]
+        lines.append("- scored window coverage: " + ", ".join(window_parts))
     if quality_under_observation:
         lines.append(f"- quality under observation: {quality_under_observation}")
     if duplicate_noop_credited:

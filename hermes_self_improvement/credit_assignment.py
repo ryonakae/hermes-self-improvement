@@ -284,6 +284,10 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
             "duplicate_noop_credited": int(quality_outcomes.get("duplicate_noop_credited") or 0),
             "skill_usage_under_observation": int(quality_outcomes.get("skill_usage_under_observation") or 0),
             "missing_evidence_under_observation": int(quality_outcomes.get("missing_evidence_under_observation") or 0),
+            "credit_windows": {
+                window: int((aggregate.get("credit_windows") or {}).get(window) or 0)
+                for window in WINDOWS
+            },
         },
         "overlay_generations": _overlay_generation_summary(by_generation),
         "aggregate_hash": aggregate.get("aggregate_hash"),

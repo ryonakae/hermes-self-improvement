@@ -523,7 +523,7 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
             ]},
         },
         "evidence_pack": {"summary": {}},
-        "credit_assignment": {"outcomes": {"tracked": 3, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 1, "insufficient_window": 0}},
+        "credit_assignment": {"outcomes": {"tracked": 3, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 1, "insufficient_window": 0, "credit_windows": {"immediate": 2, "short": 1, "medium": 0, "long": 0}}},
     })
 
     assert "Actual results:" in text
@@ -541,6 +541,7 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "Outcomes:" in text
     assert "- tracked: 3, proven improved: 1, recurring: 1, regressed: 0, unknown: 1, insufficient window: 0" in text
     assert "- unproven changes remain under observation" in text
+    assert "- scored window coverage: immediate" in text
 
 
 def test_improve_summary_reports_quality_patch_candidates_and_quality_patched():
