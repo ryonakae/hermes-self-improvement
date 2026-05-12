@@ -20,10 +20,11 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
-- `2026-05-10-milestone-4-knowledge-inventory-maintenance.md` (phases 4.1 + 4.2)
-  - **Status:** partially implemented / phases 4.1 and 4.2 done, phases 4.3 / 4.4 remain.
-  - Phase 4.1 enriches `make_skill_inventory_candidate` with deterministic safety metadata: `editable_targets` (mutable agent-created skills), `reference_matches` (builtin / hub / plugin-bundled / external / pinned), `evidence_count`, and `recommended_actions` (`merge_skills` / `archive_skill` / `mutate_skill` / `no_mutation_target`) derived from `group_kind`. The planner / skill_agent now sees editable-vs-reference splits at the candidate level without inferring from raw skill lists.
-  - Phase 4.2 adds deterministic placement routing in `reconcile_memory_extractor_payload_with_existing_memories`: raw tool output candidates get `routing_hint="defer_unclear"` + `skip_reason="not_memory_raw_tool_output"` + `suggested_route="diagnostic"`, and procedural / step-shaped facts get `skip_reason="not_memory_workflow_to_skill"` + `suggested_route="skill"`. The existing `Memory placement:` CLI section already surfaces these as duplicate / kept / would-move / would-merge-replace / routed-to-skill / diagnostic / needs-memory-planner counts.
+- `2026-05-10-milestone-4-knowledge-inventory-maintenance.md` (phases 4.1 + 4.2 + 4.3)
+  - **Status:** implemented (code) / phases 4.1, 4.2, 4.3 done. Phase 4.4 is operational dogfood, run in maintenance windows rather than as a code change.
+  - Phase 4.1 enriches `make_skill_inventory_candidate` with deterministic safety metadata (`editable_targets` / `reference_matches` / `evidence_count` / `recommended_actions`).
+  - Phase 4.2 adds raw-tool-output and workflow-shaped placement routing inside `reconcile_memory_extractor_payload_with_existing_memories`.
+  - Phase 4.3 introduces `make_skill_drift_candidate` (kind `skill_drift_candidate`, source `inventory`) with deterministic `mutation_ready` gating: `two_independent_sources`, `authoritative_source_plus_failure_trace`, or `insufficient_independent_sources` (mutation_ready=False).
 
 The previous completed implementation plan is:
 

@@ -8,8 +8,8 @@
 
 **Goal:** Make stale/overlapping skills, duplicated or misplaced memory, repo/runtime drift, and recurring user corrections first-class improvement candidates.
 
-**Current state:** Inventory reason counts and source buckets are visible in CLI and operational reports. Phase 4.1 enriches `make_skill_inventory_candidate` with deterministic safety metadata. Phase 4.2 adds deterministic placement routing inside `reconcile_memory_extractor_payload_with_existing_memories`: candidate facts that look like raw tool output (code fences / stdout-stderr / shell prompts) are routed to `routing_hint="defer_unclear"` + `skip_reason="not_memory_raw_tool_output"` + `suggested_route="diagnostic"`, and procedural / step-shaped facts are routed to `skip_reason="not_memory_workflow_to_skill"` + `suggested_route="skill"`. The existing CLI `Memory placement:` section already surfaces duplicate / kept / would-move / would-merge-replace / routed-to-skill / diagnostic / needs-memory-planner counts. Repo/runtime drift (4.3) candidates still remain.
-**Execution status:** Partially implemented; phases 4.1 and 4.2 done, phases 4.3 / 4.4 remain.
+**Current state:** Phase 4.1 enriches `make_skill_inventory_candidate` with deterministic safety metadata. Phase 4.2 adds raw-tool-output / workflow-shaped placement routing inside `reconcile_memory_extractor_payload_with_existing_memories`. Phase 4.3 introduces `make_skill_drift_candidate` for repo/runtime drift evidence (old/new reference, confidence, source paths, optional failure trace) with deterministic `mutation_ready` gating: two independent source paths → `two_independent_sources`, one source plus a failure trace → `authoritative_source_plus_failure_trace`, otherwise `insufficient_independent_sources` and `mutation_ready=False`. Wiring drift detection into a concrete scanner is left as a follow-up; phase 4.4 (dogfood / replay verification) is operational rather than code work.
+**Execution status:** Implemented (code); phases 4.1, 4.2, 4.3 done. Phase 4.4 is operational dogfood — run when the next maintenance window is available.
 
 **Depends on:** Milestone 1 post-validation, Milestone 2 coverage handling, and Milestone 3 quality patch constraints.
 
@@ -66,6 +66,8 @@
 3. Add `memory_placement` summary reasons for route-to-skill, duplicate-noop, safe replace candidate, defer.
 
 ### Phase 4.3 — Repo/runtime drift candidates
+
+**Status:** implemented.
 
 **Objective:** Detect stale commands/paths in local mutable skills when repo or runtime evidence proves drift.
 
