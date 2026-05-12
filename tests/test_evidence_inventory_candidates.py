@@ -91,6 +91,62 @@ def test_skill_inventory_candidate_marks_reference_only_when_no_editable_target(
     assert "no_mutation_target" in inventory["recommended_actions"]
 
 
+def test_skill_drift_candidate_is_mutation_ready_with_two_independent_sources():
+    from hermes_self_improvement.evidence import make_skill_drift_candidate
+
+    candidate = make_skill_drift_candidate(
+        skill_name="local-patch-workflow",
+        old_reference="--legacy-flag",
+        new_reference="--new-flag",
+        confidence="high",
+        source_paths=["docs/cli-help.txt", "tests/fixtures/cli-schema.json"],
+    )
+
+    drift = candidate["drift"]
+    assert candidate["kind"] == "skill_drift_candidate"
+    assert candidate["source"] == "inventory"
+    assert drift["target_skill"] == "local-patch-workflow"
+    assert drift["old_reference"] == "--legacy-flag"
+    assert drift["new_reference"] == "--new-flag"
+    assert drift["source_paths"] == ["docs/cli-help.txt", "tests/fixtures/cli-schema.json"]
+    assert drift["mutation_ready"] is True
+    assert drift["mutation_ready_reason"] == "two_independent_sources"
+
+
+def test_skill_drift_candidate_is_mutation_ready_with_one_source_and_failure_trace():
+    from hermes_self_improvement.evidence import make_skill_drift_candidate
+
+    candidate = make_skill_drift_candidate(
+        skill_name="local-patch-workflow",
+        old_reference="--legacy-flag",
+        new_reference="--new-flag",
+        confidence="high",
+        source_paths=["docs/cli-help.txt"],
+        failure_trace={"tool_name": "patch", "error_kind": "unknown_flag", "event_id": "ev1"},
+    )
+
+    drift = candidate["drift"]
+    assert drift["mutation_ready"] is True
+    assert drift["mutation_ready_reason"] == "authoritative_source_plus_failure_trace"
+    assert drift["failure_trace"]["tool_name"] == "patch"
+
+
+def test_skill_drift_candidate_is_not_mutation_ready_with_one_source_only():
+    from hermes_self_improvement.evidence import make_skill_drift_candidate
+
+    candidate = make_skill_drift_candidate(
+        skill_name="local-patch-workflow",
+        old_reference="--legacy-flag",
+        new_reference="--new-flag",
+        confidence="medium",
+        source_paths=["docs/cli-help.txt"],
+    )
+
+    drift = candidate["drift"]
+    assert drift["mutation_ready"] is False
+    assert drift["mutation_ready_reason"] == "insufficient_independent_sources"
+
+
 def test_memory_inventory_candidate_has_compact_shape():
     candidate = make_memory_inventory_candidate(
         candidate_id="memory-inv-1",

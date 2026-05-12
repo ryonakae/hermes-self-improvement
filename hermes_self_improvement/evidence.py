@@ -361,6 +361,53 @@ def make_skill_inventory_candidate(
     }
 
 
+def make_skill_drift_candidate(
+    *,
+    candidate_id: str | None = None,
+    skill_name: str,
+    old_reference: str,
+    new_reference: str,
+    confidence: str = "medium",
+    source_paths: list[str] | None = None,
+    failure_trace: dict[str, Any] | None = None,
+    rationale: str | None = None,
+) -> dict[str, Any]:
+    paths = [str(path) for path in (source_paths or []) if str(path).strip()]
+    if len(paths) >= 2:
+        mutation_ready = True
+        mutation_ready_reason = "two_independent_sources"
+    elif len(paths) >= 1 and isinstance(failure_trace, dict) and failure_trace:
+        mutation_ready = True
+        mutation_ready_reason = "authoritative_source_plus_failure_trace"
+    else:
+        mutation_ready = False
+        mutation_ready_reason = "insufficient_independent_sources"
+    drift: dict[str, Any] = {
+        "target_skill": _redact_text(str(skill_name or ""), max_chars=120),
+        "old_reference": _redact_text(str(old_reference or ""), max_chars=160),
+        "new_reference": _redact_text(str(new_reference or ""), max_chars=160),
+        "confidence": str(confidence) if str(confidence) in {"low", "medium", "high"} else "medium",
+        "source_paths": paths[:6],
+        "mutation_ready": mutation_ready,
+        "mutation_ready_reason": mutation_ready_reason,
+    }
+    if isinstance(failure_trace, dict) and failure_trace:
+        drift["failure_trace"] = {
+            key: _redact_text(str(value), max_chars=160)
+            for key, value in failure_trace.items()
+            if value is not None
+        }
+    return {
+        "id": candidate_id or _stable_id("skill_drift", drift),
+        "kind": "skill_drift_candidate",
+        "source": "inventory",
+        "likely_targets": _targets(("skill", 0.9)),
+        "drift": drift,
+        "rationale": _redact_text(rationale or f"Local skill `{skill_name}` references `{old_reference}` while current sources show `{new_reference}`.", max_chars=300),
+        "risk": "low" if mutation_ready else "medium",
+    }
+
+
 def make_memory_inventory_candidate(
     *,
     candidate_id: str | None = None,
