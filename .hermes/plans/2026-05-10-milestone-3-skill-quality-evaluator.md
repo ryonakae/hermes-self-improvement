@@ -8,8 +8,8 @@
 
 **Goal:** Review created/updated skills for quality, evidence fit, and low-risk self-patch opportunities.
 
-**Current state:** Deterministic diagnostics exist for frontmatter, pitfalls, verification, triggers, concrete steps, memory-shaped content, compactness, and attached evidence. Deeper semantic evidence-fit and low-risk patch generation remain incomplete.
-**Execution status:** Partially implemented; deterministic quality diagnostics are done, semantic evidence-fit and bounded quality patches remain.
+**Current state:** Deterministic diagnostics exist for frontmatter, pitfalls, verification, triggers, concrete steps, memory-shaped content, compactness, and attached evidence. Phase 3.1 now generates runtime-private evaluator eval cases (`evaluator_skill_quality_{good|needs_patch|too_generic|missing_attached_evidence}_review`) from executed-mutation skill episodes with post-validation signals, packaging skill excerpt + evidence summary + target operation + post-validation state + expected quality bucket. Low-risk patch generation (phase 3.2) and quality-aware outcome wiring (phase 3.3) still remain.
+**Execution status:** Partially implemented; phase 3.1 done, phases 3.2 / 3.3 remain.
 
 **Depends on:** Milestone 1 post-validation and Milestone 2 patch-existing-skill path.
 
@@ -34,6 +34,8 @@
 ## Implementation phases
 
 ### Phase 3.1 — Evidence-fit semantic review cases
+
+**Status:** implemented.
 
 **Objective:** Add evaluator material that compares skill content against attached evidence without making deterministic code over-classify semantics.
 

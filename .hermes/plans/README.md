@@ -20,6 +20,12 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-milestone-3-skill-quality-evaluator.md` (phase 3.1)
+  - **Status:** partially implemented / phase 3.1 done.
+  - Generates runtime-private evaluator eval cases (`evaluator_skill_quality_{good|needs_patch|too_generic|missing_attached_evidence}_review`) from executed-mutation skill episodes with post-validation signals (has_pitfalls / has_verification / has_trigger_conditions / has_concrete_steps / memory_shaped / content_too_short / content_too_long) and `attached_evidence_count`. Each case packages skill excerpt + evidence summary + target operation + post-validation state + expected quality bucket so calibration / GEPA can learn the quality classification without pinning deterministic code to semantic judgements.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-milestone-2-duplicate-existing-coverage.md` (phases 2.1 + 2.2 + 2.3)
   - **Status:** implemented / phases 2.1, 2.2, 2.3 all complete.
   - Phase 2.1 attaches a deterministic `coverage_fit` bundle (`exact_duplicate / partial_overlap / reference_only / no_existing_fit` plus matched skill names and evidence count) to each maintenance candidate and renders it in the planner prompt, so the planner can reason about duplicate vs partial vs reference vs uncovered without forcing the action.
