@@ -8,8 +8,8 @@
 
 **Goal:** Turn duplicate or already-covered proposed skill changes into useful no-op accounting, and route low-risk improvements into patch/merge/archive candidates.
 
-**Current state:** `covered_by_existing_skill` and `duplicate_prevented` are implemented for create proposals. Patch/merge/archive affordances exist in summaries but need fuller planner/executor handling and outcome tracking.
-**Execution status:** Partially implemented; duplicate create no-ops are done, patch/merge/archive affordances remain.
+**Current state:** `covered_by_existing_skill` and `duplicate_prevented` are implemented for create proposals. Phase 2.1 now attaches a bounded `coverage_fit` bundle (`exact_duplicate / partial_overlap / reference_only / no_existing_fit`) to each maintenance candidate and renders it in the planner prompt. Patch/merge/archive executor handling and outcome tracking still remain.
+**Execution status:** Partially implemented; phase 2.1 done, phases 2.2 / 2.3 remain.
 
 **Depends on:** Milestone 1 post-validation for any executed patch/merge/archive follow-up.
 
@@ -34,6 +34,8 @@
 ## Implementation phases
 
 ### Phase 2.1 — Coverage fit evidence bundle
+
+**Status:** implemented.
 
 **Objective:** Provide the planner compact evidence about why a candidate is duplicate, partially covered, or uncovered.
 

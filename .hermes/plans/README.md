@@ -20,6 +20,12 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-milestone-2-duplicate-existing-coverage.md` (phase 2.1)
+  - **Status:** partially implemented / phase 2.1 done.
+  - Attaches a deterministic `coverage_fit` bundle (`exact_duplicate / partial_overlap / reference_only / no_existing_fit` plus matched skill names and evidence count) to each maintenance candidate and renders it compactly in the planner prompt, so the planner can reason about duplicate vs partial vs reference vs uncovered without forcing the action.
+
+The previous completed implementation plan is:
+
 - `2026-05-12-old-naming-cleanup.md`
   - **Status:** implemented.
   - Cleans up the residual `editor` / `run_editor` / `conversation_memory` / `planner_editor` / `native_skill_tool_editor` names left behind by the LLM site/role refactor. Planner decision enum is reduced to `mutate_skill / archive_skill / create_skill / mutate_memory / calibrate_evaluator / skip / defer`; `patch_skill` and `merge_skills` are absorbed into a `maintenance_action: "patch" | "merge"` sub-field. Event kind `conversation_memory_gap_candidate` becomes `memory_gap_candidate` (source `memory_extractor`), the case_family / directory `planner_editor` becomes `skill_agent`, backend label `native_skill_tool_editor` becomes `native_skill_tool`, and README / AGENTS narrative is rewritten with the new site names without the legacy-compat caveats.
