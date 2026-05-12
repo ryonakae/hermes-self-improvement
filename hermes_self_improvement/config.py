@@ -52,7 +52,7 @@ def _default_config() -> dict[str, Any]:
         "retention_days": DEFAULT_RETENTION_DAYS,
         "calibration": copy.deepcopy(DEFAULT_CALIBRATION),
         "model": {
-            "planner": {
+            "improvement_planner": {
                 "provider": "auto",
                 "model": "",
                 "base_url": "",
@@ -61,7 +61,16 @@ def _default_config() -> dict[str, Any]:
                 "max_tokens": 1800,
                 "extra_body": {},
             },
-            "editor": {
+            "skill_agent": {
+                "provider": "auto",
+                "model": "",
+                "base_url": "",
+                "api_key": "",
+                "timeout": 45,
+                "max_tokens": 1000,
+                "extra_body": {},
+            },
+            "memory_agent": {
                 "provider": "auto",
                 "model": "",
                 "base_url": "",

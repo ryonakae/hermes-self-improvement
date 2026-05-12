@@ -278,7 +278,7 @@ def test_run_improve_reconciles_memory_gap_adds_against_existing_memories(monkey
         captured["memory_evidence"] = kwargs["evidence_pack"].get("evidence") or []
         return {"status": "no_memory_evidence", "changed": 0, "changed_memories": [], "decisions": []}
 
-    monkeypatch.setattr(cli, "run_memory_gap_extractor", fake_extractor)
+    monkeypatch.setattr(cli, "run_memory_extractor", fake_extractor)
     monkeypatch.setattr(cli, "run_memory_improvement_step", fake_memory_step)
 
     result = cli.run_improve(config=config, dry_run=True)
@@ -372,8 +372,8 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
         "target_resolution_digest": {"candidates": [{"target_fit_signals": {"recommendation": "unresolved"}}, {"target_fit_signals": {"recommendation": "attach_existing_skill"}}]},
         "artifact_path": "/tmp/run.json",
         "prompt_sources": {
-            "planner": {"overlay_active": True, "overlay_hash": "sha256:planner-overlay", "base_hash": "sha256:planner-base"},
-            "editor": {"overlay_active": False, "base_hash": "sha256:editor-base"},
+            "improvement_planner": {"overlay_active": True, "overlay_hash": "sha256:planner-overlay", "base_hash": "sha256:planner-base"},
+            "skill_agent": {"overlay_active": False, "base_hash": "sha256:editor-base"},
         },
     })
 
@@ -412,8 +412,8 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "- submit_result_missing: 2" in text
     assert "related lookups: completed 1" in text
     assert "private eval cases: 3 written" in text
-    assert "- planner: runtime overlay hash sha256:planner-overlay" in text
-    assert "- editor: base hash sha256:editor-base" in text
+    assert "- improvement_planner: runtime overlay hash sha256:planner-overlay" in text
+    assert "- skill_agent: base hash sha256:editor-base" in text
     assert "human review" not in text.lower()
     assert "Artifact: /tmp/run.json" in text
     assert "ledger" not in text.lower()
@@ -515,7 +515,7 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
                 "decisions": [
                     {"decision": "accepted", "changed": True, "result": {"created_skills": ["timeout-workflow"], "created_skills_inferred_from_trace": True, "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True}}},
                     {"decision": "accepted", "changed": True, "result": {"changed_skills": ["sandbox-permission-workflow"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": False, "has_verification": True}}},
-                    {"decision": "rejected", "changed": False, "result": {"error": "mutation_agent_post_validation_failed", "post_validation": {"status": "failed"}}},
+                    {"decision": "rejected", "changed": False, "result": {"error": "skill_agent_post_validation_failed", "post_validation": {"status": "failed"}}},
                 ],
             },
             "memory": {"decisions": [
@@ -670,7 +670,7 @@ def test_status_summary_is_human_readable_not_json():
         "last_event_ts": "2026-04-30T00:00:00Z",
         "last_run_artifact": "/tmp/run.json",
         "dspy_available": False,
-        "mutation_backend": {"available": True},
+        "skill_agent_backend": {"available": True},
         "runtime_setup": {"initialized": False, "active_evaluator": {"status": "missing"}, "default_assets": {"status": "missing"}},
         "curator_integration": {"skill_telemetry_source": "Hermes Curator", "hook_mode": "observation_only"},
         "curator_telemetry": {"available": True, "candidate_count": 7, "rejected_count": 3},

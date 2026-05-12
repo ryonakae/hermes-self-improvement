@@ -16,7 +16,7 @@ from .outcome_observer import compact_outcome_prepass_summary, run_outcome_prepa
 
 from .prompt_candidate_optimizer import generate_overlay_candidate_set
 from .prompt_overlays import promote_overlay_candidate_set
-from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_planner_editor_runtime_eval_cases
+from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_role_runtime_eval_cases
 from .setup_runtime import check_runtime_setup
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
@@ -69,7 +69,7 @@ def _planner_quality_from_run(payload: dict[str, Any]) -> dict[str, Any]:
     return quality
 
 
-def _planner_prompt_signal_count(quality: dict[str, Any]) -> int:
+def _improvement_planner_prompt_signal_count(quality: dict[str, Any]) -> int:
     signals = int(quality.get("action_like_skips") or 0) + int(quality.get("weak_only_selected_count") or 0)
     selected = int(quality.get("selected_for_editor") or 0)
     selected_with_evidence = int(quality.get("selected_with_evidence") or 0)
@@ -126,9 +126,9 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
             summary["sources"].append(str(path))
 
         if schema == "self_improvement_run_result":
-            planner_signals = _planner_prompt_signal_count(_planner_quality_from_run(payload))
+            planner_signals = _improvement_planner_prompt_signal_count(_planner_quality_from_run(payload))
             if planner_signals:
-                summary["planner_prompt_signals"] = int(summary.get("planner_prompt_signals") or 0) + planner_signals
+                summary["improvement_planner_prompt_signals"] = int(summary.get("improvement_planner_prompt_signals") or 0) + planner_signals
                 summary["total_events"] += 1
                 if str(path) not in summary["sources"]:
                     summary["sources"].append(str(path))
@@ -150,10 +150,10 @@ def _prompt_overlay_summary(role: str, *, candidate: dict[str, Any] | None = Non
 
 
 def _empty_prompt_overlay_summary() -> dict[str, Any]:
-    return {role: _prompt_overlay_summary(role) for role in ("planner", "editor")}
+    return {role: _prompt_overlay_summary(role) for role in ("improvement_planner", "skill_agent")}
 
 
-OVERLAY_TARGET_TO_ROLE = {"planner_overlay": "planner", "editor_overlay": "editor", "evaluator_overlay": "evaluator"}
+OVERLAY_TARGET_TO_ROLE = {"improvement_planner_overlay": "improvement_planner", "skill_agent_overlay": "skill_agent", "memory_agent_overlay": "memory_agent", "evaluator_overlay": "evaluator"}
 
 
 def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: int) -> dict[str, Any]:
@@ -180,7 +180,7 @@ def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: in
     under_observation_total = int(under_observation.get("quality") or 0) + int(under_observation.get("skill_usage") or 0)
     strong = int(evidence.get("bad_outcomes") or 0) + int(evidence.get("disagreements") or 0)
     strong += int((outcome_prepass.get("signals") or {}).get("user_correction_recurrence") or 0) if isinstance(outcome_prepass.get("signals"), dict) else 0
-    medium = len(recurring_clusters) + len(actionable_groups) + int(evidence.get("planner_prompt_signals") or 0)
+    medium = len(recurring_clusters) + len(actionable_groups) + int(evidence.get("improvement_planner_prompt_signals") or 0)
     return {
         "weak": unmatched_count + under_observation_total,
         "medium": medium,
@@ -304,7 +304,7 @@ def build_runtime_eval_cases(config: dict[str, Any], *, now: datetime | None = N
     calibration = normalize_calibration_config(config)
     cases: list[dict[str, Any]] = []
 
-    cases.extend(build_planner_editor_runtime_eval_cases(config=config, limit=1000))
+    cases.extend(build_role_runtime_eval_cases(config=config, limit=1000))
     deduped: dict[str, dict[str, Any]] = {}
     for case in cases:
         deduped[str(case.get("case_hash") or case.get("id"))] = case

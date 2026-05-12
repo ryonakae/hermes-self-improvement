@@ -8,7 +8,7 @@ from .autonomous_policy import build_autonomous_operation_policy, summarize_auto
 from .calibration import run_calibration
 from .cli import run_improve, run_pipeline
 from .config import DEFAULT_RETENTION_DAYS, load_config
-from .mutation_backend import mutation_backend_status
+from .skill_agent_backend import skill_agent_backend_status
 from .observer import _event_path, _load_events
 from .recovery_engine import memory_rollback_status
 from .setup_runtime import check_runtime_setup
@@ -196,7 +196,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
                     "attachments_by_match_kind": planner_quality.get("attachments_by_match_kind") if isinstance(planner_quality.get("attachments_by_match_kind"), dict) else {},
                     "evidence_strength_counts": planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {},
                     "selected_by_strength": planner_quality.get("selected_by_strength") if isinstance(planner_quality.get("selected_by_strength"), dict) else {},
-                    "editor_prompt_chars": planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {},
+                    "skill_agent_prompt_chars": planner_quality.get("skill_agent_prompt_chars") if isinstance(planner_quality.get("skill_agent_prompt_chars"), dict) else {},
                 },
             },
             "memory": _compact_step("memory", step_decisions.get("memory")),
@@ -311,7 +311,7 @@ def _handle_self_improvement_status_tool(args: dict[str, Any] | None = None, **_
         "retention_days": int(config.get("retention_days", DEFAULT_RETENTION_DAYS)),
         "event_count_sample": len(events),
         "last_event_ts": events[-1].get("ts") if events else None,
-        "mutation_backend": mutation_backend_status(config),
+        "skill_agent_backend": skill_agent_backend_status(config),
         "merge_verifier": merge_verifier_status(config),
         "memory_rollback": memory_rollback_status(config),
         "runtime_setup": check_runtime_setup(config),

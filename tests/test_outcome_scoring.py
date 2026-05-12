@@ -23,8 +23,8 @@ def episode_payload(episode_id="episode-1", **extra):
         "episode_kind": "executed_mutation",
         "target_kind": "skill",
         "target_id": "demo-skill",
-        "planner_prompt_hash": "sha256:planner",
-        "editor_prompt_hash": "sha256:editor",
+        "improvement_planner_prompt_hash": "sha256:planner",
+        "skill_agent_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
         "decision": "run_editor",
         "action": "skill_patch",
@@ -140,7 +140,7 @@ def test_build_outcome_score_aggregate_groups_by_prompt_and_target(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "e1.json", episode_payload("episode-1"))
-    write_json(root / "episodes" / "2026-05-03" / "e2.json", episode_payload("episode-2", target_id="other-skill", planner_prompt_hash="sha256:planner2"))
+    write_json(root / "episodes" / "2026-05-03" / "e2.json", episode_payload("episode-2", target_id="other-skill", improvement_planner_prompt_hash="sha256:planner2"))
     write_json(root / "outcomes" / "2026-05-03" / "o1.json", outcome_payload("episode-1", signals={"validation_passed": True, "related_failure_delta": -1}, confidence=0.8))
     write_json(root / "outcomes" / "2026-05-03" / "o2.json", outcome_payload("episode-2", signals={"user_correction": True}, confidence=0.9))
 
@@ -150,8 +150,8 @@ def test_build_outcome_score_aggregate_groups_by_prompt_and_target(tmp_path):
     assert aggregate["observation_count"] == 2
     assert aggregate["scored_episode_count"] == 2
     assert aggregate["overall"]["mean_score"] is not None
-    assert aggregate["by_planner_prompt_hash"]["sha256:planner"]["episodes"] == 1
-    assert aggregate["by_planner_prompt_hash"]["sha256:planner2"]["mean_score"] < 0
+    assert aggregate["by_improvement_planner_prompt_hash"]["sha256:planner"]["episodes"] == 1
+    assert aggregate["by_improvement_planner_prompt_hash"]["sha256:planner2"]["mean_score"] < 0
     assert aggregate["by_target_kind"]["skill"]["episodes"] == 2
 
 

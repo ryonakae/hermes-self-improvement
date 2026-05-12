@@ -51,7 +51,7 @@ def build_conversation_memory_windows(
     return windows[:limit]
 
 
-def normalize_memory_gap_payload(payload: Any) -> dict[str, Any]:
+def normalize_memory_extractor_payload(payload: Any) -> dict[str, Any]:
     raw_candidates = payload.get("candidates") if isinstance(payload, dict) else []
     if not isinstance(raw_candidates, list):
         raw_candidates = []
@@ -152,8 +152,8 @@ def _memory_has_conflicting_specifics(left: str, right: str) -> bool:
     return left_specific != right_specific
 
 
-def reconcile_memory_gap_payload_with_existing_memories(payload: Any, *, existing_memories: list[Any] | None = None) -> dict[str, Any]:
-    normalized = normalize_memory_gap_payload(payload)
+def reconcile_memory_extractor_payload_with_existing_memories(payload: Any, *, existing_memories: list[Any] | None = None) -> dict[str, Any]:
+    normalized = normalize_memory_extractor_payload(payload)
     memories = existing_memories or []
     missing_relations = {"", "missing", "new", "new_memory", "no_existing", "no_existing_memory"}
     for candidate in normalized.get("candidates") or []:
@@ -204,7 +204,7 @@ def reconcile_memory_gap_payload_with_existing_memories(payload: Any, *, existin
     return normalized
 
 
-def make_conversation_memory_gap_candidate(
+def make_conversation_memory_candidate(
     *,
     candidate_id: str | None = None,
     target: str,
@@ -224,7 +224,7 @@ def make_conversation_memory_gap_candidate(
         "confidence": confidence,
         "relation_to_existing": relation_to_existing,
     }
-    normalized = normalize_memory_gap_payload({"candidates": [{"candidate_id": candidate_id or "", **payload}]})["candidates"][0]
+    normalized = normalize_memory_extractor_payload({"candidates": [{"candidate_id": candidate_id or "", **payload}]})["candidates"][0]
     item = {
         "id": candidate_id or "mem_gap_" + _sha256_text(json.dumps(payload, ensure_ascii=False, sort_keys=True))[:12],
         "kind": "conversation_memory_gap_candidate",
@@ -247,7 +247,7 @@ def make_conversation_memory_gap_candidate(
     return item
 
 
-def build_memory_gap_digest(
+def build_memory_extractor_digest(
     windows: list[dict[str, Any]],
     *,
     existing_memories: list[Any] | None = None,
@@ -271,7 +271,7 @@ def build_memory_gap_digest(
     }
 
 
-MEMORY_GAP_SYSTEM = (
+MEMORY_EXTRACTOR_SYSTEM = (
     "Extract durable Hermes memory gap candidates from conversation windows. Return JSON only: "
     "{\"candidates\":[{\"candidate_id\":str,\"target\":\"user|memory\",\"action\":\"add|replace|skip|defer|block\","
     "\"candidate_fact\":str,\"old_text\":str,\"confidence\":\"low|medium|high\",\"relation_to_existing\":str,\"reason\":str}]}. "
@@ -279,27 +279,27 @@ MEMORY_GAP_SYSTEM = (
 )
 
 
-def build_memory_gap_messages(digest: dict[str, Any]) -> list[dict[str, Any]]:
+def build_memory_extractor_messages(digest: dict[str, Any]) -> list[dict[str, Any]]:
     return [
-        {"role": "system", "content": MEMORY_GAP_SYSTEM},
+        {"role": "system", "content": MEMORY_EXTRACTOR_SYSTEM},
         {"role": "user", "content": json.dumps(digest, ensure_ascii=False, sort_keys=True)},
     ]
 
 
-def _call_memory_gap_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+def _call_memory_extractor_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    gap_config = model_config.get("memory_gap_extractor") if isinstance(model_config.get("memory_gap_extractor"), dict) else {}
-    provider = gap_config.get("provider") or "auto"
-    model = gap_config.get("model") or None
-    timeout = _coerce_int(gap_config.get("timeout"), default=60)
-    max_tokens = _coerce_int(gap_config.get("max_tokens"), default=1800)
-    messages = build_memory_gap_messages(digest)
+    extractor_config = model_config.get("memory_extractor") if isinstance(model_config.get("memory_extractor"), dict) else {}
+    provider = extractor_config.get("provider") or "auto"
+    model = extractor_config.get("model") or None
+    timeout = _coerce_int(extractor_config.get("timeout"), default=60)
+    max_tokens = _coerce_int(extractor_config.get("max_tokens"), default=1800)
+    messages = build_memory_extractor_messages(digest)
     _ensure_hermes_agent_on_path()
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
     from .llm_telemetry import record_llm_call
     from .prompt_cache import apply_caching
 
-    messages, cache_extras = apply_caching(messages, site="memory_gap_extractor")
+    messages, cache_extras = apply_caching(messages, site="memory_extractor")
     response = call_llm(
         task="skills_hub",
         provider=provider,
@@ -312,7 +312,7 @@ def _call_memory_gap_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> d
     )
     response_text = extract_content_or_reasoning(response)
     record_llm_call(
-        site="memory_gap_extractor",
+        site="memory_extractor",
         messages=messages,
         response_text=response_text,
         config=config,
@@ -324,9 +324,9 @@ def _call_memory_gap_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> d
     return _extract_json_object(response_text)
 
 
-def run_memory_gap_extractor(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_memory_extractor(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
-    extractor_func = cfg.get("_memory_gap_extractor_func") if isinstance(cfg, dict) else None
+    extractor_func = cfg.get("_memory_extractor_func") if isinstance(cfg, dict) else None
     if callable(extractor_func):
         try:
             payload = extractor_func(digest=digest, config=cfg)
@@ -334,9 +334,9 @@ def run_memory_gap_extractor(digest: dict[str, Any], *, config: dict[str, Any] |
             return {"candidates": [], "extractor_error": _redact_text(str(exc), max_chars=240)}
     elif isinstance(cfg.get("model"), dict):
         try:
-            payload = _call_memory_gap_llm(digest=digest, config=cfg)
+            payload = _call_memory_extractor_llm(digest=digest, config=cfg)
         except Exception as exc:
             return {"candidates": [], "extractor_error": _redact_text(str(exc), max_chars=240)}
     else:
         payload = {"candidates": []}
-    return normalize_memory_gap_payload(payload)
+    return normalize_memory_extractor_payload(payload)

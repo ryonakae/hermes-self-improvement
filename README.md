@@ -123,12 +123,13 @@ $EDITOR config.local.yaml
 
 `config.yaml` と `config.local.yaml` はローカル実行用です。API key や provider secret は commit しないでください。
 
-モデル振り分けは3つです。
+モデル振り分けは4つです。
 
 | key | 用途 |
 |---|---|
-| `model.planner` | 改善案の採点と全体スキル計画 |
-| `model.editor` | 選ばれたスキル / メモリの変更エージェント |
+| `model.improvement_planner` | 改善案の採点と全体スキル計画 |
+| `model.skill_agent` | 選ばれたスキルの変更エージェント |
+| `model.memory_agent` | 選ばれたメモリの変更エージェント (PR2 で本格対応) |
 | `model.evaluator` | DSPy / GEPA による evaluator / プロンプト / rubric 調整 |
 
 ### 実行時ファイル
@@ -194,7 +195,7 @@ PY
 
 ### 主要ファイル
 
-入口は `plugin.yaml`、root `__init__.py`、`hermes_self_improvement/cli.py`、`hermes_self_improvement/schemas.py`、`hermes_self_improvement/tool_handlers.py` です。観測は `observer.py`、集計と context-windowed evidence は `evidence.py`、LLM target resolve は `target_resolver.py`、会話由来 memory gap は `conversation_memory.py`、calibration は `calibration.py` と `runtime_eval_cases.py`、memory/skill mutation は `mutation_policy.py` と `mutation_worker.py` を見ます。
+入口は `plugin.yaml`、root `__init__.py`、`hermes_self_improvement/cli.py`、`hermes_self_improvement/schemas.py`、`hermes_self_improvement/tool_handlers.py` です。観測は `observer.py`、集計と context-windowed evidence は `evidence.py`、LLM target resolve は `target_resolver.py`、会話由来 memory gap は `memory_extractor.py`、改善案の計画は `improvement_planner.py`、skill mutation エージェントは `skill_agent.py` / `skill_agent_backend.py`、calibration は `calibration.py` と `runtime_eval_cases.py`、memory/skill mutation の下位実行層は `mutation_policy.py` と `mutation_worker.py` を見ます。
 
 初めて触るなら、`AGENTS.md`、`skills/operations/SKILL.md`、関係する `.hermes/plans/` を読んでから実装に入ってください。テストは `tests/` にあります。
 

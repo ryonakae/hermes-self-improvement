@@ -6,13 +6,13 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .mutation_agent import run_skill_agent_task
-from .mutation_backend import build_mutation_backend
+from .skill_agent import run_skill_agent_task
+from .skill_agent_backend import build_skill_agent_backend
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_archive_operation
 from .memory_context import build_related_memory_lookup_context
 from .observer import _redact_text
-from .planner import build_planner_quality_report, build_skill_planner_digest, run_skill_planner
+from .improvement_planner import build_improvement_planner_digest, build_improvement_planner_quality_report, run_improvement_planner
 from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_editor_instructions
 from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
@@ -286,7 +286,7 @@ def _normalize_capacity_operation(raw: dict[str, Any], *, target: str) -> dict[s
 
 def _call_memory_capacity_planner_llm(*, failed_operation: dict[str, Any], failure_result: dict[str, Any], target: str, content: str, config: dict[str, Any]) -> list[dict[str, Any]]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
+    planner_config = model_config.get("improvement_planner") if isinstance(model_config.get("improvement_planner"), dict) else {}
     provider = planner_config.get("provider") or "auto"
     model = planner_config.get("model") or None
     timeout = int(planner_config.get("timeout") or 60)
@@ -645,7 +645,7 @@ def _execute_memory_move_operation(operation: dict[str, Any], config: dict[str, 
 
 def _call_memory_inventory_planner_llm(*, evidence: list[dict[str, Any]], config: dict[str, Any]) -> list[dict[str, Any]]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
+    planner_config = model_config.get("improvement_planner") if isinstance(model_config.get("improvement_planner"), dict) else {}
     provider = planner_config.get("provider") or "auto"
     model = planner_config.get("model") or None
     timeout = int(planner_config.get("timeout") or 60)
@@ -770,7 +770,7 @@ def build_skill_agent_task(
         {**candidate_meta, "name": skill_name, "evidence_ids": [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]},
         evidence_by_id,
     )
-    overlay = load_active_prompt_overlay(config or {}, role="editor", base_hash=base_prompt_hash("editor")) if config is not None else None
+    overlay = load_active_prompt_overlay(config or {}, role="skill_agent", base_hash=base_prompt_hash("skill_agent")) if config is not None else None
     rendered = render_editor_instructions(
         skill_name=skill_name,
         candidate=candidate_meta,
@@ -809,7 +809,7 @@ def build_skill_agent_task(
         "omitted_evidence_count": max(0, len(evidence) - MAX_EDITOR_EVIDENCE_ITEMS),
         "instructions": instructions,
         "llm_brief_markdown": llm_brief,
-        "prompt_source": {"editor": rendered["prompt_source"]},
+        "prompt_source": {"skill_agent": rendered["prompt_source"]},
         "constraints": [
             "Use only skills_list, skill_view, skill_manage, submit_mutation_result.",
             "Do not use terminal/file/git/direct filesystem tools.",
@@ -896,7 +896,7 @@ def run_skill_improvement_step(
             "decisions": [],
         }
     model_cfg = (config or {}).get("model") if isinstance((config or {}).get("model"), dict) else {}
-    if not candidate_by_name and not callable((config or {}).get("_skill_planner_func")) and not isinstance(model_cfg.get("planner"), dict):
+    if not candidate_by_name and not callable((config or {}).get("_improvement_planner_func")) and not isinstance(model_cfg.get("improvement_planner"), dict):
         return {
             "status": "no_skill_candidates",
             "changed": 0,
@@ -911,17 +911,17 @@ def run_skill_improvement_step(
     )
     target_resolutions = run_target_resolver(target_resolution_digest, config=config)
     evidence_pack = {**evidence_pack, "target_resolutions": target_resolutions}
-    digest = build_skill_planner_digest(evidence_pack)
-    planner = run_skill_planner(digest, config=config)
+    digest = build_improvement_planner_digest(evidence_pack)
+    planner = run_improvement_planner(digest, config=config)
     all_evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
     evidence_by_id = {str(item.get("id") or ""): item for item in all_evidence if isinstance(item, dict)}
     digest_by_name = {str(item.get("name") or ""): item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)}
     decisions: list[dict[str, Any]] = []
     changed_skills: list[str] = []
     prompt_sources: dict[str, Any] = {}
-    if isinstance(planner.get("prompt_source"), dict) and isinstance(planner["prompt_source"].get("planner"), dict):
-        prompt_sources["planner"] = planner["prompt_source"]["planner"]
-    backend = build_mutation_backend(config) if mutate else None
+    if isinstance(planner.get("prompt_source"), dict) and isinstance(planner["prompt_source"].get("improvement_planner"), dict):
+        prompt_sources["improvement_planner"] = planner["prompt_source"]["improvement_planner"]
+    backend = build_skill_agent_backend(config) if mutate else None
 
     if planner.get("status") != "completed":
         return {
@@ -1074,8 +1074,8 @@ def run_skill_improvement_step(
             continue
         task = build_skill_agent_task(skill_name=skill_name, evidence=attached_evidence, candidate=candidate, planner_decision=planner_decision, config=config)
         task_prompt_sources = task.get("prompt_source") if isinstance(task.get("prompt_source"), dict) else {}
-        if isinstance(task_prompt_sources.get("editor"), dict):
-            prompt_sources.setdefault("editor", task_prompt_sources["editor"])
+        if isinstance(task_prompt_sources.get("skill_agent"), dict):
+            prompt_sources.setdefault("skill_agent", task_prompt_sources["skill_agent"])
         if not mutate:
             decisions.append({
                 **base_decision,
@@ -1098,7 +1098,7 @@ def run_skill_improvement_step(
             "result": result,
         })
 
-    quality = build_planner_quality_report(digest=digest, planner=planner, runner_decisions=decisions)
+    quality = build_improvement_planner_quality_report(digest=digest, planner=planner, runner_decisions=decisions)
     return {
         "status": "completed" if decisions else "no_planner_decisions",
         "changed": len(set(changed_skills)),

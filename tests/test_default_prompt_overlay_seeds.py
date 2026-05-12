@@ -20,8 +20,9 @@ def config(tmp_path: Path) -> dict:
 
 def test_default_prompt_overlay_seeds_are_markdown_and_within_limits():
     required_terms = {
-        "planner": ["apply", "defer", "USER", "MEMORY", "Skill", "create_skill"],
-        "editor": ["skill_view", "skill_manage", "submit_mutation_result", "minimal"],
+        "improvement_planner": ["apply", "defer", "USER", "MEMORY", "Skill", "create_skill"],
+        "skill_agent": ["skill_view", "skill_manage", "submit_mutation_result", "minimal"],
+        "memory_agent": ["skill_view", "skill_manage", "submit_mutation_result", "minimal"],
         "evaluator": ["evaluate", "memory", "overlay", "defer"],
     }
     for role in DEFAULT_PROMPT_SEED_ROLES:
@@ -40,7 +41,7 @@ def test_materialize_default_prompt_overlays_creates_active_runtime_seed(tmp_pat
     result = materialize_default_prompt_overlays(cfg)
 
     assert result["status"] == "materialized"
-    assert set(result["roles"].keys()) == {"planner", "editor", "evaluator"}
+    assert set(result["roles"].keys()) == {"improvement_planner", "skill_agent", "memory_agent", "evaluator"}
     for role in DEFAULT_PROMPT_SEED_ROLES:
         overlay = load_active_prompt_overlay(cfg, role=role, base_hash=base_prompt_hash(role))
         assert overlay is not None
@@ -67,12 +68,12 @@ def test_materialize_default_prompt_overlays_refreshes_stale_base_hash(tmp_path)
     materialize_default_prompt_overlays(cfg)
     active_path = Path(cfg["_self_improvement_root"]) / "evaluator" / "active-prompts.json"
     pointer = json.loads(active_path.read_text(encoding="utf-8"))
-    pointer["roles"]["planner"]["base_prompt_hash"] = "sha256:old"
+    pointer["roles"]["improvement_planner"]["base_prompt_hash"] = "sha256:old"
     active_path.write_text(json.dumps(pointer, ensure_ascii=False), encoding="utf-8")
 
     result = materialize_default_prompt_overlays(cfg)
 
     assert result["status"] == "materialized"
-    overlay = load_active_prompt_overlay(cfg, role="planner", base_hash=base_prompt_hash("planner"))
+    overlay = load_active_prompt_overlay(cfg, role="improvement_planner", base_hash=base_prompt_hash("improvement_planner"))
     assert overlay is not None
     assert overlay["source"] == "default_seed"

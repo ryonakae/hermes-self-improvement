@@ -137,19 +137,26 @@ def skill_memory_classification_context() -> dict[str, str]:
 
 
 def base_prompt_spec(role: str) -> dict[str, Any]:
-    if role == "planner":
+    if role == "improvement_planner":
         return {
             "schema_name": "self_improvement_base_prompt_spec",
             "schema_version": PROMPT_SCHEMA_VERSION,
-            "role": "planner",
+            "role": "improvement_planner",
             "system_prompt": PLANNER_SYSTEM_PROMPT,
             "user_prefix": PLANNER_USER_PREFIX,
         }
-    if role == "editor":
+    if role == "skill_agent":
         return {
             "schema_name": "self_improvement_base_prompt_spec",
             "schema_version": PROMPT_SCHEMA_VERSION,
-            "role": "editor",
+            "role": "skill_agent",
+            "sections": EDITOR_BASE_SECTIONS + EDITOR_ALLOWED_TOOLS_AND_STOPS,
+        }
+    if role == "memory_agent":
+        return {
+            "schema_name": "self_improvement_base_prompt_spec",
+            "schema_version": PROMPT_SCHEMA_VERSION,
+            "role": "memory_agent",
             "sections": EDITOR_BASE_SECTIONS + EDITOR_ALLOWED_TOOLS_AND_STOPS,
         }
     if role == "evaluator":
@@ -203,7 +210,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
     ]
-    return {"messages": messages, "prompt_source": _prompt_source("planner", overlay)}
+    return {"messages": messages, "prompt_source": _prompt_source("improvement_planner", overlay)}
 
 
 def render_editor_instructions(
@@ -239,4 +246,4 @@ def render_editor_instructions(
         }),
     ])
     sections.extend(EDITOR_ALLOWED_TOOLS_AND_STOPS)
-    return {"instructions": "\n".join(sections), "prompt_source": _prompt_source("editor", overlay)}
+    return {"instructions": "\n".join(sections), "prompt_source": _prompt_source("skill_agent", overlay)}

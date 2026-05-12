@@ -8,7 +8,7 @@ from typing import Any, Callable
 from .observer import _redact_text, _sha256_text, _stable_json
 from .prompt_overlays import MAX_ADDENDUM_CHARS, MAX_ADDENDUM_LINES, prompt_overlay_root, write_prompt_candidate
 from .prompts import base_prompt_hash
-from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_planner_editor_runtime_eval_cases
+from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_role_runtime_eval_cases
 
 UTC = timezone.utc
 SAFETY_BOUNDARY_TERMS = (
@@ -27,10 +27,11 @@ SAFETY_BOUNDARY_TERMS = (
 OptimizerFn = Callable[..., dict[str, Any]]
 OverlaySetOptimizerFn = Callable[..., dict[str, Any]]
 
-OVERLAY_TARGETS = ("planner_overlay", "editor_overlay", "evaluator_overlay")
+OVERLAY_TARGETS = ("improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
 OVERLAY_TARGET_ROLES = {
-    "planner_overlay": "planner",
-    "editor_overlay": "editor",
+    "improvement_planner_overlay": "improvement_planner",
+    "skill_agent_overlay": "skill_agent",
+    "memory_agent_overlay": "memory_agent",
     "evaluator_overlay": "evaluator",
 }
 VALID_CHANGE_STATUSES = {"changed", "unchanged"}
@@ -91,7 +92,7 @@ def validate_prompt_overlay_candidate(candidate: dict[str, Any], *, role: str, m
 
 
 def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
-    if role == "planner":
+    if role == "improvement_planner":
         weak_rate = ((evidence.get("credit_assignment") or {}).get("overall") or {}).get("weak_only_selected_rate")
         suffix = f" Current weak-only selected rate: {weak_rate}." if weak_rate is not None else ""
         return (
@@ -112,7 +113,7 @@ def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
 
 
 def _fallback_case_behaviors(role: str) -> dict[str, Any]:
-    if role == "planner":
+    if role == "improvement_planner":
         return {
             "planner_weak_only_skip": {"decision": "skip"},
             "planner_ambiguous_target_defer": {"decision": "defer", "reason": "target_provenance_unsafe"},
@@ -181,7 +182,7 @@ def generate_prompt_overlay_candidate(
     max_text_chars: int = MAX_ADDENDUM_CHARS,
     write_candidate: bool = True,
 ) -> dict[str, Any]:
-    cases = [case for case in build_planner_editor_runtime_eval_cases(config=config, limit=1000) if case.get("role") == role]
+    cases = [case for case in build_role_runtime_eval_cases(config=config, limit=1000) if case.get("role") == role]
     source, raw = _run_optimizer(role=role, evidence=evidence, cases=cases, config=config, optimizer=optimizer)
     candidate = _normalize_optimizer_output(raw, role=role, evidence=evidence, source=source, max_text_chars=max_text_chars)
     candidate["runtime_eval_case_count"] = len(cases)

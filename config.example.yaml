@@ -10,14 +10,18 @@
 #   enabled: false
 
 # Optional: customize models only when auto routing is not enough.
-# planner plans skill/memory proposals, editor powers mutation agents, and evaluator
-# powers DSPy/GEPA evaluator calibration.
+# improvement_planner plans skill/memory proposals, skill_agent / memory_agent power
+# the corresponding mutation agents, and evaluator powers DSPy/GEPA evaluator calibration.
 # model:
-#   planner:
+#   improvement_planner:
 #     provider: openrouter
 #     model: anthropic/claude-sonnet-4
 #     api_key: ${OPENROUTER_API_KEY}
-#   editor:
+#   skill_agent:
+#     provider: openrouter
+#     model: anthropic/claude-sonnet-4
+#     api_key: ${OPENROUTER_API_KEY}
+#   memory_agent:
 #     provider: openrouter
 #     model: anthropic/claude-sonnet-4
 #     api_key: ${OPENROUTER_API_KEY}

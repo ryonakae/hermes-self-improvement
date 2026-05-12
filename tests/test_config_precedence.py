@@ -151,7 +151,7 @@ def test_model_config_uses_model_section_only(tmp_path):
         model_alias:
           provider: ignored
         model:
-          planner:
+          improvement_planner:
             provider: codex
             model: gpt-current
             timeout: 33
@@ -164,10 +164,10 @@ def test_model_config_uses_model_section_only(tmp_path):
 
     config = mod.load_config(repo_config)
 
-    assert config["model"]["planner"]["provider"] == "codex"
-    assert config["model"]["planner"]["model"] == "gpt-current"
-    assert config["model"]["planner"]["timeout"] == 33
-    assert config["model"]["planner"]["max_tokens"] == 444
+    assert config["model"]["improvement_planner"]["provider"] == "codex"
+    assert config["model"]["improvement_planner"]["model"] == "gpt-current"
+    assert config["model"]["improvement_planner"]["timeout"] == 33
+    assert config["model"]["improvement_planner"]["max_tokens"] == 444
     assert config["model"]["evaluator"]["model"] == "gepa-current"
     assert config["model"]["evaluator"]["timeout"] == 77
     assert "model_alias" not in config
@@ -187,17 +187,17 @@ def test_old_model_role_keys_are_dropped(tmp_path):
             provider: ignored
           old_planner:
             provider: ignored
-          planner:
+          improvement_planner:
             provider: codex
         """,
     )
 
     config = mod.load_config(repo_config)
 
-    assert list(config["model"].keys()) == ["planner", "editor", "evaluator"]
+    assert list(config["model"].keys()) == ["improvement_planner", "skill_agent", "memory_agent", "evaluator"]
     retired = "ju" + "dge"
-    assert {"llm", "mutation", "gepa", retired, "old_planner"}.isdisjoint(config["model"])
-    assert config["model"]["planner"]["provider"] == "codex"
+    assert {"llm", "mutation", "gepa", retired, "old_planner", "planner", "editor"}.isdisjoint(config["model"])
+    assert config["model"]["improvement_planner"]["provider"] == "codex"
 
 
 def test_load_config_imports_runtime_memory_layers_from_hermes_config(tmp_path, monkeypatch):
@@ -242,7 +242,7 @@ def test_code_defaults_are_used_when_repo_yaml_is_absent(tmp_path):
 
     assert config["retention_days"] == 30
     assert config["gepa_evaluator"]["enabled"] is True
-    assert list(config["model"].keys()) == ["planner", "editor", "evaluator"]
+    assert list(config["model"].keys()) == ["improvement_planner", "skill_agent", "memory_agent", "evaluator"]
     assert {"llm", "mutation", "gepa", "old_planner"}.isdisjoint(config["model"])
     assert "unsupported_policy" not in config
     assert config["config_sources"] == []

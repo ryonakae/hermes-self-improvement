@@ -38,8 +38,8 @@ def write_planner_cases(config: dict) -> None:
         "episode_kind": "preview_decision",
         "target_kind": "skill",
         "target_id": "demo-skill",
-        "planner_prompt_hash": "sha256:planner",
-        "editor_prompt_hash": "sha256:editor",
+        "improvement_planner_prompt_hash": "sha256:planner",
+        "skill_agent_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
         "decision": "run_editor",
         "action": "no_op",
@@ -58,8 +58,8 @@ def write_planner_cases(config: dict) -> None:
         "episode_kind": "executed_mutation",
         "target_kind": "skill",
         "target_id": "demo-skill",
-        "planner_prompt_hash": "sha256:planner",
-        "editor_prompt_hash": "sha256:editor",
+        "improvement_planner_prompt_hash": "sha256:planner",
+        "skill_agent_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
         "decision": "run_editor",
         "action": "skill_patch",
@@ -83,23 +83,32 @@ def overlay_candidate_set(tmp_path: Path, *, candidate_set_id: str = "overlay-se
         "optimizer": "dspy.GEPA",
         "gepa_result": "selected",
         "targets": {
-            "planner_overlay": {
-                "target": "planner_overlay",
-                "role": "planner",
+            "improvement_planner_overlay": {
+                "target": "improvement_planner_overlay",
+                "role": "improvement_planner",
                 "candidate_set_id": candidate_set_id,
                 "change_status": "changed",
-                "base_prompt_hash": base_prompt_hash("planner"),
+                "base_prompt_hash": base_prompt_hash("improvement_planner"),
                 "candidate_prompt": {"system_addendum": "Prefer skip for weak-only evidence.", "replacement": None},
                 "candidate_hash": planner_hash,
             },
-            "editor_overlay": {
-                "target": "editor_overlay",
-                "role": "editor",
+            "skill_agent_overlay": {
+                "target": "skill_agent_overlay",
+                "role": "skill_agent",
                 "candidate_set_id": candidate_set_id,
                 "change_status": "unchanged",
-                "base_prompt_hash": base_prompt_hash("editor"),
+                "base_prompt_hash": base_prompt_hash("skill_agent"),
                 "candidate_prompt": {"system_addendum": None, "replacement": None},
                 "candidate_hash": "sha256:editor-candidate",
+            },
+            "memory_agent_overlay": {
+                "target": "memory_agent_overlay",
+                "role": "memory_agent",
+                "candidate_set_id": candidate_set_id,
+                "change_status": "unchanged",
+                "base_prompt_hash": base_prompt_hash("memory_agent"),
+                "candidate_prompt": {"system_addendum": None, "replacement": None},
+                "candidate_hash": "sha256:memory-agent-candidate",
             },
             "evaluator_overlay": {
                 "target": "evaluator_overlay",
@@ -115,7 +124,7 @@ def overlay_candidate_set(tmp_path: Path, *, candidate_set_id: str = "overlay-se
 
 
 def promote_eval() -> dict:
-    return {"decision": "promote", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": [], "evaluation_hash": "sha256:evaluation"}
+    return {"decision": "promote", "gepa_result": "selected", "changed_targets": ["improvement_planner_overlay"], "hard_violations": [], "evaluation_hash": "sha256:evaluation"}
 
 
 def keep_eval() -> dict:
@@ -137,15 +146,15 @@ def test_full_feedback_loop_promotes_overlay_candidate_set_from_runtime_cases(mo
     assert result["current_status"] == "updated"
     assert result["active_changed"] is True
     assert result["overlay_candidate_set"]["status"] == "promoted"
-    assert result["overlay_candidate_set"]["promoted_targets"] == ["planner_overlay"]
-    planner = result["prompt_overlays"]["planner"]
+    assert result["overlay_candidate_set"]["promoted_targets"] == ["improvement_planner_overlay"]
+    planner = result["prompt_overlays"]["improvement_planner"]
     assert planner["promoted"] is True
     assert planner["candidate_set_id"] == "overlay-set-001"
     pointer_path = tmp_path / "self-improvement" / "evaluator" / "active-prompts.json"
     assert pointer_path.exists()
     pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
     assert pointer["overlay_generation_id"] == "overlay-set-001"
-    assert pointer["roles"]["planner"]["active"] is True
+    assert pointer["roles"]["improvement_planner"]["active"] is True
     assert result["episodes"]["count"] >= 1
 
 
@@ -163,8 +172,8 @@ def test_calibrate_dry_run_evaluates_overlay_set_without_writing_pointer(monkeyp
     assert result["current_status"] == "would_update"
     assert result["active_changed"] is False
     assert result["overlay_candidate_set"]["decision"] == "promote"
-    assert result["prompt_overlays"]["planner"]["candidate"] is True
-    assert result["prompt_overlays"]["planner"]["promoted"] is False
+    assert result["prompt_overlays"]["improvement_planner"]["candidate"] is True
+    assert result["prompt_overlays"]["improvement_planner"]["promoted"] is False
     assert not (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists()
 
 
@@ -188,7 +197,7 @@ def test_compact_tool_result_includes_overlay_set_summary_without_payload(monkey
         "gepa_result": "selected",
         "candidate_set_id": "overlay-set-001",
         "candidate_set_path": str(tmp_path / "candidate-set.json"),
-        "changed_targets": ["planner_overlay"],
+        "changed_targets": ["improvement_planner_overlay"],
         "hard_violations": 0,
     }
     assert '"targets":' not in serialized
@@ -205,7 +214,7 @@ def test_later_negative_runtime_case_keeps_next_overlay_candidate(monkeypatch, t
     monkeypatch.setattr(calibration, "generate_overlay_candidate_set", lambda *, config, evidence: overlay_candidate_set(tmp_path, planner_hash="sha256:planner-candidate-2"))
     monkeypatch.setattr(calibration, "evaluate_overlay_candidate_set", lambda candidate_set: evals.pop(0))
     first = run_calibration(config=config, execute=True)
-    first_hash = first["prompt_overlays"]["planner"]["candidate_hash"]
+    first_hash = first["prompt_overlays"]["improvement_planner"]["candidate_hash"]
 
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-04" / "weak-regression.json", {
@@ -215,8 +224,8 @@ def test_later_negative_runtime_case_keeps_next_overlay_candidate(monkeypatch, t
         "episode_kind": "preview_decision",
         "target_kind": "skill",
         "target_id": "demo-skill",
-        "planner_prompt_hash": first_hash,
-        "editor_prompt_hash": "sha256:editor",
+        "improvement_planner_prompt_hash": first_hash,
+        "skill_agent_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
         "decision": "skip",
         "action": "no_op",
@@ -233,4 +242,4 @@ def test_later_negative_runtime_case_keeps_next_overlay_candidate(monkeypatch, t
 
     assert second["overlay_candidate_set"]["decision"] == "keep_candidate"
     assert second["overlay_candidate_set"]["gepa_result"] == "no_improvement"
-    assert second["prompt_overlays"]["planner"]["promoted"] is False
+    assert second["prompt_overlays"]["improvement_planner"]["promoted"] is False

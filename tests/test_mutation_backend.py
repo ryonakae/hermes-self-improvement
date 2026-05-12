@@ -5,14 +5,14 @@ import sys
 import types
 from types import SimpleNamespace
 
-from hermes_self_improvement.mutation_backend import (
-    ALLOWED_MUTATION_AGENT_TOOLS,
-    NativeSkillToolEditorBackend,
-    MutationBackendLimits,
+from hermes_self_improvement.skill_agent_backend import (
+    ALLOWED_SKILL_AGENT_TOOLS,
+    NativeSkillAgentBackend,
+    SkillAgentBackendLimits,
     SkillToolExecutor,
-    build_mutation_backend,
+    build_skill_agent_backend,
     check_skill_tool_executor_readiness,
-    mutation_backend_status,
+    skill_agent_backend_status,
     validate_backend_success_result,
 )
 
@@ -40,12 +40,12 @@ def _content_response(content: str = "done"):
 
 
 def test_backend_contract_allows_only_skill_tools():
-    assert ALLOWED_MUTATION_AGENT_TOOLS == {"skills_list", "skill_view", "skill_manage"}
+    assert ALLOWED_SKILL_AGENT_TOOLS == {"skills_list", "skill_view", "skill_manage"}
 
 
 def test_backend_contract_requires_success_schema_fields():
-    assert validate_backend_success_result({"ok": True})["error"] == "mutation_agent_result_missing_success"
-    assert validate_backend_success_result({"success": True})["error"] == "mutation_agent_result_used_tools_missing"
+    assert validate_backend_success_result({"ok": True})["error"] == "skill_agent_result_missing_success"
+    assert validate_backend_success_result({"success": True})["error"] == "skill_agent_result_used_tools_missing"
     ok = {
         "success": True,
         "used_tools": [],
@@ -125,7 +125,7 @@ def test_validate_create_skill_rejects_natural_language_outcome_without_created_
     )
 
     assert result["success"] is False
-    assert result["error"] == "mutation_agent_result_created_skill_missing"
+    assert result["error"] == "skill_agent_result_created_skill_missing"
     assert result["expected_target"] == "safe-patch-usage"
     assert result["created_skills"] == []
     assert result["used_tools"][0]["action"] == "patch"
@@ -152,7 +152,7 @@ def test_validate_create_skill_does_not_infer_created_skill_without_create_trace
     )
 
     assert result["success"] is False
-    assert result["error"] == "mutation_agent_result_created_skill_missing"
+    assert result["error"] == "skill_agent_result_created_skill_missing"
     assert result["expected_target"] == "timeout-workflow"
     assert result["created_skills"] == []
     assert result["used_tools"][1]["tool"] == "skill_view"
@@ -176,11 +176,11 @@ def test_validate_skill_improve_rejects_changed_outcome_without_target_change_tr
     )
 
     assert result["success"] is False
-    assert result["error"] == "mutation_agent_result_changed_skill_missing"
+    assert result["error"] == "skill_agent_result_changed_skill_missing"
 
 
 def test_backend_limits_are_fail_closed():
-    limits = MutationBackendLimits(max_tool_calls=0, max_iterations=0, timeout_seconds=0)
+    limits = SkillAgentBackendLimits(max_tool_calls=0, max_iterations=0, timeout_seconds=0)
     assert limits.check()["status"] == "failed"
 
 
@@ -235,7 +235,7 @@ def test_native_backend_executes_skill_tools_and_finalizer():
             call_id="call_final",
         ),
     ])
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(
             skills_list_fn=lambda **kwargs: {"success": True, "skills": []},
             skill_view_fn=lambda **kwargs: {"success": True, "content": "demo b"},
@@ -282,7 +282,7 @@ def test_native_backend_post_validates_created_skill():
         viewed.append(kwargs)
         return {"success": True, "content": "---\nname: demo-created-skill\ndescription: Demo.\n---\n\n# Demo\n\n## Pitfalls\n\n- Avoid stale traces.\n\n## Verification\n\n- Read it back."}
 
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(
             skills_list_fn=lambda **_: {"success": True, "skills": []},
             skill_view_fn=fake_skill_view,
@@ -320,7 +320,7 @@ def test_native_backend_post_validation_records_trigger_step_and_memory_shape_qu
             call_id="call_final",
         ),
     ])
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(
             skills_list_fn=lambda **_: {"success": True, "skills": []},
             skill_view_fn=lambda **_: {"success": True, "content": "---\nname: thin-skill\ndescription: Demo.\n---\n\n# Demo\n\nUser prefers concise replies.\n\n## Pitfalls\n- None.\n\n## Verification\n- Read back."},
@@ -357,7 +357,7 @@ def test_native_backend_rejects_create_when_post_validation_readback_fails():
             call_id="call_final",
         ),
     ])
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(
             skills_list_fn=lambda **_: {"success": True, "skills": []},
             skill_view_fn=lambda **_: {"success": False, "error": "skill_not_found"},
@@ -369,7 +369,7 @@ def test_native_backend_rejects_create_when_post_validation_readback_fails():
     result = backend.run("prompt", {"targets": {"new_skill": "demo-created-skill"}, "task_kind": "skill_create"}, {})
 
     assert result["success"] is False
-    assert result["error"] == "mutation_agent_post_validation_failed"
+    assert result["error"] == "skill_agent_post_validation_failed"
     assert result["post_validation"]["status"] == "failed"
     assert result["post_validation"]["reason"] == "skill_readback_failed"
     assert result["post_validation"]["target"] == "demo-created-skill"
@@ -398,7 +398,7 @@ def test_native_backend_post_validates_patch_intended_new_text():
             call_id="call_final",
         ),
     ])
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(
             skills_list_fn=lambda **_: {"success": True, "skills": []},
             skill_view_fn=lambda **_: {"success": True, "content": "# Demo\n\nnew durable guidance\n\n## Verification\n- Read back."},
@@ -436,7 +436,7 @@ def test_native_backend_rejects_patch_when_new_text_missing_after_readback():
             call_id="call_final",
         ),
     ])
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(
             skills_list_fn=lambda **_: {"success": True, "skills": []},
             skill_view_fn=lambda **_: {"success": True, "content": "# Demo\n\nold guidance\n\n## Verification\n- Read back."},
@@ -448,7 +448,7 @@ def test_native_backend_rejects_patch_when_new_text_missing_after_readback():
     result = backend.run("prompt", {"targets": {"primary_skill": "demo-skill"}, "task_kind": "skill_improve"}, {})
 
     assert result["success"] is False
-    assert result["error"] == "mutation_agent_post_validation_failed"
+    assert result["error"] == "skill_agent_post_validation_failed"
     assert result["post_validation"]["status"] == "failed"
     assert result["post_validation"]["reason"] == "skill_intended_change_missing"
     assert result["post_validation"]["intended_change_verified"] is False
@@ -479,7 +479,7 @@ def test_native_backend_sends_tool_results_as_plain_user_context_only():
         calls.append([dict(message) for message in messages])
         return next(responses)
 
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {"success": True, "content": "demo"}, skill_manage_fn=lambda **_: {}),
         llm_call=fake_llm,
     )
@@ -512,7 +512,7 @@ def test_native_backend_non_mutating_finalizer_succeeds_without_changes():
             },
         ),
     ])
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {"success": True}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: next(responses),
     )
@@ -525,7 +525,7 @@ def test_native_backend_non_mutating_finalizer_succeeds_without_changes():
 
 
 def test_native_backend_normalizes_false_success_non_mutating_outcome_to_completed_run():
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {"success": True}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: _tool_response(
             "submit_mutation_result",
@@ -550,7 +550,7 @@ def test_native_backend_normalizes_false_success_non_mutating_outcome_to_complet
 
 
 def test_native_backend_rejects_disallowed_tool_request():
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: _tool_response("terminal", {}),
     )
@@ -559,22 +559,22 @@ def test_native_backend_rejects_disallowed_tool_request():
 
 
 def test_native_backend_stops_after_max_iterations():
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: _tool_response("skill_view", {"name": "demo"}),
-        limits=MutationBackendLimits(max_tool_calls=10, max_iterations=1),
+        limits=SkillAgentBackendLimits(max_tool_calls=10, max_iterations=1),
     )
 
     result = backend.run("prompt", {}, {})
 
-    assert result["error"] == "mutation_agent_limits_exceeded"
+    assert result["error"] == "skill_agent_limits_exceeded"
     assert result["tool_call_count"] == 1
     assert result["tool_call_counts_by_name"] == {"skill_view": 1}
     assert result["last_tool"] == "skill_view"
 
 
 def test_native_backend_requires_submit_result_tool_call():
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: _content_response("I am done"),
     )
@@ -583,7 +583,7 @@ def test_native_backend_requires_submit_result_tool_call():
 
 
 def test_native_backend_reports_tool_call_unsupported_for_non_tool_response():
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: "not a response object",
     )
@@ -608,7 +608,7 @@ def test_native_backend_records_used_tools_from_actual_calls_not_finalizer_self_
             },
         ),
     ])
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {"success": True}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: next(responses),
     )
@@ -618,15 +618,15 @@ def test_native_backend_records_used_tools_from_actual_calls_not_finalizer_self_
     assert result["used_tools"] == [{"tool": "skills_list", "success": True}]
 
 
-def test_build_mutation_backend_normalizes_disabled_and_unknown():
-    assert build_mutation_backend({"mutation": {"enabled": False}}).run("p", {}, {})["error"] == "mutation_agent_backend_disabled"
-    assert build_mutation_backend({"mutation": {"backend": "bogus"}}).run("p", {}, {})["reasons"] == ["mutation_agent_backend_unknown"]
+def test_build_skill_agent_backend_normalizes_disabled_and_unknown():
+    assert build_skill_agent_backend({"mutation": {"enabled": False}}).run("p", {}, {})["error"] == "skill_agent_backend_disabled"
+    assert build_skill_agent_backend({"mutation": {"backend": "bogus"}}).run("p", {}, {})["reasons"] == ["skill_agent_backend_unknown"]
 
 
 def test_runtime_skill_tool_resolver_reports_unavailable_without_core_hook():
-    status = mutation_backend_status({"mutation": {"backend": "disabled"}})
+    status = skill_agent_backend_status({"mutation": {"backend": "disabled"}})
     assert status["available"] is False
-    assert status["reason"] == "mutation_agent_backend_disabled"
+    assert status["reason"] == "skill_agent_backend_disabled"
 
 
 def test_skill_tool_executor_readiness_reports_resolved_callables():
@@ -652,7 +652,7 @@ def test_skill_tool_executor_readiness_fails_when_one_callable_missing():
     assert "skill_manage" in readiness["missing_tools"]
 
 
-def test_mutation_backend_status_includes_tool_executor_source_and_readiness(monkeypatch):
+def test_skill_agent_backend_status_includes_tool_executor_source_and_readiness(monkeypatch):
     fake_tools_pkg = types.ModuleType("tools")
     fake_skills_tool = types.ModuleType("tools.skills_tool")
     fake_skill_manager_tool = types.ModuleType("tools.skill_manager_tool")
@@ -663,7 +663,7 @@ def test_mutation_backend_status_includes_tool_executor_source_and_readiness(mon
     monkeypatch.setitem(sys.modules, "tools.skills_tool", fake_skills_tool)
     monkeypatch.setitem(sys.modules, "tools.skill_manager_tool", fake_skill_manager_tool)
 
-    status = mutation_backend_status({"mutation": {"enabled": True}})
+    status = skill_agent_backend_status({"mutation": {"enabled": True}})
 
     assert status["available"] is True
     assert status["configured"] == "native_skill_tool_editor"
@@ -681,7 +681,7 @@ def test_skill_tool_executor_normalizes_string_json_results_from_registry():
 
 
 def test_native_backend_rejects_finalizer_with_changed_skill_outside_task_targets():
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: _tool_response(
             "submit_mutation_result",
@@ -699,11 +699,11 @@ def test_native_backend_rejects_finalizer_with_changed_skill_outside_task_target
     result = backend.run("prompt", {"targets": {"primary_skill": "demo-skill"}}, {})
 
     assert result["success"] is False
-    assert result["error"] == "mutation_agent_result_target_escape"
+    assert result["error"] == "skill_agent_result_target_escape"
 
 
 def test_native_backend_rejects_finalizer_without_verification_notes_on_success():
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: _tool_response(
             "submit_mutation_result",
@@ -721,11 +721,11 @@ def test_native_backend_rejects_finalizer_without_verification_notes_on_success(
     result = backend.run("prompt", {"targets": {"primary_skill": "demo-skill"}}, {})
 
     assert result["success"] is False
-    assert result["error"] == "mutation_agent_result_verification_notes_missing"
+    assert result["error"] == "skill_agent_result_verification_notes_missing"
 
 
 def test_native_backend_rejects_tool_call_missing_required_name_for_skill_view():
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: _tool_response("skill_view", {}),
     )
@@ -736,7 +736,7 @@ def test_native_backend_rejects_tool_call_missing_required_name_for_skill_view()
 
 
 def test_native_backend_rejects_skill_manage_action_outside_allowed_actions():
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: _tool_response("skill_manage", {"action": "rename", "name": "demo"}),
     )
@@ -751,7 +751,7 @@ def test_native_backend_includes_last_safe_step_in_failure_context():
         _tool_response("skills_list", {}),
         _tool_response("skill_view", {}),
     ])
-    backend = NativeSkillToolEditorBackend(
+    backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {"success": True}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: next(responses),
     )

@@ -17,7 +17,7 @@ from .prompts import base_prompt_hash
 from .markdown_artifacts import render_calibration_context_markdown
 
 UTC = timezone.utc
-OVERLAY_TARGETS = ("planner_overlay", "editor_overlay", "evaluator_overlay")
+OVERLAY_TARGETS = ("improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
 
 
 def dspy_available() -> bool:
@@ -154,8 +154,9 @@ def _examples_from_cases(cases: list[dict[str, Any]], *, evidence: dict[str, Any
     evidence_json = _json_dumps(evidence)
     cases_json = _json_dumps(cases)
     current_overlays_json = _json_dumps({
-        "planner_overlay": {"base_prompt_hash": base_prompt_hash("planner")},
-        "editor_overlay": {"base_prompt_hash": base_prompt_hash("editor")},
+        "improvement_planner_overlay": {"base_prompt_hash": base_prompt_hash("improvement_planner")},
+        "skill_agent_overlay": {"base_prompt_hash": base_prompt_hash("skill_agent")},
+        "memory_agent_overlay": {"base_prompt_hash": base_prompt_hash("memory_agent")},
         "evaluator_overlay": {"base_prompt_hash": base_prompt_hash("evaluator")},
     })
     expected_json = _json_dumps({"targets": {target: {"change_status": "changed"} for target in OVERLAY_TARGETS}})
@@ -191,14 +192,14 @@ def _candidate_metric(gold: Any, pred: Any, trace: Any = None, pred_name: Any = 
 
 def _build_overlay_program(dspy: Any, *, lm: Any | None = None) -> Any:
     class OverlayCandidateSignature(dspy.Signature):
-        evidence_markdown = dspy.InputField(desc="Markdown-rendered calibration/run context for planner/editor/evaluator judgment.")
+        evidence_markdown = dspy.InputField(desc="Markdown-rendered calibration/run context for improvement_planner/skill_agent/memory_agent/evaluator judgment.")
         evidence_json = dspy.InputField(desc="Compact calibration evidence summary as program-owned JSON.")
         cases_json = dspy.InputField(desc="Overlay-set runtime eval cases as JSON array.")
-        current_overlays_json = dspy.InputField(desc="Current planner/editor/evaluator overlay identities as JSON.")
+        current_overlays_json = dspy.InputField(desc="Current improvement_planner/skill_agent/memory_agent/evaluator overlay identities as JSON.")
         candidate_set_json = dspy.OutputField(
             desc=(
                 "JSON object with gepa_result, baseline_score, candidate_score, and targets for "
-                "planner_overlay, editor_overlay, evaluator_overlay. Each target has change_status changed|unchanged, "
+                "improvement_planner_overlay, skill_agent_overlay, memory_agent_overlay, evaluator_overlay. Each target has change_status changed|unchanged, "
                 "candidate_prompt with overlay addenda only and replacement null, rationale, expected_effect, risk_notes."
             )
         )
@@ -302,8 +303,9 @@ def optimize_overlay_candidate_set(
         evidence_json = _json_dumps(evidence)
         cases_json = _json_dumps(cases)
         current_overlays_json = _json_dumps({
-            "planner_overlay": {"base_prompt_hash": base_prompt_hash("planner")},
-            "editor_overlay": {"base_prompt_hash": base_prompt_hash("editor")},
+            "improvement_planner_overlay": {"base_prompt_hash": base_prompt_hash("improvement_planner")},
+            "skill_agent_overlay": {"base_prompt_hash": base_prompt_hash("skill_agent")},
+            "memory_agent_overlay": {"base_prompt_hash": base_prompt_hash("memory_agent")},
             "evaluator_overlay": {"base_prompt_hash": base_prompt_hash("evaluator")},
         })
         prediction = compiled(evidence_markdown=evidence_markdown, evidence_json=evidence_json, cases_json=cases_json, current_overlays_json=current_overlays_json)

@@ -17,19 +17,19 @@ from .config import (
     load_config,
 )
 from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
-from .conversation_memory import (
+from .memory_extractor import (
     build_conversation_memory_windows,
-    build_memory_gap_digest,
-    make_conversation_memory_gap_candidate,
-    reconcile_memory_gap_payload_with_existing_memories,
-    run_memory_gap_extractor,
+    build_memory_extractor_digest,
+    make_conversation_memory_candidate,
+    reconcile_memory_extractor_payload_with_existing_memories,
+    run_memory_extractor,
 )
 from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
 from .diagnostic_signals import build_diagnostic_signals, normalize_report_diagnostic_signals
 from .evidence import build_evidence_pack, write_evidence_pack
 from .episodes import record_run_episodes
-from .mutation_backend import build_mutation_backend, mutation_backend_status
-from .mutation_agent import run_skill_agent_task
+from .skill_agent_backend import build_skill_agent_backend, skill_agent_backend_status
+from .skill_agent import run_skill_agent_task
 from .next_actions import render_next_actions
 from .runner_steps import (
     _execute_memory_context,
@@ -801,7 +801,7 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     prompt_overlays = result.get("prompt_overlays") if isinstance(result.get("prompt_overlays"), dict) else {}
     if prompt_overlays:
         lines.append("Prompt overlays:")
-        for role in ("planner", "editor", "evaluator"):
+        for role in ("improvement_planner", "skill_agent", "memory_agent", "evaluator"):
             item = prompt_overlays.get(role) if isinstance(prompt_overlays.get(role), dict) else None
             if not item:
                 continue
@@ -865,16 +865,16 @@ def run_improve(
             evidence_pack = _attach_diagnostic_signals_to_evidence_pack(evidence_pack, report_signals)
     existing_memories = _load_builtin_memory_entries(_builtin_memory_paths(config))
     conversation_windows = build_conversation_memory_windows(events)
-    memory_gap_digest = build_memory_gap_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
-    memory_gap_payload = reconcile_memory_gap_payload_with_existing_memories(
-        run_memory_gap_extractor(memory_gap_digest, config=config),
+    memory_extractor_digest = build_memory_extractor_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
+    memory_gap_payload = reconcile_memory_extractor_payload_with_existing_memories(
+        run_memory_extractor(memory_extractor_digest, config=config),
         existing_memories=existing_memories,
     )
     memory_gap_evidence = []
     for candidate in memory_gap_payload.get("candidates") or []:
         if not isinstance(candidate, dict) or candidate.get("action") not in {"add", "replace"}:
             continue
-        memory_gap_evidence.append(make_conversation_memory_gap_candidate(
+        memory_gap_evidence.append(make_conversation_memory_candidate(
             candidate_id=str(candidate.get("candidate_id") or "") or None,
             target=str(candidate.get("target") or "user"),
             action=str(candidate.get("action") or "defer"),
@@ -1001,7 +1001,7 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
     if not source.get("dry_run"):
         raise SystemExit("--from-run requires an improve dry-run artifact")
     steps = source.get("step_decisions") if isinstance(source.get("step_decisions"), dict) else {}
-    backend = build_mutation_backend(config)
+    backend = build_skill_agent_backend(config)
     external_provider = _external_memory_provider(config)
 
     skill_source = steps.get("skill") if isinstance(steps.get("skill"), dict) else {}
@@ -1090,7 +1090,7 @@ def _latest_run_artifact(config: dict[str, Any]) -> Path | None:
 
 
 def _render_status_summary(payload: dict[str, Any]) -> str:
-    mutation = payload.get("mutation_backend") if isinstance(payload.get("mutation_backend"), dict) else {}
+    skill_agent_backend_payload = payload.get("skill_agent_backend") if isinstance(payload.get("skill_agent_backend"), dict) else {}
     curator_integration = payload.get("curator_integration") if isinstance(payload.get("curator_integration"), dict) else {}
     policy = payload.get("autonomous_policy") if isinstance(payload.get("autonomous_policy"), dict) else {}
     lines = [
@@ -1098,7 +1098,7 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         "",
         "Readiness:",
         f"- plugin enabled: {bool(payload.get('enabled'))}",
-        f"- mutation backend: {'available' if mutation.get('available') else 'unavailable'}",
+        f"- skill agent backend: {'available' if skill_agent_backend_payload.get('available') else 'unavailable'}",
         f"- DSPy available: {bool(payload.get('dspy_available'))}",
         "Autonomous policy:",
         f"- calibrate: {'mutation-capable' if policy.get('calibrate_mutation_capable') else 'read-only'}, requires {policy.get('calibrate_requires') or 'unknown'}",
@@ -1326,7 +1326,7 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
         post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
         if post_validation.get("status") == "passed":
             post_validated += 1
-        if post_validation.get("status") == "failed" or result_payload.get("error") == "mutation_agent_post_validation_failed":
+        if post_validation.get("status") == "failed" or result_payload.get("error") == "skill_agent_post_validation_failed":
             validation_rejected += 1
         if result_payload.get("created_skills_inferred_from_trace"):
             trace_recovered += 1
@@ -1564,15 +1564,15 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
     planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
     planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
-    editor_prompt_chars = planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {}
+    skill_agent_prompt_chars = planner_quality.get("skill_agent_prompt_chars") if isinstance(planner_quality.get("skill_agent_prompt_chars"), dict) else {}
     planner_decisions = planner.get("decisions") if isinstance(planner.get("decisions"), list) else []
     skill_decisions = skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "run_editor"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
-    planner_prompt = prompt_sources.get("planner") if isinstance(prompt_sources.get("planner"), dict) else {}
-    editor_prompt = prompt_sources.get("editor") if isinstance(prompt_sources.get("editor"), dict) else {}
+    planner_prompt = prompt_sources.get("improvement_planner") if isinstance(prompt_sources.get("improvement_planner"), dict) else {}
+    editor_prompt = prompt_sources.get("skill_agent") if isinstance(prompt_sources.get("skill_agent"), dict) else {}
     evidence_strength_counts = planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {}
     evidence_by_kind = evidence_summary.get("evidence_by_kind") if isinstance(evidence_summary.get("evidence_by_kind"), dict) else {}
     inventory_health = evidence_summary.get("inventory_health") if isinstance(evidence_summary.get("inventory_health"), dict) else {}
@@ -1717,15 +1717,15 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- Would apply: {int(action_summary.get('apply') or 0)}, Deferred: {int(action_summary.get('defer') or 0)}, Skipped: {int(action_summary.get('skip') or 0)}, Blocked: {int(action_summary.get('block') or 0)}",
         "Skill planner:",
         f"- source: {planner.get('planner_source') or 'unknown'}, status: {planner.get('status') or skill_step.get('status') or 'unknown'}",
-        f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for editor: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}",
+        f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for skill_agent: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}",
         f"- proof: attached candidates {int(planner_quality.get('attached_candidate_count') or 0)}, unmatched evidence {int(planner_quality.get('unmatched_evidence_count') or 0)}, selected with evidence {int(planner_quality.get('selected_with_evidence') or 0)}, action-like skips {int(planner_quality.get('action_like_skips') or 0)}",
         f"- target hints: hint-attached evidence {int(planner_quality.get('hint_attached_evidence_count') or 0)}, hint-attached candidates {int(planner_quality.get('hint_attached_candidate_count') or 0)}, cluster evidence {int(planner_quality.get('cluster_evidence_count') or 0)}",
         f"- evidence strength: strong {strong_count}, medium {medium_count}, weak {weak_count}, weak-only selected {int(planner_quality.get('weak_only_selected_count') or 0)}",
-        f"- editor prompts: tasks {int(planner_quality.get('editor_task_count') or 0)}, max chars {int(editor_prompt_chars.get('max') or 0)}",
+        f"- skill_agent prompts: tasks {int(planner_quality.get('skill_agent_task_count') or 0)}, max chars {int(skill_agent_prompt_chars.get('max') or 0)}",
         "Prompt sources:",
         "- LLM context: Markdown briefs/reports; program control state: JSON manifests/run records/tool results",
-        f"- planner: {planner_prompt.get('overlay_source') or ('runtime overlay' if planner_prompt.get('overlay_active') else 'base')} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
-        f"- editor: {editor_prompt.get('overlay_source') or ('runtime overlay' if editor_prompt.get('overlay_active') else 'not rendered' if not editor_prompt else 'base')} hash {editor_prompt.get('overlay_hash') or editor_prompt.get('active_hash') or editor_prompt.get('base_hash') or 'n/a'}",
+        f"- improvement_planner: {planner_prompt.get('overlay_source') or ('runtime overlay' if planner_prompt.get('overlay_active') else 'base')} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
+        f"- skill_agent: {editor_prompt.get('overlay_source') or ('runtime overlay' if editor_prompt.get('overlay_active') else 'not rendered' if not editor_prompt else 'base')} hash {editor_prompt.get('overlay_hash') or editor_prompt.get('active_hash') or editor_prompt.get('base_hash') or 'n/a'}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Skill lifecycle:",
@@ -1942,7 +1942,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "last_event_ts": events[-1].get("ts") if events else None,
             "gepa_evaluator_mode": (config.get("gepa_evaluator") or {}).get("mode") if isinstance(config.get("gepa_evaluator"), dict) else None,
             "dspy_available": importlib.util.find_spec("dspy") is not None,
-            "mutation_backend": mutation_backend_status(config),
+            "skill_agent_backend": skill_agent_backend_status(config),
             "merge_verifier": merge_verifier_status(config),
             "memory_rollback": memory_rollback_status(config),
             "runtime_setup": check_runtime_setup(config),

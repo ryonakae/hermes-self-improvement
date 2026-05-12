@@ -168,7 +168,7 @@ def _summary_counts(decisions: list[dict[str, Any]], candidate_count: int) -> di
     }
 
 
-def build_skill_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
     skill_ids = [str(item) for item in views.get("skill", [])]
     skill_evidence = _evidence_by_ids(evidence_pack, skill_ids)
@@ -451,7 +451,7 @@ def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
             decisions.append({"skill": name, "decision": "skip", "reason": "weak_only_evidence", "evidence_ids": []})
         else:
             decisions.append({"skill": name, "decision": "skip", "reason": "no_attached_evidence", "evidence_ids": []})
-    return _planner_result(decisions, digest=digest, status="completed", model_role="planner", planner_source="deterministic_fallback", prompt_source={"role": "planner", "base_hash": base_prompt_hash("planner"), "overlay_active": False, "overlay_hash": None, "overlay_path": None})
+    return _planner_result(decisions, digest=digest, status="completed", model_role="improvement_planner", planner_source="deterministic_fallback", prompt_source={"role": "improvement_planner", "base_hash": base_prompt_hash("improvement_planner"), "overlay_active": False, "overlay_hash": None, "overlay_path": None})
 
 
 def _planner_result(
@@ -459,7 +459,7 @@ def _planner_result(
     *,
     digest: dict[str, Any],
     status: str,
-    model_role: str = "planner",
+    model_role: str = "improvement_planner",
     planner_source: str = "llm",
     error: str | None = None,
     prompt_source: dict[str, Any] | None = None,
@@ -475,7 +475,7 @@ def _planner_result(
         "decisions": decisions,
     }
     if prompt_source:
-        result["prompt_source"] = {"planner": prompt_source}
+        result["prompt_source"] = {"improvement_planner": prompt_source}
     if error:
         result["error"] = _redacted_preview(error, max_chars=240)
     return result
@@ -691,14 +691,14 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     return _planner_result(decisions, digest=digest, status="completed", prompt_source=prompt_source)
 
 
-def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+def _call_improvement_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
+    planner_config = model_config.get("improvement_planner") if isinstance(model_config.get("improvement_planner"), dict) else {}
     provider = planner_config.get("provider") or "auto"
     model = planner_config.get("model") or None
     timeout = _coerce_int(planner_config.get("timeout"), default=60)
     max_tokens = _coerce_int(planner_config.get("max_tokens"), default=2200)
-    overlay = load_active_prompt_overlay(config, role="planner", base_hash=base_prompt_hash("planner"))
+    overlay = load_active_prompt_overlay(config, role="improvement_planner", base_hash=base_prompt_hash("improvement_planner"))
     rendered_prompt = render_planner_messages(digest=digest, overlay=overlay)
     messages = rendered_prompt["messages"]
     _ensure_hermes_agent_on_path()
@@ -707,7 +707,7 @@ def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict
     from .prompt_cache import apply_caching
 
     overlay_hash = overlay.get("candidate_hash") if isinstance(overlay, dict) else None
-    messages, cache_extras = apply_caching(messages, site="planner", overlay_hash=overlay_hash)
+    messages, cache_extras = apply_caching(messages, site="improvement_planner", overlay_hash=overlay_hash)
     response = call_llm(
         task="skills_hub",
         provider=provider,
@@ -720,7 +720,7 @@ def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict
     )
     response_text = extract_content_or_reasoning(response)
     record_llm_call(
-        site="planner",
+        site="improvement_planner",
         messages=messages,
         response_text=response_text,
         config=config,
@@ -734,7 +734,7 @@ def _call_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict
     return payload
 
 
-def build_planner_quality_report(
+def build_improvement_planner_quality_report(
     *,
     digest: dict[str, Any],
     planner: dict[str, Any],
@@ -808,8 +808,8 @@ def build_planner_quality_report(
         "cluster_evidence_count": len(cluster_evidence_ids),
         "cluster_attached_candidate_count": len(cluster_attached_candidates),
         "cluster_selected_count": cluster_selected_count,
-        "editor_task_count": len(prompt_lengths),
-        "editor_prompt_chars": {
+        "skill_agent_task_count": len(prompt_lengths),
+        "skill_agent_prompt_chars": {
             "min": min(prompt_lengths) if prompt_lengths else 0,
             "max": max(prompt_lengths) if prompt_lengths else 0,
             "total": sum(prompt_lengths),
@@ -817,16 +817,16 @@ def build_planner_quality_report(
     }
 
 
-def run_skill_planner(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_improvement_planner(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
-    planner_func = cfg.get("_skill_planner_func") if isinstance(cfg, dict) else None
+    planner_func = cfg.get("_improvement_planner_func") if isinstance(cfg, dict) else None
     used_llm = False
     try:
         if callable(planner_func):
             payload = planner_func(digest=digest, config=cfg)
         elif isinstance(cfg.get("model"), dict):
             used_llm = True
-            payload = _call_planner_llm(digest=digest, config=cfg)
+            payload = _call_improvement_planner_llm(digest=digest, config=cfg)
         else:
             return _fallback_plan_from_digest(digest)
         return _normalize_planner_payload(payload, digest)

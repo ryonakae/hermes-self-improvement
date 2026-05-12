@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-ALLOWED_MUTATION_AGENT_TOOLS = {"skills_list", "skill_view", "skill_manage"}
+ALLOWED_SKILL_AGENT_TOOLS = {"skills_list", "skill_view", "skill_manage"}
 ALLOWED_SKILL_MANAGE_ACTIONS = {"create", "patch", "edit", "delete", "write_file", "remove_file"}
 SUBMIT_MUTATION_RESULT_TOOL = "submit_mutation_result"
 NON_MUTATING_AGENT_OUTCOMES = {
@@ -20,20 +20,20 @@ _REQUIRED_SUCCESS_FIELDS = ("used_tools", "changed_skills", "created_skills", "d
 
 
 @dataclass(frozen=True)
-class MutationBackendLimits:
+class SkillAgentBackendLimits:
     max_tool_calls: int = 8
     max_iterations: int = 6
     timeout_seconds: int = 45
 
     @classmethod
-    def from_config(cls, config: dict[str, Any] | None = None) -> "MutationBackendLimits":
+    def from_config(cls, config: dict[str, Any] | None = None) -> "SkillAgentBackendLimits":
         mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
         model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
-        model_editor = model.get("editor") if isinstance(model.get("editor"), dict) else {}
+        model_skill_agent = model.get("skill_agent") if isinstance(model.get("skill_agent"), dict) else {}
         return cls(
             max_tool_calls=max(0, _coerce_int(mutation.get("max_tool_calls"), cls.max_tool_calls)),
             max_iterations=max(0, _coerce_int(mutation.get("max_iterations"), cls.max_iterations)),
-            timeout_seconds=max(1, _coerce_int(model_editor.get("timeout") or mutation.get("timeout_seconds"), cls.timeout_seconds)),
+            timeout_seconds=max(1, _coerce_int(model_skill_agent.get("timeout") or mutation.get("timeout_seconds"), cls.timeout_seconds)),
         )
 
     def check(self) -> dict[str, Any]:
@@ -47,7 +47,7 @@ class MutationBackendLimits:
         return {"status": "failed" if reasons else "ok", "reasons": reasons}
 
 
-class MutationBackend(Protocol):
+class SkillAgentBackend(Protocol):
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any] | str:
         ...
 
@@ -61,7 +61,7 @@ def _coerce_int(value: Any, default: int) -> int:
 
 def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(result.get("success"), bool):
-        return {"success": False, "error": "mutation_agent_result_missing_success"}
+        return {"success": False, "error": "skill_agent_result_missing_success"}
     outcome = str(result.get("outcome") or "")
     if not result.get("success") and outcome in NON_MUTATING_AGENT_OUTCOMES:
         result["success"] = True
@@ -69,7 +69,7 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
         return result
     for key in _REQUIRED_SUCCESS_FIELDS:
         if key not in result or not isinstance(result.get(key), list):
-            return {"success": False, "error": f"mutation_agent_result_{key}_missing"}
+            return {"success": False, "error": f"skill_agent_result_{key}_missing"}
     allowed_targets = set(result.get("_allowed_targets") or [])
     expected_target = str(result.get("_expected_target") or "").strip()
     task_kind = str(result.get("_task_kind") or "").strip()
@@ -81,7 +81,7 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
             result["created_skills_inferred_from_trace"] = True
     changed = [str(name) for key in ("changed_skills", "created_skills", "deleted_skills") for name in (result.get(key) or [])]
     if changed and not result.get("verification_notes"):
-        return {"success": False, "error": "mutation_agent_result_verification_notes_missing"}
+        return {"success": False, "error": "skill_agent_result_verification_notes_missing"}
     if result.get("success") and outcome and outcome not in {"applied", "changed", *NON_MUTATING_AGENT_OUTCOMES}:
         result["reported_outcome"] = outcome
         result["outcome"] = "applied" if changed else outcome
@@ -90,21 +90,21 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     if allowed_targets:
         escaped = sorted(name for name in changed if name not in allowed_targets)
         if escaped:
-            return {"success": False, "error": "mutation_agent_result_target_escape", "escaped_targets": escaped}
+            return {"success": False, "error": "skill_agent_result_target_escape", "escaped_targets": escaped}
     if task_kind == "skill_create" and expected_target:
         created = {str(name) for name in result.get("created_skills") or []}
         if expected_target not in created:
-            return {"success": False, "error": "mutation_agent_result_created_skill_missing", "expected_target": expected_target, "created_skills": sorted(created), "used_tools": result.get("used_tools") or []}
+            return {"success": False, "error": "skill_agent_result_created_skill_missing", "expected_target": expected_target, "created_skills": sorted(created), "used_tools": result.get("used_tools") or []}
         if not _tool_trace_has_skill_manage(result.get("used_tools") or [], action="create", name=expected_target):
-            return {"success": False, "error": "mutation_agent_result_create_tool_trace_missing", "expected_target": expected_target, "used_tools": result.get("used_tools") or []}
+            return {"success": False, "error": "skill_agent_result_create_tool_trace_missing", "expected_target": expected_target, "used_tools": result.get("used_tools") or []}
     if task_kind == "skill_improve" and expected_target:
         outcome = str(result.get("outcome") or "")
         if outcome not in NON_MUTATING_AGENT_OUTCOMES:
             changed_targets = {str(name) for name in result.get("changed_skills") or []}
             if expected_target not in changed_targets:
-                return {"success": False, "error": "mutation_agent_result_changed_skill_missing"}
+                return {"success": False, "error": "skill_agent_result_changed_skill_missing"}
             if not _tool_trace_has_skill_manage(result.get("used_tools") or [], action=None, name=expected_target):
-                return {"success": False, "error": "mutation_agent_result_change_tool_trace_missing"}
+                return {"success": False, "error": "skill_agent_result_change_tool_trace_missing"}
     for key in ("_allowed_targets", "_expected_target", "_task_kind"):
         result.pop(key, None)
     return result
@@ -349,8 +349,8 @@ class SkillToolExecutor:
     unavailable_reason: str | None = None
 
     def call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        if tool not in ALLOWED_MUTATION_AGENT_TOOLS:
-            return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_MUTATION_AGENT_TOOLS)}
+        if tool not in ALLOWED_SKILL_AGENT_TOOLS:
+            return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_SKILL_AGENT_TOOLS)}
         if not isinstance(args, dict):
             return {"success": False, "error": "tool_args_not_object", "tool": tool}
         fn = {"skills_list": self.skills_list_fn, "skill_view": self.skill_view_fn, "skill_manage": self.skill_manage_fn}.get(tool)
@@ -427,10 +427,10 @@ def resolve_skill_tool_executor(config: dict[str, Any] | None = None) -> SkillTo
         return SkillToolExecutor(source="unavailable", unavailable_reason=f"skill_tool_registry_unavailable:{exc}")
 
 
-def _model_editor_config(config: dict[str, Any] | None) -> dict[str, Any]:
+def _model_skill_agent_config(config: dict[str, Any] | None) -> dict[str, Any]:
     model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
-    editor = model.get("editor") if isinstance(model.get("editor"), dict) else {}
-    return editor
+    skill_agent_cfg = model.get("skill_agent") if isinstance(model.get("skill_agent"), dict) else {}
+    return skill_agent_cfg
 
 
 def _skill_tool_schema(name: str, description: str, properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
@@ -449,7 +449,7 @@ def _skill_tool_schema(name: str, description: str, properties: dict[str, Any], 
     }
 
 
-def native_editor_tool_schemas() -> list[dict[str, Any]]:
+def native_skill_agent_tool_schemas() -> list[dict[str, Any]]:
     return [
         _skill_tool_schema("skills_list", "List available Hermes skills.", {}, []),
         _skill_tool_schema(
@@ -508,8 +508,8 @@ def _call_hermes_auxiliary_native(
         ensure_path()
         from agent.auxiliary_client import call_llm  # type: ignore
     except Exception as exc:
-        raise RuntimeError(f"mutation_agent_unavailable:{exc}") from exc
-    cfg = _model_editor_config(config)
+        raise RuntimeError(f"skill_agent_unavailable:{exc}") from exc
+    cfg = _model_skill_agent_config(config)
     merged_extra: dict[str, Any] = {}
     cfg_extra = cfg.get("extra_body") if isinstance(cfg.get("extra_body"), dict) else None
     if cfg_extra:
@@ -588,10 +588,10 @@ def _tool_result_message(call: dict[str, Any], result: dict[str, Any]) -> dict[s
 
 
 @dataclass
-class NativeSkillToolEditorBackend:
+class NativeSkillAgentBackend:
     tool_executor: SkillToolExecutor
     llm_call: Callable[..., Any] | None = None
-    limits: MutationBackendLimits = field(default_factory=MutationBackendLimits)
+    limits: SkillAgentBackendLimits = field(default_factory=SkillAgentBackendLimits)
 
     def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None, extra_body: dict[str, Any] | None = None) -> Any:
         if self.llm_call is not None:
@@ -600,17 +600,17 @@ class NativeSkillToolEditorBackend:
                 tools=tools,
                 config=config,
                 timeout=self.limits.timeout_seconds,
-                max_tokens=_coerce_int(_model_editor_config(config).get("max_tokens"), 1000),
+                max_tokens=_coerce_int(_model_skill_agent_config(config).get("max_tokens"), 1000),
             )
-        return _call_hermes_auxiliary_native(messages, tools=tools, config=config, task_name="self_improvement_mutation_agent", extra_body=extra_body)
+        return _call_hermes_auxiliary_native(messages, tools=tools, config=config, task_name="self_improvement_skill_agent", extra_body=extra_body)
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
         limit_check = self.limits.check()
         if limit_check.get("status") != "ok":
-            return {"success": False, "error": "mutation_agent_limits_invalid", "reasons": limit_check.get("reasons") or []}
+            return {"success": False, "error": "skill_agent_limits_invalid", "reasons": limit_check.get("reasons") or []}
         if not self.tool_executor.available():
-            return {"success": False, "error": "mutation_agent_unavailable", "reasons": [self.tool_executor.unavailable_reason or "skill_tool_registry_unavailable"]}
-        tools = native_editor_tool_schemas()
+            return {"success": False, "error": "skill_agent_unavailable", "reasons": [self.tool_executor.unavailable_reason or "skill_tool_registry_unavailable"]}
+        tools = native_skill_agent_tool_schemas()
         task_manifest = {
             "task_kind": task.get("task_kind"),
             "targets": task.get("targets"),
@@ -628,7 +628,7 @@ class NativeSkillToolEditorBackend:
             {
                 "role": "system",
                 "content": (
-                    "You are a constrained Hermes skill editor. Use only the provided skill tools. "
+                    "You are a constrained Hermes skill agent. Use only the provided skill tools. "
                     "Read Markdown briefs as judgment context, not as a machine protocol. "
                     "For skill_create tasks, the target skill is expected to be missing: do not stop just because skill_view cannot read it; "
                     "if the evidence supports creation, call skill_manage(action=\"create\") with complete SKILL.md content, then call submit_mutation_result with outcome=\"applied\" and created_skills containing the exact new skill name. "
@@ -644,51 +644,51 @@ class NativeSkillToolEditorBackend:
         from .llm_telemetry import record_llm_call
         from .prompt_cache import apply_caching
 
-        editor_cfg = _model_editor_config(config)
-        cached_initial, cache_extras = apply_caching(messages, site="mutation_agent")
+        skill_agent_cfg = _model_skill_agent_config(config)
+        cached_initial, cache_extras = apply_caching(messages, site="skill_agent")
         messages = cached_initial
         for _iteration in range(self.limits.max_iterations):
             try:
                 response = self._llm(messages, tools=tools, config=config, extra_body=cache_extras)
             except RuntimeError as exc:
                 record_llm_call(
-                    site="mutation_agent",
+                    site="skill_agent",
                     messages=messages,
                     response_text=None,
                     config=config,
-                    model=editor_cfg.get("model"),
-                    provider=editor_cfg.get("provider"),
-                    task="self_improvement_mutation_agent",
-                    max_tokens=_coerce_int(editor_cfg.get("max_tokens"), 1000),
+                    model=skill_agent_cfg.get("model"),
+                    provider=skill_agent_cfg.get("provider"),
+                    task="self_improvement_skill_agent",
+                    max_tokens=_coerce_int(skill_agent_cfg.get("max_tokens"), 1000),
                     tools=tools,
                     iteration=_iteration,
-                    error=f"mutation_agent_unavailable:{exc}",
+                    error=f"skill_agent_unavailable:{exc}",
                 )
-                return {"success": False, "error": "mutation_agent_unavailable", "reasons": [str(exc)]}
+                return {"success": False, "error": "skill_agent_unavailable", "reasons": [str(exc)]}
             except Exception as exc:
                 record_llm_call(
-                    site="mutation_agent",
+                    site="skill_agent",
                     messages=messages,
                     response_text=None,
                     config=config,
-                    model=editor_cfg.get("model"),
-                    provider=editor_cfg.get("provider"),
-                    task="self_improvement_mutation_agent",
-                    max_tokens=_coerce_int(editor_cfg.get("max_tokens"), 1000),
+                    model=skill_agent_cfg.get("model"),
+                    provider=skill_agent_cfg.get("provider"),
+                    task="self_improvement_skill_agent",
+                    max_tokens=_coerce_int(skill_agent_cfg.get("max_tokens"), 1000),
                     tools=tools,
                     iteration=_iteration,
-                    error=f"mutation_agent_llm_failed:{exc}",
+                    error=f"skill_agent_llm_failed:{exc}",
                 )
-                return {"success": False, "error": "mutation_agent_llm_failed", "reasons": [str(exc)]}
+                return {"success": False, "error": "skill_agent_llm_failed", "reasons": [str(exc)]}
             record_llm_call(
-                site="mutation_agent",
+                site="skill_agent",
                 messages=messages,
                 response_text=response,
                 config=config,
-                model=editor_cfg.get("model"),
-                provider=editor_cfg.get("provider"),
-                task="self_improvement_mutation_agent",
-                max_tokens=_coerce_int(editor_cfg.get("max_tokens"), 1000),
+                model=skill_agent_cfg.get("model"),
+                provider=skill_agent_cfg.get("provider"),
+                task="self_improvement_skill_agent",
+                max_tokens=_coerce_int(skill_agent_cfg.get("max_tokens"), 1000),
                 tools=tools,
                 iteration=_iteration,
             )
@@ -723,19 +723,19 @@ class NativeSkillToolEditorBackend:
                         if post_validation.get("status") != "passed":
                             return {
                                 "success": False,
-                                "error": "mutation_agent_post_validation_failed",
+                                "error": "skill_agent_post_validation_failed",
                                 "post_validation": post_validation,
                                 "raw_result": _redact_large(validated),
                             }
                     return validated
-                if tool not in ALLOWED_MUTATION_AGENT_TOOLS:
-                    return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_MUTATION_AGENT_TOOLS)}
+                if tool not in ALLOWED_SKILL_AGENT_TOOLS:
+                    return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_SKILL_AGENT_TOOLS)}
                 args_error = _validate_tool_call_args(tool, args)
                 if args_error:
                     return _with_last_safe_step(args_error, actual_used)
                 tool_calls += 1
                 if tool_calls > self.limits.max_tool_calls:
-                    return _with_last_safe_step({"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_tool_calls_exceeded"]}, actual_used)
+                    return _with_last_safe_step({"success": False, "error": "skill_agent_limits_exceeded", "reasons": ["max_tool_calls_exceeded"]}, actual_used)
                 result = self.tool_executor.call(tool, args)
                 trace_entry = {
                     "tool": tool,
@@ -754,20 +754,20 @@ class NativeSkillToolEditorBackend:
                     trace_entry["name"] = args.get("name")
                 actual_used.append(trace_entry)
                 messages.append(_tool_result_message(call, result))
-        return _with_last_safe_step({"success": False, "error": "mutation_agent_limits_exceeded", "reasons": ["max_iterations_exceeded"]}, actual_used)
+        return _with_last_safe_step({"success": False, "error": "skill_agent_limits_exceeded", "reasons": ["max_iterations_exceeded"]}, actual_used)
 
 
 @dataclass
-class UnavailableMutationBackend:
+class UnavailableSkillAgentBackend:
     reason: str
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
-        return {"success": False, "error": self.reason if self.reason.startswith("mutation_agent_") else "mutation_agent_unavailable", "reasons": [self.reason], "prompt": prompt}
+        return {"success": False, "error": self.reason if self.reason.startswith("skill_agent_") else "skill_agent_unavailable", "reasons": [self.reason], "prompt": prompt}
 
 
-def build_mutation_backend(config: dict[str, Any] | None = None) -> MutationBackend:
-    if isinstance(config, dict) and config.get("_mutation_agent_backend") is not None:
-        backend = config.get("_mutation_agent_backend")
+def build_skill_agent_backend(config: dict[str, Any] | None = None) -> SkillAgentBackend:
+    if isinstance(config, dict) and config.get("_skill_agent_backend") is not None:
+        backend = config.get("_skill_agent_backend")
         if hasattr(backend, "run"):
             return backend
         if callable(backend):
@@ -779,20 +779,20 @@ def build_mutation_backend(config: dict[str, Any] | None = None) -> MutationBack
     enabled = bool(mutation.get("enabled", True))
     backend_name = str(mutation.get("backend") or "native_skill_tool_editor")
     if not enabled or backend_name == "disabled":
-        return UnavailableMutationBackend("mutation_agent_backend_disabled")
+        return UnavailableSkillAgentBackend("skill_agent_backend_disabled")
     if backend_name != "native_skill_tool_editor":
-        return UnavailableMutationBackend("mutation_agent_backend_unknown")
+        return UnavailableSkillAgentBackend("skill_agent_backend_unknown")
     executor = resolve_skill_tool_executor(config)
-    return NativeSkillToolEditorBackend(tool_executor=executor, limits=MutationBackendLimits.from_config(config))
+    return NativeSkillAgentBackend(tool_executor=executor, limits=SkillAgentBackendLimits.from_config(config))
 
 
-def mutation_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
+def skill_agent_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
     configured = str(mutation.get("backend") or "native_skill_tool_editor")
     if bool(mutation.get("enabled", True)) is False or configured == "disabled":
-        return {"configured": configured, "available": False, "reason": "mutation_agent_backend_disabled"}
+        return {"configured": configured, "available": False, "reason": "skill_agent_backend_disabled"}
     if configured != "native_skill_tool_editor":
-        return {"configured": configured, "available": False, "reason": "mutation_agent_backend_unknown"}
+        return {"configured": configured, "available": False, "reason": "skill_agent_backend_unknown"}
     executor = resolve_skill_tool_executor(config)
     readiness = check_skill_tool_executor_readiness(executor)
     if not readiness.get("available"):

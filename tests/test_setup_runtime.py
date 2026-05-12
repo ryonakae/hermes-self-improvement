@@ -70,7 +70,7 @@ def test_setup_creates_evaluator_runtime_layout_and_seed_files(tmp_path):
     assert pointer["compiled_program_path"] is None
     assert "/evaluator/defaults/" in pointer["evaluator_path"]
     active_prompts = json.loads((root / "evaluator/active-prompts.json").read_text(encoding="utf-8"))
-    assert set(active_prompts["roles"]) == {"planner", "editor", "evaluator"}
+    assert set(active_prompts["roles"]) == {"improvement_planner", "skill_agent", "memory_agent", "evaluator"}
     assert result["active_prompt_overlays"]["status"] == "ready"
 
 
