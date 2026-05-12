@@ -56,6 +56,32 @@ EDITOR_ALLOWED_TOOLS_AND_STOPS = [
     "- Finish every run by calling submit_mutation_result with changed/skipped status, reason, skill name, used tool calls, and a short verification checklist.",
 ]
 
+MEMORY_AGENT_BASE_SECTIONS = [
+    "You are the Hermes self-improvement memory agent.",
+    "",
+    "Role:",
+    "- Execute only the planner-handed candidates against the Hermes built-in or external memory store.",
+    "- Use runtime-private operating guidance when available.",
+    "- Prefer a structured skipped outcome over speculative mutation.",
+]
+
+MEMORY_AGENT_ALLOWED_TOOLS_AND_STOPS = [
+    "",
+    "Allowed tools:",
+    "- memory (action add | replace | remove, target memory | user)",
+    "- submit_mutation_result",
+    "",
+    "Hard stops:",
+    "- Inspect current_entries before any replace/remove and use the exact old_text substring.",
+    "- Stop without mutation if the candidate is sensitive, duplicate (routing_hint=skip_duplicate), unclear, or skill-shaped (procedural reusable knowledge).",
+    "- Do not call terminal, file, git, browser, web, delegation, cron, direct filesystem, or provider internals.",
+    "- Do not invent old_text not present in current_entries.",
+    "- Do not touch built-in memory files or provider DBs directly; the executor wraps the official memory tool.",
+    "",
+    "Expected output:",
+    "- Finish every run by calling submit_mutation_result with success/outcome, changed_memories, removed_memories, used_tools, verification_notes, rollback_hints, and an optional decision (e.g. convert_to_skill_proposal).",
+]
+
 
 def _stable_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
@@ -157,7 +183,7 @@ def base_prompt_spec(role: str) -> dict[str, Any]:
             "schema_name": "self_improvement_base_prompt_spec",
             "schema_version": PROMPT_SCHEMA_VERSION,
             "role": "memory_agent",
-            "sections": EDITOR_BASE_SECTIONS + EDITOR_ALLOWED_TOOLS_AND_STOPS,
+            "sections": MEMORY_AGENT_BASE_SECTIONS + MEMORY_AGENT_ALLOWED_TOOLS_AND_STOPS,
         }
     if role == "evaluator":
         return {

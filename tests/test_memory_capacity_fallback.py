@@ -77,9 +77,11 @@ def test_memory_capacity_falls_back_to_active_external_provider_when_still_full(
     assert decision["result"]["fallback_context"]["external_provider"] == "hindsight"
 
 
-def test_memory_capacity_uses_default_llm_compaction_planner_when_model_configured(monkeypatch):
-    import hermes_self_improvement.runner_steps as steps
-
+def test_memory_capacity_uses_injected_compaction_planner_when_provided():
+    # PR2-c: memory_capacity_planner の LLM 呼び出しは廃止された。
+    # 互換注入フック `_memory_capacity_planner_fn` から compaction を受け取れる
+    # ことだけを検証する。本来の compaction 計画は memory_agent
+    # (memory_agent_backend.py) に移譲される。
     calls = []
 
     def fake_memory(**args):
@@ -92,15 +94,15 @@ def test_memory_capacity_uses_default_llm_compaction_planner_when_model_configur
             })
         return json.dumps({"success": True})
 
-    monkeypatch.setattr(
-        steps,
-        "_call_memory_capacity_planner_llm",
-        lambda **kwargs: [{"action": "remove", "target": kwargs["target"], "old_text": "old verbose entry"}],
-    )
+    def injected_planner(**kwargs):
+        return [{"action": "remove", "target": kwargs["target"], "old_text": "old verbose entry"}]
 
     result = run_memory_improvement_step(
         evidence_pack=_pack({"operation": "memory_add", "target": "memory", "content": "new durable fact"}),
-        config={"model": {"planner": {"provider": "fake"}}, "_memory_tool_fn": fake_memory},
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_memory_capacity_planner_fn": injected_planner,
+        },
         mutate=True,
     )
 

@@ -106,8 +106,15 @@ def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
             "Runtime eval cases indicate evaluator recommendations should track actual outcomes. "
             "Prefer defer for insufficient confidence, keep successful low-risk mutations eligible, and do not override mutation scope."
         )
+    if role == "memory_agent":
+        return (
+            "Runtime eval cases indicate memory edits should stay narrow and verifiable. "
+            "Use exact old_text from current_entries for replace/remove, prefer add only for genuinely new durable facts, "
+            "skip duplicates, route procedural reusable knowledge back to skill via "
+            "submit_mutation_result(decision=\"convert_to_skill_proposal\"), and on memory_capacity_exceeded remove a stale entry before retrying add."
+        )
     return (
-        "Runtime eval cases indicate editor edits should remain narrow. "
+        "Runtime eval cases indicate skill_agent edits should remain narrow. "
         "If selected evidence does not match the target skill, produce no mutation; otherwise keep patches procedural and minimal."
     )
 
@@ -117,6 +124,11 @@ def _fallback_case_behaviors(role: str) -> dict[str, Any]:
         return {
             "planner_weak_only_skip": {"decision": "skip"},
             "planner_ambiguous_target_defer": {"decision": "defer", "reason": "target_provenance_unsafe"},
+        }
+    if role == "memory_agent":
+        return {
+            "memory_agent_duplicate_skip": {"mutation": "skip", "reason": "memory_duplicate_existing"},
+            "memory_agent_sensitive_skip": {"mutation": "skip", "reason": "sensitive_memory_candidate"},
         }
     return {"editor_target_mismatch_skip": {"mutation": "skip", "reason": "target_mismatch"}}
 
