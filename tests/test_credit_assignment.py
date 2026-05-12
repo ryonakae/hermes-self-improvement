@@ -20,7 +20,7 @@ def episode_payload(episode_id: str, **extra):
         "target_kind": "skill",
         "target_id": "demo-skill",
         "improvement_planner_prompt_hash": "sha256:planner-a",
-        "skill_agent_prompt_hash": "sha256:editor-a",
+        "skill_agent_prompt_hash": "sha256:skill_agent-a",
         "evaluator_hash": "sha256:evaluator-a",
         "decision": "mutate_skill",
         "action": "skill_patch",

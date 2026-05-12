@@ -38,17 +38,17 @@ def exact_case() -> dict:
     }
 
 
-def editor_case() -> dict:
+def skill_agent_case() -> dict:
     return {
         "schema_name": "self_improvement_runtime_eval_case",
         "schema_version": "1.0",
         "case_family": "skill_agent",
         "case_type": "skill_agent_target_mismatch_skip",
         "role": "skill_agent",
-        "source": {"kind": "episode", "episode_id": "episode-editor"},
+        "source": {"kind": "episode", "episode_id": "episode-skill_agent"},
         "input": {"decision": "mutate_skill", "action": "no_op", "evidence_strength": "medium"},
         "expected": {"mutation": "skip", "reason_contains": "target_mismatch"},
-        "case_hash": "sha256:editor",
+        "case_hash": "sha256:skill_agent",
     }
 
 
@@ -60,8 +60,8 @@ def test_candidate_with_better_weak_only_behavior_promotes():
             "candidate_prompt": {"system_addendum": "Prefer skip for weak-only evidence.", "replacement": None},
             "case_behaviors": {"improvement_planner_weak_only_skip": {"decision": "skip"}},
         },
-        current_identity={"improvement_planner_prompt_hash": "sha256:current", "skill_agent_prompt_hash": "sha256:editor", "evaluator_hash": "sha256:evaluator"},
-        candidate_identity={"improvement_planner_prompt_hash": "sha256:candidate", "skill_agent_prompt_hash": "sha256:editor", "evaluator_hash": "sha256:evaluator"},
+        current_identity={"improvement_planner_prompt_hash": "sha256:current", "skill_agent_prompt_hash": "sha256:skill_agent", "evaluator_hash": "sha256:evaluator"},
+        candidate_identity={"improvement_planner_prompt_hash": "sha256:candidate", "skill_agent_prompt_hash": "sha256:skill_agent", "evaluator_hash": "sha256:evaluator"},
         cases=[weak_case(), exact_case()],
         outcome_aggregate={"aggregate_hash": "sha256:outcomes"},
         threshold=0.2,
@@ -116,7 +116,7 @@ def test_candidate_that_increases_prompt_size_above_budget_rejects():
     assert any(item["code"] == "prompt_budget_exceeded" for item in result["violations"])
 
 
-def test_editor_candidate_evaluation_does_not_mutate_skills(tmp_path):
+def test_skill_agent_candidate_evaluation_does_not_mutate_skills(tmp_path):
     skill_file = tmp_path / "skills" / "demo" / "SKILL.md"
     skill_file.parent.mkdir(parents=True)
     skill_file.write_text("original\n", encoding="utf-8")
@@ -126,7 +126,7 @@ def test_editor_candidate_evaluation_does_not_mutate_skills(tmp_path):
         candidate={"candidate_hash": "sha256:candidate", "case_behaviors": {"skill_agent_target_mismatch_skip": {"mutation": "skip", "reason": "target_mismatch"}}},
         current_identity={"skill_agent_prompt_hash": "sha256:current"},
         candidate_identity={"skill_agent_prompt_hash": "sha256:candidate"},
-        cases=[editor_case()],
+        cases=[skill_agent_case()],
         min_confidence=0.5,
     )
 
@@ -172,7 +172,7 @@ def overlay_candidate_set(tmp_path: Path, *, gepa_result: str = "selected", plan
                 "role": "skill_agent",
                 "candidate_set_id": "overlay-set-001",
                 "change_status": "unchanged",
-                "base_prompt_hash": "sha256:editor-base",
+                "base_prompt_hash": "sha256:skill_agent-base",
                 "candidate_prompt": {"system_addendum": None, "user_addendum": None, "replacement": None},
             },
             "memory_agent_overlay": {

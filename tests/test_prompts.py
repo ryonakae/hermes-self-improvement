@@ -41,4 +41,4 @@ def test_render_skill_agent_instructions_applies_runtime_overlay_addendum():
     assert rendered["prompt_source"]["role"] == "skill_agent"
     assert rendered["prompt_source"]["overlay_active"] is True
     assert "Prefer skipped when evidence is stale." in rendered["instructions"]
-    assert "You are the Hermes self-improvement skill editor." in rendered["instructions"]
+    assert "You are the Hermes self-improvement skill_agent." in rendered["instructions"]

@@ -498,7 +498,7 @@ def test_skill_planner_blocks_archive_with_invalid_successor():
     assert decision["reason"] == "archive_blocked_by_invalid_successor"
 
 
-def test_planner_normalization_strips_action_fields_from_skips_and_requires_evidence_for_editor():
+def test_planner_normalization_strips_action_fields_from_skips_and_requires_evidence_for_skill_agent():
     def fake_planner(*, digest, config):
         return {
             "decisions": [

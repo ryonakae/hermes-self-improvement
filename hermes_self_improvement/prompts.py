@@ -31,7 +31,7 @@ PLANNER_USER_PREFIX = (
 )
 
 SKILL_AGENT_BASE_SECTIONS = [
-    "You are the Hermes self-improvement skill editor.",
+    "You are the Hermes self-improvement skill_agent.",
     "",
     "Role:",
     "- Execute only the planner-selected operation for the target skill.",

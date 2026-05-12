@@ -419,7 +419,7 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
         "unmatched_evidence": {"count": len(unmatched), "by_reason": by_reason, "examples": unmatched[:10]},
         "constraints": {
             "mutable_targets_only": True,
-            "editor_tools_only": ["skills_list", "skill_view", "skill_manage"],
+            "skill_agent_tools_only": ["skills_list", "skill_view", "skill_manage"],
             "defer_for": [],
             "defer_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge"],
         },

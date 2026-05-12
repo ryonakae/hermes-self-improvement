@@ -133,7 +133,7 @@ def extract_target_hints(value: dict[str, Any], *, candidate_names: list[str]) -
     """Return attachable target hints for a compact event/evidence item.
 
     Hints only attach evidence to existing mutable Curator candidates. They do not
-    grant mutation permission; planner/editor still decide and can skip.
+    grant mutation permission; improvement_planner / skill_agent still decide and can skip.
     """
     event = _event_from(value)
     tool_name = str(event.get("tool_name") or "")

@@ -293,7 +293,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                     "changed_skills": [],
                     "prompt_sources": {
                         "improvement_planner": {"role": "improvement_planner", "source": "base", "overlay_active": False, "base_hash": "sha256:planner"},
-                        "skill_agent": {"role": "skill_agent", "source": "runtime", "overlay_active": True, "base_hash": "sha256:editor", "active_hash": "sha256:active", "path": str(tmp_path / "active-prompts.json")},
+                        "skill_agent": {"role": "skill_agent", "source": "runtime", "overlay_active": True, "base_hash": "sha256:skill_agent", "active_hash": "sha256:active", "path": str(tmp_path / "active-prompts.json")},
                     },
                     "planner": {
                         "status": "completed",

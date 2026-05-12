@@ -373,7 +373,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
         "artifact_path": "/tmp/run.json",
         "prompt_sources": {
             "improvement_planner": {"overlay_active": True, "overlay_hash": "sha256:planner-overlay", "base_hash": "sha256:planner-base"},
-            "skill_agent": {"overlay_active": False, "base_hash": "sha256:editor-base"},
+            "skill_agent": {"overlay_active": False, "base_hash": "sha256:skill_agent-base"},
         },
     })
 
@@ -385,7 +385,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "次に見る点:" in text
     assert "Skill improvements:" in text
     assert "- changed 2 skills" in text
-    assert "editor stopped/rejected: skipped_superseded 1, submit_result_missing 2" in text
+    assert "skill_agent stopped/rejected: skipped_superseded 1, submit_result_missing 2" in text
     assert "Verbose natural-language reason" not in text
     assert "Skill lifecycle:" in text
     assert "- archive candidates 1, would archive 1, archived 0, blocked 0" in text
@@ -413,7 +413,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "related lookups: completed 1" in text
     assert "private eval cases: 3 written" in text
     assert "- improvement_planner: runtime overlay hash sha256:planner-overlay" in text
-    assert "- skill_agent: base hash sha256:editor-base" in text
+    assert "- skill_agent: base hash sha256:skill_agent-base" in text
     assert "human review" not in text.lower()
     assert "Artifact: /tmp/run.json" in text
     assert "ledger" not in text.lower()

@@ -39,6 +39,6 @@ Penalize changes that:
 
 ## Feedback for GEPA/DSPy
 
-When outcomes show a pattern, recommend overlay guidance changes for planner, editor, or evaluator roles. Good feedback is specific: name the recurring failure mode, the desired decision tendency, and the evidence level that should trigger it.
+When outcomes show a pattern, recommend overlay guidance changes for improvement_planner, skill_agent, memory_agent, or evaluator roles. Good feedback is specific: name the recurring failure mode, the desired decision tendency, and the evidence level that should trigger it.
 
-Keep scoring advisory. It should inform future planner/editor/evaluator prompts and runtime eval cases, not grant mutation permission by itself.
+Keep scoring advisory. It should inform future improvement_planner / skill_agent / memory_agent / evaluator prompts and runtime eval cases, not grant mutation permission by itself.

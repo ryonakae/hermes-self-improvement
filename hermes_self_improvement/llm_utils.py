@@ -1,10 +1,8 @@
 """Common helpers shared by plugin LLM call sites.
 
-These were previously co-located with ``_call_llm_scorer`` in ``scoring.py``,
-but they have no relation to scoring and are imported by every site that calls
-the auxiliary LLM (planner, target_resolver, conversation_memory,
-runner_steps). Moving them here lets ``scoring.py`` shrink to its report
-heuristic role.
+Imported by every site that calls the auxiliary LLM
+(memory_extractor, target_resolver, improvement_planner, skill_agent,
+memory_agent, prompt_optimizer).
 """
 
 from __future__ import annotations

@@ -681,7 +681,7 @@ def _memory_inventory_operations(evidence: list[dict[str, Any]], config: dict[st
 MAX_EDITOR_EVIDENCE_ITEMS = 8
 
 
-def _compact_editor_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _compact_skill_agent_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     compact: list[dict[str, Any]] = []
     for item in evidence[:MAX_EDITOR_EVIDENCE_ITEMS]:
         if not isinstance(item, dict):
@@ -703,7 +703,7 @@ def _compact_editor_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, A
         compact.append({
             "kind": "omitted_evidence_summary",
             "omitted_evidence_count": len(evidence) - MAX_EDITOR_EVIDENCE_ITEMS,
-            "reason": "editor prompt evidence cap; full evidence remains in run artifact",
+            "reason": "skill_agent prompt evidence cap; full evidence remains in run artifact",
         })
     return compact
 
@@ -722,7 +722,7 @@ def build_skill_agent_task(
 ) -> dict[str, Any]:
     candidate_meta = candidate or {}
     planner_meta = planner_decision or {}
-    compact_evidence = _compact_editor_evidence(evidence)
+    compact_evidence = _compact_skill_agent_evidence(evidence)
     evidence_by_id = {str(item.get("id") or ""): item for item in compact_evidence if isinstance(item, dict) and item.get("id")}
     llm_brief = render_candidate_markdown(
         {**candidate_meta, "name": skill_name, "evidence_ids": [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]},
@@ -792,7 +792,7 @@ def build_skill_create_agent_task(
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     planner_meta = planner_decision or {}
-    compact_evidence = _compact_editor_evidence(evidence)
+    compact_evidence = _compact_skill_agent_evidence(evidence)
     evidence_ids = [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]
     llm_brief = render_candidate_markdown(
         {"name": skill_name, "source": "planner_create_skill", "state": "missing", "evidence_ids": evidence_ids, "risk": planner_meta.get("risk")},

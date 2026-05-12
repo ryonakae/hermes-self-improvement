@@ -65,7 +65,7 @@ PY
 
 - Runtime hook 内で LLM call、GEPA optimizer、skill patch、memory edit、重い集計を動かさない。
 - 改善対象は `skill`, `memory`, `evaluator` だけ。
-- `improve` の semantic decision は `apply / defer / skip / block` に寄せる。内部互換の `mutate_skill` などは残してよいが、新しい apply mode、承認キュー、別 lane は増やさない。
+- `improve` の semantic decision は `apply / defer / skip / block` に寄せる。新しい apply mode、承認キュー、別 lane は増やさない。
 - Conversation-derived memory gap は改善対象。キーワードは window ranking にだけ使い、semantic gate にしない。
 - plugin 自身の README / AGENTS / config / plans / bundled skill、Hermes core、任意 docs/config は自己改善対象にしない。
 - skill mutation は `skill_manage` など公式 skill tools 経由だけ。direct filesystem fallback は使わない。既存 skill の patch/archive は Hermes-created local mutable skill だけを候補にし、built-in / hub-installed / plugin-bundled / external-dir / ambiguous provenance は LLM-facing candidate list に載せない。観測から durable な手順不足が明確で、既存 Hermes-created skill に受け皿がない場合だけ `skill_manage(action="create")` 経由の新規 skill 作成を許可する。

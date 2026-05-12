@@ -37,7 +37,7 @@ def test_episode_schema_requires_id_and_source_hashes_for_mutating_actions():
 
     payload.update({
         "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:editor",
+        "skill_agent_prompt_hash": "sha256:skill_agent",
         "memory_agent_prompt_hash": "sha256:memory-agent",
         "evaluator_hash": "sha256:evaluator",
     })
@@ -110,7 +110,7 @@ def test_autonomous_evaluator_result_requires_baseline_for_promotion():
 
     payload["baseline"] = {
         "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:editor",
+        "skill_agent_prompt_hash": "sha256:skill_agent",
         "memory_agent_prompt_hash": "sha256:memory-agent",
         "evaluator_hash": "sha256:evaluator",
         "outcome_aggregate_hash": "sha256:outcomes",
@@ -136,7 +136,7 @@ def test_compact_summaries_exclude_large_prompt_fields():
         "target_kind": "skill",
         "target_id": "demo-skill",
         "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:editor",
+        "skill_agent_prompt_hash": "sha256:skill_agent",
         "memory_agent_prompt_hash": "sha256:memory-agent",
         "evaluator_hash": "sha256:evaluator",
         "decision": "mutate_skill",
@@ -168,7 +168,7 @@ def test_compact_summaries_exclude_large_prompt_fields():
         "violations": [],
         "baseline": {
             "improvement_planner_prompt_hash": "sha256:planner",
-            "skill_agent_prompt_hash": "sha256:editor",
+            "skill_agent_prompt_hash": "sha256:skill_agent",
             "memory_agent_prompt_hash": "sha256:memory-agent",
             "evaluator_hash": "sha256:evaluator",
             "outcome_aggregate_hash": "sha256:outcomes",

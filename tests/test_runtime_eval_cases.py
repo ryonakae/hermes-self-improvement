@@ -20,7 +20,7 @@ def episode_payload(episode_id: str, **extra):
         "target_kind": "skill",
         "target_id": "demo-skill",
         "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:editor",
+        "skill_agent_prompt_hash": "sha256:skill_agent",
         "evaluator_hash": "sha256:evaluator",
         "decision": "skip",
         "action": "no_op",
@@ -102,7 +102,7 @@ def test_runtime_eval_cases_convert_skill_agent_target_mismatch_to_skip(tmp_path
         decision="mutate_skill",
         action="no_op",
         evidence_strength="medium",
-        reason="editor target mismatch; skip mutation",
+        reason="skill_agent target mismatch; skip mutation",
     ))
 
     cases = build_role_runtime_eval_cases(config=config, limit=100)
@@ -126,7 +126,7 @@ def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
         reason="exact mutable local skill evidence",
         overlay_generation_id="overlay-generation-001",
         improvement_planner_overlay_hash="sha256:planner-overlay",
-        skill_agent_overlay_hash="sha256:editor-overlay",
+        skill_agent_overlay_hash="sha256:skill_agent-overlay",
         evaluator_overlay_hash="sha256:evaluator-overlay",
         outcome="success",
     ))
@@ -144,7 +144,7 @@ def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
         assert case["input"]["evidence_ids"] == ["ev1"]
         assert case["input"]["overlay_generation_id"] == "overlay-generation-001"
         assert case["input"]["improvement_planner_overlay_hash"] == "sha256:planner-overlay"
-        assert case["input"]["skill_agent_overlay_hash"] == "sha256:editor-overlay"
+        assert case["input"]["skill_agent_overlay_hash"] == "sha256:skill_agent-overlay"
         assert case["input"]["evaluator_overlay_hash"] == "sha256:evaluator-overlay"
     serialized = json.dumps(cases)
     assert "candidate_prompt" not in serialized

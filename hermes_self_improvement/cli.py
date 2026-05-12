@@ -1581,7 +1581,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     planner_prompt = prompt_sources.get("improvement_planner") if isinstance(prompt_sources.get("improvement_planner"), dict) else {}
-    editor_prompt = prompt_sources.get("skill_agent") if isinstance(prompt_sources.get("skill_agent"), dict) else {}
+    skill_agent_prompt = prompt_sources.get("skill_agent") if isinstance(prompt_sources.get("skill_agent"), dict) else {}
     evidence_strength_counts = planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {}
     evidence_by_kind = evidence_summary.get("evidence_by_kind") if isinstance(evidence_summary.get("evidence_by_kind"), dict) else {}
     inventory_health = evidence_summary.get("inventory_health") if isinstance(evidence_summary.get("inventory_health"), dict) else {}
@@ -1624,7 +1624,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         and item.get("decision") in {"rejected", "skip"}
         and (item.get("archive_reason") or str(item.get("reason") or "").startswith("archive_blocked"))
     )
-    editor_stop_counts: dict[str, int] = {}
+    skill_agent_stop_counts: dict[str, int] = {}
     for item in skill_decisions:
         if not isinstance(item, dict):
             continue
@@ -1635,7 +1635,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
             continue
         result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
         reason = str(result_payload.get("outcome") or result_payload.get("error") or item.get("reason") or "unknown")
-        editor_stop_counts[reason] = editor_stop_counts.get(reason, 0) + 1
+        skill_agent_stop_counts[reason] = skill_agent_stop_counts.get(reason, 0) + 1
     lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
     for decision in memory_step.get("decisions") or []:
         if isinstance(decision, dict):
@@ -1734,7 +1734,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Prompt sources:",
         "- LLM context: Markdown briefs/reports; program control state: JSON manifests/run records/tool results",
         f"- improvement_planner: {planner_prompt.get('overlay_source') or ('runtime overlay' if planner_prompt.get('overlay_active') else 'base')} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
-        f"- skill_agent: {editor_prompt.get('overlay_source') or ('runtime overlay' if editor_prompt.get('overlay_active') else 'not rendered' if not editor_prompt else 'base')} hash {editor_prompt.get('overlay_hash') or editor_prompt.get('active_hash') or editor_prompt.get('base_hash') or 'n/a'}",
+        f"- skill_agent: {skill_agent_prompt.get('overlay_source') or ('runtime overlay' if skill_agent_prompt.get('overlay_active') else 'not rendered' if not skill_agent_prompt else 'base')} hash {skill_agent_prompt.get('overlay_hash') or skill_agent_prompt.get('active_hash') or skill_agent_prompt.get('base_hash') or 'n/a'}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Skill lifecycle:",
@@ -1799,10 +1799,10 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
             executed_lines.append("Rejected reasons:")
             executed_lines.extend(f"- {reason}: {count}" for reason, count in sorted(rejected_reason_counts.items()))
         lines[insert_at:insert_at] = executed_lines
-    if editor_stop_counts:
-        lines.append("- editor stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(editor_stop_counts.items())))
+    if skill_agent_stop_counts:
+        lines.append("- skill_agent stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(skill_agent_stop_counts.items())))
     if selected_preview:
-        lines.append("Selected for editor:")
+        lines.append("Selected for skill_agent:")
         for item in selected_preview:
             lines.append(f"- {item.get('skill')}: {item.get('change_intent') or item.get('rationale') or item.get('reason') or 'planned'}")
     if result.get("artifact_path"):

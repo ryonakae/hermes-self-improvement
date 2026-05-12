@@ -57,7 +57,7 @@ def test_build_skill_agent_task_uses_skills_only_constraints():
     assert task["observed_problem"]
     assert task["desired_outcome"]
     assert "Do not duplicate guidance" in "\n".join(task["non_goals"])
-    assert "You are the Hermes self-improvement skill editor." in task["instructions"]
+    assert "You are the Hermes self-improvement skill_agent." in task["instructions"]
     assert "# Candidate brief: demo-skill" in task["instructions"]
     assert "Target skill:" not in task["instructions"]
     assert "Planner decision:" not in task["instructions"]
@@ -91,16 +91,16 @@ def test_build_skill_agent_task_uses_active_editor_prompt_overlay(tmp_path):
         cfg,
         role="skill_agent",
         candidate={
-            "role": "editor",
+            "role": "skill_agent",
             "base_prompt_hash": base_prompt_hash("skill_agent"),
-            "candidate_prompt": {"system_addendum": "Runtime editor overlay guidance."},
+            "candidate_prompt": {"system_addendum": "Runtime skill_agent overlay guidance."},
         },
     )
     promote_prompt_candidate(cfg, role="skill_agent", candidate_path=candidate_path, regression={"status": "passed"})
 
     task = build_skill_agent_task(skill_name="demo-skill", evidence=[], config=cfg)
 
-    assert "Runtime editor overlay guidance." in task["instructions"]
+    assert "Runtime skill_agent overlay guidance." in task["instructions"]
     assert task["prompt_source"]["skill_agent"]["overlay_active"] is True
 
 
@@ -411,7 +411,7 @@ def test_skill_step_executes_only_mutable_local_skill_via_backend(tmp_path):
     assert result["changed"] == 1
     assert result["changed_skills"] == ["demo-skill"]
     assert seen["task"]["targets"] == {"primary_skill": "demo-skill"}
-    assert "You are the Hermes self-improvement skill editor." in seen["task"]["instructions"]
+    assert "You are the Hermes self-improvement skill_agent." in seen["task"]["instructions"]
     assert "Markdown brief:" in seen["task"]["instructions"]
     assert "# Candidate brief: demo-skill" in seen["task"]["instructions"]
     assert "skill_manage" in seen["prompt"]

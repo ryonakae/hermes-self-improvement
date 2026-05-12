@@ -42,9 +42,9 @@ def test_apply_caching_includes_overlay_hash_when_provided():
         {"role": "user", "content": "task brief"},
     ]
 
-    _, extras_a = apply_caching(messages, site="editor", overlay_hash="abc123def456ghi")
-    _, extras_b = apply_caching(messages, site="editor", overlay_hash="zzz999zzz999zzz")
-    _, extras_none = apply_caching(messages, site="editor")
+    _, extras_a = apply_caching(messages, site="skill_agent", overlay_hash="abc123def456ghi")
+    _, extras_b = apply_caching(messages, site="skill_agent", overlay_hash="zzz999zzz999zzz")
+    _, extras_none = apply_caching(messages, site="skill_agent")
 
     # Different overlay hashes produce different keys.
     assert extras_a["prompt_cache_key"] != extras_b["prompt_cache_key"]
