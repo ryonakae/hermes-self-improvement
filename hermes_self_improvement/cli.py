@@ -29,6 +29,7 @@ from .diagnostic_signals import build_diagnostic_signals, normalize_report_diagn
 from .evidence import build_evidence_pack, write_evidence_pack
 from .episodes import record_run_episodes
 from .skill_agent_backend import build_skill_agent_backend, skill_agent_backend_status
+from .memory_agent_backend import build_memory_agent_backend, memory_agent_backend_status
 from .skill_agent import run_skill_agent_task
 from .next_actions import render_next_actions
 from .runner_steps import (
@@ -922,7 +923,10 @@ def run_improve(
     proposals = pipeline.get("proposals") if isinstance(pipeline.get("proposals"), list) else []
     decisions_summary = _summarize_runner_decisions(proposals)
     skill_step = run_skill_improvement_step(evidence_pack=evidence_pack, config=config, mutate=mutate)
-    memory_step = run_memory_improvement_step(evidence_pack=evidence_pack, config=config, mutate=mutate)
+    memory_config = dict(config) if isinstance(config, dict) else {}
+    if memory_config.get("_memory_agent_backend") is None:
+        memory_config["_memory_agent_backend"] = build_memory_agent_backend(config)
+    memory_step = run_memory_improvement_step(evidence_pack=evidence_pack, config=memory_config, mutate=mutate)
     step_decisions_payload = {
         "summary": decisions_summary,
         "proposals_considered": proposals,
@@ -1094,6 +1098,7 @@ def _latest_run_artifact(config: dict[str, Any]) -> Path | None:
 
 def _render_status_summary(payload: dict[str, Any]) -> str:
     skill_agent_backend_payload = payload.get("skill_agent_backend") if isinstance(payload.get("skill_agent_backend"), dict) else {}
+    memory_agent_backend_payload = payload.get("memory_agent_backend") if isinstance(payload.get("memory_agent_backend"), dict) else {}
     curator_integration = payload.get("curator_integration") if isinstance(payload.get("curator_integration"), dict) else {}
     policy = payload.get("autonomous_policy") if isinstance(payload.get("autonomous_policy"), dict) else {}
     lines = [
@@ -1102,6 +1107,7 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         "Readiness:",
         f"- plugin enabled: {bool(payload.get('enabled'))}",
         f"- skill agent backend: {'available' if skill_agent_backend_payload.get('available') else 'unavailable'}",
+        f"- memory agent backend: {'available' if memory_agent_backend_payload.get('available') else 'unavailable'}",
         f"- DSPy available: {bool(payload.get('dspy_available'))}",
         "Autonomous policy:",
         f"- calibrate: {'mutation-capable' if policy.get('calibrate_mutation_capable') else 'read-only'}, requires {policy.get('calibrate_requires') or 'unknown'}",
@@ -1946,6 +1952,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "gepa_evaluator_mode": (config.get("gepa_evaluator") or {}).get("mode") if isinstance(config.get("gepa_evaluator"), dict) else None,
             "dspy_available": importlib.util.find_spec("dspy") is not None,
             "skill_agent_backend": skill_agent_backend_status(config),
+            "memory_agent_backend": memory_agent_backend_status(config),
             "merge_verifier": merge_verifier_status(config),
             "memory_rollback": memory_rollback_status(config),
             "runtime_setup": check_runtime_setup(config),

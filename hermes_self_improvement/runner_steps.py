@@ -10,6 +10,7 @@ from .skill_agent import run_skill_agent_task
 from .skill_agent_backend import build_skill_agent_backend
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_archive_operation
+from .memory_agent import run_memory_agent_task
 from .memory_context import build_related_memory_lookup_context
 from .observer import _redact_text
 from .improvement_planner import build_improvement_planner_digest, build_improvement_planner_quality_report, run_improvement_planner
@@ -17,6 +18,75 @@ from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_editor_instructions
 from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
 from .target_resolver import build_target_resolution_digest, run_target_resolver
+
+
+MEMORY_AGENT_SKIP_HINTS = {"skip_duplicate", "skip_sensitive", "defer_unclear"}
+MEMORY_AGENT_CONSTRAINTS = (
+    "Use only memory tool and submit_mutation_result.",
+    "Do not use terminal/file/git/direct filesystem tools.",
+)
+MEMORY_AGENT_DISPATCH_KINDS = {"conversation_memory_gap_candidate"}
+
+
+def _memory_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
+    kind = str(item.get("kind") or "")
+    if kind not in MEMORY_AGENT_DISPATCH_KINDS:
+        return None
+    memory = item.get("memory") if isinstance(item.get("memory"), dict) else None
+    if not memory:
+        return None
+    routing_hint = str(memory.get("routing_hint") or "").strip()
+    if routing_hint in MEMORY_AGENT_SKIP_HINTS:
+        return None
+    return {
+        "candidate_id": memory.get("candidate_id") or item.get("id"),
+        "target": memory.get("target") or "memory",
+        "candidate_fact": memory.get("candidate_fact") or "",
+        "old_text": memory.get("old_text") or "",
+        "confidence": memory.get("confidence") or "medium",
+        "relation_to_existing": memory.get("relation_to_existing") or "missing",
+        "routing_hint": routing_hint or "new",
+    }
+
+
+def _dispatch_memory_agent(
+    *,
+    memory_evidence: list[dict[str, Any]],
+    config: dict[str, Any] | None,
+    mutate: bool,
+) -> dict[str, Any]:
+    cfg = config or {}
+    backend = cfg.get("_memory_agent_backend")
+    if backend is None:
+        return {"status": "skipped_no_backend"}
+    candidates: list[dict[str, Any]] = []
+    for item in memory_evidence:
+        if not isinstance(item, dict):
+            continue
+        candidate = _memory_agent_candidate_from_evidence(item)
+        if candidate is None:
+            continue
+        candidates.append(candidate)
+    if not candidates:
+        return {"status": "no_candidates"}
+    if not mutate:
+        return {"status": "preview", "candidate_count": len(candidates), "candidates": candidates}
+    task = {
+        "type": "memory_agent_task",
+        "task_kind": "memory_apply",
+        "candidates": candidates,
+        "current_entries": cfg.get("_memory_current_entries") if isinstance(cfg.get("_memory_current_entries"), list) else [],
+        "constraints": list(MEMORY_AGENT_CONSTRAINTS),
+        "evidence_ids": [c.get("candidate_id") for c in candidates],
+    }
+    result = run_memory_agent_task(task, config=config, backend=backend)
+    status = "completed" if result.get("success") else "rejected"
+    return {
+        "status": status,
+        "candidate_count": len(candidates),
+        "changed": len(result.get("changed_memories") or []) if result.get("success") else 0,
+        "result": result,
+    }
 
 
 MEMORY_SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
@@ -1278,6 +1348,14 @@ def run_memory_improvement_step(
             "result": result,
         })
 
+    memory_agent_block = _dispatch_memory_agent(
+        memory_evidence=memory_evidence,
+        config=config,
+        mutate=mutate,
+    )
+    if memory_agent_block.get("status") == "completed":
+        changed += int(memory_agent_block.get("changed") or 0)
+
     return {
         "status": "completed" if decisions else "no_memory_evidence",
         "external_provider": external_provider,
@@ -1285,4 +1363,5 @@ def run_memory_improvement_step(
         "changed": changed,
         "changed_memories": [str(decision.get("evidence_id")) for decision in decisions if decision.get("changed")],
         "decisions": decisions,
+        "memory_agent": memory_agent_block,
     }

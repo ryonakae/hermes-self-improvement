@@ -91,6 +91,8 @@ PY
 - `hermes_self_improvement/improvement_planner.py`: planner that ranks skill candidates and routes memory/evaluator decisions (LLM site `improvement_planner`)
 - `hermes_self_improvement/skill_agent.py`: skill mutation agent runner / prompt builder / result parser (LLM site `skill_agent`)
 - `hermes_self_improvement/skill_agent_backend.py`: native skill agent backend, tool executor, limits (LLM site `skill_agent`)
+- `hermes_self_improvement/memory_agent.py`: memory mutation agent runner / prompt builder / result parser (LLM site `memory_agent`)
+- `hermes_self_improvement/memory_agent_backend.py`: native memory agent backend, tool executor, limits (LLM site `memory_agent`)
 - `hermes_self_improvement/calibration.py`: evaluator overlay calibration
 - `hermes_self_improvement/runtime_eval_cases.py`: runtime-private eval cases for episodes, unmatched observations, and improve run artifacts
 - `hermes_self_improvement/mutation_policy.py`: memory provider capability / strategy helpers
