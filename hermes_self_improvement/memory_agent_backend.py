@@ -97,15 +97,15 @@ class MemoryToolExecutor:
             from .mutation_worker import execute_memory_tool_operation
         except Exception as exc:  # pragma: no cover
             return {"success": False, "error": "memory_tool_unavailable", "reasons": [str(exc)]}
-        operation = {
-            "operation": "memory_" + str(args.get("action") or ""),
+        tool_args = {
+            "action": str(args.get("action") or ""),
             "target": str(args.get("target") or "memory"),
         }
         if args.get("content"):
-            operation["content"] = args.get("content")
+            tool_args["content"] = args.get("content")
         if args.get("old_text"):
-            operation["old_text"] = args.get("old_text")
-        result = execute_memory_tool_operation(operation, memory_fn=self.memory_tool_fn, config=None)
+            tool_args["old_text"] = args.get("old_text")
+        result = execute_memory_tool_operation(tool_args, memory_fn=self.memory_tool_fn, config=None)
         result.setdefault("tool_name", "memory")
         result.setdefault("tool_args", dict(args))
         return _redact_large(result, max_chars=self.max_output_chars)
