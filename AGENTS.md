@@ -2,6 +2,10 @@
 
 `hermes-self-improvement` は、Hermes runtime の観測イベントから skill / memory / evaluator の改善材料を作る user plugin です。hook は観測専用です。mutation は `improve` / `calibrate` runner で扱います。初めて触るときは、まず `README.md` で全体像を確認してください。
 
+## 進め方
+
+TDD で進めてください。新規機能 / 振る舞い変更は、先に失敗するテストを `tests/` に追加してから実装に着手します。リファクタや純粋なリネームのときも、既存テストが緑のまま意図を担保できることを変更前後に `pytest -q` で確認してください。
+
 ## 着手前チェック
 
 ```bash
