@@ -8,8 +8,8 @@
 
 **Goal:** Determine whether changes helped over immediate, short, medium, and long windows, and feed those outcomes into calibration safely.
 
-**Current state:** Immediate validation, recurrence, quiet-window, duplicate-noop, skill-usage, quality-hold, missing-evidence, and overlay-generation grouping exist. Each observation already carries `window=immediate|short|medium|long` derived from the gap between the prior mutation and the later signal. Phase 5.1 surfaces those windows in the compact credit-assignment summary (`outcomes.credit_windows`) and in the CLI `Outcomes:` section as `- scored window coverage: immediate N, short M, medium K, long L`, so daily-facing output distinguishes early vs late credit rather than only "tracked". User-correction recurrence (5.2), same-target re-edit signal (5.3), and stronger GEPA material (5.4) still remain.
-**Execution status:** Partially implemented; phase 5.1 done, phases 5.2 / 5.3 / 5.4 remain.
+**Current state:** Implemented. Phase 5.1 surfaces `outcomes.credit_windows` in compact summary and as `scored window coverage` in the CLI Outcomes line. Phase 5.2 (`collect_user_correction_recurrence_observations`) already drops events without explicit target/evidence linkage to the unmatched bucket and assigns a stronger negative outcome_score (`-0.8`, confidence `0.9`) than generic cluster recurrence; phase 5.2 added regression tests covering explicit-target match, unrelated-clarification drop, and stronger-than-cluster scoring. Phase 5.3 (`collect_target_reedit_observations`) emits `target_reedit_shortly_after_mutation` only within `REEDIT_WINDOW` (7 days) for same target_kind/target_id, with conservative outcome_score `-0.3`; phase 5.3 added a regression test ensuring later normal edits outside the window do not trigger the signal. Phase 5.4 builds evaluator runtime eval cases `evaluator_{recurring,regressed}_outcome_review` from the credit-assignment aggregate, gated on episodes that carry a `post_validation_status`, capped at 30 cases per build.
+**Execution status:** Implemented; phases 5.1, 5.2, 5.3, 5.4 all complete.
 
 **Depends on:** Episode metadata from Milestones 1–4.
 
@@ -52,6 +52,8 @@
 
 ### Phase 5.2 — User correction recurrence
 
+**Status:** implemented.
+
 **Objective:** Treat repeated user corrections after a mutation as stronger negative evidence than generic tool failure recurrence.
 
 **Files:**
@@ -65,6 +67,8 @@
 3. Score correction recurrence as stronger negative than low-confidence cluster recurrence.
 
 ### Phase 5.3 — Same-target re-edit signal
+
+**Status:** implemented.
 
 **Objective:** Detect rapid repeated edits to the same skill/memory as possible poor-quality prior mutation.
 
@@ -80,6 +84,8 @@
 3. Keep score conservative unless re-edit reason indicates correction.
 
 ### Phase 5.4 — Calibration material from outcomes
+
+**Status:** implemented.
 
 **Objective:** Feed outcome aggregates into GEPA/evaluator cases without letting weak under-observation signals dominate.
 

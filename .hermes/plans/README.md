@@ -20,9 +20,12 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
-- `2026-05-10-milestone-5-outcome-credit-assignment.md` (phase 5.1)
-  - **Status:** partially implemented / phase 5.1 done.
-  - Surfaces immediate / short / medium / long scoring windows in the compact credit-assignment summary as `outcomes.credit_windows` and renders them in the CLI `Outcomes:` section as `- scored window coverage: immediate N, short M, medium K, long L`. Each observation already carries the derived window field, so this phase wires the existing per-observation metadata through to daily-facing output.
+- `2026-05-10-milestone-5-outcome-credit-assignment.md` (phases 5.1 + 5.2 + 5.3 + 5.4)
+  - **Status:** implemented / phases 5.1, 5.2, 5.3, 5.4 all complete.
+  - Phase 5.1 surfaces immediate / short / medium / long scoring windows in `outcomes.credit_windows` and as `scored window coverage` in the CLI Outcomes line.
+  - Phase 5.2 (`collect_user_correction_recurrence_observations`) keeps the explicit-target / evidence-id gate and the stronger-than-cluster outcome_score (`-0.8`, confidence `0.9`) under regression tests including explicit-target match, unrelated-clarification drop, and stronger-than-cluster scoring contract.
+  - Phase 5.3 (`collect_target_reedit_observations`) emits `target_reedit_shortly_after_mutation` only within `REEDIT_WINDOW=7 days` for same target_kind/target_id, with conservative outcome_score `-0.3`, plus a regression test ensuring later normal edits outside the window are ignored.
+  - Phase 5.4 wires the credit-assignment aggregate into `build_role_runtime_eval_cases`, emitting `evaluator_{recurring,regressed}_outcome_review` for episodes carrying `post_validation_status`, capped at 30 cases per build.
 
 The previous completed implementation plan is:
 
