@@ -530,7 +530,7 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- actual mutations: skill created 1, skill patched 1, memory 1" in text
     assert "- created skills: timeout-workflow" in text
     assert "- patched skills: sandbox-permission-workflow" in text
-    assert "- validation: post-validated 2, rejected 1" in text
+    assert "- validation: post-validated 2, rejected 1, unknown 0" in text
     assert "- recovered accounting: created skills inferred from trace 1" in text
     assert "- duplicate/no-op: covered by existing skill 1, duplicate prevented 1" in text
     assert "- prompt overlay/evaluator: changed" in text
@@ -541,6 +541,28 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "Outcomes:" in text
     assert "- tracked: 3, proven improved: 1, recurring: 1, regressed: 0, unknown: 1, insufficient window: 0" in text
     assert "- unproven changes remain under observation" in text
+
+
+def test_improve_summary_reports_write_only_unverified_memory_as_validation_unknown():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 0, "memory_changes": 2, "scorer_evaluator_changed": False},
+        "step_decisions": {
+            "skill": {"planner": {"decisions": []}, "decisions": []},
+            "memory": {"decisions": [
+                {"decision": "accepted", "changed": True, "result": {"success": True, "post_validation": {"status": "passed", "mode": "built_in_hash"}}},
+                {"decision": "accepted", "changed": True, "result": {"success": True, "post_validation": {"status": "write_only_unverified", "mode": "provider_write_only", "provider": "supermemory", "accounting_status": "applied_unverified"}}},
+                {"decision": "accepted", "changed": True, "result": {"success": True, "post_validation": {"status": "write_only_unverified", "mode": "provider_write_only", "provider": "supermemory", "accounting_status": "applied_unverified"}}},
+            ]},
+        },
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Actual results:" in text
+    assert "- actual mutations: skill created 0, skill patched 0, memory 3" in text
+    assert "- validation: post-validated 1, rejected 0, unknown 2" in text
+    assert "- validation unknown breakdown: provider_write_only 2" in text
 
 
 def test_improve_summary_outcomes_show_quality_under_observation():

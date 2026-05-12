@@ -1315,12 +1315,26 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
     patched_names: list[str] = []
     post_validated = 0
     validation_rejected = 0
+    validation_unknown = 0
+    validation_unknown_modes: dict[str, int] = {}
     trace_recovered = 0
     def note_names(target: list[str], values: Any) -> None:
         for value in values or []:
             name = str(value or "").strip()
             if name and name not in target:
                 target.append(name)
+    def tally_post_validation(result_payload: dict[str, Any]) -> None:
+        nonlocal post_validated, validation_rejected, validation_unknown
+        post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
+        status = str(post_validation.get("status") or "")
+        if status == "passed":
+            post_validated += 1
+        elif status == "failed":
+            validation_rejected += 1
+        elif status == "write_only_unverified" or str(post_validation.get("accounting_status") or "") == "applied_unverified":
+            validation_unknown += 1
+            mode = str(post_validation.get("mode") or "unknown")
+            validation_unknown_modes[mode] = validation_unknown_modes.get(mode, 0) + 1
     for item in skill_decisions:
         if not isinstance(item, dict):
             continue
@@ -1332,13 +1346,18 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
             patched += len(patched_values)
             note_names(created_names, created_values)
             note_names(patched_names, patched_values)
-        post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
-        if post_validation.get("status") == "passed":
-            post_validated += 1
-        if post_validation.get("status") == "failed" or result_payload.get("error") == "skill_agent_post_validation_failed":
-            validation_rejected += 1
+        tally_post_validation(result_payload)
+        if result_payload.get("error") == "skill_agent_post_validation_failed":
+            post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
+            if str(post_validation.get("status") or "") != "failed":
+                validation_rejected += 1
         if result_payload.get("created_skills_inferred_from_trace"):
             trace_recovered += 1
+    for item in memory_decisions:
+        if not isinstance(item, dict):
+            continue
+        result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
+        tally_post_validation(result_payload)
     memory_changed = sum(1 for item in memory_decisions if isinstance(item, dict) and item.get("decision") == "accepted" and item.get("changed"))
     if not memory_changed:
         memory_changed = int(summary.get("memory_changes") or 0)
@@ -1359,7 +1378,10 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
     if patched_names:
         suffix = f", ... {len(patched_names) - 5} more" if len(patched_names) > 5 else ""
         lines.append(f"- patched skills: {', '.join(patched_names[:5])}{suffix}")
-    lines.append(f"- validation: post-validated {post_validated}, rejected {validation_rejected}")
+    lines.append(f"- validation: post-validated {post_validated}, rejected {validation_rejected}, unknown {validation_unknown}")
+    if validation_unknown_modes:
+        parts = [f"{mode} {count}" for mode, count in sorted(validation_unknown_modes.items())]
+        lines.append(f"- validation unknown breakdown: {', '.join(parts)}")
     if trace_recovered:
         lines.append(f"- recovered accounting: created skills inferred from trace {trace_recovered}")
     if noop_counts:
