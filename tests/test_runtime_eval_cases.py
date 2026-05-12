@@ -113,6 +113,66 @@ def test_runtime_eval_cases_convert_skill_agent_target_mismatch_to_skip(tmp_path
     assert cases[0]["expected"]["mutation"] == "skip"
 
 
+def test_runtime_eval_cases_emit_evaluator_outcome_status_review_for_recurring_and_regressed_episodes(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    recurring_episode = episode_payload(
+        "episode-recurring",
+        episode_kind="executed_mutation",
+        decision="mutate_skill",
+        action="skill_patch",
+        executed=True,
+        changed=True,
+        post_validation_status="passed",
+    )
+    regressed_episode = episode_payload(
+        "episode-regressed",
+        episode_kind="executed_mutation",
+        decision="mutate_skill",
+        action="skill_patch",
+        executed=True,
+        changed=True,
+        post_validation_status="failed",
+    )
+    write_json(root / "episodes" / "2026-05-03" / "recurring.json", recurring_episode)
+    write_json(root / "episodes" / "2026-05-03" / "regressed.json", regressed_episode)
+    write_json(root / "outcomes" / "2026-05-03" / "o-recurring.json", {
+        "schema_name": "self_improvement_outcome_observation",
+        "schema_version": "1.0",
+        "episode_id": "episode-recurring",
+        "observed_at": "2026-05-03T01:00:00+00:00",
+        "window": "immediate",
+        "signals": {"same_failure_cluster_recurrence": True, "repeat_fix_needed": True},
+        "outcome_score": -0.7,
+        "confidence": 0.7,
+        "source": {"kind": "automatic_observation", "signal": "same_failure_cluster_recurrence"},
+    })
+    write_json(root / "outcomes" / "2026-05-03" / "o-regressed.json", {
+        "schema_name": "self_improvement_outcome_observation",
+        "schema_version": "1.0",
+        "episode_id": "episode-regressed",
+        "observed_at": "2026-05-03T01:00:00+00:00",
+        "window": "immediate",
+        "signals": {"validation_passed": False, "prompt_size_regression": True},
+        "outcome_score": -0.5,
+        "confidence": 0.7,
+        "source": {"kind": "automatic_observation", "signal": "validation_failed"},
+    })
+
+    cases = build_role_runtime_eval_cases(config=config, limit=100)
+    case_types = {case.get("case_type") for case in cases}
+
+    assert "evaluator_recurring_outcome_review" in case_types
+    assert "evaluator_regressed_outcome_review" in case_types
+    for case in cases:
+        if case.get("case_type") == "evaluator_recurring_outcome_review":
+            assert case["role"] == "evaluator"
+            assert case["expected"]["outcome_status"] == "recurring"
+        if case.get("case_type") == "evaluator_regressed_outcome_review":
+            assert case["role"] == "evaluator"
+            assert case["expected"]["outcome_status"] == "regressed"
+
+
 def _quality_episode(episode_id: str, **extra):
     base = episode_payload(
         episode_id,

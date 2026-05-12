@@ -267,15 +267,71 @@ def _skill_quality_case_from_episode(episode: dict[str, Any]) -> dict[str, Any] 
     return case
 
 
+_OUTCOME_STATUS_CASE_LIMIT = 30
+
+
+def _outcome_status_case_from_episode(episode: dict[str, Any], *, status: str) -> dict[str, Any]:
+    case = _base_case(
+        episode,
+        case_type=f"evaluator_{status}_outcome_review",
+        role="evaluator",
+        expected={"outcome_status": status},
+    )
+    case["input"]["outcome_status"] = status
+    seed = {key: case[key] for key in ("case_family", "case_type", "role", "input", "expected")}
+    seed["source"] = {key: value for key, value in case["source"].items() if key != "path"}
+    case["case_hash"] = "sha256:" + _sha256_text(_stable_json(seed))
+    case["id"] = f"{case['case_type']}-{case['case_hash'].split(':', 1)[1][:12]}"
+    return case
+
+
+def _outcome_status_cases_from_credit_aggregate(config: dict[str, Any], episodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    try:
+        from .credit_assignment import build_credit_assignment_aggregate
+    except Exception:
+        return []
+    try:
+        aggregate = build_credit_assignment_aggregate(config=config, limit=len(episodes) or 1000)
+    except Exception:
+        return []
+    related = aggregate.get("related_episode_ids") if isinstance(aggregate.get("related_episode_ids"), dict) else {}
+    recurring_ids = set(related.get("recurring") or [])
+    regressed_ids = set(related.get("regressed") or [])
+    if not recurring_ids and not regressed_ids:
+        return []
+    episode_by_id = {str(ep.get("episode_id") or ""): ep for ep in episodes if isinstance(ep, dict)}
+    eligible_ids = {
+        episode_id
+        for episode_id, ep in episode_by_id.items()
+        if str(ep.get("post_validation_status") or "")
+    }
+    out: list[dict[str, Any]] = []
+    for episode_id in sorted(recurring_ids & eligible_ids):
+        episode = episode_by_id.get(str(episode_id))
+        if episode is not None:
+            out.append(_outcome_status_case_from_episode(episode, status="recurring"))
+        if len(out) >= _OUTCOME_STATUS_CASE_LIMIT:
+            break
+    for episode_id in sorted(regressed_ids & eligible_ids):
+        if len(out) >= _OUTCOME_STATUS_CASE_LIMIT:
+            break
+        episode = episode_by_id.get(str(episode_id))
+        if episode is not None:
+            out.append(_outcome_status_case_from_episode(episode, status="regressed"))
+    return out
+
+
 def build_role_runtime_eval_cases(*, config: dict[str, Any], limit: int = 1000) -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
-    for episode in load_recent_episodes(config=config, limit=limit):
+    episodes = list(load_recent_episodes(config=config, limit=limit))
+    for episode in episodes:
         case = _case_from_episode(episode)
         if case is not None:
             cases.append(case)
         quality_case = _skill_quality_case_from_episode(episode)
         if quality_case is not None:
             cases.append(quality_case)
+    cases.extend(_outcome_status_cases_from_credit_aggregate(config, episodes))
     deduped: dict[str, dict[str, Any]] = {}
     for case in cases:
         deduped[str(case.get("case_hash") or case.get("id"))] = case

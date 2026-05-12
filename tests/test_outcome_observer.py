@@ -339,6 +339,19 @@ def test_collect_target_reedit_observations_attributes_weak_negative_to_prior_ep
     assert candidate["confidence"] == 0.4
 
 
+def test_collect_target_reedit_observations_skips_later_normal_edit_outside_reedit_window():
+    episodes = [
+        episode_payload("episode-1", created_at="2026-05-01T09:00:00+00:00", target_id="demo-skill"),
+        episode_payload("episode-2", created_at="2026-05-15T09:00:00+00:00", target_id="demo-skill"),
+    ]
+    window = {"start": "2026-04-30T00:00:00+00:00", "end": "2026-05-20T00:00:00+00:00"}
+
+    candidates, unmatched = collect_target_reedit_observations(episodes=episodes, window=window)
+
+    assert candidates == []
+    assert unmatched == []
+
+
 def test_collect_target_reedit_observations_ignores_noop_and_different_targets():
     episodes = [
         episode_payload("episode-1", created_at="2026-05-05T09:00:00+00:00", target_id="demo-skill"),
@@ -504,6 +517,50 @@ def test_collect_user_correction_recurrence_observations_matches_explicit_target
     assert candidates[0]["signals"]["user_correction_recurrence"] is True
     assert candidates[0]["signals"]["user_correction"] is True
     assert candidates[0]["confidence"] == 0.9
+
+
+def test_collect_user_correction_recurrence_observations_drops_unrelated_clarification(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    episode = episode_payload("episode-1", created_at="2026-05-05T09:00:00+00:00", target_id="demo-skill")
+    event = {
+        "ts": "2026-05-05T10:00:00+00:00",
+        "event": "user_correction",
+        "target_kind": "skill",
+        "target_id": "unrelated-skill",
+        "session_id": "session-1",
+    }
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text(json.dumps(event, sort_keys=True) + "\n", encoding="utf-8")
+    window = {"start": "2026-05-05T09:30:00+00:00", "end": "2026-05-05T11:00:00+00:00"}
+
+    candidates, unmatched = collect_user_correction_recurrence_observations(config=config, episodes=[episode], window=window)
+
+    assert candidates == []
+    assert len(unmatched) == 1
+    assert unmatched[0]["signal"] == "user_correction_recurrence"
+    assert unmatched[0]["reason"] == "correction_episode_not_matched"
+
+
+def test_user_correction_recurrence_outcome_score_is_stronger_negative_than_cluster_recurrence(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    episode = episode_payload("episode-1", created_at="2026-05-05T09:00:00+00:00", target_id="demo-skill")
+    event = {
+        "ts": "2026-05-05T10:00:00+00:00",
+        "event": "user_correction",
+        "target_kind": "skill",
+        "target_id": "demo-skill",
+        "session_id": "session-1",
+    }
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text(json.dumps(event, sort_keys=True) + "\n", encoding="utf-8")
+    window = {"start": "2026-05-05T09:30:00+00:00", "end": "2026-05-05T11:00:00+00:00"}
+
+    candidates, _ = collect_user_correction_recurrence_observations(config=config, episodes=[episode], window=window)
+
+    assert candidates[0]["outcome_score"] <= -0.8
+    assert candidates[0]["confidence"] >= 0.8
 
 
 def test_collect_post_validation_observations_records_immediate_validation_signal():
