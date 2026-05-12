@@ -113,6 +113,97 @@ def test_runtime_eval_cases_convert_skill_agent_target_mismatch_to_skip(tmp_path
     assert cases[0]["expected"]["mutation"] == "skip"
 
 
+def _quality_episode(episode_id: str, **extra):
+    base = episode_payload(
+        episode_id,
+        episode_kind="executed_mutation",
+        decision="mutate_skill",
+        action="skill_patch",
+        executed=True,
+        changed=True,
+        attached_evidence_count=2,
+        post_validation_status="passed",
+        post_validation_has_pitfalls=True,
+        post_validation_has_verification=True,
+        post_validation_has_trigger_conditions=True,
+        post_validation_has_concrete_steps=True,
+        post_validation_memory_shaped=False,
+        post_validation_content_too_short=False,
+        post_validation_content_too_long=False,
+    )
+    base.update(extra)
+    return base
+
+
+def test_runtime_eval_cases_emit_evaluator_skill_quality_good_for_complete_skill(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "episodes" / "2026-05-03" / "good.json", _quality_episode("episode-good"))
+
+    cases = build_role_runtime_eval_cases(config=config, limit=100)
+    quality_cases = [case for case in cases if str(case.get("case_type") or "").startswith("evaluator_skill_quality_")]
+
+    assert len(quality_cases) == 1
+    case = quality_cases[0]
+    assert case["case_type"] == "evaluator_skill_quality_good_review"
+    assert case["role"] == "evaluator"
+    assert case["expected"]["quality_bucket"] == "good"
+    assert case["input"]["post_validation"]["has_pitfalls"] is True
+    assert case["input"]["evidence_summary"]["attached_evidence_count"] == 2
+
+
+def test_runtime_eval_cases_emit_evaluator_skill_quality_needs_patch_when_sections_missing(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(
+        root / "episodes" / "2026-05-03" / "needs.json",
+        _quality_episode(
+            "episode-needs",
+            post_validation_has_pitfalls=False,
+            post_validation_has_verification=False,
+        ),
+    )
+
+    cases = build_role_runtime_eval_cases(config=config, limit=100)
+    quality_cases = [case for case in cases if str(case.get("case_type") or "").startswith("evaluator_skill_quality_")]
+
+    assert len(quality_cases) == 1
+    assert quality_cases[0]["case_type"] == "evaluator_skill_quality_needs_patch_review"
+    assert quality_cases[0]["expected"]["quality_bucket"] == "needs_patch"
+
+
+def test_runtime_eval_cases_emit_evaluator_skill_quality_too_generic_for_memory_shaped(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(
+        root / "episodes" / "2026-05-03" / "generic.json",
+        _quality_episode("episode-generic", post_validation_memory_shaped=True),
+    )
+
+    cases = build_role_runtime_eval_cases(config=config, limit=100)
+    quality_cases = [case for case in cases if str(case.get("case_type") or "").startswith("evaluator_skill_quality_")]
+
+    assert len(quality_cases) == 1
+    assert quality_cases[0]["case_type"] == "evaluator_skill_quality_too_generic_review"
+    assert quality_cases[0]["expected"]["quality_bucket"] == "too_generic"
+
+
+def test_runtime_eval_cases_emit_evaluator_skill_quality_missing_evidence_for_zero_attached(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(
+        root / "episodes" / "2026-05-03" / "missing-evidence.json",
+        _quality_episode("episode-missing-evidence", attached_evidence_count=0),
+    )
+
+    cases = build_role_runtime_eval_cases(config=config, limit=100)
+    quality_cases = [case for case in cases if str(case.get("case_type") or "").startswith("evaluator_skill_quality_")]
+
+    assert len(quality_cases) == 1
+    assert quality_cases[0]["case_type"] == "evaluator_skill_quality_missing_attached_evidence_review"
+    assert quality_cases[0]["expected"]["quality_bucket"] == "missing_attached_evidence"
+
+
 def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])

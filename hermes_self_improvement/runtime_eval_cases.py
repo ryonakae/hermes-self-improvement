@@ -204,12 +204,78 @@ def _case_from_episode(episode: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _skill_quality_bucket(episode: dict[str, Any]) -> str | None:
+    if str(episode.get("episode_kind") or "") != "executed_mutation":
+        return None
+    if str(episode.get("target_kind") or "") != "skill":
+        return None
+    if not str(episode.get("post_validation_status") or ""):
+        return None
+    if bool(episode.get("post_validation_memory_shaped")):
+        return "too_generic"
+    try:
+        attached = int(episode.get("attached_evidence_count") or 0)
+    except (TypeError, ValueError):
+        attached = 0
+    if attached == 0:
+        return "missing_attached_evidence"
+    has_pitfalls = bool(episode.get("post_validation_has_pitfalls"))
+    has_verification = bool(episode.get("post_validation_has_verification"))
+    has_trigger = bool(episode.get("post_validation_has_trigger_conditions"))
+    has_steps = bool(episode.get("post_validation_has_concrete_steps"))
+    content_short = bool(episode.get("post_validation_content_too_short"))
+    content_long = bool(episode.get("post_validation_content_too_long"))
+    if not (has_pitfalls and has_verification and has_trigger and has_steps) or content_short or content_long:
+        return "needs_patch"
+    return "good"
+
+
+def _skill_quality_case_from_episode(episode: dict[str, Any]) -> dict[str, Any] | None:
+    bucket = _skill_quality_bucket(episode)
+    if bucket is None:
+        return None
+    case = _base_case(
+        episode,
+        case_type=f"evaluator_skill_quality_{bucket}_review",
+        role="evaluator",
+        expected={"quality_bucket": bucket},
+    )
+    case["input"]["post_validation"] = {
+        "has_pitfalls": bool(episode.get("post_validation_has_pitfalls")),
+        "has_verification": bool(episode.get("post_validation_has_verification")),
+        "has_trigger_conditions": bool(episode.get("post_validation_has_trigger_conditions")),
+        "has_concrete_steps": bool(episode.get("post_validation_has_concrete_steps")),
+        "memory_shaped": bool(episode.get("post_validation_memory_shaped")),
+        "content_too_short": bool(episode.get("post_validation_content_too_short")),
+        "content_too_long": bool(episode.get("post_validation_content_too_long")),
+        "status": str(episode.get("post_validation_status") or ""),
+    }
+    try:
+        attached = int(episode.get("attached_evidence_count") or 0)
+    except (TypeError, ValueError):
+        attached = 0
+    case["input"]["evidence_summary"] = {
+        "attached_evidence_count": attached,
+        "evidence_strength": _evidence_strength(episode),
+    }
+    case["input"]["target_operation"] = str(episode.get("action") or "")
+    case["input"]["skill_excerpt"] = str(episode.get("target_id") or "")
+    seed = {key: case[key] for key in ("case_family", "case_type", "role", "input", "expected")}
+    seed["source"] = {key: value for key, value in case["source"].items() if key != "path"}
+    case["case_hash"] = "sha256:" + _sha256_text(_stable_json(seed))
+    case["id"] = f"{case['case_type']}-{case['case_hash'].split(':', 1)[1][:12]}"
+    return case
+
+
 def build_role_runtime_eval_cases(*, config: dict[str, Any], limit: int = 1000) -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
     for episode in load_recent_episodes(config=config, limit=limit):
         case = _case_from_episode(episode)
         if case is not None:
             cases.append(case)
+        quality_case = _skill_quality_case_from_episode(episode)
+        if quality_case is not None:
+            cases.append(quality_case)
     deduped: dict[str, dict[str, Any]] = {}
     for case in cases:
         deduped[str(case.get("case_hash") or case.get("id"))] = case
