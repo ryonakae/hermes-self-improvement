@@ -20,9 +20,10 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
-- `2026-05-10-milestone-4-knowledge-inventory-maintenance.md` (phase 4.1)
-  - **Status:** partially implemented / phase 4.1 done.
-  - Enriches `make_skill_inventory_candidate` with deterministic safety metadata: `editable_targets` (mutable agent-created skills), `reference_matches` (builtin / hub / plugin-bundled / external / pinned), `evidence_count`, and `recommended_actions` (`merge_skills` / `archive_skill` / `mutate_skill` / `no_mutation_target`) derived from `group_kind`. The planner / skill_agent now sees editable-vs-reference splits at the candidate level without inferring from raw skill lists.
+- `2026-05-10-milestone-4-knowledge-inventory-maintenance.md` (phases 4.1 + 4.2)
+  - **Status:** partially implemented / phases 4.1 and 4.2 done, phases 4.3 / 4.4 remain.
+  - Phase 4.1 enriches `make_skill_inventory_candidate` with deterministic safety metadata: `editable_targets` (mutable agent-created skills), `reference_matches` (builtin / hub / plugin-bundled / external / pinned), `evidence_count`, and `recommended_actions` (`merge_skills` / `archive_skill` / `mutate_skill` / `no_mutation_target`) derived from `group_kind`. The planner / skill_agent now sees editable-vs-reference splits at the candidate level without inferring from raw skill lists.
+  - Phase 4.2 adds deterministic placement routing in `reconcile_memory_extractor_payload_with_existing_memories`: raw tool output candidates get `routing_hint="defer_unclear"` + `skip_reason="not_memory_raw_tool_output"` + `suggested_route="diagnostic"`, and procedural / step-shaped facts get `skip_reason="not_memory_workflow_to_skill"` + `suggested_route="skill"`. The existing `Memory placement:` CLI section already surfaces these as duplicate / kept / would-move / would-merge-replace / routed-to-skill / diagnostic / needs-memory-planner counts.
 
 The previous completed implementation plan is:
 

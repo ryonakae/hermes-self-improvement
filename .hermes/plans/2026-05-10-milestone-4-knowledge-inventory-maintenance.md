@@ -8,8 +8,8 @@
 
 **Goal:** Make stale/overlapping skills, duplicated or misplaced memory, repo/runtime drift, and recurring user corrections first-class improvement candidates.
 
-**Current state:** Inventory reason counts and source buckets are visible in CLI and operational reports. Planner sees maintenance candidates in the prompt. Phase 4.1 now enriches `make_skill_inventory_candidate` with deterministic safety metadata: `editable_targets` (mutable agent-created skills), `reference_matches` (builtin / hub / plugin-bundled / external / pinned), `evidence_count`, and `recommended_actions` derived from `group_kind` (merge_skills / archive_skill / mutate_skill / no_mutation_target). Memory placement (4.2) and repo/runtime drift (4.3) candidates still remain.
-**Execution status:** Partially implemented; phase 4.1 done, phases 4.2 / 4.3 / 4.4 remain.
+**Current state:** Inventory reason counts and source buckets are visible in CLI and operational reports. Phase 4.1 enriches `make_skill_inventory_candidate` with deterministic safety metadata. Phase 4.2 adds deterministic placement routing inside `reconcile_memory_extractor_payload_with_existing_memories`: candidate facts that look like raw tool output (code fences / stdout-stderr / shell prompts) are routed to `routing_hint="defer_unclear"` + `skip_reason="not_memory_raw_tool_output"` + `suggested_route="diagnostic"`, and procedural / step-shaped facts are routed to `skip_reason="not_memory_workflow_to_skill"` + `suggested_route="skill"`. The existing CLI `Memory placement:` section already surfaces duplicate / kept / would-move / would-merge-replace / routed-to-skill / diagnostic / needs-memory-planner counts. Repo/runtime drift (4.3) candidates still remain.
+**Execution status:** Partially implemented; phases 4.1 and 4.2 done, phases 4.3 / 4.4 remain.
 
 **Depends on:** Milestone 1 post-validation, Milestone 2 coverage handling, and Milestone 3 quality patch constraints.
 
@@ -50,6 +50,8 @@
 3. Ensure non-editable references are present for coverage checks but not mutation targets.
 
 ### Phase 4.2 — Memory placement and cleanup bundles
+
+**Status:** implemented.
 
 **Objective:** Route duplicated/stale/misplaced memory evidence to add/replace/remove/skill-maintenance/defer decisions.
 
