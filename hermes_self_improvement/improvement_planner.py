@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from .autonomous_loop import normalize_autonomous_decision
-from .evidence import filter_llm_skill_candidates
+from .evidence import compute_coverage_fit_for_name, filter_llm_skill_candidates
 from .observer import _redact_text
 from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 from .target_hints import extract_target_hints
@@ -361,6 +361,8 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
             "source": item.get("source"),
             "mutation_allowed": False,
         })
+    editable_skill_names_for_fit = list(candidate_by_name.keys())
+    reference_skill_names_for_fit = [str(item.get("name") or "") for item in reference_skills if isinstance(item, dict) and item.get("name")]
     maintenance_candidates = []
     for item in skill_evidence:
         if not isinstance(item, dict):
@@ -370,6 +372,14 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
         if not affordance:
             continue
         coverage = item.get("coverage") if isinstance(item.get("coverage"), dict) else {}
+        boundary_for_fit = str(affordance.get("workflow_boundary") or item.get("theme") or coverage.get("workflow_boundary") or "")
+        evidence_count_for_fit = item.get("count") or coverage.get("evidence_count")
+        coverage_fit = compute_coverage_fit_for_name(
+            boundary_for_fit,
+            editable_skill_names=editable_skill_names_for_fit,
+            reference_skill_names=reference_skill_names_for_fit,
+            evidence_count=int(evidence_count_for_fit) if isinstance(evidence_count_for_fit, (int, float)) else None,
+        )
         maintenance_candidates.append({
             "evidence_id": str(item.get("id") or ""),
             "kind": item.get("kind"),
@@ -377,6 +387,7 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
             "count": item.get("count") or coverage.get("evidence_count"),
             "maintenance_affordance": affordance,
             "unresolved_reason": hint.get("unresolved_reason") or "no_existing_skill_fit",
+            "coverage_fit": coverage_fit,
         })
     knowledge_maintenance = {
         "editable_skills": [

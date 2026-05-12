@@ -186,6 +186,72 @@ def _slug_seed(text: str, *, max_tokens: int = 5) -> str:
     return "-".join(tokens) or "workflow"
 
 
+COVERAGE_FIT_KINDS = ("exact_duplicate", "partial_overlap", "reference_only", "no_existing_fit")
+
+_COVERAGE_FIT_STOPWORDS = {"the", "and", "for", "with", "from", "into", "of", "a", "an", "to", "in", "on"}
+
+
+def _coverage_name_tokens(name: str) -> set[str]:
+    return {
+        token
+        for token in "".join(ch.lower() if ch.isalnum() else " " for ch in str(name or "")).split()
+        if token and len(token) >= 3 and token not in _COVERAGE_FIT_STOPWORDS
+    }
+
+
+def compute_coverage_fit_for_name(
+    name: str,
+    *,
+    editable_skill_names: list[str] | None = None,
+    reference_skill_names: list[str] | None = None,
+    min_token_overlap: int = 2,
+    evidence_count: int | None = None,
+) -> dict[str, Any]:
+    """Classify how an LLM-facing skill candidate name overlaps existing skill names.
+
+    Returns a bounded bundle: kind in COVERAGE_FIT_KINDS, the matched skill names,
+    which side (editable/reference/none) the match came from, and the optional
+    upstream evidence_count carried along for planner-side rendering.
+    """
+    slug = _slug_seed(name)
+    candidate_tokens = _coverage_name_tokens(slug)
+    editable = list(editable_skill_names or [])
+    reference = list(reference_skill_names or [])
+    bundle: dict[str, Any] = {
+        "kind": "no_existing_fit",
+        "fit_skills": [],
+        "match_target": "none",
+    }
+    if evidence_count is not None:
+        bundle["evidence_count"] = int(evidence_count)
+    if slug in editable:
+        bundle.update({"kind": "exact_duplicate", "fit_skills": [slug], "match_target": "editable"})
+        return bundle
+    if slug in reference:
+        bundle.update({"kind": "reference_only", "fit_skills": [slug], "match_target": "reference"})
+        return bundle
+    if not candidate_tokens:
+        return bundle
+    partial_editable = sorted(
+        skill_name
+        for skill_name in editable
+        if len(_coverage_name_tokens(skill_name) & candidate_tokens) >= min_token_overlap
+    )
+    partial_reference = sorted(
+        skill_name
+        for skill_name in reference
+        if len(_coverage_name_tokens(skill_name) & candidate_tokens) >= min_token_overlap
+    )
+    if partial_editable:
+        fit = partial_editable + [name for name in partial_reference if name not in partial_editable]
+        bundle.update({"kind": "partial_overlap", "fit_skills": fit[:3], "match_target": "editable_partial"})
+        return bundle
+    if partial_reference:
+        bundle.update({"kind": "reference_only", "fit_skills": partial_reference[:3], "match_target": "reference_partial"})
+        return bundle
+    return bundle
+
+
 def _clean_list(values: list[Any] | tuple[Any, ...] | None, *, max_items: int = 8, max_chars: int = 180) -> list[str]:
     out: list[str] = []
     for value in values or []:

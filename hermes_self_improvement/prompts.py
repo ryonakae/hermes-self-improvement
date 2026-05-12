@@ -113,8 +113,12 @@ def _render_knowledge_maintenance_section(digest: dict[str, Any]) -> str:
     ]
     for item in candidates[:20]:
         affordance = item.get("maintenance_affordance") if isinstance(item.get("maintenance_affordance"), dict) else {}
+        coverage_fit = item.get("coverage_fit") if isinstance(item.get("coverage_fit"), dict) else {}
+        fit_kind = coverage_fit.get("kind") or "no_existing_fit"
+        fit_skills = coverage_fit.get("fit_skills") or []
+        fit_skills_str = ",".join(str(name) for name in fit_skills[:3]) if fit_skills else "none"
         lines.extend([
-            f"- evidence_id={item.get('evidence_id')}; boundary={_clip(affordance.get('workflow_boundary') or item.get('theme'), max_chars=140)}; count={item.get('count')}; create_skill_name_seed={_clip(affordance.get('create_skill_name_seed'), max_chars=120)}; possible_actions={_clip(affordance.get('possible_actions'), max_chars=220)}",
+            f"- evidence_id={item.get('evidence_id')}; boundary={_clip(affordance.get('workflow_boundary') or item.get('theme'), max_chars=140)}; count={item.get('count')}; create_skill_name_seed={_clip(affordance.get('create_skill_name_seed'), max_chars=120)}; possible_actions={_clip(affordance.get('possible_actions'), max_chars=220)}; coverage_fit={fit_kind} ({fit_skills_str})",
         ])
     if len(candidates) > 20:
         lines.append(f"- omitted maintenance candidates: {len(candidates) - 20}")

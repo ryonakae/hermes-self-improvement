@@ -1,7 +1,110 @@
-from hermes_self_improvement.evidence import make_knowledge_coverage_candidate
+from hermes_self_improvement.evidence import compute_coverage_fit_for_name, make_knowledge_coverage_candidate
 from hermes_self_improvement.improvement_planner import build_improvement_planner_digest, run_improvement_planner
 from hermes_self_improvement.prompts import render_planner_messages
 from hermes_self_improvement.runner_steps import run_skill_improvement_step
+
+
+def test_compute_coverage_fit_for_name_classifies_exact_partial_reference_and_no_fit():
+    editable = ["local-patch-workflow", "timeout-workflow"]
+    reference = ["safe-patch-usage", "sandbox-permission-guide"]
+
+    exact = compute_coverage_fit_for_name(
+        "local-patch-workflow",
+        editable_skill_names=editable,
+        reference_skill_names=reference,
+    )
+    assert exact["kind"] == "exact_duplicate"
+    assert exact["match_target"] == "editable"
+    assert exact["fit_skills"] == ["local-patch-workflow"]
+
+    partial = compute_coverage_fit_for_name(
+        "patch tool workflow",
+        editable_skill_names=editable,
+        reference_skill_names=reference,
+    )
+    assert partial["kind"] == "partial_overlap"
+    assert "local-patch-workflow" in partial["fit_skills"]
+
+    reference_only = compute_coverage_fit_for_name(
+        "safe-patch-usage",
+        editable_skill_names=["unrelated-skill"],
+        reference_skill_names=reference,
+    )
+    assert reference_only["kind"] == "reference_only"
+    assert reference_only["match_target"] == "reference"
+    assert "safe-patch-usage" in reference_only["fit_skills"]
+
+    no_fit = compute_coverage_fit_for_name(
+        "totally new boundary",
+        editable_skill_names=editable,
+        reference_skill_names=reference,
+    )
+    assert no_fit["kind"] == "no_existing_fit"
+    assert no_fit["fit_skills"] == []
+
+
+def test_planner_digest_attaches_coverage_fit_to_maintenance_candidates():
+    candidate = make_knowledge_coverage_candidate(
+        gap_kind="recurring_workflow_without_skill",
+        evidence_ids=["u1"],
+        evidence_count=4,
+        workflow_boundary="patch tool workflow",
+        resolution_kind="unresolved",
+        rationale="Repeated patch failures lack a suitable local skill.",
+    )
+    pack = {
+        "views": {"skill": [candidate["id"]]},
+        "evidence": [candidate],
+        "skill_candidates": [
+            {"name": "local-patch-workflow", "description": "Local patch workflow", "mutable": True, "state": "active", "provenance": "agent_created"},
+            {"name": "safe-patch-usage", "description": "Built-in patch safety", "mutable": False, "state": "active", "provenance": "builtin"},
+        ],
+        "target_resolutions": {"resolutions": [{
+            "candidate_id": candidate["id"],
+            "resolution_kind": "unresolved",
+            "target_kind": "none",
+            "target": "",
+            "confidence": "high",
+            "unresolved_reason": "no_existing_skill_fit",
+            "suggested_boundary": "patch tool workflow",
+            "decision_hint": "defer",
+        }]},
+    }
+
+    digest = build_improvement_planner_digest(pack)
+
+    maintenance_candidate = digest["knowledge_maintenance"]["maintenance_candidates"][0]
+    coverage_fit = maintenance_candidate["coverage_fit"]
+    assert coverage_fit["kind"] == "partial_overlap"
+    assert "local-patch-workflow" in coverage_fit["fit_skills"]
+    assert coverage_fit["evidence_count"] == 4
+
+
+def test_planner_prompt_renders_coverage_fit_for_maintenance_candidates():
+    candidate = make_knowledge_coverage_candidate(
+        gap_kind="recurring_workflow_without_skill",
+        evidence_ids=["unmatched_patch"],
+        evidence_count=12,
+        workflow_boundary="patch tool workflow",
+        resolution_kind="unresolved",
+        rationale="Repeated patch failures lack a suitable local skill.",
+    )
+    pack = {
+        "summary": {"event_count": 12, "evidence_count": 1, "ignored_count": 0},
+        "views": {"skill": [candidate["id"]]},
+        "evidence": [candidate],
+        "skill_candidates": [
+            {"name": "local-patch-workflow", "mutable": True, "state": "active", "provenance": "agent_created"},
+            {"name": "safe-patch-usage", "mutable": False, "state": "active", "provenance": "builtin"},
+        ],
+    }
+
+    rendered = render_planner_messages(digest=build_improvement_planner_digest(pack))
+    user_content = rendered["messages"][1]["content"]
+
+    assert "coverage_fit" in user_content
+    assert "partial_overlap" in user_content
+    assert "local-patch-workflow" in user_content
 
 
 def test_planner_digest_exposes_knowledge_maintenance_inventory_without_mutating_reference_skills():
