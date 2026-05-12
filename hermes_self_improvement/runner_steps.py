@@ -753,7 +753,9 @@ def build_skill_agent_task(
             "Do not edit unrelated skills or repo files.",
         ]
     evidence_ids = [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]
-    return {
+    maintenance_action = str(planner_meta.get("maintenance_action") or "").strip().lower()
+    merge_target_skill = str(planner_meta.get("target_skill") or planner_meta.get("successor") or "").strip()
+    task: dict[str, Any] = {
         "type": "skill_agent_task",
         "task_kind": "skill_improve",
         "targets": {"primary_skill": skill_name},
@@ -782,6 +784,11 @@ def build_skill_agent_task(
         },
         "verification_contract": {"checklist_required": True, "llm_verifier_required": False},
     }
+    if maintenance_action:
+        task["maintenance_action"] = maintenance_action
+        if maintenance_action == "merge" and merge_target_skill:
+            task["target_skill"] = merge_target_skill
+    return task
 
 
 def build_skill_create_agent_task(

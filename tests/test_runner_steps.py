@@ -70,6 +70,47 @@ def test_build_skill_agent_task_uses_skills_only_constraints():
     assert "direct filesystem" in joined
 
 
+def test_build_skill_agent_task_carries_patch_maintenance_action_into_task_and_prompt():
+    planner_decision = {
+        "skill": "demo-skill",
+        "decision": "mutate_skill",
+        "maintenance_action": "patch",
+        "evidence_ids": ["ev1"],
+        "skill_agent_instructions": "Add a pitfall about timeout retries.",
+    }
+    task = build_skill_agent_task(
+        skill_name="demo-skill",
+        evidence=[{"id": "ev1", "kind": "tool_failure_evidence", "event": {"tool_name": "patch", "status": "error"}}],
+        candidate={"name": "demo-skill", "provenance": "agent_created", "state": "active"},
+        planner_decision=planner_decision,
+    )
+
+    assert task["maintenance_action"] == "patch"
+    assert "target_skill" not in task
+    assert "maintenance_action: patch" in task["instructions"]
+
+
+def test_build_skill_agent_task_carries_merge_maintenance_action_with_target_skill():
+    planner_decision = {
+        "skill": "old-skill",
+        "decision": "mutate_skill",
+        "maintenance_action": "merge",
+        "target_skill": "new-skill",
+        "evidence_ids": ["ev1"],
+    }
+    task = build_skill_agent_task(
+        skill_name="old-skill",
+        evidence=[{"id": "ev1", "kind": "tool_failure_evidence", "event": {"tool_name": "patch", "status": "error"}}],
+        candidate={"name": "old-skill", "provenance": "agent_created", "state": "stale"},
+        planner_decision=planner_decision,
+    )
+
+    assert task["maintenance_action"] == "merge"
+    assert task["target_skill"] == "new-skill"
+    assert "maintenance_action: merge" in task["instructions"]
+    assert "target_skill: new-skill" in task["instructions"]
+
+
 def test_build_skill_agent_task_caps_selected_evidence_for_prompt_budget():
     evidence = [
         {"id": f"ev{i}", "kind": "tool_failure_evidence", "event": {"tool_name": "patch", "status": "error", "result_preview": "x" * 400}}

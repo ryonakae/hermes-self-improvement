@@ -261,6 +261,8 @@ def render_skill_agent_instructions(
     user_addendum = _overlay_addendum(overlay, key="user_addendum")
     if user_addendum:
         sections.extend(["", "Runtime-private user guidance:", user_addendum])
+    maintenance_action = str(planner_decision.get("maintenance_action") or "").strip().lower()
+    merge_target_skill = str(planner_decision.get("target_skill") or planner_decision.get("successor") or "").strip()
     sections.extend([
         "",
         "Markdown brief:",
@@ -268,12 +270,20 @@ def render_skill_agent_instructions(
             {**candidate, "name": skill_name, "evidence_ids": [str(item.get("id") or "") for item in evidence if isinstance(item, dict) and item.get("id")]},
             {str(item.get("id") or ""): item for item in evidence if isinstance(item, dict) and item.get("id")},
         ),
+    ])
+    if maintenance_action:
+        sections.extend(["", f"maintenance_action: {maintenance_action}"])
+        if maintenance_action == "merge" and merge_target_skill:
+            sections.append(f"target_skill: {merge_target_skill}")
+    sections.extend([
         "",
         "Program-owned task summary:",
         _format_json_section({
             "target_skill": skill_name,
             "candidate_source": candidate.get("source") or candidate.get("candidate_source"),
             "planner_decision": planner_decision.get("decision"),
+            "maintenance_action": maintenance_action or None,
+            "merge_target_skill": merge_target_skill or None,
             "evidence_ids": [str(item.get("id") or "") for item in evidence if isinstance(item, dict) and item.get("id")],
         }),
     ])
