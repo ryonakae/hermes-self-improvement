@@ -25,8 +25,6 @@ TARGET_KINDS = {
 }
 DECISIONS = {
     "mutate_skill",
-    "patch_skill",
-    "merge_skills",
     "archive_skill",
     "create_skill",
     "skip",

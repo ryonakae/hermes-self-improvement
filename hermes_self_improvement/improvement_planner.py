@@ -542,24 +542,29 @@ def _normalize_decision(
     if skill not in candidate_names:
         return None
     decision = str(raw.get("decision") or "skip").strip()
+    raw_maintenance_action = str(raw.get("maintenance_action") or "").strip().lower()
+    if decision == "patch_skill":
+        decision = "mutate_skill"
+        raw_maintenance_action = raw_maintenance_action or "patch"
+    elif decision == "merge_skills":
+        decision = "mutate_skill"
+        raw_maintenance_action = raw_maintenance_action or "merge"
     normalized_decision = normalize_autonomous_decision({"decision": decision})
     decision = str(normalized_decision.get("decision") or "skip")
     maintenance_action = ""
     forced_skip_reason: str | None = None
     target_skill = str(raw.get("target_skill") or raw.get("successor") or "").strip()
-    if decision == "patch_skill":
-        maintenance_action = "patch_skill"
-        decision = "mutate_skill"
-    elif decision == "merge_skills":
-        maintenance_action = "merge_skills"
-        if not target_skill or target_skill not in candidate_names:
-            decision = "skip"
-            forced_skip_reason = "merge_target_missing_or_not_editable"
-        elif target_skill == skill:
-            decision = "skip"
-            forced_skip_reason = "merge_target_same_as_source"
+    if decision == "mutate_skill":
+        if raw_maintenance_action == "merge":
+            maintenance_action = "merge"
+            if not target_skill or target_skill not in candidate_names:
+                decision = "skip"
+                forced_skip_reason = "merge_target_missing_or_not_editable"
+            elif target_skill == skill:
+                decision = "skip"
+                forced_skip_reason = "merge_target_same_as_source"
         else:
-            decision = "mutate_skill"
+            maintenance_action = "patch"
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item)]
     allowed_evidence = evidence_by_candidate.get(skill) or set()
     evidence_ids = [item for item in evidence_ids if item in allowed_evidence]

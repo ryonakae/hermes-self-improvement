@@ -1270,9 +1270,9 @@ def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], mainte
         note_source(item)
         decision = str(item.get("decision") or "")
         maintenance_action = str(item.get("maintenance_action") or "")
-        if maintenance_action == "patch_skill" or decision == "patch_skill":
+        if maintenance_action == "patch":
             buckets["patch"][skill] = buckets["patch"].get(skill, 0) + 1
-        elif maintenance_action == "merge_skills" or decision == "merge_skills":
+        elif maintenance_action == "merge":
             target = str(item.get("target_skill") or item.get("successor") or "unknown").strip() or "unknown"
             label = f"{skill} -> {target}"
             buckets["merge"][label] = buckets["merge"].get(label, 0) + 1

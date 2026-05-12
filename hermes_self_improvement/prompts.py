@@ -16,16 +16,18 @@ If it belongs on a sticky note, prefer memory. If it belongs in a reference docu
 
 PLANNER_SYSTEM_PROMPT = (
     "You are the Hermes self-improvement planner. Read Markdown evidence as context, not as a machine protocol. "
-    "Use only allowed decisions: mutate_skill, patch_skill, merge_skills, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator. "
+    "Use only allowed decisions: mutate_skill, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator. "
+    "When mutate_skill, set maintenance_action to either \"patch\" or \"merge\" (with target_skill for merge). "
     "Do not bypass mutation scope, allowed tool boundaries, hard safety checks, or secret handling. "
     "Use runtime-private operating guidance when available."
 )
 
 PLANNER_USER_PREFIX = (
     "Read the Markdown context below. It is evidence and rationale context, not machine-control state.\n"
-    "Allowed planner decision vocabulary: mutate_skill, patch_skill, merge_skills, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator.\n"
-    "New skill creation is one maintenance option, not the default; prefer patch_skill, merge_skills, or archive_skill when evidence supports existing local mutable skill maintenance.\n"
-    "When you provide structured decisions, use the existing decisions array fields: skill/proposed_skill_name, decision, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n\n"
+    "Allowed planner decision vocabulary: mutate_skill, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator.\n"
+    "For mutate_skill, also set maintenance_action: \"patch\" (in-place edit) or \"merge\" (with target_skill of the consolidation target).\n"
+    "New skill creation is one maintenance option, not the default; prefer mutate_skill or archive_skill when evidence supports existing local mutable skill maintenance.\n"
+    "When you provide structured decisions, use the existing decisions array fields: skill/proposed_skill_name, decision, maintenance_action, target_skill, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n\n"
 )
 
 SKILL_AGENT_BASE_SECTIONS = [
@@ -107,7 +109,7 @@ def _render_knowledge_maintenance_section(digest: dict[str, Any]) -> str:
         return "## Knowledge maintenance candidates\n- n/a\n"
     lines = [
         "## Knowledge maintenance candidates",
-        "These are unresolved procedural workflow gaps. For every item in this section, return one explicit decision: create_skill, patch_skill, merge_skills, archive_skill, skip, or defer. Do not answer only for existing skill_candidates when maintenance candidates are present. If no editable skill fits and evidence_count is recurring/durable, create_skill is allowed unless it duplicates a reference skill or violates hard boundaries.",
+        "These are unresolved procedural workflow gaps. For every item in this section, return one explicit decision: create_skill, mutate_skill (set maintenance_action to \"patch\" or \"merge\"), archive_skill, skip, or defer. Do not answer only for existing skill_candidates when maintenance candidates are present. If no editable skill fits and evidence_count is recurring/durable, create_skill is allowed unless it duplicates a reference skill or violates hard boundaries.",
     ]
     for item in candidates[:20]:
         affordance = item.get("maintenance_affordance") if isinstance(item.get("maintenance_affordance"), dict) else {}

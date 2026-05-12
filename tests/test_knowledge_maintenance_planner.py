@@ -95,9 +95,9 @@ def test_planner_normalizes_patch_and_merge_maintenance_decisions():
     decisions = {row["skill"]: row for row in result["decisions"]}
 
     assert decisions["local-patch-workflow"]["decision"] == "mutate_skill"
-    assert decisions["local-patch-workflow"]["maintenance_action"] == "patch_skill"
+    assert decisions["local-patch-workflow"]["maintenance_action"] == "patch"
     assert decisions["old-patch-workflow"]["decision"] == "mutate_skill"
-    assert decisions["old-patch-workflow"]["maintenance_action"] == "merge_skills"
+    assert decisions["old-patch-workflow"]["maintenance_action"] == "merge"
     assert decisions["old-patch-workflow"]["target_skill"] == "local-patch-workflow"
 
 
@@ -159,6 +159,6 @@ def test_skill_step_dry_run_maps_merge_skill_to_editor_preview():
 
     decision = result["decisions"][0]
     assert decision["decision"] == "mutate_skill_preview"
-    assert decision["planner_decision"]["maintenance_action"] == "merge_skills"
+    assert decision["planner_decision"]["maintenance_action"] == "merge"
     assert decision["planner_decision"]["target_skill"] == "local-patch-workflow"
     assert "Merge durable guidance" in decision["task"]["instructions"]

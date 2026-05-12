@@ -466,8 +466,8 @@ def test_improve_summary_shows_knowledge_maintenance_decisions():
         "dry_run": True,
         "summary": {},
         "step_decisions": {"skill": {"planner": {"decisions": [
-            {"skill": "safe-patch-usage", "decision": "mutate_skill", "maintenance_action": "patch_skill", "candidate_source": "skill_inventory_candidate"},
-            {"skill": "old-skill", "decision": "mutate_skill", "maintenance_action": "merge_skills", "target_skill": "new-skill", "candidate_source": "skill_inventory_candidate"},
+            {"skill": "safe-patch-usage", "decision": "mutate_skill", "maintenance_action": "patch", "candidate_source": "skill_inventory_candidate"},
+            {"skill": "old-skill", "decision": "mutate_skill", "maintenance_action": "merge", "target_skill": "new-skill", "candidate_source": "skill_inventory_candidate"},
             {"skill": "obsolete-skill", "decision": "archive_skill", "candidate_source": "skill_inventory_candidate"},
             {"skill": "patch-tool-workflow", "decision": "create_skill", "candidate_source": "tool_error_cluster"},
             {"skill": "timeout-workflow", "decision": "defer", "candidate_source": "knowledge_coverage_candidate"},
