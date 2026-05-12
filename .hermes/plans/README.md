@@ -33,8 +33,8 @@ The previous completed implementation plan is:
 The previous completed implementation plan is:
 
 - `2026-05-10-milestone-1-reliable-mutation-accounting.md`
-  - **Status:** partially implemented / phases 1.1 and 1.2 implemented.
-  - Adds compact post-validation failure diagnostics and memory post-validation capability accounting: built-in hash verification, external write-only unverified execution, and unsupported providers are distinguished.
+  - **Status:** implemented / phases 1.1, 1.2, 1.3 all complete.
+  - Adds compact post-validation failure diagnostics, memory post-validation capability accounting (built-in hash verification, external write-only unverified execution, unsupported providers), and an accounting reconciliation summary that separates accepted, trace-recovered, validation-rejected, and write-only-unverified counts (with mode breakdown) across both `Actual results:` and the read-only operational reports.
 
 The previous completed implementation plan is:
 

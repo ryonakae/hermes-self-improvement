@@ -8,8 +8,8 @@
 
 **Goal:** Make every skill, memory, and overlay mutation recorded according to verified post-state, not LLM prose.
 
-**Current state:** Mostly implemented for native skill create/patch/edit, built-in memory state-hash validation, compact validation failure diagnostics, and provider write-only/unavailable validation capability accounting. Remaining work is summary reconciliation fields that make accepted/recovered/rejected/unverified paths obvious.
-**Execution status:** Mostly implemented; remaining slices are hardening/diagnostics only.
+**Current state:** Implemented end-to-end. Native skill create/patch/edit, built-in memory state-hash validation, compact validation failure diagnostics, and provider write-only/unavailable validation capability accounting are in place. `Actual results:` and the read-only operational reports now separate accepted, trace-recovered, validation-rejected, and write-only-unverified (validation unknown) counts with an additional mode breakdown.
+**Execution status:** Implemented; phase 1.1, 1.2, 1.3 all complete.
 
 **Depends on:** Existing native skill_agent / memory_agent harness, memory mutation policy, and overlay pointer machinery.
 
@@ -71,6 +71,8 @@
 
 ### Phase 1.3 — Accounting reconciliation summary
 
+**Status:** implemented.
+
 **Objective:** Show accepted, trace-recovered, validation-rejected, and unknown-readback counts separately.
 
 **Files:**
@@ -101,6 +103,12 @@
 - Too much detail in daily reports will recreate the original ambiguity; keep diagnostics bounded and artifact-backed.
 
 ## Result
+
+`Actual results:` and read-only operational reports now reconcile accounting buckets:
+
+- `validation: post-validated N, rejected N, unknown N` (skill / memory 両方を集計)
+- `validation unknown breakdown: <mode> N` (例: `provider_write_only`) で `write_only_unverified` の内訳
+- `recovered accounting: created skills inferred from trace N` (trace-backed recovered)
 
 Skill and built-in memory post-validation failures now carry compact diagnostics:
 

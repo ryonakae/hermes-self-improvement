@@ -81,9 +81,9 @@ Overall: **about 7合目**.
 
 ### Weak areas
 
-- **Post-validation / accounting:** around 7.8合目.
+- **Post-validation / accounting:** around 8.2合目.
   - Trace-backed accounting exists, skill create/improve mutations are read back through `skill_view`, built-in memory mutations use before/after state-hash checks, skill patch/edit readback now verifies the intended changed text where available, failed validations carry compact `reason` / `observed` / `next_action`, and external memory provider write-only execution is explicitly marked `write_only_unverified` / `applied_unverified` instead of validated success.
-  - Remaining gaps are mostly summary reconciliation fields that make accepted/recovered/rejected/unverified paths obvious at a glance.
+  - Milestone 1 phase 1.3 reconciled the accounting summary: `Actual results:` and read-only operational reports now show `validation: post-validated N, rejected N, unknown N` (skill / memory 両方を集計) plus `validation unknown breakdown: <mode> N` (例: `provider_write_only`), so accepted / trace-recovered / validation-rejected / write-only-unverified が一目で区別できる。
 
 - **Skill quality evaluation:** around 7.2合目.
   - New/updated skills now get deterministic diagnostics for frontmatter, pitfalls, verification, trigger conditions, concrete steps, memory-shaped content, intended patch/edit readback, compactness signals (`content_too_short` / `content_too_long`), and whether the accepted mutation carried attached evidence. These diagnostics are preserved into episodes and immediate outcome observations where applicable, scored conservatively, and summarized with compact reason counts in CLI/daily-facing output and latest-run operational reports. Deeper semantic evidence-fit evaluation and low-risk auto-patch generation still need evaluator work.
