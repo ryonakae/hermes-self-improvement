@@ -871,19 +871,22 @@ def run_improve(
         existing_memories=existing_memories,
     )
     memory_gap_evidence = []
+    skip_hints = {"skip_duplicate", "skip_sensitive", "defer_unclear"}
     for candidate in memory_gap_payload.get("candidates") or []:
-        if not isinstance(candidate, dict) or candidate.get("action") not in {"add", "replace"}:
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("routing_hint") in skip_hints:
             continue
         memory_gap_evidence.append(make_conversation_memory_candidate(
             candidate_id=str(candidate.get("candidate_id") or "") or None,
             target=str(candidate.get("target") or "user"),
-            action=str(candidate.get("action") or "defer"),
             candidate_fact=str(candidate.get("candidate_fact") or ""),
             old_text=str(candidate.get("old_text") or "") or None,
             confidence=str(candidate.get("confidence") or "medium"),
             relation_to_existing=str(candidate.get("relation_to_existing") or "missing"),
             context_windows=conversation_windows[:5],
             rationale=str(candidate.get("reason") or "conversation-derived memory gap"),
+            routing_hint=str(candidate.get("routing_hint") or "") or None,
         ))
     if memory_gap_evidence:
         evidence_pack["evidence"] = [*(evidence_pack.get("evidence") or []), *memory_gap_evidence]

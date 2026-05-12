@@ -54,7 +54,7 @@ def test_conversation_window_includes_surrounding_context():
     assert windows[0]["center_index"] == 1
 
 
-def test_normalize_memory_extractor_payload_allows_add_and_replace():
+def test_normalize_memory_extractor_payload_strips_action_and_preserves_candidate_fields():
     payload = {
         "candidates": [
             {
@@ -71,57 +71,32 @@ def test_normalize_memory_extractor_payload_allows_add_and_replace():
 
     out = normalize_memory_extractor_payload(payload)
 
-    assert out["candidates"][0]["action"] == "replace"
+    assert "action" not in out["candidates"][0]
     assert out["candidates"][0]["target"] == "user"
+    assert out["candidates"][0]["candidate_fact"].startswith("Ryo prefers")
 
 
-def test_make_conversation_memory_candidate_has_memory_operation_for_add():
+def test_make_conversation_memory_candidate_does_not_emit_memory_operation():
     candidate = make_conversation_memory_candidate(
         candidate_id="m1",
         target="user",
-        action="add",
         candidate_fact="Ryo prefers simple apply/defer/skip/block decisions for self-improvement.",
         confidence="high",
         relation_to_existing="missing",
         context_windows=[],
         rationale="User stated this preference directly.",
+        routing_hint="new",
     )
 
     assert candidate["kind"] == "conversation_memory_gap_candidate"
-    assert candidate["memory_operation"]["operation"] == "memory_add"
-    assert candidate["memory_operation"]["target"] == "user"
+    assert candidate["memory"]["routing_hint"] == "new"
+    assert "memory_operation" not in candidate
 
 
-def test_conversation_memory_gap_add_applies_with_memory_tool():
-    calls = []
-
-    candidate = make_conversation_memory_candidate(
-        candidate_id="m1",
-        target="user",
-        action="add",
-        candidate_fact="Ryo prefers simple apply/defer/skip/block decisions for self-improvement.",
-        confidence="high",
-        relation_to_existing="missing",
-        context_windows=[],
-        rationale="User stated this preference directly.",
-    )
-    config = {"_memory_tool_fn": lambda **args: calls.append(args) or {"success": True, "changed": True}}
-
-    result = run_memory_improvement_step(evidence_pack=_pack([candidate]), config=config, mutate=True)
-
-    assert result["changed"] == 1
-    assert calls == [{
-        "action": "add",
-        "target": "user",
-        "content": "Ryo prefers simple apply/defer/skip/block decisions for self-improvement.",
-    }]
-
-
-def test_reconcile_memory_gap_payload_skips_near_duplicate_add():
+def test_reconcile_memory_gap_payload_marks_near_duplicate_as_skip_duplicate():
     payload = {"candidates": [{
         "candidate_id": "m1",
         "target": "memory",
-        "action": "add",
         "candidate_fact": "Hermes runtime root is ~/.hermes.",
         "confidence": "high",
     }]}
@@ -131,15 +106,14 @@ def test_reconcile_memory_gap_payload_skips_near_duplicate_add():
         existing_memories=[{"target": "memory", "text": "Hermes runtime root is ~/.hermes."}],
     )
 
-    assert out["candidates"][0]["action"] == "skip"
+    assert out["candidates"][0]["routing_hint"] == "skip_duplicate"
     assert out["candidates"][0]["relation_to_existing"] == "duplicate_existing_memory"
 
 
-def test_reconcile_memory_gap_payload_skips_semantic_duplicate_browser_guidance():
+def test_reconcile_memory_gap_payload_marks_semantic_duplicate_browser_guidance_as_skip():
     payload = {"candidates": [{
         "candidate_id": "m1",
         "target": "memory",
-        "action": "add",
         "candidate_fact": "Hermes の default browser tool interface は常に保持し、backend が agent-browser でも plugin/plan から直接 agent-browser CLI を前提にしない。blocked/thin/dynamic ページの軽い確認に留める。",
         "confidence": "high",
         "relation_to_existing": "missing",
@@ -151,17 +125,16 @@ def test_reconcile_memory_gap_payload_skips_semantic_duplicate_browser_guidance(
     )
 
     candidate = out["candidates"][0]
-    assert candidate["action"] == "skip"
+    assert candidate["routing_hint"] == "skip_duplicate"
     assert candidate["relation_to_existing"] == "duplicate_existing_memory"
     assert candidate["skip_reason"] == "memory_duplicate_existing"
     assert candidate["matched_existing_text"].startswith("Hermes browser はデフォルト")
 
 
-def test_reconcile_memory_gap_payload_replaces_related_stale_memory_instead_of_adding():
+def test_reconcile_memory_gap_payload_marks_related_stale_memory_as_replace_existing():
     payload = {"candidates": [{
         "candidate_id": "m1",
         "target": "memory",
-        "action": "add",
         "candidate_fact": "Hermes runtime root is ~/.hermes.",
         "confidence": "high",
     }]}
@@ -172,16 +145,15 @@ def test_reconcile_memory_gap_payload_replaces_related_stale_memory_instead_of_a
     )
 
     candidate = out["candidates"][0]
-    assert candidate["action"] == "replace"
+    assert candidate["routing_hint"] == "replace_existing"
     assert candidate["old_text"] == "Hermes runtime root is /opt/data."
     assert candidate["relation_to_existing"] == "updates_existing_memory"
 
 
-def test_reconcile_memory_gap_payload_defers_add_that_claims_existing_relation_without_old_text():
+def test_reconcile_memory_gap_payload_marks_unclear_existing_relation_as_defer():
     payload = {"candidates": [{
         "candidate_id": "m1",
         "target": "memory",
-        "action": "add",
         "candidate_fact": "Hermes TUI footer keeps compact metadata inline.",
         "confidence": "high",
         "relation_to_existing": "extends existing herm-tui footer guidance",
@@ -190,8 +162,8 @@ def test_reconcile_memory_gap_payload_defers_add_that_claims_existing_relation_w
     out = reconcile_memory_extractor_payload_with_existing_memories(payload, existing_memories=[])
 
     candidate = out["candidates"][0]
-    assert candidate["action"] == "defer"
-    assert candidate["defer_reason"] == "add_claims_existing_memory_without_old_text"
+    assert candidate["routing_hint"] == "defer_unclear"
+    assert candidate["defer_reason"] == "claims_existing_memory_without_old_text"
 
 
 def test_memory_gap_extractor_returns_empty_candidates_on_llm_parse_failure():
