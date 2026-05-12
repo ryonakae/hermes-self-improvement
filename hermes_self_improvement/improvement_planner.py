@@ -398,6 +398,7 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
                 "provenance": row.get("provenance"),
                 "mutation_allowed": True,
                 "active_reference_count": row.get("active_reference_count", 0),
+                **({"quality_signals": candidate_by_name[row.get("name")].get("quality_signals")} if isinstance(candidate_by_name.get(row.get("name")), dict) and isinstance(candidate_by_name[row.get("name")].get("quality_signals"), dict) else {}),
             }
             for row in candidate_rows
         ],

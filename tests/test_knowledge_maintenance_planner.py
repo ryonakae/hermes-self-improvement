@@ -80,6 +80,63 @@ def test_planner_digest_attaches_coverage_fit_to_maintenance_candidates():
     assert coverage_fit["evidence_count"] == 4
 
 
+def test_planner_digest_propagates_quality_signals_to_editable_skills():
+    pack = {
+        "summary": {"event_count": 0, "evidence_count": 0, "ignored_count": 0},
+        "views": {"skill": [], "memory": [], "evaluator": []},
+        "evidence": [],
+        "skill_candidates": [
+            {
+                "name": "local-patch-workflow",
+                "description": "Local patch workflow",
+                "mutable": True,
+                "state": "active",
+                "provenance": "agent_created",
+                "quality_signals": {
+                    "needs_patch": True,
+                    "missing_sections": ["pitfalls", "verification"],
+                    "post_validation_status": "passed",
+                },
+            },
+        ],
+    }
+
+    digest = build_improvement_planner_digest(pack)
+
+    editable = digest["knowledge_maintenance"]["editable_skills"][0]
+    assert editable["quality_signals"]["needs_patch"] is True
+    assert editable["quality_signals"]["missing_sections"] == ["pitfalls", "verification"]
+
+
+def test_planner_prompt_renders_quality_signals_for_needs_patch_editable_skills():
+    pack = {
+        "summary": {"event_count": 0, "evidence_count": 0, "ignored_count": 0},
+        "views": {"skill": [], "memory": [], "evaluator": []},
+        "evidence": [],
+        "skill_candidates": [
+            {
+                "name": "local-patch-workflow",
+                "description": "Local patch workflow",
+                "mutable": True,
+                "state": "active",
+                "provenance": "agent_created",
+                "quality_signals": {
+                    "needs_patch": True,
+                    "missing_sections": ["pitfalls", "verification"],
+                },
+            },
+        ],
+    }
+
+    rendered = render_planner_messages(digest=build_improvement_planner_digest(pack))
+    user_content = rendered["messages"][1]["content"]
+
+    assert "needs_patch" in user_content
+    assert "missing_sections" in user_content
+    assert "pitfalls" in user_content
+    assert "mutate_skill" in user_content
+
+
 def test_planner_prompt_renders_coverage_fit_for_maintenance_candidates():
     candidate = make_knowledge_coverage_candidate(
         gap_kind="recurring_workflow_without_skill",

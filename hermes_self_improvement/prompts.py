@@ -102,6 +102,26 @@ def _clip(value: Any, *, max_chars: int = 220) -> str:
     return text if len(text) <= max_chars else text[:max_chars] + f"...<truncated {len(text) - max_chars} chars>"
 
 
+def _render_editable_skills_quality_section(digest: dict[str, Any]) -> str:
+    maintenance = digest.get("knowledge_maintenance") if isinstance(digest.get("knowledge_maintenance"), dict) else {}
+    editable = [item for item in maintenance.get("editable_skills") or [] if isinstance(item, dict) and isinstance(item.get("quality_signals"), dict)]
+    if not editable:
+        return ""
+    lines = [
+        "## Editable skills with quality signals",
+        "Skills below already exist as editable local mutable Hermes-created candidates. When quality_signals.needs_patch is true and missing_sections is non-empty, prefer mutate_skill with maintenance_action=\"patch\" to add only those missing sections, not create_skill or broad rewrite.",
+    ]
+    for item in editable[:20]:
+        signals = item.get("quality_signals") or {}
+        needs_patch = bool(signals.get("needs_patch"))
+        missing_sections = signals.get("missing_sections") or []
+        missing_str = ",".join(str(section) for section in missing_sections[:5]) if missing_sections else "none"
+        lines.append(
+            f"- name={item.get('name')}; needs_patch={str(needs_patch).lower()}; missing_sections=[{missing_str}]; post_validation_status={_clip(signals.get('post_validation_status'), max_chars=40)}"
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _render_knowledge_maintenance_section(digest: dict[str, Any]) -> str:
     maintenance = digest.get("knowledge_maintenance") if isinstance(digest.get("knowledge_maintenance"), dict) else {}
     candidates = [item for item in maintenance.get("maintenance_candidates") or [] if isinstance(item, dict)]
@@ -220,9 +240,11 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
             representative = candidate.get("representative_evidence") if isinstance(candidate.get("representative_evidence"), list) else []
             evidence_by_id = {str(item.get("id") or ""): item for item in representative if isinstance(item, dict) and item.get("id")}
             candidate_sections.append(render_candidate_markdown(candidate, evidence_by_id, max_evidence=4))
+    quality_section = _render_editable_skills_quality_section(digest)
     markdown_context = "\n".join([
         render_evidence_markdown(digest, max_items=20),
         _render_knowledge_maintenance_section(digest),
+        *([quality_section] if quality_section else []),
         "## Planner candidate briefs",
         *(candidate_sections or ["- n/a\n"]),
         "## Program-owned digest summary",
@@ -282,6 +304,18 @@ def render_skill_agent_instructions(
                 f"- treat the archive of {skill_name} as a preview / future step. Do not delete {skill_name} in this run; no direct deletion of the source skill.",
                 f"- enrich {merge_target_skill} only with what the attached evidence explicitly supports, never with speculative content.",
             ])
+        if maintenance_action == "patch":
+            candidate_quality = candidate.get("quality_signals") if isinstance(candidate.get("quality_signals"), dict) else {}
+            missing_sections = candidate_quality.get("missing_sections") if isinstance(candidate_quality.get("missing_sections"), list) else []
+            if bool(candidate_quality.get("needs_patch")) and missing_sections:
+                missing_repr = ", ".join(str(section) for section in missing_sections[:5])
+                sections.extend([
+                    "",
+                    "Quality patch semantics:",
+                    f"- missing_sections: [{missing_repr}]. Add only those missing sections; no broad rewrite of unaffected content.",
+                    "- one bounded quality patch per target/episode. Do not retry if the patch fails; let the outcome become future evidence instead.",
+                    "- keep additions backed by the attached evidence; do not invent procedure not present in the evidence.",
+                ])
     sections.extend([
         "",
         "Program-owned task summary:",

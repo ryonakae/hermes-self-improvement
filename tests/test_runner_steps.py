@@ -90,6 +90,36 @@ def test_build_skill_agent_task_carries_patch_maintenance_action_into_task_and_p
     assert "maintenance_action: patch" in task["instructions"]
 
 
+def test_build_skill_agent_task_bounds_needs_patch_quality_to_missing_sections_only():
+    planner_decision = {
+        "skill": "demo-skill",
+        "decision": "mutate_skill",
+        "maintenance_action": "patch",
+        "evidence_ids": ["ev1"],
+    }
+    task = build_skill_agent_task(
+        skill_name="demo-skill",
+        evidence=[{"id": "ev1", "kind": "tool_failure_evidence", "event": {"tool_name": "patch", "status": "error"}}],
+        candidate={
+            "name": "demo-skill",
+            "provenance": "agent_created",
+            "state": "active",
+            "quality_signals": {
+                "needs_patch": True,
+                "missing_sections": ["pitfalls", "verification"],
+            },
+        },
+        planner_decision=planner_decision,
+    )
+
+    instructions = task["instructions"]
+    assert "missing_sections" in instructions
+    assert "pitfalls" in instructions and "verification" in instructions
+    assert "missing section" in instructions.lower() or "missing sections" in instructions.lower()
+    assert "no broad rewrite" in instructions.lower() or "broad rewrite" in instructions.lower()
+    assert "do not retry" in instructions.lower() or "no retry" in instructions.lower() or "outcome evidence" in instructions.lower()
+
+
 def test_build_skill_agent_task_carries_merge_maintenance_action_with_target_skill():
     planner_decision = {
         "skill": "old-skill",
