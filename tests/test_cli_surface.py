@@ -543,6 +543,44 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- unproven changes remain under observation" in text
 
 
+def test_improve_summary_reports_quality_patch_candidates_and_quality_patched():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 1, "memory_changes": 0, "scorer_evaluator_changed": False},
+        "step_decisions": {
+            "skill": {
+                "planner": {"decisions": [
+                    {"skill": "needs-patch-skill", "decision": "mutate_skill", "maintenance_action": "patch", "evidence_ids": ["ev1"]},
+                    {"skill": "another-needs-patch", "decision": "mutate_skill", "maintenance_action": "patch", "evidence_ids": ["ev2"]},
+                ]},
+                "decisions": [
+                    {
+                        "decision": "accepted",
+                        "changed": True,
+                        "skill": "needs-patch-skill",
+                        "planner_decision": {"decision": "mutate_skill", "maintenance_action": "patch"},
+                        "result": {"changed_skills": ["needs-patch-skill"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": True, "has_concrete_steps": True}},
+                    },
+                    {
+                        "decision": "rejected",
+                        "changed": False,
+                        "skill": "another-needs-patch",
+                        "planner_decision": {"decision": "mutate_skill", "maintenance_action": "patch"},
+                        "result": {"error": "skill_agent_post_validation_failed", "post_validation": {"status": "failed"}},
+                    },
+                ],
+            },
+            "memory": {"decisions": []},
+        },
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Skill quality:" in text
+    assert "- quality patch candidates: 2" in text
+    assert "- quality patched: 1" in text
+
+
 def test_improve_summary_reports_write_only_unverified_memory_as_validation_unknown():
     cli = load_cli_module()
     text = cli._render_improve_summary({

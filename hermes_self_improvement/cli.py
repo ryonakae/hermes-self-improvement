@@ -1489,7 +1489,23 @@ def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_
                 reason_counts[reason] = reason_counts.get(reason, 0) + 1
             if category in {"needs_patch", "too_generic", "unsafe"}:
                 follow_up.append(target)
-    if not reviewed:
+    quality_patch_candidates = sum(
+        1
+        for item in planner_decisions
+        if isinstance(item, dict)
+        and str(item.get("decision") or "") == "mutate_skill"
+        and str(item.get("maintenance_action") or "") == "patch"
+    )
+    quality_patched = sum(
+        1
+        for item in skill_decisions
+        if isinstance(item, dict)
+        and str(item.get("decision") or "") == "accepted"
+        and bool(item.get("changed"))
+        and isinstance(item.get("planner_decision"), dict)
+        and str(item["planner_decision"].get("maintenance_action") or "") == "patch"
+    )
+    if not reviewed and not quality_patch_candidates and not quality_patched:
         return []
     lines = [
         "Skill quality:",
@@ -1501,6 +1517,9 @@ def _skill_quality_summary_lines(skill_decisions: list[dict[str, Any]], planner_
         lines.append("- quality reasons: " + "; ".join(reason_parts))
     if follow_up:
         lines.append("- follow-up candidates: " + ", ".join(sorted(set(follow_up))[:5]))
+    if quality_patch_candidates or quality_patched:
+        lines.append(f"- quality patch candidates: {quality_patch_candidates}")
+        lines.append(f"- quality patched: {quality_patched}")
     return lines
 
 
