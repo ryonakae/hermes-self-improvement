@@ -20,6 +20,18 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
+- `2026-05-12-old-naming-cleanup.md`
+  - **Status:** implemented.
+  - Cleans up the residual `editor` / `run_editor` / `conversation_memory` / `planner_editor` / `native_skill_tool_editor` names left behind by the LLM site/role refactor. Planner decision enum is reduced to `mutate_skill / archive_skill / create_skill / mutate_memory / calibrate_evaluator / skip / defer`; `patch_skill` and `merge_skills` are absorbed into a `maintenance_action: "patch" | "merge"` sub-field. Event kind `conversation_memory_gap_candidate` becomes `memory_gap_candidate` (source `memory_extractor`), the case_family / directory `planner_editor` becomes `skill_agent`, backend label `native_skill_tool_editor` becomes `native_skill_tool`, and README / AGENTS narrative is rewritten with the new site names without the legacy-compat caveats.
+
+The previous completed implementation plan is:
+
+- `2026-05-12-llm-site-role-naming-refactor.md`
+  - **Status:** implemented.
+  - Unifies the LLM site/role naming to `memory_extractor / target_resolver / improvement_planner / skill_agent / memory_agent / prompt_optimizer` and introduces `memory_agent` as a first-class mutation agent (memory tool loop with add / replace / remove, parallel to `skill_agent`). Tooling, prompts, file/function/class names, and tests are aligned with the new scheme; `prompt_optimizer` covers four roles (`improvement_planner`, `skill_agent`, `memory_agent`, `evaluator`).
+
+The previous completed implementation plan is:
+
 - `2026-05-10-milestone-1-reliable-mutation-accounting.md`
   - **Status:** partially implemented / phases 1.1 and 1.2 implemented.
   - Adds compact post-validation failure diagnostics and memory post-validation capability accounting: built-in hash verification, external write-only unverified execution, and unsupported providers are distinguished.
