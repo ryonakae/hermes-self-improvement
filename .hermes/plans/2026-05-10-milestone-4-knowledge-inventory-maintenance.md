@@ -52,7 +52,7 @@
 **Objective:** Route duplicated/stale/misplaced memory evidence to add/replace/remove/skill-maintenance/defer decisions.
 
 **Files:**
-- Modify: `hermes_self_improvement/conversation_memory.py`
+- Modify: `hermes_self_improvement/memory_extractor.py`
 - Modify: `hermes_self_improvement/runner_steps.py`
 - Test: `tests/test_memory_inventory_planner.py`
 
@@ -73,7 +73,7 @@
 **Steps:**
 1. Add fixtures where a local skill references a removed CLI flag or stale path and current repo evidence shows the replacement.
 2. Emit compact drift evidence with old reference, new reference, confidence, and source artifact path. Require either two independent current sources (for example help/schema/test fixture/manifest) or one authoritative source plus a matching failure trace before a drift patch can become mutation-ready.
-3. Planner may choose `patch_skill`; execution remains official-tool and readback-verified. Built-in, hub, plugin-bundled, external-dir, and ambiguous-provenance skills stay reference-only and never become mutation targets.
+3. improvement_planner may choose `mutate_skill` (maintenance_action="patch"); execution remains official-tool and readback-verified. Built-in, hub, plugin-bundled, external-dir, and ambiguous-provenance skills stay reference-only and never become mutation targets.
 
 ### Phase 4.4 — Maintenance execution dogfood
 

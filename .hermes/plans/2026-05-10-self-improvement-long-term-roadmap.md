@@ -6,7 +6,7 @@
 
 **Architecture:** Keep one existing `improve` flow and one existing `calibrate` flow. Add better evidence, validation, accounting, outcome feedback, and report surfaces inside those flows. Do not add approval queues, extra lanes, broad policy modes, or Hermes core dependencies unless a concrete failure requires them.
 
-**Tech Stack:** Hermes standalone plugin, observer hooks, `bin/hermes-self-improve`, official skill/memory tools, native skill-tool editor harness, runtime-private prompt overlays, DSPy/GEPA through `calibrate`, pytest.
+**Tech Stack:** Hermes standalone plugin, observer hooks, `bin/hermes-self-improve`, official skill/memory tools, native skill_agent / memory_agent tool harness, runtime-private prompt overlays, DSPy/GEPA through `calibrate`, pytest.
 
 ---
 
@@ -25,7 +25,7 @@ A complete loop looks like this:
   -> [6] Post-validate actual state: read back skill/memory/overlay, verify frontmatter/trace/target identity
   -> [7] Record episodes and credit assignment data
   -> [8] Observe later outcomes: recurrence, user correction, repeated edits, skill usage, reduced failures
-  -> [9] Calibrate planner/editor/evaluator overlays with GEPA/DSPy when there is enough material
+  -> [9] Calibrate improvement_planner / skill_agent / memory_agent / evaluator overlays with GEPA/DSPy when there is enough material
   -> [10] Report actual mutations, no-ops, blocks, overlays, unresolved work, and confidence clearly
   -> back to [1]
 ```
@@ -55,7 +55,7 @@ Overall: **about 7合目**.
   - The apparent failure was not planner quality; it was mutation harness/accounting.
 
 - **Runtime-private prompt overlays / GEPA:** around 7.3合目.
-  - `calibrate` can generate and promote planner/editor/evaluator overlay sets.
+  - `calibrate` can generate and promote improvement_planner / skill_agent / memory_agent / evaluator overlay sets.
   - Recent active overlay generation `overlay-set-b8335b6c61af` was selected by GEPA and promoted from the inspected candidate-set artifact.
   - Calibration signal strength now receives actionable cluster groups and under-observation quality/usage/missing-evidence counts, so grouped workflow areas and weak held outcomes can guide overlay material without being dominated by non-actionable raw volume. Missing-evidence remains a visible reason detail inside quality holds and is not double-counted in weak signal volume.
 

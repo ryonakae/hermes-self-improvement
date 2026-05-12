@@ -11,7 +11,7 @@
 **Current state:** Mostly implemented for native skill create/patch/edit, built-in memory state-hash validation, compact validation failure diagnostics, and provider write-only/unavailable validation capability accounting. Remaining work is summary reconciliation fields that make accepted/recovered/rejected/unverified paths obvious.
 **Execution status:** Mostly implemented; remaining slices are hardening/diagnostics only.
 
-**Depends on:** Existing native skill editor harness, memory mutation policy, and overlay pointer machinery.
+**Depends on:** Existing native skill_agent / memory_agent harness, memory mutation policy, and overlay pointer machinery.
 
 **Blocks:** Milestone 3 quality patches, Milestone 5 outcome scoring, and Milestone 7 steady-state readiness.
 

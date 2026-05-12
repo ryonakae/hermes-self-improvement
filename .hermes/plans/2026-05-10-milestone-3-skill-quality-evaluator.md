@@ -58,8 +58,8 @@
 - Test: `tests/test_knowledge_maintenance_planner.py`
 
 **Steps:**
-1. RED test: a created skill missing verification and pitfalls should emit `patch_skill` candidate, not create a new skill.
-2. Prompt planner/editor with the missing reason counts and attached evidence summary.
+1. RED test: a created skill missing verification and pitfalls should emit `mutate_skill` (maintenance_action="patch") candidate, not create a new skill.
+2. Prompt improvement_planner / skill_agent with the missing reason counts and attached evidence summary.
 3. Constrain the patch to one bounded quality patch per episode/target, adding only missing sections such as trigger conditions, pitfalls, or verification. Target must be a Hermes-created local mutable skill. No broad rewrite; failed patch becomes outcome evidence rather than another automatic patch attempt.
 4. Reuse intended-change readback verification.
 

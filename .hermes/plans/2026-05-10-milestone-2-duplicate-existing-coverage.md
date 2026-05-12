@@ -49,16 +49,16 @@
 
 ### Phase 2.2 — Patch existing skill candidate path
 
-**Objective:** Let the planner choose `patch_skill` for editable existing coverage when the new evidence is additive.
+**Objective:** Let the improvement_planner choose `mutate_skill` with `maintenance_action="patch"` for editable existing coverage when the new evidence is additive.
 
 **Files:**
 - Modify: `hermes_self_improvement/runner_steps.py`
-- Modify: `hermes_self_improvement/mutation_backend.py`
+- Modify: `hermes_self_improvement/skill_agent_backend.py`
 - Test: `tests/test_runner_steps.py`
 - Test: `tests/test_mutation_backend.py`
 
 **Steps:**
-1. Add RED test for planner decision `patch_skill` with attached evidence and editable target.
+1. Add RED test for improvement_planner decision `mutate_skill` (maintenance_action="patch") with attached evidence and editable target.
 2. Require target provenance to be local mutable Hermes-created skill.
 3. Execute through existing native skill patch harness and intended-change verification.
 4. Preserve `noop_outcome=existing_skill_sufficient` only when planner chooses skip/no-op, not patch.
@@ -74,7 +74,7 @@
 - Test: `tests/test_episode_ledger.py`
 
 **Steps:**
-1. Add tests for `merge_skills` and `archive_skill` decisions becoming mutation-ready only when hard invariants pass.
+1. Add tests for `mutate_skill` with `maintenance_action="merge"` and `archive_skill` decisions becoming mutation-ready only when hard invariants pass.
 2. For archive, execute only if an official supported skill tool exists for archive/lifecycle mutation. If not, keep archive as preview/defer/block. Do not call internal `skill_usage.archive_skill` or mutate files directly. Always block pinned/reference/configured skills.
 3. For merge, first create patch-to-successor task plus archive preview, not direct deletion.
 4. Record safe no-op / blocked reasons distinctly.
