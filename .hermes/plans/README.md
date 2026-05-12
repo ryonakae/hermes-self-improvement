@@ -20,6 +20,13 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-milestone-6-trustworthy-reporting.md` (phases 6.1 + 6.2)
+  - **Status:** implemented (code) / phases 6.1 and 6.2 done. Phase 6.3 (Daily Slack template) is operational follow-up against the external automations repo.
+  - Phase 6.1 adds a compact `Unresolved:` CLI section that groups deferred / skipped / preview decisions into reason buckets (insufficient evidence / unsupported tool / unsafe destructive action / duplicate prevented / needs planner review) with bounded `next action:` follow-ups pulled from each decision payload.
+  - Phase 6.2 enriches the `prompt overlay set:` line with `generation <overlay-set-id>` and `regression <status>` when known, retaining `action would promote` for dry-run vs `action promoted` for executed runs.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-milestone-5-outcome-credit-assignment.md` (phases 5.1 + 5.2 + 5.3 + 5.4)
   - **Status:** implemented / phases 5.1, 5.2, 5.3, 5.4 all complete.
   - Phase 5.1 surfaces immediate / short / medium / long scoring windows in `outcomes.credit_windows` and as `scored window coverage` in the CLI Outcomes line.

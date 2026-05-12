@@ -8,8 +8,8 @@
 
 **Goal:** Make CLI, operational report, and daily Slack inputs explain what actually happened without JSON archaeology.
 
-**Current state:** Actual results, skill names, validation, no-op, outcomes, quality reasons, grouped signals, inventory reasons, and knowledge-maintenance sources are now visible. Remaining work is unresolved/next-action summaries, overlay generation details, and final daily-template tightening from real dogfood output.
-**Execution status:** Partially implemented; actual results, names, no-op, quality, inventory, grouped signals, and outcomes are visible; unresolved/next-action and final daily wording remain.
+**Current state:** Phase 6.1 adds a compact `Unresolved:` CLI section that groups defer / skip / preview reasons into "insufficient evidence", "unsupported tool", "unsafe destructive action", "duplicate prevented", and "needs planner review", with bounded `next action:` lines pulled from the decision payload. Phase 6.2 enriches the `- prompt overlay set:` line with `generation <overlay-set-id>`, `regression <status>` when present, and keeps `action would promote` for dry-run vs `action promoted` for executed runs. Phase 6.3 (Daily Slack template tightening) is operational follow-up against the external `.hermes/automations/daily-ops-digest/templates/slack-template.md`, not a code change in this plugin.
+**Execution status:** Implemented (code); phases 6.1 and 6.2 done. Phase 6.3 is an operational template task and is tracked outside this plugin.
 
 **Depends on:** Compact artifact fields from Milestones 1–5.
 
@@ -35,6 +35,8 @@
 
 ### Phase 6.1 — Unresolved top themes and next actions
 
+**Status:** implemented.
+
 **Objective:** Add compact unresolved themes and recommended next actions to improve and operational reports.
 
 **Files:**
@@ -48,6 +50,8 @@
 3. Include `next_action` when available; otherwise use bounded generic guidance.
 
 ### Phase 6.2 — Overlay generation reporting
+
+**Status:** implemented.
 
 **Objective:** Show active/promoted overlay generation id and action status in daily-facing summaries.
 

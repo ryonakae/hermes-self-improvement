@@ -112,7 +112,10 @@ Overall: **about 7合目**.
   - Missing attached evidence now has an explicit outcome-score component and compact `missing_evidence_under_observation` count, so evidence-fit holds do not hide inside generic quality holds.
   - Successful later `skill_view(name=<target>)` usage now emits a weak positive `skill_used_after_mutation` observation for prior skill mutation episodes. Outcome scoring maps that signal to the existing weak `skill_used_without_correction` component, credit assignment keeps usage-only positives under observation, and read-only operational reports now surface latest-run outcome status without opening the run JSON artifact.
 
-- **Human-readable daily / CLI reporting:** around 8.0合目.
+- **Human-readable daily / CLI reporting:** around 8.6合目.
+  - Milestone 6 phase 6.1 adds an `Unresolved:` CLI section that groups deferred / skipped / blocked decisions by reason (insufficient evidence / unsupported tool / unsafe destructive action / duplicate prevented / needs planner review) and appends `next action:` lines when the decision payload carries one.
+  - Milestone 6 phase 6.2 extends the `prompt overlay set:` summary line with `generation <overlay-set-id>` and `regression <status>` when known, keeping `action would promote` for dry-run vs `action promoted` for executed runs.
+  - Milestone 6 phase 6.3 (Daily Slack template) is operational follow-up against the external automations repo and is not part of plugin self-improvement code work.
   - The daily Slack template has been improved, and `improve` / `calibrate` / read-only operational reports now separate actual mutation, created/patched skill names, preview, no-op/skip, validation reject, overlay promotion, grouped actionable signals, non-actionable diagnostic volume, knowledge-inventory reason counts, latest-run actual results, latest-run outcome status, and latest-run skill-quality reason counts more clearly.
   - Skill-quality reason labels now describe deficiencies (`missing_*`) instead of exposing positive boolean field names, so daily-facing summaries are harder to misread.
   - `calibrate --dry-run` says `action would promote`; executed calibration says `action promoted`.
