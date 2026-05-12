@@ -59,7 +59,7 @@ def create_runner_artifacts(config: dict) -> None:
             "skill": {
                 "planner": {"decisions": [
                     {"decision": "skip", "noop_outcome": "covered_by_existing_skill"},
-                    {"decision": "patch_skill", "skill": "safe-patch-usage", "maintenance_action": "patch_skill", "reason": "tool_error:patch:not_found"},
+                    {"decision": "mutate_skill", "skill": "safe-patch-usage", "maintenance_action": "patch", "reason": "tool_error:patch:not_found"},
                 ]},
                 "planner_digest": {"knowledge_maintenance": {"maintenance_candidates": [
                     {"theme": "memory duplicate cleanup", "kind": "inventory_duplicate", "maintenance_affordance": {"workflow_boundary": "memory duplicate cleanup"}},

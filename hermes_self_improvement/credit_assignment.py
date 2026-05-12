@@ -60,7 +60,7 @@ def _bucket_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     score_values = [float(row["score"]) for row in scored]
     confidence_values = [float(row.get("confidence") or 0.0) for row in scored]
     weak_episodes = [row for row in rows if str(row.get("evidence_strength") or "") == "weak"]
-    weak_selected = [row for row in weak_episodes if row.get("decision") in {"run_editor", "memory_candidate", "evaluator_candidate"}]
+    weak_selected = [row for row in weak_episodes if row.get("decision") in {"mutate_skill", "mutate_memory", "calibrate_evaluator"}]
     repeat_fix = [row for row in rows if float(row.get("components", {}).get("repeat_fix_penalty") or 0.0) < 0]
     return {
         "episodes": len(rows),

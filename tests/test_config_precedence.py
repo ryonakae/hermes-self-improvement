@@ -254,11 +254,11 @@ def test_config_example_yaml_is_parseable(tmp_path):
 
     config = mod.load_config(tmp_path / "config.yaml", cli_config_path=example)
 
-    assert config["model"]["planner"]["provider"] == "auto"
+    assert config["model"]["improvement_planner"]["provider"] == "auto"
     assert config["model"]["evaluator"]["timeout"] == 120
-    assert config["model"]["editor"]["timeout"] == 45
-    assert config["model"]["editor"]["max_tokens"] == 1000
-    assert config.get("mutation", {}).get("backend") == "native_skill_tool_editor"
+    assert config["model"]["skill_agent"]["timeout"] == 45
+    assert config["model"]["skill_agent"]["max_tokens"] == 1000
+    assert config.get("mutation", {}).get("backend") == "native_skill_tool"
     assert config["calibration"]["evidence"]["min_evidence_events"] == 20
 
 

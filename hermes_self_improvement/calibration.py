@@ -71,7 +71,7 @@ def _planner_quality_from_run(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _improvement_planner_prompt_signal_count(quality: dict[str, Any]) -> int:
     signals = int(quality.get("action_like_skips") or 0) + int(quality.get("weak_only_selected_count") or 0)
-    selected = int(quality.get("selected_for_editor") or 0)
+    selected = int(quality.get("mutate_skill_count") or 0)
     selected_with_evidence = int(quality.get("selected_with_evidence") or 0)
     if selected and selected_with_evidence < selected:
         signals += selected - selected_with_evidence
@@ -296,7 +296,7 @@ def _runtime_eval_cases_dir(config: dict[str, Any]) -> Path:
 def _runtime_eval_cases_path(config: dict[str, Any], candidate: dict[str, Any]) -> Path:
     candidate_hash = str(candidate.get("candidate_hash") or "candidate")[:12]
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    return _runtime_eval_cases_dir(config) / "planner-editor" / f"{stamp}-{candidate_hash}-cases.jsonl"
+    return _runtime_eval_cases_dir(config) / "skill-agent" / f"{stamp}-{candidate_hash}-cases.jsonl"
 
 
 

@@ -40,7 +40,7 @@ def test_dspy_unavailable_falls_back_without_import_failure(monkeypatch, tmp_pat
 def test_fake_optimizer_can_produce_candidate_file(tmp_path):
     def fake_optimizer(*, role, evidence, cases, config):
         return {
-            "candidate_prompt": {"system_addendum": "Prefer skip for weak-only evidence.", "user_addendum": "Keep run_editor for exact evidence.", "replacement": None},
+            "candidate_prompt": {"system_addendum": "Prefer skip for weak-only evidence.", "user_addendum": "Keep mutate_skill for exact evidence.", "replacement": None},
             "rationale": "Runtime cases show weak-only over-selection.",
             "expected_effect": "Reduce weak-only selected rate.",
             "risk_notes": "Overlay only.",
@@ -125,7 +125,7 @@ def test_fake_optimizer_can_produce_overlay_candidate_set(tmp_path):
             "targets": {
                 "improvement_planner_overlay": {
                     "change_status": "changed",
-                    "candidate_prompt": {"system_addendum": "Require concrete evidence ids before run_editor.", "replacement": None},
+                    "candidate_prompt": {"system_addendum": "Require concrete evidence ids before mutate_skill.", "replacement": None},
                     "rationale": "Planner over-selected weak evidence.",
                 },
                 "skill_agent_overlay": {
@@ -149,7 +149,7 @@ def test_fake_optimizer_can_produce_overlay_candidate_set(tmp_path):
         "episode_kind": "preview_decision",
         "target_kind": "skill",
         "target_id": "demo-skill",
-        "decision": "run_editor",
+        "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
         "learnable": True,

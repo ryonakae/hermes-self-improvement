@@ -18,9 +18,9 @@ from .config import (
 )
 from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
 from .memory_extractor import (
-    build_conversation_memory_windows,
+    build_memory_extractor_windows,
     build_memory_extractor_digest,
-    make_conversation_memory_candidate,
+    make_memory_extractor_candidate,
     reconcile_memory_extractor_payload_with_existing_memories,
     run_memory_extractor,
 )
@@ -221,7 +221,7 @@ def _summarize_run_skill_lifecycle(payload: dict[str, Any]) -> dict[str, Any]:
         reason = str(item.get("reason") or "")
         if reason.startswith("archive_blocked") or reason == "archive_without_lifecycle_evidence":
             blocked_by_reason[reason] = blocked_by_reason.get(reason, 0) + 1
-    archive_candidates = int(planner_summary.get("archive_candidates") or 0)
+    archive_skill_count = int(planner_summary.get("archive_skill_count") or 0)
     would_archive = sum(1 for item in decisions if item.get("decision") == "archive_skill_preview")
     archived = sum(
         1
@@ -232,10 +232,10 @@ def _summarize_run_skill_lifecycle(payload: dict[str, Any]) -> dict[str, Any]:
         and item.get("changed")
     )
     blocked = sum(blocked_by_reason.values())
-    if not any((archive_candidates, would_archive, archived, blocked)):
+    if not any((archive_skill_count, would_archive, archived, blocked)):
         return {}
     return {
-        "archive_candidates": archive_candidates,
+        "archive_skill_count": archive_skill_count,
         "would_archive": would_archive,
         "archived": archived,
         "blocked": blocked,
@@ -348,7 +348,7 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
             if lifecycle:
                 lines.append(
                     "- Skill lifecycle: "
-                    f"archive candidates {int(lifecycle.get('archive_candidates') or 0)}, "
+                    f"archive candidates {int(lifecycle.get('archive_skill_count') or 0)}, "
                     f"would archive {int(lifecycle.get('would_archive') or 0)}, "
                     f"archived {int(lifecycle.get('archived') or 0)}, "
                     f"blocked {int(lifecycle.get('blocked') or 0)}"
@@ -865,7 +865,7 @@ def run_improve(
         if report_signals:
             evidence_pack = _attach_diagnostic_signals_to_evidence_pack(evidence_pack, report_signals)
     existing_memories = _load_builtin_memory_entries(_builtin_memory_paths(config))
-    conversation_windows = build_conversation_memory_windows(events)
+    conversation_windows = build_memory_extractor_windows(events)
     memory_extractor_digest = build_memory_extractor_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
     memory_gap_payload = reconcile_memory_extractor_payload_with_existing_memories(
         run_memory_extractor(memory_extractor_digest, config=config),
@@ -878,7 +878,7 @@ def run_improve(
             continue
         if candidate.get("routing_hint") in skip_hints:
             continue
-        memory_gap_evidence.append(make_conversation_memory_candidate(
+        memory_gap_evidence.append(make_memory_extractor_candidate(
             candidate_id=str(candidate.get("candidate_id") or "") or None,
             target=str(candidate.get("target") or "user"),
             candidate_fact=str(candidate.get("candidate_fact") or ""),
@@ -896,20 +896,20 @@ def run_improve(
         evidence_pack["views"] = views
         summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
         evidence_by_kind = summary.get("evidence_by_kind") if isinstance(summary.get("evidence_by_kind"), dict) else {}
-        evidence_by_kind = {**evidence_by_kind, "conversation_memory_gap_candidate": int(evidence_by_kind.get("conversation_memory_gap_candidate") or 0) + len(memory_gap_evidence)}
+        evidence_by_kind = {**evidence_by_kind, "memory_gap_candidate": int(evidence_by_kind.get("memory_gap_candidate") or 0) + len(memory_gap_evidence)}
         evidence_pack["summary"] = {
             **summary,
             "evidence_count": int(summary.get("evidence_count") or 0) + len(memory_gap_evidence),
-            "conversation_memory_window_count": len(conversation_windows),
-            "conversation_memory_gap_candidate_count": len(memory_gap_evidence),
+            "memory_extractor_window_count": len(conversation_windows),
+            "memory_gap_candidate_count": len(memory_gap_evidence),
             "evidence_by_kind": evidence_by_kind,
         }
     else:
         summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
         evidence_pack["summary"] = {
             **summary,
-            "conversation_memory_window_count": len(conversation_windows),
-            "conversation_memory_gap_candidate_count": 0,
+            "memory_extractor_window_count": len(conversation_windows),
+            "memory_gap_candidate_count": 0,
         }
     candidate_names = [str(item.get("name") or "") for item in evidence_pack.get("skill_candidates") or [] if isinstance(item, dict) and item.get("name")]
     active_references = build_active_skill_references(config, candidate_names=candidate_names)
@@ -1018,7 +1018,7 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
         if not isinstance(decision, dict):
             continue
         kind = str(decision.get("decision") or "")
-        if kind not in {"run_editor_preview", "create_skill_preview"}:
+        if kind not in {"mutate_skill_preview", "create_skill_preview"}:
             skill_decisions.append({**decision, "decision": "skip", "reason": "replay_not_mutation_ready", "changed": False})
             continue
         task = decision.get("task") if isinstance(decision.get("task"), dict) else None
@@ -1270,9 +1270,9 @@ def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], mainte
         note_source(item)
         decision = str(item.get("decision") or "")
         maintenance_action = str(item.get("maintenance_action") or "")
-        if maintenance_action == "patch_skill" or decision == "patch_skill":
+        if maintenance_action == "patch":
             buckets["patch"][skill] = buckets["patch"].get(skill, 0) + 1
-        elif maintenance_action == "merge_skills" or decision == "merge_skills":
+        elif maintenance_action == "merge":
             target = str(item.get("target_skill") or item.get("successor") or "unknown").strip() or "unknown"
             label = f"{skill} -> {target}"
             buckets["merge"][label] = buckets["merge"].get(label, 0) + 1
@@ -1539,7 +1539,7 @@ def _memory_placement_summary_lines(decisions: list[dict[str, Any]]) -> list[str
 def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[str]:
     buckets = {
         "unresolved": {},
-        "memory_candidate": {},
+        "mutate_memory": {},
         "skip_noise": {},
     }
     for item in candidates:
@@ -1554,8 +1554,8 @@ def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[s
     lines = []
     if buckets["unresolved"]:
         lines.append(f"- unresolved themes: {_format_count_map(_top_count_map(buckets['unresolved']))}")
-    if buckets["memory_candidate"]:
-        lines.append(f"- memory leaning: {_format_count_map(_top_count_map(buckets['memory_candidate']))}")
+    if buckets["mutate_memory"]:
+        lines.append(f"- memory leaning: {_format_count_map(_top_count_map(buckets['mutate_memory']))}")
     if buckets["skip_noise"]:
         lines.append(f"- skip-noise leaning: {_format_count_map(_top_count_map(buckets['skip_noise']))}")
     return lines
@@ -1576,12 +1576,12 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     skill_agent_prompt_chars = planner_quality.get("skill_agent_prompt_chars") if isinstance(planner_quality.get("skill_agent_prompt_chars"), dict) else {}
     planner_decisions = planner.get("decisions") if isinstance(planner.get("decisions"), list) else []
     skill_decisions = skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []
-    selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "run_editor"][:5]
+    selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "mutate_skill"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     planner_prompt = prompt_sources.get("improvement_planner") if isinstance(prompt_sources.get("improvement_planner"), dict) else {}
-    editor_prompt = prompt_sources.get("skill_agent") if isinstance(prompt_sources.get("skill_agent"), dict) else {}
+    skill_agent_prompt = prompt_sources.get("skill_agent") if isinstance(prompt_sources.get("skill_agent"), dict) else {}
     evidence_strength_counts = planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {}
     evidence_by_kind = evidence_summary.get("evidence_by_kind") if isinstance(evidence_summary.get("evidence_by_kind"), dict) else {}
     inventory_health = evidence_summary.get("inventory_health") if isinstance(evidence_summary.get("inventory_health"), dict) else {}
@@ -1607,7 +1607,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     strong_count = int(evidence_strength_counts.get("strong") or 0)
     medium_count = int(evidence_strength_counts.get("medium") or 0)
     weak_count = int(evidence_strength_counts.get("weak") or 0)
-    archive_candidates = int(planner_summary.get("archive_candidates") or 0)
+    archive_skill_count = int(planner_summary.get("archive_skill_count") or 0)
     would_archive = sum(1 for item in skill_decisions if isinstance(item, dict) and item.get("decision") == "archive_skill_preview")
     archived = sum(
         1
@@ -1624,18 +1624,18 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         and item.get("decision") in {"rejected", "skip"}
         and (item.get("archive_reason") or str(item.get("reason") or "").startswith("archive_blocked"))
     )
-    editor_stop_counts: dict[str, int] = {}
+    skill_agent_stop_counts: dict[str, int] = {}
     for item in skill_decisions:
         if not isinstance(item, dict):
             continue
         if item.get("decision") != "rejected":
             continue
         planner_decision = item.get("planner_decision") if isinstance(item.get("planner_decision"), dict) else {}
-        if planner_decision.get("decision") != "run_editor":
+        if planner_decision.get("decision") != "mutate_skill":
             continue
         result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
         reason = str(result_payload.get("outcome") or result_payload.get("error") or item.get("reason") or "unknown")
-        editor_stop_counts[reason] = editor_stop_counts.get(reason, 0) + 1
+        skill_agent_stop_counts[reason] = skill_agent_stop_counts.get(reason, 0) + 1
     lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
     for decision in memory_step.get("decisions") or []:
         if isinstance(decision, dict):
@@ -1726,7 +1726,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- Would apply: {int(action_summary.get('apply') or 0)}, Deferred: {int(action_summary.get('defer') or 0)}, Skipped: {int(action_summary.get('skip') or 0)}, Blocked: {int(action_summary.get('block') or 0)}",
         "Skill planner:",
         f"- source: {planner.get('planner_source') or 'unknown'}, status: {planner.get('status') or skill_step.get('status') or 'unknown'}",
-        f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for skill_agent: {int(planner_summary.get('selected_for_editor') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}",
+        f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for skill_agent: {int(planner_summary.get('mutate_skill_count') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}",
         f"- proof: attached candidates {int(planner_quality.get('attached_candidate_count') or 0)}, unmatched evidence {int(planner_quality.get('unmatched_evidence_count') or 0)}, selected with evidence {int(planner_quality.get('selected_with_evidence') or 0)}, action-like skips {int(planner_quality.get('action_like_skips') or 0)}",
         f"- target hints: hint-attached evidence {int(planner_quality.get('hint_attached_evidence_count') or 0)}, hint-attached candidates {int(planner_quality.get('hint_attached_candidate_count') or 0)}, cluster evidence {int(planner_quality.get('cluster_evidence_count') or 0)}",
         f"- evidence strength: strong {strong_count}, medium {medium_count}, weak {weak_count}, weak-only selected {int(planner_quality.get('weak_only_selected_count') or 0)}",
@@ -1734,11 +1734,11 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Prompt sources:",
         "- LLM context: Markdown briefs/reports; program control state: JSON manifests/run records/tool results",
         f"- improvement_planner: {planner_prompt.get('overlay_source') or ('runtime overlay' if planner_prompt.get('overlay_active') else 'base')} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
-        f"- skill_agent: {editor_prompt.get('overlay_source') or ('runtime overlay' if editor_prompt.get('overlay_active') else 'not rendered' if not editor_prompt else 'base')} hash {editor_prompt.get('overlay_hash') or editor_prompt.get('active_hash') or editor_prompt.get('base_hash') or 'n/a'}",
+        f"- skill_agent: {skill_agent_prompt.get('overlay_source') or ('runtime overlay' if skill_agent_prompt.get('overlay_active') else 'not rendered' if not skill_agent_prompt else 'base')} hash {skill_agent_prompt.get('overlay_hash') or skill_agent_prompt.get('active_hash') or skill_agent_prompt.get('base_hash') or 'n/a'}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Skill lifecycle:",
-        f"- archive candidates {archive_candidates}, would archive {would_archive}, archived {archived}, blocked {blocked_archive}",
+        f"- archive candidates {archive_skill_count}, would archive {would_archive}, archived {archived}, blocked {blocked_archive}",
         "Memory improvements:",
         f"- changed {int(summary.get('memory_changes') or 0)} memories",
         f"- related lookups: completed {lookup_counts['completed']}, unavailable {lookup_counts['unavailable']}, failed {lookup_counts['failed']}, skipped {lookup_counts['skipped']}",
@@ -1799,10 +1799,10 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
             executed_lines.append("Rejected reasons:")
             executed_lines.extend(f"- {reason}: {count}" for reason, count in sorted(rejected_reason_counts.items()))
         lines[insert_at:insert_at] = executed_lines
-    if editor_stop_counts:
-        lines.append("- editor stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(editor_stop_counts.items())))
+    if skill_agent_stop_counts:
+        lines.append("- skill_agent stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(skill_agent_stop_counts.items())))
     if selected_preview:
-        lines.append("Selected for editor:")
+        lines.append("Selected for skill_agent:")
         for item in selected_preview:
             lines.append(f"- {item.get('skill')}: {item.get('change_intent') or item.get('rationale') or item.get('reason') or 'planned'}")
     if result.get("artifact_path"):

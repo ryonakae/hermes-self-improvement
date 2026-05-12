@@ -90,7 +90,7 @@ def _default_config() -> dict[str, Any]:
             },
         },
         "mutation": {
-            "backend": "native_skill_tool_editor",
+            "backend": "native_skill_tool",
             "enabled": True,
             "max_tool_calls": 8,
             "max_iterations": 6,

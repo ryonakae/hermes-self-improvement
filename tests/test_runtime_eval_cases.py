@@ -20,7 +20,7 @@ def episode_payload(episode_id: str, **extra):
         "target_kind": "skill",
         "target_id": "demo-skill",
         "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:editor",
+        "skill_agent_prompt_hash": "sha256:skill_agent",
         "evaluator_hash": "sha256:evaluator",
         "decision": "skip",
         "action": "no_op",
@@ -54,12 +54,12 @@ def test_runtime_eval_cases_convert_weak_only_evidence_to_skip_or_defer(tmp_path
     assert "system_addendum" not in serialized
 
 
-def test_runtime_eval_cases_convert_exact_mutable_skill_evidence_to_run_editor(tmp_path):
+def test_runtime_eval_cases_convert_exact_mutable_skill_evidence_to_mutate_skill(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "exact.json", episode_payload(
         "episode-exact",
-        decision="run_editor",
+        decision="mutate_skill",
         action="skill_patch",
         executed=True,
         changed=True,
@@ -70,8 +70,8 @@ def test_runtime_eval_cases_convert_exact_mutable_skill_evidence_to_run_editor(t
     cases = build_role_runtime_eval_cases(config=config, limit=100)
 
     assert len(cases) == 1
-    assert cases[0]["case_type"] == "improvement_planner_exact_evidence_run_editor"
-    assert cases[0]["expected"]["decision"] == "run_editor"
+    assert cases[0]["case_type"] == "improvement_planner_exact_evidence_mutate_skill"
+    assert cases[0]["expected"]["decision"] == "mutate_skill"
     assert cases[0]["expected"]["requires_evidence_ids"] is True
 
 
@@ -94,15 +94,15 @@ def test_runtime_eval_cases_convert_unsafe_provenance_to_defer(tmp_path):
     assert cases[0]["expected"]["reason_contains"] == "target_provenance_unsafe"
 
 
-def test_runtime_eval_cases_convert_editor_target_mismatch_to_skip(tmp_path):
+def test_runtime_eval_cases_convert_skill_agent_target_mismatch_to_skip(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "mismatch.json", episode_payload(
         "episode-mismatch",
-        decision="run_editor",
+        decision="mutate_skill",
         action="no_op",
         evidence_strength="medium",
-        reason="editor target mismatch; skip mutation",
+        reason="skill_agent target mismatch; skip mutation",
     ))
 
     cases = build_role_runtime_eval_cases(config=config, limit=100)
@@ -118,7 +118,7 @@ def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "overlay.json", episode_payload(
         "episode-overlay",
-        decision="run_editor",
+        decision="mutate_skill",
         action="skill_patch",
         executed=True,
         changed=True,
@@ -126,7 +126,7 @@ def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
         reason="exact mutable local skill evidence",
         overlay_generation_id="overlay-generation-001",
         improvement_planner_overlay_hash="sha256:planner-overlay",
-        skill_agent_overlay_hash="sha256:editor-overlay",
+        skill_agent_overlay_hash="sha256:skill_agent-overlay",
         evaluator_overlay_hash="sha256:evaluator-overlay",
         outcome="success",
     ))
@@ -136,7 +136,7 @@ def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
     assert {case["target"] for case in cases} == {"improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay"}
     assert {case["case_family"] for case in cases} == {"overlay_set"}
     by_target = {case["target"]: case for case in cases}
-    assert by_target["improvement_planner_overlay"]["expected"] == {"decision": "run_editor"}
+    assert by_target["improvement_planner_overlay"]["expected"] == {"decision": "mutate_skill"}
     assert by_target["skill_agent_overlay"]["expected"] == {"mutation": "changed"}
     assert by_target["evaluator_overlay"]["expected"] == {"recommendation": "candidate"}
     for case in cases:
@@ -144,7 +144,7 @@ def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
         assert case["input"]["evidence_ids"] == ["ev1"]
         assert case["input"]["overlay_generation_id"] == "overlay-generation-001"
         assert case["input"]["improvement_planner_overlay_hash"] == "sha256:planner-overlay"
-        assert case["input"]["skill_agent_overlay_hash"] == "sha256:editor-overlay"
+        assert case["input"]["skill_agent_overlay_hash"] == "sha256:skill_agent-overlay"
         assert case["input"]["evaluator_overlay_hash"] == "sha256:evaluator-overlay"
     serialized = json.dumps(cases)
     assert "candidate_prompt" not in serialized
@@ -215,7 +215,7 @@ def test_overlay_eval_cases_include_improve_run_unmatched_and_memory_gap_signals
             "summary": {
                 "unmatched_candidate_count": 2,
                 "unmatched_candidate_themes": ["patch_tool_workflow", "sandbox_permission_workflow"],
-                "conversation_memory_gap_candidate_count": 1,
+                "memory_gap_candidate_count": 1,
             }
         },
         "step_decisions": {
@@ -235,8 +235,8 @@ def test_overlay_eval_cases_include_improve_run_unmatched_and_memory_gap_signals
 
     case_types = {case["case_type"] for case in cases}
     assert "improvement_planner_overlay_from_improve_unmatched_candidates" in case_types
-    assert "improvement_planner_overlay_from_conversation_memory_gap" in case_types
+    assert "improvement_planner_overlay_from_memory_gap" in case_types
     planner_case = next(case for case in cases if case["case_type"] == "improvement_planner_overlay_from_improve_unmatched_candidates")
     assert planner_case["expected"]["decision"] in {"apply", "defer"}
-    memory_case = next(case for case in cases if case["case_type"] == "improvement_planner_overlay_from_conversation_memory_gap")
+    memory_case = next(case for case in cases if case["case_type"] == "improvement_planner_overlay_from_memory_gap")
     assert memory_case["expected"]["decision"] == "apply"

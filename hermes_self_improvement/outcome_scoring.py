@@ -114,7 +114,7 @@ def _signal_components(signals: dict[str, Any]) -> dict[str, float]:
         components["memory_retrieved_useful"] = COMPONENT_WEIGHTS["memory_retrieved_useful"]
     if signals.get("planner_selected_low_evidence") is True:
         components["low_evidence_penalty"] = COMPONENT_WEIGHTS["low_evidence_penalty"]
-    if signals.get("editor_no_op_despite_strong_evidence") is True:
+    if signals.get("skill_agent_no_op_despite_strong_evidence") is True:
         components["no_op_strong_evidence_penalty"] = COMPONENT_WEIGHTS["no_op_strong_evidence_penalty"]
     if signals.get("duplicate_noop_prevented") is True:
         components["duplicate_noop_prevented"] = COMPONENT_WEIGHTS["duplicate_noop_prevented"]

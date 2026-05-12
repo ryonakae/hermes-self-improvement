@@ -293,17 +293,17 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                     "changed_skills": [],
                     "prompt_sources": {
                         "improvement_planner": {"role": "improvement_planner", "source": "base", "overlay_active": False, "base_hash": "sha256:planner"},
-                        "skill_agent": {"role": "skill_agent", "source": "runtime", "overlay_active": True, "base_hash": "sha256:editor", "active_hash": "sha256:active", "path": str(tmp_path / "active-prompts.json")},
+                        "skill_agent": {"role": "skill_agent", "source": "runtime", "overlay_active": True, "base_hash": "sha256:skill_agent", "active_hash": "sha256:active", "path": str(tmp_path / "active-prompts.json")},
                     },
                     "planner": {
                         "status": "completed",
                         "planner_source": "deterministic_fallback",
-                        "summary": {"candidate_count": 2, "selected_for_editor": 1, "archive_candidates": 1, "skipped": 1, "deferred": 0, "memory_candidates": 0, "evaluator_candidates": 0},
-                        "decisions": [{"skill": "a", "decision": "run_editor", "editor_instructions": large_instruction}],
+                        "summary": {"candidate_count": 2, "mutate_skill_count": 1, "archive_skill_count": 1, "skipped": 1, "deferred": 0, "mutate_memory_count": 0, "calibrate_evaluator_count": 0},
+                        "decisions": [{"skill": "a", "decision": "mutate_skill", "skill_agent_instructions": large_instruction}],
                     },
                     "planner_quality": {"attached_candidate_count": 1, "unmatched_evidence_count": 2, "selected_with_evidence": 1, "action_like_skips": 0, "hint_attached_evidence_count": 1, "hint_attached_candidate_count": 1, "cluster_evidence_count": 0, "attachments_by_match_kind": {"hint_tool_class": 1}, "skill_agent_task_count": 1, "skill_agent_prompt_chars": {"max": 500, "min": 500, "total": 500}},
                     "decisions": [
-                        {"skill": "a", "decision": "run_editor_preview", "reason": "planner_run_editor_preview", "task": {"instructions": large_instruction}},
+                        {"skill": "a", "decision": "mutate_skill_preview", "reason": "planner_mutate_skill_preview", "task": {"instructions": large_instruction}},
                         {"skill": "b", "decision": "defer", "reason": "target_uncertain"},
                         {"skill": "c", "decision": "skip", "reason": "one_off_noise"},
                     ],
@@ -336,8 +336,8 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["steps"]["prompt_sources"]["improvement_planner"]["overlay_active"] is False
     assert payload["steps"]["prompt_sources"]["skill_agent"]["overlay_active"] is True
     assert payload["steps"]["prompt_sources"]["skill_agent"]["active_hash"] == "sha256:active"
-    assert payload["steps"]["skill_planner"]["selected_for_editor"] == 1
-    assert payload["steps"]["skill_planner"]["archive_candidates"] == 1
+    assert payload["steps"]["skill_planner"]["mutate_skill_count"] == 1
+    assert payload["steps"]["skill_planner"]["archive_skill_count"] == 1
     assert payload["steps"]["skill_planner"]["source"] == "deterministic_fallback"
     assert payload["steps"]["skill_planner"]["quality"]["selected_with_evidence"] == 1
     assert payload["steps"]["skill_planner"]["quality"]["hint_attached_evidence_count"] == 1

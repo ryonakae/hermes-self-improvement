@@ -97,8 +97,8 @@ def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
         suffix = f" Current weak-only selected rate: {weak_rate}." if weak_rate is not None else ""
         return (
             "Runtime eval cases indicate planner calibration should be stricter. "
-            "Prefer skip or defer for weak-only evidence, require concrete evidence ids before run_editor, "
-            "and keep exact mutable-local skill evidence eligible for run_editor."
+            "Prefer skip or defer for weak-only evidence, require concrete evidence ids before mutate_skill, "
+            "and keep exact mutable-local skill evidence eligible for mutate_skill."
             + suffix
         )
     if role == "evaluator":
@@ -128,9 +128,9 @@ def _fallback_case_behaviors(role: str) -> dict[str, Any]:
     if role == "memory_agent":
         return {
             "memory_agent_duplicate_skip": {"mutation": "skip", "reason": "memory_duplicate_existing"},
-            "memory_agent_sensitive_skip": {"mutation": "skip", "reason": "sensitive_memory_candidate"},
+            "memory_agent_sensitive_skip": {"mutation": "skip", "reason": "sensitive_memory_gap_candidate"},
         }
-    return {"editor_target_mismatch_skip": {"mutation": "skip", "reason": "target_mismatch"}}
+    return {"skill_agent_target_mismatch_skip": {"mutation": "skip", "reason": "target_mismatch"}}
 
 
 def _normalize_optimizer_output(

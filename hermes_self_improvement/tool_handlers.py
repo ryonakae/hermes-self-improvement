@@ -72,7 +72,7 @@ def _related_lookup_counts(memory_step: dict[str, Any]) -> dict[str, int]:
 def _semantic_action_from_decision(decision: dict[str, Any], *, kind: str) -> str:
     raw = str(decision.get("decision") or "")
     reason = str(decision.get("reason") or "")
-    if raw in {"run_editor_preview", "archive_skill_preview"}:
+    if raw in {"mutate_skill_preview", "archive_skill_preview"}:
         return "apply"
     if raw == "accepted":
         return "apply"
@@ -174,18 +174,18 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
                 "status": planner.get("status"),
                 "source": planner.get("planner_source"),
                 "candidate_count": int(planner_summary.get("candidate_count") or 0),
-                "selected_for_editor": int(planner_summary.get("selected_for_editor") or 0),
-                "archive_candidates": int(planner_summary.get("archive_candidates") or 0),
+                "mutate_skill_count": int(planner_summary.get("mutate_skill_count") or 0),
+                "archive_skill_count": int(planner_summary.get("archive_skill_count") or 0),
                 "skipped": int(planner_summary.get("skipped") or 0),
                 "deferred": int(planner_summary.get("deferred") or 0),
-                "memory_candidates": int(planner_summary.get("memory_candidates") or 0),
-                "evaluator_candidates": int(planner_summary.get("evaluator_candidates") or 0),
+                "mutate_memory_count": int(planner_summary.get("mutate_memory_count") or 0),
+                "calibrate_evaluator_count": int(planner_summary.get("calibrate_evaluator_count") or 0),
                 "quality": {
                     "attached_candidate_count": int(planner_quality.get("attached_candidate_count") or 0),
                     "unmatched_evidence_count": int(planner_quality.get("unmatched_evidence_count") or 0),
                     "selected_with_evidence": int(planner_quality.get("selected_with_evidence") or 0),
                     "action_like_skips": int(planner_quality.get("action_like_skips") or 0),
-                    "editor_task_count": int(planner_quality.get("editor_task_count") or 0),
+                    "skill_agent_task_count": int(planner_quality.get("skill_agent_task_count") or 0),
                     "hint_attached_evidence_count": int(planner_quality.get("hint_attached_evidence_count") or 0),
                     "hint_attached_candidate_count": int(planner_quality.get("hint_attached_candidate_count") or 0),
                     "cluster_evidence_count": int(planner_quality.get("cluster_evidence_count") or 0),

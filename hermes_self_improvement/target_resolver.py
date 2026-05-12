@@ -8,14 +8,14 @@ from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_
 
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
 ALLOWED_DECISIONS = {"apply", "defer", "skip", "block"}
-ALLOWED_RESOLUTION_KINDS = {"attach_existing_skill", "memory_candidate", "unresolved", "skip_noise"}
+ALLOWED_RESOLUTION_KINDS = {"attach_existing_skill", "mutate_memory", "unresolved", "skip_noise"}
 
 
 def _default_resolution_kind(target_kind: str, target: str, decision_hint: str) -> str:
     if decision_hint == "skip":
         return "skip_noise"
     if target_kind == "memory":
-        return "memory_candidate"
+        return "mutate_memory"
     if target_kind == "skill" and target:
         return "attach_existing_skill"
     return "unresolved"
@@ -70,7 +70,7 @@ def normalize_target_resolver_payload(
             decision_hint = "block"
             unresolved_reason = "out_of_scope"
             suggested_boundary = ""
-        elif resolution_kind == "memory_candidate":
+        elif resolution_kind == "mutate_memory":
             target_kind = "memory"
             target = target or "memory"
             unresolved_reason = ""
@@ -185,7 +185,7 @@ def build_target_resolution_digest(
         if not isinstance(item, dict):
             continue
         kind = str(item.get("kind") or "")
-        if kind not in {"unmatched_improvement_candidate", "tool_error_cluster_evidence", "conversation_memory_gap_candidate", "knowledge_coverage_candidate", "diagnostic_signal"}:
+        if kind not in {"unmatched_improvement_candidate", "tool_error_cluster_evidence", "memory_gap_candidate", "knowledge_coverage_candidate", "diagnostic_signal"}:
             continue
         row = {
             "id": str(item.get("id") or ""),
@@ -234,13 +234,13 @@ def build_target_resolution_digest(
 TARGET_RESOLVER_SYSTEM = (
     "You are resolving Hermes self-improvement observation targets. Return JSON only: "
     "{\"resolutions\":[{\"candidate_id\":str,"
-    "\"resolution_kind\":\"attach_existing_skill|memory_candidate|unresolved|skip_noise\","
+    "\"resolution_kind\":\"attach_existing_skill|mutate_memory|unresolved|skip_noise\","
     "\"target_kind\":\"skill|memory|none\",\"target\":str,"
     "\"confidence\":\"low|medium|high\",\"suggested_action\":\"apply|defer|skip|block\","
     "\"unresolved_reason\":\"no_existing_skill_fit|unclear_target|insufficient_context|out_of_scope\","
     "\"suggested_boundary\":str,\"reason\":str}]}. "
     "Your job is attachment only: attach_existing_skill only for a listed mutable skill with positive fit; "
-    "memory_candidate only for durable facts, preferences, or environment details; "
+    "mutate_memory only for durable facts, preferences, or environment details; "
     "unresolved when evidence may be useful but has no existing skill fit or needs planner judgment; "
     "skip_noise for one-off, transient, or already-handled noise. "
     "Two skill lists are provided: 'skill_targets' carry full descriptions for skills that already look related to one or more candidates; "

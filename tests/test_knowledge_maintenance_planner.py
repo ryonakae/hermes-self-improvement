@@ -87,17 +87,17 @@ def test_planner_normalizes_patch_and_merge_maintenance_decisions():
 
     def planner(*, digest, config):
         return {"decisions": [
-            {"skill": "local-patch-workflow", "decision": "patch_skill", "evidence_ids": ["ev_patch"], "risk": "low", "editor_instructions": "Add reusable patch guidance."},
-            {"skill": "old-patch-workflow", "decision": "merge_skills", "target_skill": "local-patch-workflow", "evidence_ids": ["ev_merge"], "risk": "medium", "editor_instructions": "Merge useful guidance into local-patch-workflow."},
+            {"skill": "local-patch-workflow", "decision": "patch_skill", "evidence_ids": ["ev_patch"], "risk": "low", "skill_agent_instructions": "Add reusable patch guidance."},
+            {"skill": "old-patch-workflow", "decision": "merge_skills", "target_skill": "local-patch-workflow", "evidence_ids": ["ev_merge"], "risk": "medium", "skill_agent_instructions": "Merge useful guidance into local-patch-workflow."},
         ]}
 
     result = run_improvement_planner(digest, config={"_improvement_planner_func": planner})
     decisions = {row["skill"]: row for row in result["decisions"]}
 
-    assert decisions["local-patch-workflow"]["decision"] == "run_editor"
-    assert decisions["local-patch-workflow"]["maintenance_action"] == "patch_skill"
-    assert decisions["old-patch-workflow"]["decision"] == "run_editor"
-    assert decisions["old-patch-workflow"]["maintenance_action"] == "merge_skills"
+    assert decisions["local-patch-workflow"]["decision"] == "mutate_skill"
+    assert decisions["local-patch-workflow"]["maintenance_action"] == "patch"
+    assert decisions["old-patch-workflow"]["decision"] == "mutate_skill"
+    assert decisions["old-patch-workflow"]["maintenance_action"] == "merge"
     assert decisions["old-patch-workflow"]["target_skill"] == "local-patch-workflow"
 
 
@@ -132,7 +132,7 @@ def test_planner_rejects_create_skill_that_duplicates_reference_skill():
     assert decision["covered_by_reference_skill"] == "safe-patch-usage"
 
 
-def test_skill_step_dry_run_maps_merge_skill_to_editor_preview():
+def test_skill_step_dry_run_maps_merge_skill_to_skill_agent_preview():
     evidence_pack = {
         "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},
         "views": {"skill": ["ev_merge"]},
@@ -152,13 +152,13 @@ def test_skill_step_dry_run_maps_merge_skill_to_editor_preview():
             "decision": "merge_skills",
             "target_skill": "local-patch-workflow",
             "evidence_ids": ["ev_merge"],
-            "editor_instructions": "Merge durable guidance into local-patch-workflow; do not archive yet.",
+            "skill_agent_instructions": "Merge durable guidance into local-patch-workflow; do not archive yet.",
         }]}
 
     result = run_skill_improvement_step(evidence_pack=evidence_pack, config={"_target_resolver_func": resolver, "_improvement_planner_func": planner}, mutate=False)
 
     decision = result["decisions"][0]
-    assert decision["decision"] == "run_editor_preview"
-    assert decision["planner_decision"]["maintenance_action"] == "merge_skills"
+    assert decision["decision"] == "mutate_skill_preview"
+    assert decision["planner_decision"]["maintenance_action"] == "merge"
     assert decision["planner_decision"]["target_skill"] == "local-patch-workflow"
     assert "Merge durable guidance" in decision["task"]["instructions"]

@@ -335,7 +335,7 @@ def test_memory_inventory_operation_hint_executes_without_llm_planner():
     calls = []
     evidence = _inventory_evidence()
     evidence["target_resolution_hint"] = {
-        "resolution_kind": "memory_candidate",
+        "resolution_kind": "mutate_memory",
         "suggested_action": "apply",
         "memory_operation_hint": {
             "operation": "memory_replace",

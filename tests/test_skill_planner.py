@@ -94,7 +94,7 @@ def test_skill_planner_digest_attaches_inventory_candidate_to_all_group_targets(
     assert rows["alpha-main"]["representative_evidence"][0]["inventory"]["group_kind"] == "similar_skills"
 
 
-def test_planner_allows_run_editor_with_inventory_evidence():
+def test_planner_allows_mutate_skill_with_inventory_evidence():
     pack_data = {
         "summary": {"event_count": 0, "evidence_count": 1, "ignored_count": 0},
         "views": {"skill": ["inv-1"], "memory": [], "evaluator": []},
@@ -110,11 +110,11 @@ def test_planner_allows_run_editor_with_inventory_evidence():
     }
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "alpha-main", "decision": "run_editor", "evidence_ids": ["inv-1"], "risk": "low"}]}
+        return {"decisions": [{"skill": "alpha-main", "decision": "mutate_skill", "evidence_ids": ["inv-1"], "risk": "low"}]}
 
     result = run_improvement_planner(build_improvement_planner_digest(pack_data), config={"_improvement_planner_func": fake_planner})
 
-    assert result["decisions"][0]["decision"] == "run_editor"
+    assert result["decisions"][0]["decision"] == "mutate_skill"
     assert result["decisions"][0]["evidence_ids"] == ["inv-1"]
 
 
@@ -195,15 +195,15 @@ def test_run_improvement_planner_uses_injected_planner_and_normalizes_decisions(
             "decisions": [
                 {
                     "skill": "demo-skill",
-                    "decision": "run_editor",
+                    "decision": "mutate_skill",
                     "priority": "high",
                     "risk": "low",
                     "change_intent": "add lookup pitfall",
-                    "editor_instructions": "Document bare fallback.",
+                    "skill_agent_instructions": "Document bare fallback.",
                     "evidence_ids": ["ev1"],
                     "rationale": "repeated lookup evidence",
                 },
-                {"skill": "not-a-candidate", "decision": "run_editor", "evidence_ids": ["ev1"]},
+                {"skill": "not-a-candidate", "decision": "mutate_skill", "evidence_ids": ["ev1"]},
             ]
         }
 
@@ -211,9 +211,9 @@ def test_run_improvement_planner_uses_injected_planner_and_normalizes_decisions(
 
     assert calls
     assert result["status"] == "completed"
-    assert result["summary"]["selected_for_editor"] == 1
+    assert result["summary"]["mutate_skill_count"] == 1
     assert result["decisions"][0]["skill"] == "demo-skill"
-    assert result["decisions"][0]["decision"] == "run_editor"
+    assert result["decisions"][0]["decision"] == "mutate_skill"
     assert all(item["skill"] != "not-a-candidate" for item in result["decisions"])
 
 
@@ -225,7 +225,7 @@ def test_run_improvement_planner_fails_closed_on_invalid_planner_output():
 
     assert result["status"] == "planner_error"
     assert result["decisions"] == []
-    assert result["summary"]["selected_for_editor"] == 0
+    assert result["summary"]["mutate_skill_count"] == 0
 
 
 def test_llm_planner_uses_active_prompt_overlay(monkeypatch, tmp_path):
@@ -306,7 +306,7 @@ def test_llm_planner_accepts_archive_decision_from_fake_model(monkeypatch):
     decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
 
     assert result["planner_source"] == "llm"
-    assert result["summary"]["archive_candidates"] == 1
+    assert result["summary"]["archive_skill_count"] == 1
     assert decision["decision"] == "archive_skill"
     assert decision["archive_reason"] == "obsolete_marker"
     assert decision["evidence_ids"] == ["ev_archive"]
@@ -316,7 +316,7 @@ def test_run_improvement_planner_deterministic_fallback_skips_no_evidence_candid
     result = run_improvement_planner(build_improvement_planner_digest(pack()), config={})
 
     by_skill = {item["skill"]: item for item in result["decisions"]}
-    assert by_skill["demo-skill"]["decision"] == "run_editor"
+    assert by_skill["demo-skill"]["decision"] == "mutate_skill"
     assert by_skill["unused-skill"]["decision"] == "skip"
     assert by_skill["unused-skill"]["reason"] == "no_attached_evidence"
 
@@ -354,7 +354,7 @@ def test_skill_planner_falls_back_when_llm_planner_fails(monkeypatch):
 
     assert result["status"] == "completed"
     assert result["planner_source"] == "deterministic_fallback_after_error"
-    assert result["summary"]["selected_for_editor"] == 1
+    assert result["summary"]["mutate_skill_count"] == 1
     assert "planner down" in result["error"]
 
 
@@ -422,7 +422,7 @@ def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence
     assert decision["archive_reason"] == "obsolete_marker"
     assert decision["successor"] == "demo-skill"
     assert decision["evidence_ids"] == ["ev_archive"]
-    assert result["summary"]["archive_candidates"] == 1
+    assert result["summary"]["archive_skill_count"] == 1
 
 
 def test_skill_planner_blocks_archive_without_attached_lifecycle_evidence():
@@ -498,16 +498,16 @@ def test_skill_planner_blocks_archive_with_invalid_successor():
     assert decision["reason"] == "archive_blocked_by_invalid_successor"
 
 
-def test_planner_normalization_strips_action_fields_from_skips_and_requires_evidence_for_editor():
+def test_planner_normalization_strips_action_fields_from_skips_and_requires_evidence_for_skill_agent():
     def fake_planner(*, digest, config):
         return {
             "decisions": [
                 {
                     "skill": "demo-skill",
-                    "decision": "run_editor",
+                    "decision": "mutate_skill",
                     "evidence_ids": [],
                     "change_intent": "should not become an edit",
-                    "editor_instructions": "do something",
+                    "skill_agent_instructions": "do something",
                     "rationale": "no attached evidence",
                 },
                 {
@@ -515,7 +515,7 @@ def test_planner_normalization_strips_action_fields_from_skips_and_requires_evid
                     "decision": "skip",
                     "evidence_ids": [],
                     "change_intent": "tempting edit",
-                    "editor_instructions": "patch it",
+                    "skill_agent_instructions": "patch it",
                 },
             ]
         }
@@ -524,11 +524,11 @@ def test_planner_normalization_strips_action_fields_from_skips_and_requires_evid
     by_skill = {item["skill"]: item for item in result["decisions"]}
 
     assert by_skill["demo-skill"]["decision"] == "skip"
-    assert by_skill["demo-skill"]["reason"] == "run_editor_without_attached_evidence"
-    assert "editor_instructions" not in by_skill["demo-skill"]
+    assert by_skill["demo-skill"]["reason"] == "mutate_skill_without_attached_evidence"
+    assert "skill_agent_instructions" not in by_skill["demo-skill"]
     assert "change_intent" not in by_skill["demo-skill"]
     assert by_skill["unused-skill"]["decision"] == "skip"
-    assert "editor_instructions" not in by_skill["unused-skill"]
+    assert "skill_agent_instructions" not in by_skill["unused-skill"]
     assert "change_intent" not in by_skill["unused-skill"]
     assert by_skill["unused-skill"]["notes"] == "tempting edit"
 
@@ -537,9 +537,9 @@ def test_planner_quality_report_counts_evidence_and_action_like_skips():
     digest = build_improvement_planner_digest(pack())
     planner = {
         "decisions": [
-            {"skill": "demo-skill", "decision": "run_editor", "evidence_ids": ["ev1"]},
+            {"skill": "demo-skill", "decision": "mutate_skill", "evidence_ids": ["ev1"]},
             {"skill": "unused-skill", "decision": "skip", "evidence_ids": []},
-            {"skill": "memory-ish", "decision": "memory_candidate", "evidence_ids": []},
+            {"skill": "memory-ish", "decision": "mutate_memory", "evidence_ids": []},
         ]
     }
     report = build_improvement_planner_quality_report(
@@ -551,10 +551,10 @@ def test_planner_quality_report_counts_evidence_and_action_like_skips():
     assert report["candidate_count"] == 2
     assert report["attached_candidate_count"] == 1
     assert report["unmatched_evidence_count"] == 1
-    assert report["selected_for_editor"] == 1
+    assert report["mutate_skill_count"] == 1
     assert report["selected_with_evidence"] == 1
     assert report["action_like_skips"] == 0
-    assert report["memory_candidates"] == 1
+    assert report["mutate_memory_count"] == 1
     assert report["skill_agent_prompt_chars"]["max"] == 5
 
 
@@ -652,7 +652,7 @@ def test_planner_quality_report_counts_hint_attachment_match_kinds():
     digest = build_improvement_planner_digest(pack_data)
     report = build_improvement_planner_quality_report(
         digest=digest,
-        planner={"decisions": [{"skill": "hermes-development-maintenance", "decision": "run_editor", "evidence_ids": ["ev_patch"]}]},
+        planner={"decisions": [{"skill": "hermes-development-maintenance", "decision": "mutate_skill", "evidence_ids": ["ev_patch"]}]},
         runner_decisions=[],
     )
 

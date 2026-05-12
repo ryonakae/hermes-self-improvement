@@ -55,7 +55,7 @@ def test_normalize_target_resolver_payload_keeps_attachment_only_resolution_kind
     payload = {"resolutions": [
         {"candidate_id": "a", "resolution_kind": "attach_existing_skill", "target_kind": "skill", "target": "hermes-skill-management", "confidence": "high", "suggested_action": "apply"},
         {"candidate_id": "b", "resolution_kind": "unresolved", "unresolved_reason": "no_existing_skill_fit", "target_kind": "none", "target": "", "confidence": "medium", "suggested_action": "defer", "suggested_boundary": "patch tool workflow"},
-        {"candidate_id": "c", "resolution_kind": "memory_candidate", "target_kind": "memory", "target": "memory", "confidence": "medium", "suggested_action": "apply"},
+        {"candidate_id": "c", "resolution_kind": "mutate_memory", "target_kind": "memory", "target": "memory", "confidence": "medium", "suggested_action": "apply"},
         {"candidate_id": "d", "resolution_kind": "skip_noise", "target_kind": "none", "target": "", "confidence": "high", "suggested_action": "skip"},
     ]}
     known = {"hermes-skill-management": {"mutable": True, "pinned": False, "state": "active", "provenance": "curator_agent_created"}}
@@ -65,7 +65,7 @@ def test_normalize_target_resolver_payload_keeps_attachment_only_resolution_kind
     assert [row["resolution_kind"] for row in out["resolutions"]] == [
         "attach_existing_skill",
         "unresolved",
-        "memory_candidate",
+        "mutate_memory",
         "skip_noise",
     ]
     assert out["resolutions"][1]["target_kind"] == "none"
@@ -280,11 +280,11 @@ def test_target_resolver_prompt_keeps_attachment_only_guidance():
     prompt = build_target_resolver_prompt({"candidates": [], "skill_targets": []})
 
     assert "attach_existing_skill" in prompt
-    assert "memory_candidate" in prompt
+    assert "mutate_memory" in prompt
     assert "unresolved" in prompt
     assert "skip_noise" in prompt
     assert "create_new_skill" not in prompt
-    assert "run_editor" not in prompt
+    assert "mutate_skill" not in prompt
     assert "archive_skill" not in prompt
     assert "approval" not in prompt.lower()
     assert "lane" not in prompt.lower()

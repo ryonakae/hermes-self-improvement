@@ -105,7 +105,7 @@ def test_live_mutation_backend_smoke_isolated_status_only(tmp_path, monkeypatch)
     hermes_home = tmp_path / "hermes-home"
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
     assert not Path.home().joinpath(".hermes", "skills").resolve().is_relative_to(tmp_path.resolve())
-    status = skill_agent_backend_status({"mutation": {"backend": "native_skill_tool_editor", "enabled": True}})
+    status = skill_agent_backend_status({"mutation": {"backend": "native_skill_tool", "enabled": True}})
     if not status.get("available"):
         pytest.skip(f"mutation backend unavailable: {status.get('reason')}")
     assert status["available"] is True

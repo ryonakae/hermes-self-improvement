@@ -52,14 +52,14 @@ def write_review_outcome(config: dict, payload: dict, name: str = "outcome.json"
         "episode_kind": "executed_mutation",
         "target_kind": "skill",
         "target_id": f"target-{Path(name).stem}",
-        "decision": "run_editor",
+        "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
         "learnable": True,
         "changed": True,
         "created_at": "2026-04-30T00:00:00+00:00",
         "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:editor",
+        "skill_agent_prompt_hash": "sha256:skill_agent",
         "evaluator_hash": "sha256:evaluator",
     })
     signals = {"validation_passed": False, "user_correction": True} if payload.get("outcome") in {"failed", "rejected_by_user"} else {"validation_passed": True}
@@ -549,7 +549,7 @@ def test_build_runtime_eval_cases_includes_role_episode_cases(tmp_path):
         "target_kind": "skill",
         "target_id": "demo-skill",
         "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:editor",
+        "skill_agent_prompt_hash": "sha256:skill_agent",
         "evaluator_hash": "sha256:evaluator",
         "decision": "skip",
         "action": "no_op",
@@ -565,7 +565,7 @@ def test_build_runtime_eval_cases_includes_role_episode_cases(tmp_path):
     cases = calibration.build_runtime_eval_cases(config)
 
     assert {case["case_type"] for case in cases} == {"improvement_planner_weak_only_skip"}
-    assert cases[0]["case_family"] == "planner_editor"
+    assert cases[0]["case_family"] == "skill_agent"
 
 
 def write_planner_quality_run(config: dict, payload: dict, name: str = "run.json") -> Path:
@@ -650,7 +650,7 @@ def overlay_candidate_set_payload(calibration, tmp_path: Path, *, candidate_set_
                 "change_status": "unchanged",
                 "base_prompt_hash": base_prompt_hash("skill_agent"),
                 "candidate_prompt": {"system_addendum": None, "replacement": None},
-                "candidate_hash": "sha256:editor-candidate",
+                "candidate_hash": "sha256:skill_agent-candidate",
             },
             "memory_agent_overlay": {
                 "target": "memory_agent_overlay",
@@ -855,9 +855,9 @@ def test_collect_calibration_evidence_includes_windowed_outcome_scores(tmp_path)
         "target_kind": "skill",
         "target_id": "demo-skill",
         "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:editor",
+        "skill_agent_prompt_hash": "sha256:skill_agent",
         "evaluator_hash": "sha256:evaluator",
-        "decision": "run_editor",
+        "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
         "learnable": True,
@@ -897,9 +897,9 @@ def test_collect_calibration_evidence_runs_outcome_prepass_before_scoring(tmp_pa
         "target_kind": "skill",
         "target_id": "demo-skill",
         "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:editor",
+        "skill_agent_prompt_hash": "sha256:skill_agent",
         "evaluator_hash": "sha256:evaluator",
-        "decision": "run_editor",
+        "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
         "learnable": True,

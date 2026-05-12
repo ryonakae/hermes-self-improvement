@@ -158,13 +158,13 @@ def _strength_counts(resolutions: list[dict[str, Any]]) -> dict[str, int]:
 def _summary_counts(decisions: list[dict[str, Any]], candidate_count: int) -> dict[str, int]:
     return {
         "candidate_count": candidate_count,
-        "selected_for_editor": sum(1 for item in decisions if item.get("decision") == "run_editor"),
-        "archive_candidates": sum(1 for item in decisions if item.get("decision") == "archive_skill"),
+        "mutate_skill_count": sum(1 for item in decisions if item.get("decision") == "mutate_skill"),
+        "archive_skill_count": sum(1 for item in decisions if item.get("decision") == "archive_skill"),
         "create_skill_candidates": sum(1 for item in decisions if item.get("decision") == "create_skill"),
         "skipped": sum(1 for item in decisions if item.get("decision") == "skip"),
         "deferred": sum(1 for item in decisions if item.get("decision") == "defer"),
-        "memory_candidates": sum(1 for item in decisions if item.get("decision") == "memory_candidate"),
-        "evaluator_candidates": sum(1 for item in decisions if item.get("decision") == "evaluator_candidate"),
+        "mutate_memory_count": sum(1 for item in decisions if item.get("decision") == "mutate_memory"),
+        "calibrate_evaluator_count": sum(1 for item in decisions if item.get("decision") == "calibrate_evaluator"),
     }
 
 
@@ -419,7 +419,7 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
         "unmatched_evidence": {"count": len(unmatched), "by_reason": by_reason, "examples": unmatched[:10]},
         "constraints": {
             "mutable_targets_only": True,
-            "editor_tools_only": ["skills_list", "skill_view", "skill_manage"],
+            "skill_agent_tools_only": ["skills_list", "skill_view", "skill_manage"],
             "defer_for": [],
             "defer_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge"],
         },
@@ -439,11 +439,11 @@ def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
         if evidence_ids and (strong_count or medium_count):
             decisions.append({
                 "skill": name,
-                "decision": "run_editor",
+                "decision": "mutate_skill",
                 "priority": "medium",
                 "risk": "low",
                 "change_intent": "address attached self-improvement evidence",
-                "editor_instructions": "Inspect the skill and apply a small, reusable procedural improvement only if the attached evidence still fits this skill.",
+                "skill_agent_instructions": "Inspect the skill and apply a small, reusable procedural improvement only if the attached evidence still fits this skill.",
                 "evidence_ids": evidence_ids,
                 "rationale": f"{len(evidence_ids)} attached evidence item(s) matched this mutable Curator candidate, including strong/medium evidence.",
             })
@@ -522,7 +522,7 @@ def _normalize_create_skill_decision(
         "priority": str(raw.get("priority") or "medium") if str(raw.get("priority") or "medium") in ALLOWED_PRIORITIES else "medium",
         "risk": str(raw.get("risk") or "medium") if str(raw.get("risk") or "medium") in ALLOWED_RISKS else "medium",
     }
-    for key, max_chars in (("reason", 240), ("rationale", 600), ("change_intent", 280), ("editor_instructions", 900)):
+    for key, max_chars in (("reason", 240), ("rationale", 600), ("change_intent", 280), ("skill_agent_instructions", 900)):
         if raw.get(key) is not None:
             normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
     if isinstance(raw.get("non_goals"), list):
@@ -542,30 +542,35 @@ def _normalize_decision(
     if skill not in candidate_names:
         return None
     decision = str(raw.get("decision") or "skip").strip()
+    raw_maintenance_action = str(raw.get("maintenance_action") or "").strip().lower()
+    if decision == "patch_skill":
+        decision = "mutate_skill"
+        raw_maintenance_action = raw_maintenance_action or "patch"
+    elif decision == "merge_skills":
+        decision = "mutate_skill"
+        raw_maintenance_action = raw_maintenance_action or "merge"
     normalized_decision = normalize_autonomous_decision({"decision": decision})
     decision = str(normalized_decision.get("decision") or "skip")
     maintenance_action = ""
     forced_skip_reason: str | None = None
     target_skill = str(raw.get("target_skill") or raw.get("successor") or "").strip()
-    if decision == "patch_skill":
-        maintenance_action = "patch_skill"
-        decision = "run_editor"
-    elif decision == "merge_skills":
-        maintenance_action = "merge_skills"
-        if not target_skill or target_skill not in candidate_names:
-            decision = "skip"
-            forced_skip_reason = "merge_target_missing_or_not_editable"
-        elif target_skill == skill:
-            decision = "skip"
-            forced_skip_reason = "merge_target_same_as_source"
+    if decision == "mutate_skill":
+        if raw_maintenance_action == "merge":
+            maintenance_action = "merge"
+            if not target_skill or target_skill not in candidate_names:
+                decision = "skip"
+                forced_skip_reason = "merge_target_missing_or_not_editable"
+            elif target_skill == skill:
+                decision = "skip"
+                forced_skip_reason = "merge_target_same_as_source"
         else:
-            decision = "run_editor"
+            maintenance_action = "patch"
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item)]
     allowed_evidence = evidence_by_candidate.get(skill) or set()
     evidence_ids = [item for item in evidence_ids if item in allowed_evidence]
-    if decision == "run_editor" and not evidence_ids:
+    if decision == "mutate_skill" and not evidence_ids:
         decision = "skip"
-        forced_skip_reason = "run_editor_without_attached_evidence"
+        forced_skip_reason = "mutate_skill_without_attached_evidence"
     if decision == "archive_skill" and not archive_markers_by_candidate.get(skill):
         decision = "skip"
         forced_skip_reason = "archive_without_lifecycle_evidence"
@@ -610,8 +615,8 @@ def _normalize_decision(
         normalized["reason"] = _redacted_preview(raw.get("reason"), max_chars=240)
     if raw.get("rationale") is not None:
         normalized["rationale"] = _redacted_preview(raw.get("rationale"), max_chars=600)
-    if decision == "run_editor":
-        for key, max_chars in (("change_intent", 280), ("editor_instructions", 900)):
+    if decision == "mutate_skill":
+        for key, max_chars in (("change_intent", 280), ("skill_agent_instructions", 900)):
             if raw.get(key) is not None:
                 normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
     elif decision == "archive_skill":
@@ -624,11 +629,11 @@ def _normalize_decision(
         successor = str(raw.get("successor") or "").strip()
         if successor:
             normalized["successor"] = successor
-    elif decision in {"memory_candidate", "evaluator_candidate", "defer"}:
+    elif decision in {"mutate_memory", "calibrate_evaluator", "defer"}:
         if raw.get("change_intent") is not None:
             normalized["change_intent"] = _redacted_preview(raw.get("change_intent"), max_chars=280)
     else:
-        notes = raw.get("notes") or raw.get("change_intent") or raw.get("editor_instructions")
+        notes = raw.get("notes") or raw.get("change_intent") or raw.get("skill_agent_instructions")
         if notes is not None:
             normalized["notes"] = _redacted_preview(notes, max_chars=360)
     if forced_skip_reason:
@@ -742,7 +747,7 @@ def build_improvement_planner_quality_report(
 ) -> dict[str, Any]:
     candidates = [item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)]
     planner_decisions = [item for item in planner.get("decisions") or [] if isinstance(item, dict)]
-    selected = [item for item in planner_decisions if item.get("decision") == "run_editor"]
+    selected = [item for item in planner_decisions if item.get("decision") == "mutate_skill"]
     skipped = [item for item in planner_decisions if item.get("decision") == "skip"]
     runner_decisions = runner_decisions or []
     prompt_lengths = []
@@ -790,11 +795,11 @@ def build_improvement_planner_quality_report(
         "attached_candidate_count": sum(1 for item in candidates if int(item.get("attached_evidence_count") or 0) > 0),
         "unmatched_evidence_count": int(unmatched.get("count") or 0),
         "unmatched_by_reason": unmatched.get("by_reason") if isinstance(unmatched.get("by_reason"), dict) else {},
-        "selected_for_editor": len(selected),
+        "mutate_skill_count": len(selected),
         "selected_with_evidence": sum(1 for item in selected if item.get("evidence_ids")),
-        "action_like_skips": sum(1 for item in skipped if item.get("change_intent") or item.get("editor_instructions")),
-        "memory_candidates": sum(1 for item in planner_decisions if item.get("decision") == "memory_candidate"),
-        "evaluator_candidates": sum(1 for item in planner_decisions if item.get("decision") == "evaluator_candidate"),
+        "action_like_skips": sum(1 for item in skipped if item.get("change_intent") or item.get("skill_agent_instructions")),
+        "mutate_memory_count": sum(1 for item in planner_decisions if item.get("decision") == "mutate_memory"),
+        "calibrate_evaluator_count": sum(1 for item in planner_decisions if item.get("decision") == "calibrate_evaluator"),
         "hint_attached_evidence_count": len(hint_attached_evidence_ids),
         "hint_attached_candidate_count": len(hint_attached_candidates),
         "attachments_by_match_kind": attachments_by_match_kind,

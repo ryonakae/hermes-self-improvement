@@ -576,7 +576,7 @@ def _is_generic_review_proposal(proposal: dict[str, Any]) -> bool:
     target = str(proposal.get("target") or "").lower()
     title = str(proposal.get("title") or "").lower()
     return (
-        action in {"review_existing_skill_or_add_pitfall", "review_memory_candidate"}
+        action in {"review_existing_skill_or_add_pitfall", "review_memory_gap_candidate"}
         or target in {"skill_or_prompt", "memory"}
         or title.startswith("review recurring")
     )
@@ -585,7 +585,7 @@ def _is_generic_review_proposal(proposal: dict[str, Any]) -> bool:
 def _has_concrete_remediation(proposal: dict[str, Any]) -> bool:
     action = str(proposal.get("action") or "").lower()
     text = " ".join(str(proposal.get(key) or "") for key in ("title", "reason", "target", "action")).lower()
-    if action and action not in {"review_existing_skill_or_add_pitfall", "review_memory_candidate"}:
+    if action and action not in {"review_existing_skill_or_add_pitfall", "review_memory_gap_candidate"}:
         return True
     concrete_terms = (
         "requires",

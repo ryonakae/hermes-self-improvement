@@ -777,10 +777,10 @@ def build_skill_agent_backend(config: dict[str, Any] | None = None) -> SkillAgen
             return CallableBackend()
     mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
     enabled = bool(mutation.get("enabled", True))
-    backend_name = str(mutation.get("backend") or "native_skill_tool_editor")
+    backend_name = str(mutation.get("backend") or "native_skill_tool")
     if not enabled or backend_name == "disabled":
         return UnavailableSkillAgentBackend("skill_agent_backend_disabled")
-    if backend_name != "native_skill_tool_editor":
+    if backend_name != "native_skill_tool":
         return UnavailableSkillAgentBackend("skill_agent_backend_unknown")
     executor = resolve_skill_tool_executor(config)
     return NativeSkillAgentBackend(tool_executor=executor, limits=SkillAgentBackendLimits.from_config(config))
@@ -788,10 +788,10 @@ def build_skill_agent_backend(config: dict[str, Any] | None = None) -> SkillAgen
 
 def skill_agent_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
-    configured = str(mutation.get("backend") or "native_skill_tool_editor")
+    configured = str(mutation.get("backend") or "native_skill_tool")
     if bool(mutation.get("enabled", True)) is False or configured == "disabled":
         return {"configured": configured, "available": False, "reason": "skill_agent_backend_disabled"}
-    if configured != "native_skill_tool_editor":
+    if configured != "native_skill_tool":
         return {"configured": configured, "available": False, "reason": "skill_agent_backend_unknown"}
     executor = resolve_skill_tool_executor(config)
     readiness = check_skill_tool_executor_readiness(executor)

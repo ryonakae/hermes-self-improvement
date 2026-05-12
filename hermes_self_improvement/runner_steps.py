@@ -15,7 +15,7 @@ from .memory_context import build_related_memory_lookup_context
 from .observer import _redact_text
 from .improvement_planner import build_improvement_planner_digest, build_improvement_planner_quality_report, run_improvement_planner
 from .prompt_overlays import load_active_prompt_overlay
-from .prompts import base_prompt_hash, render_editor_instructions
+from .prompts import base_prompt_hash, render_skill_agent_instructions
 from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
 from .target_resolver import build_target_resolution_digest, run_target_resolver
 
@@ -25,7 +25,7 @@ MEMORY_AGENT_CONSTRAINTS = (
     "Use only memory tool and submit_mutation_result.",
     "Do not use terminal/file/git/direct filesystem tools.",
 )
-MEMORY_AGENT_DISPATCH_KINDS = {"conversation_memory_gap_candidate"}
+MEMORY_AGENT_DISPATCH_KINDS = {"memory_gap_candidate"}
 
 
 def _memory_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -681,7 +681,7 @@ def _memory_inventory_operations(evidence: list[dict[str, Any]], config: dict[st
 MAX_EDITOR_EVIDENCE_ITEMS = 8
 
 
-def _compact_editor_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _compact_skill_agent_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     compact: list[dict[str, Any]] = []
     for item in evidence[:MAX_EDITOR_EVIDENCE_ITEMS]:
         if not isinstance(item, dict):
@@ -703,7 +703,7 @@ def _compact_editor_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, A
         compact.append({
             "kind": "omitted_evidence_summary",
             "omitted_evidence_count": len(evidence) - MAX_EDITOR_EVIDENCE_ITEMS,
-            "reason": "editor prompt evidence cap; full evidence remains in run artifact",
+            "reason": "skill_agent prompt evidence cap; full evidence remains in run artifact",
         })
     return compact
 
@@ -722,14 +722,14 @@ def build_skill_agent_task(
 ) -> dict[str, Any]:
     candidate_meta = candidate or {}
     planner_meta = planner_decision or {}
-    compact_evidence = _compact_editor_evidence(evidence)
+    compact_evidence = _compact_skill_agent_evidence(evidence)
     evidence_by_id = {str(item.get("id") or ""): item for item in compact_evidence if isinstance(item, dict) and item.get("id")}
     llm_brief = render_candidate_markdown(
         {**candidate_meta, "name": skill_name, "evidence_ids": [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]},
         evidence_by_id,
     )
     overlay = load_active_prompt_overlay(config or {}, role="skill_agent", base_hash=base_prompt_hash("skill_agent")) if config is not None else None
-    rendered = render_editor_instructions(
+    rendered = render_skill_agent_instructions(
         skill_name=skill_name,
         candidate=candidate_meta,
         planner_decision=planner_meta,
@@ -738,13 +738,13 @@ def build_skill_agent_task(
         llm_brief_markdown=llm_brief,
     )
     instructions = rendered["instructions"]
-    if planner_meta.get("editor_instructions"):
-        instructions = instructions + "\n\nPlanner maintenance instructions:\n" + str(planner_meta.get("editor_instructions"))
+    if planner_meta.get("skill_agent_instructions"):
+        instructions = instructions + "\n\nPlanner maintenance instructions:\n" + str(planner_meta.get("skill_agent_instructions"))
     observed_problem = planner_meta.get("observed_problem") or planner_meta.get("change_intent") or planner_meta.get("rationale") or "Improve the target skill if current content confirms the attached evidence."
-    desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("editor_instructions") or planner_meta.get("change_intent") or "A small reusable procedural improvement, or a non-mutating stop if already covered."
+    desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("skill_agent_instructions") or planner_meta.get("change_intent") or "A small reusable procedural improvement, or a non-mutating stop if already covered."
     suggested_focus = planner_meta.get("suggested_focus") if isinstance(planner_meta.get("suggested_focus"), list) else []
-    if not suggested_focus and planner_meta.get("editor_instructions"):
-        suggested_focus = [planner_meta.get("editor_instructions")]
+    if not suggested_focus and planner_meta.get("skill_agent_instructions"):
+        suggested_focus = [planner_meta.get("skill_agent_instructions")]
     non_goals = planner_meta.get("non_goals") if isinstance(planner_meta.get("non_goals"), list) else []
     if not non_goals:
         non_goals = [
@@ -792,14 +792,14 @@ def build_skill_create_agent_task(
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     planner_meta = planner_decision or {}
-    compact_evidence = _compact_editor_evidence(evidence)
+    compact_evidence = _compact_skill_agent_evidence(evidence)
     evidence_ids = [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]
     llm_brief = render_candidate_markdown(
         {"name": skill_name, "source": "planner_create_skill", "state": "missing", "evidence_ids": evidence_ids, "risk": planner_meta.get("risk")},
         {str(item.get("id") or ""): item for item in compact_evidence if isinstance(item, dict) and item.get("id")},
     )
     observed_problem = planner_meta.get("observed_problem") or planner_meta.get("change_intent") or planner_meta.get("rationale") or planner_meta.get("reason") or "Create a missing reusable Hermes skill if evidence proves a durable workflow gap."
-    desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("editor_instructions") or "A compact SKILL.md with trigger conditions, concrete steps, pitfalls, and verification notes."
+    desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("skill_agent_instructions") or "A compact SKILL.md with trigger conditions, concrete steps, pitfalls, and verification notes."
     non_goals = planner_meta.get("non_goals") if isinstance(planner_meta.get("non_goals"), list) else []
     if not non_goals:
         non_goals = [
@@ -911,7 +911,7 @@ def run_skill_improvement_step(
                 "missing_evidence_id_count": max(0, len(evidence_ids) - len(attached_evidence)),
                 "planner_decision": planner_decision,
                 "change_intent": planner_decision.get("change_intent"),
-                "editor_instructions": planner_decision.get("editor_instructions"),
+                "skill_agent_instructions": planner_decision.get("skill_agent_instructions"),
                 "rationale": planner_decision.get("rationale"),
             }
             task = build_skill_create_agent_task(skill_name=skill_name, evidence=attached_evidence, planner_decision=planner_decision, config=config)
@@ -972,7 +972,7 @@ def run_skill_improvement_step(
             "missing_evidence_id_count": max(0, len(evidence_ids) - len(attached_evidence)),
             "planner_decision": planner_decision,
             "change_intent": planner_decision.get("change_intent"),
-            "editor_instructions": planner_decision.get("editor_instructions"),
+            "skill_agent_instructions": planner_decision.get("skill_agent_instructions"),
             "rationale": planner_decision.get("rationale"),
         }
         for key in ("raw_evidence_skill", "normalized_skill", "evidence_match"):
@@ -1011,7 +1011,7 @@ def run_skill_improvement_step(
                 "result": result,
             })
             continue
-        if decision_kind != "run_editor":
+        if decision_kind != "mutate_skill":
             if decision_kind == "defer" and not attached_evidence:
                 decisions.append({
                     **base_decision,
@@ -1037,8 +1037,8 @@ def run_skill_improvement_step(
         if not mutate:
             decisions.append({
                 **base_decision,
-                "decision": "run_editor_preview",
-                "reason": "planner_run_editor_preview",
+                "decision": "mutate_skill_preview",
+                "reason": "planner_mutate_skill_preview",
                 "changed": False,
                 "task": task,
             })

@@ -705,7 +705,7 @@ def collect_skill_inventory_candidates(curator_telemetry: dict[str, Any] | None,
             group_kind="stale_singleton_skill",
             target_names=[name],
             rationale="A stale Hermes-created mutable skill may need archive, refresh, or skip after planner review.",
-            hints=["planner may choose archive_skill, run_editor, or skip", "do not archive if active references or successor checks fail"],
+            hints=["planner may choose archive_skill, mutate_skill, or skip", "do not archive if active references or successor checks fail"],
             risk="medium",
             skills=[item],
         ))
@@ -777,7 +777,7 @@ def _uncertain_memory_text(text: str) -> bool:
 
 
 def _stale_memory_pair_action_hint(entries: list[dict[str, Any]]) -> dict[str, Any]:
-    base = {"resolution_kind": "memory_candidate"}
+    base = {"resolution_kind": "mutate_memory"}
     if len(entries) != 2:
         return {**base, "suggested_action": "defer", "reason": "ambiguous_stale_pair"}
     old_entry, current_entry = entries[0], entries[1]

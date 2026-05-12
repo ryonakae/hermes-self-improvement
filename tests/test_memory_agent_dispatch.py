@@ -13,8 +13,8 @@ def _pack(evidence: list[dict]):
 def _conversation_candidate(candidate_id: str = "m1", routing_hint: str = "new") -> dict:
     return {
         "id": candidate_id,
-        "kind": "conversation_memory_gap_candidate",
-        "source": "conversation_memory",
+        "kind": "memory_gap_candidate",
+        "source": "memory_extractor",
         "likely_targets": [{"target": "memory", "weight": 0.9}],
         "memory": {
             "candidate_id": candidate_id,

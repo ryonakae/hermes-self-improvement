@@ -14,13 +14,13 @@ class FakePrediction:
         "targets": {
             "improvement_planner_overlay": {
                 "change_status": "changed",
-                "candidate_prompt": {"addenda": "Require concrete evidence ids before run_editor.", "replacement": None},
+                "candidate_prompt": {"addenda": "Require concrete evidence ids before mutate_skill.", "replacement": None},
                 "rationale": "Planner selected weak evidence too often.",
             },
             "skill_agent_overlay": {
                 "change_status": "unchanged",
                 "candidate_prompt": {"replacement": None},
-                "rationale": "No editor change needed.",
+                "rationale": "No skill_agent change needed.",
             },
             "evaluator_overlay": {
                 "change_status": "unchanged",
@@ -93,14 +93,14 @@ class FakeDspy:
             return FakePrediction()
 
 
-def overlay_case(target: str, *, case_hash: str | None = None, outcome: str = "unknown", changed: bool = False, executed: bool = False, expected: dict | None = None, decision: str = "run_editor") -> dict:
+def overlay_case(target: str, *, case_hash: str | None = None, outcome: str = "unknown", changed: bool = False, executed: bool = False, expected: dict | None = None, decision: str = "mutate_skill") -> dict:
     return {
         "schema_name": "self_improvement_runtime_eval_case",
         "case_family": "overlay_set",
         "target": target,
         "role": target.removesuffix("_overlay") if target != "evaluator_overlay" else "evaluator",
         "input": {"evidence_ids": ["ev1"], "mutation_task": {"decision": decision}, "outcome": {"outcome": outcome, "changed": changed, "executed": executed}},
-        "expected": expected or {"decision": "run_editor"},
+        "expected": expected or {"decision": "mutate_skill"},
         "case_hash": case_hash or f"sha256:{target}",
     }
 
@@ -109,8 +109,8 @@ def test_select_overlay_eval_cases_balances_targets_and_prefers_high_signal():
     cases = [
         overlay_case("improvement_planner_overlay", case_hash="sha256:planner-low"),
         overlay_case("improvement_planner_overlay", case_hash="sha256:planner-high", outcome="failed", expected={"decision": "skip"}, decision="skip"),
-        overlay_case("skill_agent_overlay", case_hash="sha256:editor-low"),
-        overlay_case("skill_agent_overlay", case_hash="sha256:editor-high", changed=True, executed=True, expected={"mutation": "skip"}),
+        overlay_case("skill_agent_overlay", case_hash="sha256:skill_agent-low"),
+        overlay_case("skill_agent_overlay", case_hash="sha256:skill_agent-high", changed=True, executed=True, expected={"mutation": "skip"}),
         overlay_case("evaluator_overlay", case_hash="sha256:evaluator-low"),
         overlay_case("evaluator_overlay", case_hash="sha256:evaluator-high", outcome="rejected_by_user", expected={"recommendation": "defer"}),
     ]
@@ -119,7 +119,7 @@ def test_select_overlay_eval_cases_balances_targets_and_prefers_high_signal():
 
     assert [case["case_hash"] for case in selected] == [
         "sha256:planner-high",
-        "sha256:editor-high",
+        "sha256:skill_agent-high",
         "sha256:evaluator-high",
     ]
     assert [case["target"] for case in selected] == ["improvement_planner_overlay", "skill_agent_overlay", "evaluator_overlay"]
@@ -128,7 +128,7 @@ def test_select_overlay_eval_cases_balances_targets_and_prefers_high_signal():
 def test_select_overlay_eval_cases_keeps_recent_order_after_balanced_selection():
     cases = [
         overlay_case("improvement_planner_overlay", case_hash="sha256:planner-new", outcome="failed"),
-        overlay_case("skill_agent_overlay", case_hash="sha256:editor-new", outcome="failed"),
+        overlay_case("skill_agent_overlay", case_hash="sha256:skill_agent-new", outcome="failed"),
         overlay_case("evaluator_overlay", case_hash="sha256:evaluator-new", outcome="failed"),
         overlay_case("improvement_planner_overlay", case_hash="sha256:planner-old", outcome="failed"),
     ]
@@ -137,7 +137,7 @@ def test_select_overlay_eval_cases_keeps_recent_order_after_balanced_selection()
 
     assert [case["case_hash"] for case in selected] == [
         "sha256:planner-new",
-        "sha256:editor-new",
+        "sha256:skill_agent-new",
         "sha256:evaluator-new",
         "sha256:planner-old",
     ]
@@ -146,9 +146,9 @@ def test_select_overlay_eval_cases_keeps_recent_order_after_balanced_selection()
 def test_select_overlay_eval_cases_prefers_executed_cases_over_unexecuted_skips():
     cases = [
         overlay_case("improvement_planner_overlay", case_hash="sha256:planner-skip", expected={"decision": "skip"}, decision="skip"),
-        overlay_case("improvement_planner_overlay", case_hash="sha256:planner-executed", executed=True, expected={"decision": "run_editor"}),
-        overlay_case("skill_agent_overlay", case_hash="sha256:editor-skip", expected={"mutation": "skip"}, decision="skip"),
-        overlay_case("skill_agent_overlay", case_hash="sha256:editor-executed", executed=True, expected={"mutation": "no_change"}),
+        overlay_case("improvement_planner_overlay", case_hash="sha256:planner-executed", executed=True, expected={"decision": "mutate_skill"}),
+        overlay_case("skill_agent_overlay", case_hash="sha256:skill_agent-skip", expected={"mutation": "skip"}, decision="skip"),
+        overlay_case("skill_agent_overlay", case_hash="sha256:skill_agent-executed", executed=True, expected={"mutation": "no_change"}),
         overlay_case("evaluator_overlay", case_hash="sha256:evaluator-report", expected={"recommendation": "skip"}, decision="skip"),
         overlay_case("evaluator_overlay", case_hash="sha256:evaluator-executed", executed=True, expected={"recommendation": "skip"}),
     ]
@@ -157,7 +157,7 @@ def test_select_overlay_eval_cases_prefers_executed_cases_over_unexecuted_skips(
 
     assert [case["case_hash"] for case in selected] == [
         "sha256:planner-executed",
-        "sha256:editor-executed",
+        "sha256:skill_agent-executed",
         "sha256:evaluator-executed",
     ]
 
@@ -178,7 +178,7 @@ def test_optimize_overlay_candidate_set_calls_dspy_gepa_and_returns_candidate_ta
     assert result["candidate_score"] == 0.8
     assert set(result["targets"]) == {"improvement_planner_overlay", "skill_agent_overlay", "evaluator_overlay"}
     assert result["targets"]["improvement_planner_overlay"]["change_status"] == "changed"
-    assert result["targets"]["improvement_planner_overlay"]["candidate_prompt"]["system_addendum"] == "Require concrete evidence ids before run_editor."
+    assert result["targets"]["improvement_planner_overlay"]["candidate_prompt"]["system_addendum"] == "Require concrete evidence ids before mutate_skill."
     assert Path(result["artifact_path"]).exists()
     assert FakeGEPA.calls
     assert FakeGEPA.calls[0]["kwargs"]["max_full_evals"] == 2

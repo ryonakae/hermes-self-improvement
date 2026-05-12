@@ -60,7 +60,7 @@ def runtime_layout(config: dict[str, Any]) -> dict[str, Path]:
         "evaluator_programs": evaluator / "programs",
         "evaluator_candidates": evaluator / "candidates",
         "runtime_eval_cases": evaluator / "runtime-eval-cases",
-        "planner_editor_runtime_eval_cases": evaluator / "runtime-eval-cases" / "planner-editor",
+        "skill_agent_runtime_eval_cases": evaluator / "runtime-eval-cases" / "skill-agent",
         "active_prompt_overlays": active_prompts_path(config),
         "prompt_candidates": evaluator / "prompt-candidates",
         "prompt_candidate_sets": evaluator / "prompt-candidate-sets",

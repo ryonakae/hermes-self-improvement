@@ -54,7 +54,7 @@ def _base_case(episode: dict[str, Any], *, case_type: str, role: str, expected: 
     case = {
         "schema_name": "self_improvement_runtime_eval_case",
         "schema_version": "1.0",
-        "case_family": "planner_editor",
+        "case_family": "skill_agent",
         "case_type": case_type,
         "role": role,
         "source": {
@@ -169,7 +169,7 @@ def _case_from_episode(episode: dict[str, Any]) -> dict[str, Any] | None:
     strength = _evidence_strength(episode)
     reason = _reason(episode)
 
-    if decision == "run_editor" and action == "no_op" and "target mismatch" in reason.lower():
+    if decision == "mutate_skill" and action == "no_op" and "target mismatch" in reason.lower():
         return _base_case(
             episode,
             case_type="skill_agent_target_mismatch_skip",
@@ -193,12 +193,12 @@ def _case_from_episode(episode: dict[str, Any]) -> dict[str, Any] | None:
             expected={"decision": "skip", "allowed_decisions": ["skip", "defer"], "requires_evidence_ids": False},
         )
 
-    if decision == "run_editor" and strength in {"strong", "exact"}:
+    if decision == "mutate_skill" and strength in {"strong", "exact"}:
         return _base_case(
             episode,
-            case_type="improvement_planner_exact_evidence_run_editor",
+            case_type="improvement_planner_exact_evidence_mutate_skill",
             role="improvement_planner",
-            expected={"decision": "run_editor", "requires_evidence_ids": True},
+            expected={"decision": "mutate_skill", "requires_evidence_ids": True},
         )
 
     return None
@@ -293,7 +293,7 @@ def _improve_run_overlay_cases(config: dict[str, Any], *, limit: int) -> list[di
         summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
         unmatched_count = int(summary.get("unmatched_candidate_count") or 0)
         themes = [str(item) for item in (summary.get("unmatched_candidate_themes") or []) if str(item)] if isinstance(summary.get("unmatched_candidate_themes"), list) else []
-        memory_gap_count = int(summary.get("conversation_memory_gap_candidate_count") or 0)
+        memory_gap_count = int(summary.get("memory_gap_candidate_count") or 0)
         step_decisions = payload.get("step_decisions") if isinstance(payload.get("step_decisions"), dict) else {}
         skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
         planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
@@ -313,11 +313,11 @@ def _improve_run_overlay_cases(config: dict[str, Any], *, limit: int) -> list[di
         if memory_gap_count > 0:
             cases.append(_improve_run_overlay_case(
                 run=payload,
-                case_type="improvement_planner_overlay_from_conversation_memory_gap",
+                case_type="improvement_planner_overlay_from_memory_gap",
                 expected={"decision": "apply", "target_kind": "memory", "allow_replace_or_add": True},
                 input_payload={
-                    "source_kind": "conversation_memory_gap",
-                    "conversation_memory_gap_candidate_count": memory_gap_count,
+                    "source_kind": "memory_gap",
+                    "memory_gap_candidate_count": memory_gap_count,
                 },
             ))
     return cases
