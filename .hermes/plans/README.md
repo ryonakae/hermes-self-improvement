@@ -20,9 +20,10 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
-- `2026-05-10-milestone-3-skill-quality-evaluator.md` (phase 3.1)
-  - **Status:** partially implemented / phase 3.1 done.
-  - Generates runtime-private evaluator eval cases (`evaluator_skill_quality_{good|needs_patch|too_generic|missing_attached_evidence}_review`) from executed-mutation skill episodes with post-validation signals (has_pitfalls / has_verification / has_trigger_conditions / has_concrete_steps / memory_shaped / content_too_short / content_too_long) and `attached_evidence_count`. Each case packages skill excerpt + evidence summary + target operation + post-validation state + expected quality bucket so calibration / GEPA can learn the quality classification without pinning deterministic code to semantic judgements.
+- `2026-05-10-milestone-3-skill-quality-evaluator.md` (phases 3.1 + 3.2)
+  - **Status:** partially implemented / phases 3.1 and 3.2 done, phase 3.3 remains.
+  - Phase 3.1 generates runtime-private evaluator eval cases (`evaluator_skill_quality_{good|needs_patch|too_generic|missing_attached_evidence}_review`) from executed-mutation skill episodes with post-validation signals (has_pitfalls / has_verification / has_trigger_conditions / has_concrete_steps / memory_shaped / content_too_short / content_too_long) and `attached_evidence_count`. Each case packages skill excerpt + evidence summary + target operation + post-validation state + expected quality bucket so calibration / GEPA can learn the quality classification without pinning deterministic code to semantic assessments.
+  - Phase 3.2 propagates `quality_signals` (`needs_patch` / `missing_sections` / `post_validation_status`) from skill_candidates through the planner digest into a new "Editable skills with quality signals" prompt section, and into the skill_agent task / instructions as a "Quality patch semantics" block. `needs_patch` skills become a bounded `mutate_skill (maintenance_action="patch")` candidate limited to the listed `missing_sections`, with no broad rewrite and no automatic retry.
 
 The previous completed implementation plan is:
 
