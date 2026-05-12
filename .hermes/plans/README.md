@@ -20,10 +20,11 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
-- `2026-05-10-milestone-2-duplicate-existing-coverage.md` (phases 2.1 + 2.2)
-  - **Status:** mostly implemented / phases 2.1 and 2.2 done, phase 2.3 remains.
+- `2026-05-10-milestone-2-duplicate-existing-coverage.md` (phases 2.1 + 2.2 + 2.3)
+  - **Status:** implemented / phases 2.1, 2.2, 2.3 all complete.
   - Phase 2.1 attaches a deterministic `coverage_fit` bundle (`exact_duplicate / partial_overlap / reference_only / no_existing_fit` plus matched skill names and evidence count) to each maintenance candidate and renders it in the planner prompt, so the planner can reason about duplicate vs partial vs reference vs uncovered without forcing the action.
   - Phase 2.2 propagates `maintenance_action` (`patch` / `merge`) and the merge `target_skill` from the planner decision into the skill_agent task and prompt. The skill_agent task carries `maintenance_action` / `target_skill` fields, and the rendered instructions include an explicit `maintenance_action: patch|merge` (plus `target_skill: <name>` for merge) line plus matching fields in the program-owned task summary. The patch/merge sub-action is wired end-to-end through the existing native skill patch harness without inventing a new mutation lane.
+  - Phase 2.3 gates archive execution by an injected official archive tool: when `_skill_archive_fn` is absent, the runner now falls back to `archive_skill_preview` with `reason="archive_blocked_no_official_tool"` instead of silently invoking `tools.skill_usage.archive_skill`. Pinned / reference / state-mismatched archive candidates remain blocked at the planner stage with distinct reasons. For merge, the skill_agent prompt now spells out the merge semantics (patch the source skill with a migration pointer to `target_skill`, treat the archive as preview only, no direct deletion).
 
 The previous completed implementation plan is:
 

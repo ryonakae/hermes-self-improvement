@@ -8,8 +8,8 @@
 
 **Goal:** Turn duplicate or already-covered proposed skill changes into useful no-op accounting, and route low-risk improvements into patch/merge/archive candidates.
 
-**Current state:** `covered_by_existing_skill` and `duplicate_prevented` are implemented for create proposals. Phase 2.1 attaches a bounded `coverage_fit` bundle to each maintenance candidate. Phase 2.2 propagates `maintenance_action` (patch / merge) and the merge `target_skill` from the planner decision into the skill_agent task and prompt, so the skill_agent can execute through the existing native skill patch harness with the planner-selected sub-action. Phase 2.3 (merge/archive preview semantics) still remains.
-**Execution status:** Mostly implemented; phases 2.1 and 2.2 done, phase 2.3 remains.
+**Current state:** Implemented end-to-end. `covered_by_existing_skill` / `duplicate_prevented` are recorded for create proposals. Phase 2.1 attaches a deterministic `coverage_fit` bundle to each maintenance candidate. Phase 2.2 propagates `maintenance_action` (patch / merge) and the merge `target_skill` from the planner decision into the skill_agent task and prompt. Phase 2.3 makes archive execution gated by an injected official archive tool (otherwise it falls back to `archive_skill_preview` with `reason="archive_blocked_no_official_tool"`), and adds explicit merge semantics in the skill_agent prompt (patch the source skill with a migration pointer to `target_skill`, treat archive as preview only, no direct deletion).
+**Execution status:** Implemented; phases 2.1, 2.2, 2.3 all complete.
 
 **Depends on:** Milestone 1 post-validation for any executed patch/merge/archive follow-up.
 
@@ -68,6 +68,8 @@
 4. Preserve `noop_outcome=existing_skill_sufficient` only when planner chooses skip/no-op, not patch.
 
 ### Phase 2.3 — Merge/archive preview semantics
+
+**Status:** implemented.
 
 **Objective:** Safely represent merge/archive candidates without executing destructive changes prematurely.
 
