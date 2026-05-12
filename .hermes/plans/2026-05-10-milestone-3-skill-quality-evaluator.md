@@ -8,8 +8,8 @@
 
 **Goal:** Review created/updated skills for quality, evidence fit, and low-risk self-patch opportunities.
 
-**Current state:** Deterministic diagnostics exist for frontmatter, pitfalls, verification, triggers, concrete steps, memory-shaped content, compactness, and attached evidence. Phase 3.1 generates runtime-private evaluator eval cases (`evaluator_skill_quality_{good|needs_patch|too_generic|missing_attached_evidence}_review`) from executed-mutation skill episodes. Phase 3.2 propagates `quality_signals` from skill_candidates through the planner digest into the prompt (new "Editable skills with quality signals" section) and into the skill_agent task / instructions (new "Quality patch semantics" block) so `needs_patch` skills become a bounded `mutate_skill (maintenance_action="patch")` candidate limited to the listed `missing_sections`, with no broad rewrite and no automatic retry. Quality-aware outcome wiring (phase 3.3) still remains.
-**Execution status:** Partially implemented; phases 3.1 and 3.2 done, phase 3.3 remains.
+**Current state:** Implemented end-to-end. Phase 3.1 generates runtime-private evaluator eval cases for the four quality buckets from executed-mutation skill episodes. Phase 3.2 propagates `quality_signals` from skill_candidates through the planner digest and prompt and into the skill_agent task / instructions so `needs_patch` skills become a bounded `mutate_skill (maintenance_action="patch")` candidate limited to the listed `missing_sections`. Phase 3.3 adds `Skill quality:` reporting lines `quality patch candidates` (planner-side patch picks) and `quality patched` (skill_agent-accepted patch executions). Existing outcome_scoring continues to keep `skill_quality_needs_patch_penalty` and friends under observation, so a successful low-risk patch with post-validation readback drops the penalty and the next episode can transition from quality hold to improved.
+**Execution status:** Implemented; phases 3.1, 3.2, 3.3 all complete.
 
 **Depends on:** Milestone 1 post-validation and Milestone 2 patch-existing-skill path.
 
@@ -68,6 +68,8 @@
 4. Reuse intended-change readback verification.
 
 ### Phase 3.3 — Quality status affects reporting and calibration
+
+**Status:** implemented.
 
 **Objective:** Ensure quality review changes how outcomes are interpreted and how calibration sees weak evidence.
 
