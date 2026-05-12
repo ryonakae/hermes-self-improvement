@@ -8,8 +8,8 @@
 
 **Goal:** Turn duplicate or already-covered proposed skill changes into useful no-op accounting, and route low-risk improvements into patch/merge/archive candidates.
 
-**Current state:** `covered_by_existing_skill` and `duplicate_prevented` are implemented for create proposals. Phase 2.1 now attaches a bounded `coverage_fit` bundle (`exact_duplicate / partial_overlap / reference_only / no_existing_fit`) to each maintenance candidate and renders it in the planner prompt. Patch/merge/archive executor handling and outcome tracking still remain.
-**Execution status:** Partially implemented; phase 2.1 done, phases 2.2 / 2.3 remain.
+**Current state:** `covered_by_existing_skill` and `duplicate_prevented` are implemented for create proposals. Phase 2.1 attaches a bounded `coverage_fit` bundle to each maintenance candidate. Phase 2.2 propagates `maintenance_action` (patch / merge) and the merge `target_skill` from the planner decision into the skill_agent task and prompt, so the skill_agent can execute through the existing native skill patch harness with the planner-selected sub-action. Phase 2.3 (merge/archive preview semantics) still remains.
+**Execution status:** Mostly implemented; phases 2.1 and 2.2 done, phase 2.3 remains.
 
 **Depends on:** Milestone 1 post-validation for any executed patch/merge/archive follow-up.
 
@@ -50,6 +50,8 @@
 3. Render coverage fit in the planner prompt without forcing the action.
 
 ### Phase 2.2 — Patch existing skill candidate path
+
+**Status:** implemented.
 
 **Objective:** Let the improvement_planner choose `mutate_skill` with `maintenance_action="patch"` for editable existing coverage when the new evidence is additive.
 

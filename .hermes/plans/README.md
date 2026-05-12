@@ -20,9 +20,10 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
-- `2026-05-10-milestone-2-duplicate-existing-coverage.md` (phase 2.1)
-  - **Status:** partially implemented / phase 2.1 done.
-  - Attaches a deterministic `coverage_fit` bundle (`exact_duplicate / partial_overlap / reference_only / no_existing_fit` plus matched skill names and evidence count) to each maintenance candidate and renders it compactly in the planner prompt, so the planner can reason about duplicate vs partial vs reference vs uncovered without forcing the action.
+- `2026-05-10-milestone-2-duplicate-existing-coverage.md` (phases 2.1 + 2.2)
+  - **Status:** mostly implemented / phases 2.1 and 2.2 done, phase 2.3 remains.
+  - Phase 2.1 attaches a deterministic `coverage_fit` bundle (`exact_duplicate / partial_overlap / reference_only / no_existing_fit` plus matched skill names and evidence count) to each maintenance candidate and renders it in the planner prompt, so the planner can reason about duplicate vs partial vs reference vs uncovered without forcing the action.
+  - Phase 2.2 propagates `maintenance_action` (`patch` / `merge`) and the merge `target_skill` from the planner decision into the skill_agent task and prompt. The skill_agent task carries `maintenance_action` / `target_skill` fields, and the rendered instructions include an explicit `maintenance_action: patch|merge` (plus `target_skill: <name>` for merge) line plus matching fields in the program-owned task summary. The patch/merge sub-action is wired end-to-end through the existing native skill patch harness without inventing a new mutation lane.
 
 The previous completed implementation plan is:
 
