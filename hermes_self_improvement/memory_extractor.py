@@ -145,12 +145,41 @@ def _memory_has_conflicting_specifics(left: str, right: str) -> bool:
     return left_specific != right_specific
 
 
+_RAW_TOOL_OUTPUT_MARKERS = ("```", "stdout:", "stderr:", "\n$ ", "$ ")
+_WORKFLOW_SHAPED_MARKERS = ("step 1", "step 2", "first run", "then run", "run `", "run $", "execute `")
+
+
+def _looks_raw_tool_output(text: str) -> bool:
+    lowered = str(text or "").lower()
+    if "```" in text:
+        return True
+    return any(marker in lowered for marker in _RAW_TOOL_OUTPUT_MARKERS if marker != "```")
+
+
+def _looks_workflow_shaped(text: str) -> bool:
+    lowered = str(text or "").lower()
+    return any(marker in lowered for marker in _WORKFLOW_SHAPED_MARKERS)
+
+
 def reconcile_memory_extractor_payload_with_existing_memories(payload: Any, *, existing_memories: list[Any] | None = None) -> dict[str, Any]:
     normalized = normalize_memory_extractor_payload(payload)
     memories = existing_memories or []
     missing_relations = {"", "missing", "new", "new_memory", "no_existing", "no_existing_memory"}
     for candidate in normalized.get("candidates") or []:
         if candidate.get("routing_hint") == "skip_sensitive":
+            continue
+        fact_text = str(candidate.get("candidate_fact") or "")
+        if _looks_raw_tool_output(fact_text):
+            candidate["routing_hint"] = "defer_unclear"
+            candidate["skip_reason"] = "not_memory_raw_tool_output"
+            candidate["suggested_route"] = "diagnostic"
+            candidate["reason"] = "Candidate fact appears to be raw tool output; keep as diagnostic, not memory."
+            continue
+        if _looks_workflow_shaped(fact_text):
+            candidate["routing_hint"] = "defer_unclear"
+            candidate["skip_reason"] = "not_memory_workflow_to_skill"
+            candidate["suggested_route"] = "skill"
+            candidate["reason"] = "Candidate fact looks procedural; route to skill maintenance rather than memory add."
             continue
         relation = str(candidate.get("relation_to_existing") or "").strip().lower().replace(" ", "_")
         if relation not in missing_relations and not candidate.get("old_text"):

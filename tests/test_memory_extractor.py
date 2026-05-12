@@ -93,6 +93,40 @@ def test_make_memory_extractor_candidate_does_not_emit_memory_operation():
     assert "memory_operation" not in candidate
 
 
+def test_reconcile_memory_gap_payload_routes_workflow_shaped_fact_to_skill_route():
+    payload = {"candidates": [{
+        "candidate_id": "m1",
+        "target": "memory",
+        "candidate_fact": "Run `bin/hermes-self-improve improve --dry-run` first, then inspect the artifact. Step 1. ...",
+        "confidence": "medium",
+        "relation_to_existing": "missing",
+    }]}
+
+    out = reconcile_memory_extractor_payload_with_existing_memories(payload, existing_memories=[])
+
+    candidate = out["candidates"][0]
+    assert candidate["routing_hint"] == "defer_unclear"
+    assert candidate["skip_reason"] == "not_memory_workflow_to_skill"
+    assert candidate.get("suggested_route") == "skill"
+
+
+def test_reconcile_memory_gap_payload_routes_raw_tool_output_to_diagnostic():
+    payload = {"candidates": [{
+        "candidate_id": "m1",
+        "target": "memory",
+        "candidate_fact": "```\n$ npm test\nstdout: ok\nstderr: warning\n```",
+        "confidence": "medium",
+        "relation_to_existing": "missing",
+    }]}
+
+    out = reconcile_memory_extractor_payload_with_existing_memories(payload, existing_memories=[])
+
+    candidate = out["candidates"][0]
+    assert candidate["routing_hint"] == "defer_unclear"
+    assert candidate["skip_reason"] == "not_memory_raw_tool_output"
+    assert candidate.get("suggested_route") == "diagnostic"
+
+
 def test_reconcile_memory_gap_payload_marks_near_duplicate_as_skip_duplicate():
     payload = {"candidates": [{
         "candidate_id": "m1",
