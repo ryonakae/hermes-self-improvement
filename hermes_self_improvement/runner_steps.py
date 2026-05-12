@@ -1004,7 +1004,20 @@ def run_skill_improvement_step(
                     "archive_context": archive_context,
                 })
                 continue
-            result = execute_skill_archive_operation(archive_context, archive_fn=(config or {}).get("_skill_archive_fn"))
+            archive_fn = (config or {}).get("_skill_archive_fn")
+            if archive_fn is None:
+                decisions.append({
+                    **base_decision,
+                    "decision": "archive_skill_preview",
+                    "reason": "archive_blocked_no_official_tool",
+                    "changed": False,
+                    "archive_reason": planner_decision.get("archive_reason"),
+                    "archive_context": archive_context,
+                    "skip_detail": "no_official_archive_tool_available",
+                    "next_action": "defer_archive_until_official_skill_archive_tool_is_available",
+                })
+                continue
+            result = execute_skill_archive_operation(archive_context, archive_fn=archive_fn)
             changed = bool(result.get("success"))
             if changed:
                 changed_skills.append(skill_name)

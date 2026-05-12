@@ -109,6 +109,11 @@ def test_build_skill_agent_task_carries_merge_maintenance_action_with_target_ski
     assert task["target_skill"] == "new-skill"
     assert "maintenance_action: merge" in task["instructions"]
     assert "target_skill: new-skill" in task["instructions"]
+    instructions = task["instructions"]
+    assert "patch old-skill" in instructions or "patch the source skill" in instructions
+    assert "archive" in instructions.lower()
+    assert "preview" in instructions.lower()
+    assert "do not delete" in instructions.lower() or "no direct deletion" in instructions.lower()
 
 
 def test_build_skill_agent_task_caps_selected_evidence_for_prompt_budget():
@@ -285,6 +290,24 @@ def test_skill_step_dry_run_records_archive_preview_without_mutating():
     assert result["changed"] == 0
     assert decision["decision"] == "archive_skill_preview"
     assert decision["reason"] == "planner_archive_skill_preview"
+    assert decision["archive_reason"] == "obsolete_marker"
+
+
+def test_skill_step_falls_back_to_archive_preview_when_no_official_archive_tool_is_injected():
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
+
+    result = run_skill_improvement_step(
+        evidence_pack=archive_evidence_pack(),
+        config={"_improvement_planner_func": fake_planner},
+        mutate=True,
+    )
+
+    decision = result["decisions"][0]
+    assert result["changed"] == 0
+    assert decision["decision"] == "archive_skill_preview"
+    assert decision["reason"] == "archive_blocked_no_official_tool"
+    assert decision["skip_detail"] == "no_official_archive_tool_available"
     assert decision["archive_reason"] == "obsolete_marker"
 
 

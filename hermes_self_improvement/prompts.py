@@ -275,6 +275,13 @@ def render_skill_agent_instructions(
         sections.extend(["", f"maintenance_action: {maintenance_action}"])
         if maintenance_action == "merge" and merge_target_skill:
             sections.append(f"target_skill: {merge_target_skill}")
+            sections.extend([
+                "",
+                "Merge semantics:",
+                f"- patch {skill_name} so its content points users to {merge_target_skill} (migration note or stub) instead of duplicating procedure.",
+                f"- treat the archive of {skill_name} as a preview / future step. Do not delete {skill_name} in this run; no direct deletion of the source skill.",
+                f"- enrich {merge_target_skill} only with what the attached evidence explicitly supports, never with speculative content.",
+            ])
     sections.extend([
         "",
         "Program-owned task summary:",
