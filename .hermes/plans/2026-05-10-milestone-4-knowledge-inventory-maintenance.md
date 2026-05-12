@@ -8,8 +8,8 @@
 
 **Goal:** Make stale/overlapping skills, duplicated or misplaced memory, repo/runtime drift, and recurring user corrections first-class improvement candidates.
 
-**Current state:** Inventory reason counts and source buckets are visible in CLI and operational reports. Planner sees maintenance candidates in the prompt. Deeper stale/overlap planning and safe execution are still needed.
-**Execution status:** Partially implemented; reason/source reporting is done, execution-quality inventory bundles remain.
+**Current state:** Inventory reason counts and source buckets are visible in CLI and operational reports. Planner sees maintenance candidates in the prompt. Phase 4.1 now enriches `make_skill_inventory_candidate` with deterministic safety metadata: `editable_targets` (mutable agent-created skills), `reference_matches` (builtin / hub / plugin-bundled / external / pinned), `evidence_count`, and `recommended_actions` derived from `group_kind` (merge_skills / archive_skill / mutate_skill / no_mutation_target). Memory placement (4.2) and repo/runtime drift (4.3) candidates still remain.
+**Execution status:** Partially implemented; phase 4.1 done, phases 4.2 / 4.3 / 4.4 remain.
 
 **Depends on:** Milestone 1 post-validation, Milestone 2 coverage handling, and Milestone 3 quality patch constraints.
 
@@ -34,6 +34,8 @@
 ## Implementation phases
 
 ### Phase 4.1 — Skill inventory bundles with provenance
+
+**Status:** implemented.
 
 **Objective:** Convert similar/stale skill groups into compact planner candidates with editable/reference/archive safety metadata.
 

@@ -20,6 +20,12 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-milestone-4-knowledge-inventory-maintenance.md` (phase 4.1)
+  - **Status:** partially implemented / phase 4.1 done.
+  - Enriches `make_skill_inventory_candidate` with deterministic safety metadata: `editable_targets` (mutable agent-created skills), `reference_matches` (builtin / hub / plugin-bundled / external / pinned), `evidence_count`, and `recommended_actions` (`merge_skills` / `archive_skill` / `mutate_skill` / `no_mutation_target`) derived from `group_kind`. The planner / skill_agent now sees editable-vs-reference splits at the candidate level without inferring from raw skill lists.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-milestone-3-skill-quality-evaluator.md` (phases 3.1 + 3.2 + 3.3)
   - **Status:** implemented / phases 3.1, 3.2, 3.3 all complete.
   - Phase 3.1 generates runtime-private evaluator eval cases (`evaluator_skill_quality_{good|needs_patch|too_generic|missing_attached_evidence}_review`) from executed-mutation skill episodes with post-validation signals and `attached_evidence_count`. Each case packages skill excerpt + evidence summary + target operation + post-validation state + expected quality bucket so calibration / GEPA can learn the quality classification without pinning deterministic code to semantic assessments.
