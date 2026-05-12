@@ -2,6 +2,10 @@
 
 `hermes-self-improvement` は、Hermes runtime の観測イベントから skill / memory / evaluator の改善材料を作る user plugin です。hook は観測専用です。mutation は `improve` / `calibrate` runner で扱います。初めて触るときは、まず `README.md` で全体像を確認してください。
 
+## 進め方
+
+TDD で進めてください。新規機能 / 振る舞い変更は、先に失敗するテストを `tests/` に追加してから実装に着手します。リファクタや純粋なリネームのときも、既存テストが緑のまま意図を担保できることを変更前後に `pytest -q` で確認してください。
+
 ## 着手前チェック
 
 ```bash
@@ -87,6 +91,8 @@ PY
 - `hermes_self_improvement/improvement_planner.py`: planner that ranks skill candidates and routes memory/evaluator decisions (LLM site `improvement_planner`)
 - `hermes_self_improvement/skill_agent.py`: skill mutation agent runner / prompt builder / result parser (LLM site `skill_agent`)
 - `hermes_self_improvement/skill_agent_backend.py`: native skill agent backend, tool executor, limits (LLM site `skill_agent`)
+- `hermes_self_improvement/memory_agent.py`: memory mutation agent runner / prompt builder / result parser (LLM site `memory_agent`)
+- `hermes_self_improvement/memory_agent_backend.py`: native memory agent backend, tool executor, limits (LLM site `memory_agent`)
 - `hermes_self_improvement/calibration.py`: evaluator overlay calibration
 - `hermes_self_improvement/runtime_eval_cases.py`: runtime-private eval cases for episodes, unmatched observations, and improve run artifacts
 - `hermes_self_improvement/mutation_policy.py`: memory provider capability / strategy helpers

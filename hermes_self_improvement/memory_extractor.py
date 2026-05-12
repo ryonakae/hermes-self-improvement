@@ -9,9 +9,9 @@ from .evidence import build_context_window
 from .observer import _redact_text, _sha256_text
 from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 
-ALLOWED_ACTIONS = {"add", "replace", "skip", "defer", "block"}
 ALLOWED_TARGETS = {"user", "memory"}
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
+ALLOWED_ROUTING_HINTS = {"new", "replace_existing", "skip_duplicate", "skip_sensitive", "defer_unclear"}
 SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
 
 
@@ -61,20 +61,16 @@ def normalize_memory_extractor_payload(payload: Any) -> dict[str, Any]:
             continue
         candidate_id = str(raw.get("candidate_id") or "").strip()
         target = str(raw.get("target") or "user").strip()
-        action = str(raw.get("action") or "defer").strip()
         confidence = str(raw.get("confidence") or "medium").strip()
         fact = _redact_text(str(raw.get("candidate_fact") or ""), max_chars=360)
         old_text = _redact_text(str(raw.get("old_text") or ""), max_chars=260)
         if target not in ALLOWED_TARGETS:
             target = "memory"
-        if action not in ALLOWED_ACTIONS:
-            action = "defer"
         if confidence not in ALLOWED_CONFIDENCE:
             confidence = "medium"
         item = {
             "candidate_id": candidate_id,
             "target": target,
-            "action": action,
             "candidate_fact": fact,
             "old_text": old_text,
             "confidence": confidence,
@@ -83,11 +79,8 @@ def normalize_memory_extractor_payload(payload: Any) -> dict[str, Any]:
         if raw.get("reason") is not None:
             item["reason"] = _redact_text(str(raw.get("reason")), max_chars=260)
         if _looks_secret(fact) or _looks_secret(old_text):
-            item["action"] = "block"
-            item["block_reason"] = "sensitive_memory_candidate"
-        if item["action"] == "replace" and not old_text:
-            item["action"] = "defer"
-            item["defer_reason"] = "replace_without_old_text"
+            item["routing_hint"] = "skip_sensitive"
+            item["skip_reason"] = "sensitive_memory_candidate"
         candidates.append(item)
     return {"candidates": candidates}
 
@@ -157,12 +150,12 @@ def reconcile_memory_extractor_payload_with_existing_memories(payload: Any, *, e
     memories = existing_memories or []
     missing_relations = {"", "missing", "new", "new_memory", "no_existing", "no_existing_memory"}
     for candidate in normalized.get("candidates") or []:
-        if candidate.get("action") != "add":
+        if candidate.get("routing_hint") == "skip_sensitive":
             continue
         relation = str(candidate.get("relation_to_existing") or "").strip().lower().replace(" ", "_")
         if relation not in missing_relations and not candidate.get("old_text"):
-            candidate["action"] = "defer"
-            candidate["defer_reason"] = "add_claims_existing_memory_without_old_text"
+            candidate["routing_hint"] = "defer_unclear"
+            candidate["defer_reason"] = "claims_existing_memory_without_old_text"
             candidate["reason"] = "Candidate claims it refines or extends existing memory but did not identify old_text."
             continue
         fact = str(candidate.get("candidate_fact") or "")
@@ -181,9 +174,10 @@ def reconcile_memory_extractor_payload_with_existing_memories(payload: Any, *, e
                 best_text = text
                 best_score = score
         if best_entry is None:
+            candidate["routing_hint"] = "new"
             continue
         if best_score >= 0.92:
-            candidate["action"] = "skip"
+            candidate["routing_hint"] = "skip_duplicate"
             candidate["relation_to_existing"] = "duplicate_existing_memory"
             candidate["skip_reason"] = "memory_duplicate_existing"
             candidate["matched_existing_text"] = _redact_text(best_text, max_chars=260)
@@ -191,16 +185,18 @@ def reconcile_memory_extractor_payload_with_existing_memories(payload: Any, *, e
             continue
         if best_score >= 0.50 and _memory_topic_overlap(fact, best_text):
             if not _memory_has_conflicting_specifics(fact, best_text):
-                candidate["action"] = "skip"
+                candidate["routing_hint"] = "skip_duplicate"
                 candidate["relation_to_existing"] = "duplicate_existing_memory"
                 candidate["skip_reason"] = "memory_duplicate_existing"
                 candidate["matched_existing_text"] = _redact_text(best_text, max_chars=260)
                 candidate["reason"] = "Candidate is already covered by existing memory."
                 continue
-            candidate["action"] = "replace"
+            candidate["routing_hint"] = "replace_existing"
             candidate["old_text"] = _redact_text(best_text, max_chars=260)
             candidate["relation_to_existing"] = "updates_existing_memory"
             candidate["reason"] = "Candidate appears to update a related existing memory."
+            continue
+        candidate["routing_hint"] = "new"
     return normalized
 
 
@@ -208,23 +204,24 @@ def make_conversation_memory_candidate(
     *,
     candidate_id: str | None = None,
     target: str,
-    action: str,
     candidate_fact: str,
     confidence: str,
     relation_to_existing: str,
     context_windows: list[dict[str, Any]],
     rationale: str,
     old_text: str | None = None,
+    routing_hint: str | None = None,
 ) -> dict[str, Any]:
     payload = {
         "target": target,
-        "action": action,
         "candidate_fact": candidate_fact,
         "old_text": old_text or "",
         "confidence": confidence,
         "relation_to_existing": relation_to_existing,
     }
     normalized = normalize_memory_extractor_payload({"candidates": [{"candidate_id": candidate_id or "", **payload}]})["candidates"][0]
+    if routing_hint and routing_hint in ALLOWED_ROUTING_HINTS:
+        normalized["routing_hint"] = routing_hint
     item = {
         "id": candidate_id or "mem_gap_" + _sha256_text(json.dumps(payload, ensure_ascii=False, sort_keys=True))[:12],
         "kind": "conversation_memory_gap_candidate",
@@ -234,16 +231,6 @@ def make_conversation_memory_candidate(
         "context_windows": context_windows[:5],
         "rationale": _redact_text(rationale, max_chars=300),
     }
-    if normalized["action"] in {"add", "replace"}:
-        operation_name = {"add": "memory_add", "replace": "memory_replace"}[normalized["action"]]
-        operation = {
-            "operation": operation_name,
-            "target": normalized["target"],
-            "content": normalized["candidate_fact"],
-        }
-        if normalized["action"] == "replace":
-            operation["old_text"] = normalized["old_text"]
-        item["memory_operation"] = operation
     return item
 
 
@@ -272,10 +259,10 @@ def build_memory_extractor_digest(
 
 
 MEMORY_EXTRACTOR_SYSTEM = (
-    "Extract durable Hermes memory gap candidates from conversation windows. Return JSON only: "
-    "{\"candidates\":[{\"candidate_id\":str,\"target\":\"user|memory\",\"action\":\"add|replace|skip|defer|block\","
+    "Extract durable Hermes memory candidates from conversation windows. Return JSON only: "
+    "{\"candidates\":[{\"candidate_id\":str,\"target\":\"user|memory\","
     "\"candidate_fact\":str,\"old_text\":str,\"confidence\":\"low|medium|high\",\"relation_to_existing\":str,\"reason\":str}]}. "
-    "Do not store temporary task progress, secrets, or unsupported deletes."
+    "Do not propose temporary task progress, secrets, or deletes; downstream routing decides add/replace/skip."
 )
 
 

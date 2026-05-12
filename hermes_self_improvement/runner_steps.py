@@ -10,6 +10,7 @@ from .skill_agent import run_skill_agent_task
 from .skill_agent_backend import build_skill_agent_backend
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_archive_operation
+from .memory_agent import run_memory_agent_task
 from .memory_context import build_related_memory_lookup_context
 from .observer import _redact_text
 from .improvement_planner import build_improvement_planner_digest, build_improvement_planner_quality_report, run_improvement_planner
@@ -17,6 +18,75 @@ from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_editor_instructions
 from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
 from .target_resolver import build_target_resolution_digest, run_target_resolver
+
+
+MEMORY_AGENT_SKIP_HINTS = {"skip_duplicate", "skip_sensitive", "defer_unclear"}
+MEMORY_AGENT_CONSTRAINTS = (
+    "Use only memory tool and submit_mutation_result.",
+    "Do not use terminal/file/git/direct filesystem tools.",
+)
+MEMORY_AGENT_DISPATCH_KINDS = {"conversation_memory_gap_candidate"}
+
+
+def _memory_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
+    kind = str(item.get("kind") or "")
+    if kind not in MEMORY_AGENT_DISPATCH_KINDS:
+        return None
+    memory = item.get("memory") if isinstance(item.get("memory"), dict) else None
+    if not memory:
+        return None
+    routing_hint = str(memory.get("routing_hint") or "").strip()
+    if routing_hint in MEMORY_AGENT_SKIP_HINTS:
+        return None
+    return {
+        "candidate_id": memory.get("candidate_id") or item.get("id"),
+        "target": memory.get("target") or "memory",
+        "candidate_fact": memory.get("candidate_fact") or "",
+        "old_text": memory.get("old_text") or "",
+        "confidence": memory.get("confidence") or "medium",
+        "relation_to_existing": memory.get("relation_to_existing") or "missing",
+        "routing_hint": routing_hint or "new",
+    }
+
+
+def _dispatch_memory_agent(
+    *,
+    memory_evidence: list[dict[str, Any]],
+    config: dict[str, Any] | None,
+    mutate: bool,
+) -> dict[str, Any]:
+    cfg = config or {}
+    backend = cfg.get("_memory_agent_backend")
+    if backend is None:
+        return {"status": "skipped_no_backend"}
+    candidates: list[dict[str, Any]] = []
+    for item in memory_evidence:
+        if not isinstance(item, dict):
+            continue
+        candidate = _memory_agent_candidate_from_evidence(item)
+        if candidate is None:
+            continue
+        candidates.append(candidate)
+    if not candidates:
+        return {"status": "no_candidates"}
+    if not mutate:
+        return {"status": "preview", "candidate_count": len(candidates), "candidates": candidates}
+    task = {
+        "type": "memory_agent_task",
+        "task_kind": "memory_apply",
+        "candidates": candidates,
+        "current_entries": cfg.get("_memory_current_entries") if isinstance(cfg.get("_memory_current_entries"), list) else [],
+        "constraints": list(MEMORY_AGENT_CONSTRAINTS),
+        "evidence_ids": [c.get("candidate_id") for c in candidates],
+    }
+    result = run_memory_agent_task(task, config=config, backend=backend)
+    status = "completed" if result.get("success") else "rejected"
+    return {
+        "status": status,
+        "candidate_count": len(candidates),
+        "changed": len(result.get("changed_memories") or []) if result.get("success") else 0,
+        "result": result,
+    }
 
 
 MEMORY_SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
@@ -284,66 +354,12 @@ def _normalize_capacity_operation(raw: dict[str, Any], *, target: str) -> dict[s
     return op
 
 
-def _call_memory_capacity_planner_llm(*, failed_operation: dict[str, Any], failure_result: dict[str, Any], target: str, content: str, config: dict[str, Any]) -> list[dict[str, Any]]:
-    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    planner_config = model_config.get("improvement_planner") if isinstance(model_config.get("improvement_planner"), dict) else {}
-    provider = planner_config.get("provider") or "auto"
-    model = planner_config.get("model") or None
-    timeout = int(planner_config.get("timeout") or 60)
-    max_tokens = int(planner_config.get("max_tokens") or 1200)
-    current_entries = failure_result.get("current_entries") if isinstance(failure_result.get("current_entries"), list) else []
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are the Hermes memory capacity planner. The official built-in memory tool rejected an add because the target store is full. "
-                "Return JSON only: {\"operations\":[{\"action\":\"remove|replace\",\"target\":\"memory|user\",\"old_text\":str,\"content\":str}]}. "
-                "Use only exact old_text substrings from current_entries. Prefer consolidating or removing stale/duplicate/low-value entries. "
-                "Do not remove user preferences unless clearly obsolete. Keep replacement content compact. Return at most 3 operations."
-            ),
-        },
-        {
-            "role": "user",
-            "content": json.dumps(
-                {
-                    "target": target,
-                    "new_entry": content,
-                    "failed_operation": failed_operation,
-                    "failure": {"error": failure_result.get("error"), "usage": failure_result.get("usage")},
-                    "current_entries": current_entries,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-                default=str,
-            ),
-        },
-    ]
-    from agent.auxiliary_client import call_llm, extract_content_or_reasoning
-    from .llm_utils import _ensure_hermes_agent_on_path, _extract_json_object
-    from .llm_telemetry import record_llm_call
-    from .prompt_cache import apply_caching
-
-    _ensure_hermes_agent_on_path()
-    messages, cache_extras = apply_caching(messages, site="memory_capacity_planner")
-    response = call_llm(task="memory", provider=provider, model=model, messages=messages, temperature=None, max_tokens=max_tokens, timeout=timeout, extra_body=cache_extras)
-    response_text = extract_content_or_reasoning(response)
-    record_llm_call(
-        site="memory_capacity_planner",
-        messages=messages,
-        response_text=response_text,
-        config=config,
-        model=model,
-        provider=provider,
-        task="memory",
-        max_tokens=max_tokens,
-    )
-    payload = _extract_json_object(response_text)
-    operations = payload.get("operations") if isinstance(payload, dict) else None
-    return operations if isinstance(operations, list) else []
-
-
 def _capacity_compaction_operations(*, failed_operation: dict[str, Any] | None, failure_result: dict[str, Any], target: str, content: str, config: dict[str, Any]) -> list[dict[str, Any]]:
+    # memory_capacity_planner の LLM 呼び出しは廃止 (PR2-c)。
+    # capacity 圧迫時の compaction は memory_agent (memory_agent_backend.py) に集約する。
+    # 一時的に互換注入用フックは残し、deterministic な計画は外部から渡されたときだけ採用する。
     planner = config.get("_memory_capacity_planner_fn")
+    raw: list[Any] = []
     if callable(planner):
         try:
             raw = planner(
@@ -352,22 +368,9 @@ def _capacity_compaction_operations(*, failed_operation: dict[str, Any] | None, 
                 target=target,
                 content=content,
                 config=config,
-            )
+            ) or []
         except Exception:
             raw = []
-    elif isinstance(config.get("model"), dict):
-        try:
-            raw = _call_memory_capacity_planner_llm(
-                failed_operation=failed_operation or {},
-                failure_result=failure_result,
-                target=target,
-                content=content,
-                config=config,
-            )
-        except Exception:
-            raw = []
-    else:
-        raw = []
     items = raw if isinstance(raw, list) else []
     normalized = []
     for item in items[:3]:
@@ -643,55 +646,15 @@ def _execute_memory_move_operation(operation: dict[str, Any], config: dict[str, 
     return {"success": True, "changed": True, "add_result": add_result, "remove_result": remove_result}
 
 
-def _call_memory_inventory_planner_llm(*, evidence: list[dict[str, Any]], config: dict[str, Any]) -> list[dict[str, Any]]:
-    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    planner_config = model_config.get("improvement_planner") if isinstance(model_config.get("improvement_planner"), dict) else {}
-    provider = planner_config.get("provider") or "auto"
-    model = planner_config.get("model") or None
-    timeout = int(planner_config.get("timeout") or 60)
-    max_tokens = int(planner_config.get("max_tokens") or 1800)
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are the Hermes self-improvement memory planner. Return JSON only: {\"operations\": [...]}. "
-                "Allowed operation values: keep, add, replace, remove, move_user_to_memory, move_memory_to_user, merge_with_existing, convert_to_skill_update, skip_noise. "
-                "Read Markdown placement context as judgment context, not a machine protocol. "
-                "Use keep for entries already in the right USER or MEMORY store. "
-                "Use convert_to_skill_update for procedural reusable guidance; do not invent or execute a skill mutation here. "
-                "Use move/replace/remove/merge only with exact old_text copied from evidence. "
-                "Return one operation for every evidence_id unless the evidence is unsafe or sensitive. "
-                "If uncertain but the current store looks acceptable, choose keep rather than omitting. "
-                "Skip unsafe or sensitive cases by omitting them."
-            ),
-        },
-        {"role": "user", "content": render_memory_placement_markdown(evidence)},
-    ]
-    from agent.auxiliary_client import call_llm, extract_content_or_reasoning
-    from .llm_utils import _ensure_hermes_agent_on_path, _extract_json_object
-    from .llm_telemetry import record_llm_call
-    from .prompt_cache import apply_caching
-
-    _ensure_hermes_agent_on_path()
-    messages, cache_extras = apply_caching(messages, site="memory_inventory_planner")
-    response = call_llm(task="memory", provider=provider, model=model, messages=messages, temperature=None, max_tokens=max_tokens, timeout=timeout, extra_body=cache_extras)
-    response_text = extract_content_or_reasoning(response)
-    record_llm_call(
-        site="memory_inventory_planner",
-        messages=messages,
-        response_text=response_text,
-        config=config,
-        model=model,
-        provider=provider,
-        task="memory",
-        max_tokens=max_tokens,
-    )
-    payload = _extract_json_object(response_text)
-    operations = payload.get("operations") if isinstance(payload, dict) else None
-    return operations if isinstance(operations, list) else []
-
-
 def _memory_inventory_operations(evidence: list[dict[str, Any]], config: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Return memory operations derived from deterministic evidence hints.
+
+    PR2-c で memory_inventory_planner の LLM 呼び出しは廃止した。判断負荷は
+    新設の memory_agent (memory_agent_backend.py) に集約する。ここでは
+    `target_resolution_hint` に明示的に書かれた hinted operation だけを
+    実行候補として返し、それ以外は memory_agent に委ねる方針に切り替えた。
+    互換注入用フック `_memory_inventory_planner_fn` は引き続き受け付ける。
+    """
     cfg = config or {}
     planner_fn = cfg.get("_memory_inventory_planner_fn") if isinstance(cfg, dict) else None
     inventory_evidence = [item for item in evidence if isinstance(item, dict) and item.get("kind") in {"memory_inventory_candidate", "memory_placement_candidate"}]
@@ -712,11 +675,6 @@ def _memory_inventory_operations(evidence: list[dict[str, Any]], config: dict[st
         except TypeError:
             raw = planner_fn(inventory_evidence, config=cfg)
         return raw if isinstance(raw, list) else []
-    if isinstance(cfg.get("model"), dict):
-        try:
-            return _call_memory_inventory_planner_llm(evidence=inventory_evidence, config=cfg)
-        except Exception:
-            return []
     return []
 
 
@@ -1390,6 +1348,14 @@ def run_memory_improvement_step(
             "result": result,
         })
 
+    memory_agent_block = _dispatch_memory_agent(
+        memory_evidence=memory_evidence,
+        config=config,
+        mutate=mutate,
+    )
+    if memory_agent_block.get("status") == "completed":
+        changed += int(memory_agent_block.get("changed") or 0)
+
     return {
         "status": "completed" if decisions else "no_memory_evidence",
         "external_provider": external_provider,
@@ -1397,4 +1363,5 @@ def run_memory_improvement_step(
         "changed": changed,
         "changed_memories": [str(decision.get("evidence_id")) for decision in decisions if decision.get("changed")],
         "decisions": decisions,
+        "memory_agent": memory_agent_block,
     }
