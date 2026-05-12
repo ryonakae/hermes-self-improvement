@@ -32,6 +32,65 @@ def test_skill_inventory_candidate_has_compact_shape():
     assert "full_content" not in json.dumps(candidate)
 
 
+def test_skill_inventory_candidate_classifies_editable_and_reference_skills():
+    candidate = make_skill_inventory_candidate(
+        candidate_id="skill-inv-pair",
+        group_kind="similar_skills",
+        target_names=["alpha-workflow", "alpha-legacy"],
+        rationale="similar names and overlapping descriptions",
+        evidence_count=4,
+        skills=[
+            {"name": "alpha-workflow", "mutable": True, "state": "active", "provenance": "agent_created"},
+            {"name": "alpha-legacy", "mutable": True, "state": "stale", "provenance": "agent_created"},
+            {"name": "alpha-builtin", "mutable": False, "state": "active", "provenance": "builtin"},
+        ],
+    )
+
+    inventory = candidate["inventory"]
+    assert inventory["editable_targets"] == ["alpha-workflow", "alpha-legacy"]
+    assert inventory["reference_matches"] == ["alpha-builtin"]
+    assert inventory["evidence_count"] == 4
+    assert "merge_skills" in inventory["recommended_actions"]
+
+
+def test_skill_inventory_candidate_recommends_archive_for_stale_singleton():
+    candidate = make_skill_inventory_candidate(
+        candidate_id="skill-inv-stale",
+        group_kind="stale_singleton",
+        target_names=["old-skill"],
+        rationale="no usage for 90 days",
+        evidence_count=1,
+        skills=[
+            {"name": "old-skill", "mutable": True, "state": "stale", "provenance": "agent_created"},
+        ],
+    )
+
+    inventory = candidate["inventory"]
+    assert inventory["editable_targets"] == ["old-skill"]
+    assert inventory["reference_matches"] == []
+    assert inventory["evidence_count"] == 1
+    assert "archive_skill" in inventory["recommended_actions"]
+
+
+def test_skill_inventory_candidate_marks_reference_only_when_no_editable_target():
+    candidate = make_skill_inventory_candidate(
+        candidate_id="skill-inv-ref",
+        group_kind="reference_duplicate",
+        target_names=["builtin-skill"],
+        rationale="duplicates a built-in reference",
+        evidence_count=2,
+        skills=[
+            {"name": "builtin-skill", "mutable": False, "state": "active", "provenance": "builtin"},
+        ],
+    )
+
+    inventory = candidate["inventory"]
+    assert inventory["editable_targets"] == []
+    assert inventory["reference_matches"] == ["builtin-skill"]
+    assert inventory["evidence_count"] == 2
+    assert "no_mutation_target" in inventory["recommended_actions"]
+
+
 def test_memory_inventory_candidate_has_compact_shape():
     candidate = make_memory_inventory_candidate(
         candidate_id="memory-inv-1",

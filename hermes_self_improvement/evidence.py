@@ -268,6 +268,48 @@ def _looks_secret(text: str) -> bool:
     return any(marker in lowered for marker in SECRET_MARKERS)
 
 
+_NON_EDITABLE_PROVENANCES = {"builtin", "hub", "plugin", "plugin-bundled", "external", "external-dir"}
+
+
+def _classify_skill_inventory_targets(skills: list[dict[str, Any]] | None) -> tuple[list[str], list[str]]:
+    editable: list[str] = []
+    reference: list[str] = []
+    for item in skills or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        provenance = str(item.get("provenance") or item.get("source") or "").strip().lower()
+        is_mutable = bool(item.get("mutable", True)) and not bool(item.get("pinned"))
+        if is_mutable and provenance not in _NON_EDITABLE_PROVENANCES:
+            if name not in editable:
+                editable.append(name)
+        else:
+            if name not in reference:
+                reference.append(name)
+    return editable, reference
+
+
+def _skill_inventory_recommended_actions(group_kind: str, editable: list[str], reference: list[str]) -> list[str]:
+    actions: list[str] = []
+    kind = str(group_kind or "").lower()
+    if not editable:
+        actions.append("no_mutation_target")
+        return actions
+    if kind in {"similar_skills", "near_duplicate_skills", "duplicate_skills"}:
+        actions.append("merge_skills")
+        if len(editable) >= 2:
+            actions.append("mutate_skill")
+    elif kind in {"stale_singleton", "stale_skill"}:
+        actions.append("archive_skill")
+    elif kind in {"reference_duplicate"}:
+        actions.append("no_mutation_target")
+    else:
+        actions.append("mutate_skill")
+    return actions
+
+
 def make_skill_inventory_candidate(
     *,
     candidate_id: str | None = None,
@@ -277,13 +319,23 @@ def make_skill_inventory_candidate(
     hints: list[str] | None = None,
     risk: str = "medium",
     skills: list[dict[str, Any]] | None = None,
+    evidence_count: int | None = None,
 ) -> dict[str, Any]:
     clean_targets = _clean_list(target_names, max_items=8, max_chars=120)
+    editable_targets, reference_matches = _classify_skill_inventory_targets(skills)
     inventory: dict[str, Any] = {
         "group_kind": _redact_text(group_kind, max_chars=80),
         "target_names": clean_targets,
         "hints": _clean_list(hints, max_items=6, max_chars=180),
+        "editable_targets": editable_targets[:8],
+        "reference_matches": reference_matches[:8],
+        "recommended_actions": _skill_inventory_recommended_actions(group_kind, editable_targets, reference_matches),
     }
+    if evidence_count is not None:
+        try:
+            inventory["evidence_count"] = int(evidence_count)
+        except (TypeError, ValueError):
+            pass
     if skills:
         inventory["skills"] = [
             {
