@@ -20,6 +20,12 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
+- `2026-05-13-self-improvement-cron-no-agent.md`
+  - **Status:** implemented / awaiting next 04:00 full scheduled run.
+  - Converts `self-improvement-autonomous-maintenance` (`1d8bff2395e2`) from an outer agent-prompt cron into a script-only `no_agent` job using `~/.hermes/scripts/self-improvement-maintenance.sh` and the canonical `hermes self-improvement ...` commands. Sets `cron.script_timeout_seconds: 3600`; read-only `status` / `report` smoke passed. The mutating full script was intentionally not run manually.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-milestone-7-autonomous-steady-state.md` (phases 7.2 + 7.3)
   - **Status:** code complete (phases 7.2, 7.3). Operational phases 7.1 (dogfood protocol) and 7.4 (final readiness report) wait on multi-window dogfood runs.
   - Phase 7.2 exposes calibration thresholds in the `status` payload and renders them under a `Calibration thresholds:` section (`min_evidence_events`, `min_disagreements`, `min_bad_outcomes`, `window_days`), so operators can confirm the safety gates at a glance.
