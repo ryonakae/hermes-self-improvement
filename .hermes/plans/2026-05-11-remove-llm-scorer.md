@@ -14,7 +14,7 @@
 
 ユーザー方針は「過去互換不要、綺麗さっぱり消す」。dead code / 古い field / 名残記述すべて削除する。
 
-`bin/hermes-self-improve improve` の dry-run でも `llm_scorer` site の prompt は 28KB 規模で記録されており、削除すれば毎 run この分の LLM 呼び出しがゼロになる(直接的なトークン削減効果も大きい)。
+`hermes self-improvement improve` の dry-run でも `llm_scorer` site の prompt は 28KB 規模で記録されており、削除すれば毎 run この分の LLM 呼び出しがゼロになる(直接的なトークン削減効果も大きい)。
 
 ## 進行順序
 
@@ -161,8 +161,8 @@ git diff --check
 
 ### 全 Step 完了後
 - 全 pytest が pass(605 件前後を想定、scorer 関連削除で減る)
-- `bin/hermes-self-improve status` がエラーなく動く
-- `bin/hermes-self-improve improve --dry-run` が動作する(target_resolver の JSON parse エラーは別問題、無視)
+- `hermes self-improvement status` がエラーなく動く
+- `hermes self-improvement improve --dry-run` が動作する(target_resolver の JSON parse エラーは別問題、無視)
 - `state/events.jsonl` に `self_improvement_llm_call` の `site` で `llm_scorer` が現れないことを確認:
   ```bash
   jq -r 'select(.event=="self_improvement_llm_call") | .site' ~/.hermes/self-improvement/state/events.jsonl | sort -u

@@ -49,9 +49,9 @@ Steps:
 1. Keep `render_next_actions()` as a generic renderer.
 2. Change `build_next_actions_for_apply_preview()` / `build_next_actions_for_plan()` / `build_next_actions_for_improve()` so they only recommend current four-command workflows:
    - inspect historical artifact / latest run artifact
-   - `bin/hermes-self-improve improve --dry-run`
-   - `bin/hermes-self-improve improve`
-   - `bin/hermes-self-improve report --since-hours 24`
+   - `hermes self-improvement improve --dry-run`
+   - `hermes self-improvement improve`
+   - `hermes self-improvement report --since-hours 24`
 3. Remove command strings containing `apply`, `outcome`, `--execute`, or `--from-plan-item`.
 4. Update tests to assert the absence of legacy command guidance.
 
@@ -140,10 +140,10 @@ print(json.dumps({
     }),
 }, ensure_ascii=False))
 PY
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate --dry-run
-bin/hermes-self-improve report --since-hours 24
+hermes self-improvement status
+hermes self-improvement improve --dry-run
+hermes self-improvement calibrate --dry-run
+hermes self-improvement report --since-hours 24
 ```
 
 Expected:

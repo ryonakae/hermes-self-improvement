@@ -320,8 +320,8 @@ def _level_rank(value: Any) -> int:
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests/test_gepa_eval_assets.py tests/test_gepa_optimizer.py tests/test_gepa_offline_scorer.py -q
-bin/hermes-self-improve calibrate --json
-bin/hermes-self-improve status
+hermes self-improvement calibrate --json
+hermes self-improvement status
 ```
 
 通常 suite も可能なら実行する。

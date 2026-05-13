@@ -8,7 +8,7 @@
 
 **Architecture:** Split the pipeline into three explicit layers: hard static invariants, configurable apply policy, and advisory scorer/GEPA judgment. Static validators run during apply-plan item construction and before execution, so machine-checkable invalid targets never become `ready`. `improve` remains a command that exits after preview unless `--execute` is passed; preview payloads and human-readable output include clear `next_actions`. Outcome recording stays append-only and feeds calibration evidence; it records human decisions but does not grant apply permission.
 
-**Tech Stack:** Python 3.11, pytest, existing `hermes_self_improvement/{apply_plan,apply_engine,config,cli,outcome_store,schemas,tool_handlers}.py`, runtime artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, wrapper CLI `bin/hermes-self-improve`.
+**Tech Stack:** Python 3.11, pytest, existing `hermes_self_improvement/{apply_plan,apply_engine,config,cli,outcome_store,schemas,tool_handlers}.py`, runtime artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, wrapper CLI `hermes self-improvement`.
 
 ---
 
@@ -17,7 +17,7 @@
 - Hook observation already records redacted runtime telemetry; hooks remain observational.
 - `improve` without `--execute` currently generates calibration preview, proposals, apply plan, apply preview, and exits.
 - `improve --execute` / `apply --execute` is the mutation boundary; policy and validation still decide what is applied.
-- Review outcomes are currently recordable from CLI via `bin/hermes-self-improve outcome ...` and feed calibration evidence.
+- Review outcomes are currently recordable from CLI via `hermes self-improvement outcome ...` and feed calibration evidence.
 - Tool-native outcome recording was deliberately deferred to keep primary plugin tools at seven, but this plan reopens it as a bounded append-only feedback tool after static validation / next-actions UX is fixed.
 - `.hermes/plans/README.md` currently says there are no active unfinished plans. This plan should become the sole active plan while being implemented.
 
@@ -421,7 +421,7 @@ def test_next_actions_include_execute_review_and_outcome_commands():
         "summary": {"would_apply": 2, "needs_review": 1, "failed": 0},
         "ledger_path": "/tmp/ledger.json",
     }
-    actions = build_next_actions_for_apply_preview(result, command_prefix="bin/hermes-self-improve")
+    actions = build_next_actions_for_apply_preview(result, command_prefix="hermes self-improvement")
 
     kinds = {item["kind"] for item in actions}
     assert "execute_ready_items" in kinds
@@ -441,7 +441,7 @@ from __future__ import annotations
 from typing import Any
 
 
-def build_next_actions_for_apply_preview(result: dict[str, Any], *, command_prefix: str = "bin/hermes-self-improve") -> list[dict[str, Any]]:
+def build_next_actions_for_apply_preview(result: dict[str, Any], *, command_prefix: str = "hermes self-improvement") -> list[dict[str, Any]]:
     plan_id = result.get("plan_id") or (result.get("apply_plan") or {}).get("plan_id")
     summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
     actions: list[dict[str, Any]] = []
@@ -462,7 +462,7 @@ def build_next_actions_for_apply_preview(result: dict[str, Any], *, command_pref
     return actions
 
 
-def build_next_actions_for_improve(result: dict[str, Any], *, command_prefix: str = "bin/hermes-self-improve") -> list[dict[str, Any]]:
+def build_next_actions_for_improve(result: dict[str, Any], *, command_prefix: str = "hermes self-improvement") -> list[dict[str, Any]]:
     plan = result.get("plan") if isinstance(result.get("plan"), dict) else {}
     apply_result = result.get("apply") if isinstance(result.get("apply"), dict) else {}
     plan_id = plan.get("plan_id") or apply_result.get("plan_id")
@@ -483,8 +483,8 @@ Human output should add a section:
 
 ```text
 Next actions:
-- Execute ready items: bin/hermes-self-improve apply <plan-id> --execute
-- Record rejection: bin/hermes-self-improve outcome ...
+- Execute ready items: hermes self-improvement apply <plan-id> --execute
+- Record rejection: hermes self-improvement outcome ...
 ```
 
 No interactive prompt.
@@ -550,7 +550,7 @@ Apply/rollback inferred outcomes may still come from ledgers without human-suppl
 Optional but useful:
 
 ```bash
-bin/hermes-self-improve outcome --outcome rejected_by_human --from-plan-item plan-id:step-002 --reason "too broad"
+hermes self-improvement outcome --outcome rejected_by_human --from-plan-item plan-id:step-002 --reason "too broad"
 ```
 
 Parser fills `plan_id` and `item_id`. Keep explicit `--plan-id` / `--item-id` as canonical.
@@ -582,7 +582,7 @@ Run:
 
 ```bash
 $PY -m pytest tests/test_outcome_store.py tests/test_calibration.py tests/test_cli_surface.py tests/test_next_actions.py -q
-bin/hermes-self-improve outcome --outcome rejected_by_human --plan-id demo --item-id step-001 --reason "demo" --json --config /tmp/self-improve-outcome-smoke.json
+hermes self-improvement outcome --outcome rejected_by_human --plan-id demo --item-id step-001 --reason "demo" --json --config /tmp/self-improve-outcome-smoke.json
 ```
 
 Use temp config for smoke, not production runtime.
@@ -790,9 +790,9 @@ uv sync --group dev
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status --json
-bin/hermes-self-improve improve --since-hours 24 --json
-bin/hermes-self-improve report --since-hours 24 --json
+hermes self-improvement status --json
+hermes self-improvement improve --since-hours 24 --json
+hermes self-improvement report --since-hours 24 --json
 python3 - <<'PY'
 from hermes_cli.plugins import discover_plugins, get_plugin_manager
 import json

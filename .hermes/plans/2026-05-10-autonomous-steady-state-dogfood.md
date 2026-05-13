@@ -30,10 +30,10 @@ Out of scope:
 
 ## Suggested Tasks
 
-1. Run `bin/hermes-self-improve improve --dry-run` and inspect summary/artifact.
+1. Run `hermes self-improvement improve --dry-run` and inspect summary/artifact.
 2. If preview is safe and bounded, run the matching mutating replay.
-3. Run `bin/hermes-self-improve report --since-hours 24` and confirm report clarity.
-4. Run `bin/hermes-self-improve calibrate --dry-run` and verify outcome/credit material is present but not overfit.
+3. Run `hermes self-improvement report --since-hours 24` and confirm report clarity.
+4. Run `hermes self-improvement calibrate --dry-run` and verify outcome/credit material is present but not overfit.
 5. Add focused tests for any confusing or missing summary fields.
 6. Update roadmap/index after verification.
 

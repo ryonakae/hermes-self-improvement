@@ -863,7 +863,7 @@ def test_status_summary_is_human_readable_not_json():
     assert "Readiness:" in text
     assert "Runtime setup:" in text
     assert "active evaluator: missing" in text
-    assert "next: bin/hermes-self-improve setup" in text
+    assert "next: hermes self-improvement setup" in text
     assert "Curator integration:" in text
     assert "skill candidates: 7" in text
     assert '"enabled"' not in text

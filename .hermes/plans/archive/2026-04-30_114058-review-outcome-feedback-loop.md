@@ -8,14 +8,14 @@
 
 **Architecture:** Add a plugin-owned outcome ledger under `${HERMES_HOME:-~/.hermes}/self-improvement/outcomes/`, plus CLI/tool/report integration that summarizes outcomes and exposes them to `collect_calibration_evidence()`. Outcome recording is explicit and append-only; it never mutates apply ledgers or proposals in place. Calibration consumes outcome summaries as advisory evidence only and remains regression-gated before any active evaluator promotion.
 
-**Tech Stack:** Python 3.11, pytest, existing `hermes_self_improvement/{cli,calibration,observer,tool_handlers,schemas}.py`, runtime artifact helpers via `_reports_dir()`, JSON ledgers, existing `bin/hermes-self-improve` wrapper.
+**Tech Stack:** Python 3.11, pytest, existing `hermes_self_improvement/{cli,calibration,observer,tool_handlers,schemas}.py`, runtime artifact helpers via `_reports_dir()`, JSON ledgers, existing `hermes self-improvement` wrapper.
 
 ---
 
 ## Current Observed State
 
 - `.hermes/plans/README.md` says there are no active unfinished implementation plans.
-- `bin/hermes-self-improve status --json` reports:
+- `hermes self-improvement status --json` reports:
   - `mutation_backend.available=true`
   - `merge_planner.available=true`
   - `memory_rollback.supported=false`, `execution=blocked`, preview-only modes.
@@ -396,7 +396,7 @@ if args.command == "outcome":
 
 ```bash
 $PY -m pytest tests/test_cli_surface.py tests/test_outcome_store.py -q
-bin/hermes-self-improve outcome --outcome rejected_by_human --plan-id demo --item-id step-001 --reason "demo" --json
+hermes self-improvement outcome --outcome rejected_by_human --plan-id demo --item-id step-001 --reason "demo" --json
 ```
 
 Use a temp config in tests; do not write test artifacts to production runtime in unit tests.
@@ -595,7 +595,7 @@ Be careful not to double-count inferred ledgers if Phase 4 output is also used. 
 
 ```bash
 $PY -m pytest tests/test_calibration.py tests/test_outcome_store.py -q
-bin/hermes-self-improve calibrate --json
+hermes self-improvement calibrate --json
 ```
 
 ### Step 4: Commit
@@ -662,7 +662,7 @@ For human-readable markdown, add a short section:
 
 ```bash
 $PY -m pytest tests/test_report_integration.py tests/test_plugin_tools.py -q
-bin/hermes-self-improve report --since-hours 24 --json
+hermes self-improvement report --since-hours 24 --json
 ```
 
 ### Step 4: Commit
@@ -736,8 +736,8 @@ uv sync --group dev
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status --json
-bin/hermes-self-improve report --since-hours 24 --json
+hermes self-improvement status --json
+hermes self-improvement report --since-hours 24 --json
 ```
 
 Final report should state:

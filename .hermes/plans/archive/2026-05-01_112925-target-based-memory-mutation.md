@@ -557,13 +557,13 @@ But mutation decisions should use the normalized target, not `active_memory_prov
 3. Run plugin status:
 
    ```bash
-   bin/hermes-self-improve status
+   hermes self-improvement status
    ```
 
 4. Run dry-run improve to inspect artifact shape:
 
    ```bash
-   bin/hermes-self-improve improve --dry-run
+   hermes self-improvement improve --dry-run
    ```
 
 5. Verify output/artifacts show target-based decisions:

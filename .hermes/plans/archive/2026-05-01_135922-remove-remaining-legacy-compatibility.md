@@ -60,7 +60,7 @@ Do not:
 
 **Files:**
 - Modify: `hermes_self_improvement/*.py`
-- Modify: `bin/hermes-self-improve` only if it relies on direct file import behavior
+- Modify: `hermes self-improvement` only if it relies on direct file import behavior
 - Modify tests if they import files by path instead of package module
 
 **Steps:**
@@ -107,9 +107,9 @@ Do not:
 ```bash
 python -m py_compile __init__.py hermes_self_improvement/*.py tests/*.py
 python -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run --json | python -m json.tool >/tmp/self_improve_dry_run.json
-bin/hermes-self-improve calibrate --dry-run --json | python -m json.tool >/tmp/self_improve_calibrate_dry_run.json
+hermes self-improvement status
+hermes self-improvement improve --dry-run --json | python -m json.tool >/tmp/self_improve_dry_run.json
+hermes self-improvement calibrate --dry-run --json | python -m json.tool >/tmp/self_improve_calibrate_dry_run.json
 git diff --check
 ```
 

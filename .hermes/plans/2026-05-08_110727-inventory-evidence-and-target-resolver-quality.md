@@ -6,7 +6,7 @@
 
 **Architecture:** Candidate generation stays evidence-preserving and decision-neutral. Program code may collect compact health signals, coverage gaps, target fit signals, negative fit signals, and create-skill affordances; LLM planner/resolver decides semantic outcomes. Candidate collection must filter immutable/non-local skill targets before anything reaches the LLM. Mutations continue only through official skill/memory tools.
 
-**Tech Stack:** Python, pytest, Hermes plugin runtime, `bin/hermes-self-improve improve --dry-run`, runtime artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, official Hermes `skill_manage`, `memory`, and active provider memory tools.
+**Tech Stack:** Python, pytest, Hermes plugin runtime, `hermes self-improvement improve --dry-run`, runtime artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, official Hermes `skill_manage`, `memory`, and active provider memory tools.
 
 ---
 
@@ -873,7 +873,7 @@ git commit -m "feat: summarize knowledge coverage and resolver quality"
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 git diff --check
 ```
 
@@ -888,7 +888,7 @@ git diff --check has no output
 **Step 2: Run dry-run**
 
 ```bash
-bin/hermes-self-improve improve --dry-run --scorer llm | tee /tmp/hermes-self-improve-knowledge-inventory-resolver-dryrun.txt
+hermes self-improvement improve --dry-run --scorer llm | tee /tmp/hermes-self-improve-knowledge-inventory-resolver-dryrun.txt
 ```
 
 Inspect:
@@ -990,8 +990,8 @@ Use this set before final push:
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run --scorer llm
+hermes self-improvement status
+hermes self-improvement improve --dry-run --scorer llm
 git diff --check
 git status --short --branch
 ```

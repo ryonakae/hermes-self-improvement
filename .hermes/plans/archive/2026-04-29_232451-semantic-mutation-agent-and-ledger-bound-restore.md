@@ -8,7 +8,7 @@
 
 **Architecture:** Forward mutation is semantic and agent-driven: the plugin creates bounded task intents and a Hermes mutation agent executes them with official Hermes skill/memory tools only. Verification, policy, scope checks, ledgers, and rollback remain plugin-owned. Rollback is not agent-driven; `self_improvement_rollback` / CLI reads a verified ledger and performs deterministic restore from snapshots via a dedicated recovery engine.
 
-**Tech Stack:** Python, pytest, Hermes plugin tools, Hermes skill tools (`skills_list`, `skill_view`, `skill_manage`), Hermes memory/provider tools, existing `bin/hermes-self-improve` CLI.
+**Tech Stack:** Python, pytest, Hermes plugin tools, Hermes skill tools (`skills_list`, `skill_view`, `skill_manage`), Hermes memory/provider tools, existing `hermes self-improvement` CLI.
 
 ---
 
@@ -94,7 +94,7 @@ Required validation after each meaningful slice:
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 ---
@@ -799,7 +799,7 @@ git commit -m "refactor(self-improvement): isolate legacy skill mutation paths"
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 **Optional plugin discovery validation if tool schemas changed:**

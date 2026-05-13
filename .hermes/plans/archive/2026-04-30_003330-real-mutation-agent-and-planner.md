@@ -8,7 +8,7 @@
 
 **Architecture:** Keep the current split: apply/ledger/rollback stay plugin-owned; semantic forward mutation is delegated to a bounded skills-only mutation backend; merge safety is evaluated by a Hermes auxiliary-model planner; memory rollback remains fail-closed unless store semantics are proven. The next implementation must remove accidental “works only in tests” gaps without adding broad terminal/file/git fallback.
 
-**Tech Stack:** Python plugin under `hermes_self_improvement/`, Hermes plugin tool registration, Hermes auxiliary model path via `agent.auxiliary_client.call_llm`, official tool-mediated skill operations via `skill_manage`, pytest, wrapper CLI `bin/hermes-self-improve`.
+**Tech Stack:** Python plugin under `hermes_self_improvement/`, Hermes plugin tool registration, Hermes auxiliary model path via `agent.auxiliary_client.call_llm`, official tool-mediated skill operations via `skill_manage`, pytest, wrapper CLI `hermes self-improvement`.
 
 **Model config convention:** Mutation agent model settings must follow the existing `model.llm` / `model.gepa` shape as `model.mutation`, not `mutation.model`. The `mutation.*` section is reserved for backend/runtime controls such as `backend`, `enabled`, `max_tool_calls`, and `max_iterations`. `model.mutation` owns `provider`, `model`, `base_url`, `api_key`, `timeout`, `max_tokens`, and `extra_body`. Merge planner should use `model.mutation` as well unless a later plan proves a separate `model.planner` is needed.
 
@@ -30,7 +30,7 @@ Latest checked state:
 - Validation already passes:
   - `.venv/bin/python -m py_compile __init__.py hermes_self_improvement/*.py`
   - `.venv/bin/python -m pytest tests -q` → `239 passed`
-  - `bin/hermes-self-improve status` → OK
+  - `hermes self-improvement status` → OK
 
 Implemented but only partially real:
 
@@ -544,7 +544,7 @@ Return an executor that either has real callables or returns `tool_unavailable` 
 
 **Step 5: Update status/report visibility**
 
-Add a field to `bin/hermes-self-improve status` output:
+Add a field to `hermes self-improvement status` output:
 
 ```json
 "mutation_backend": {
@@ -568,7 +568,7 @@ If unavailable:
 
 ```bash
 .venv/bin/python -m pytest tests/test_mutation_backend.py tests/test_plugin_tools.py -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 **Step 7: Commit**
@@ -743,13 +743,13 @@ def merge_planner_status(config: dict[str, Any] | None = None) -> dict[str, Any]
 
 **Step 3: Wire into status/report**
 
-`bin/hermes-self-improve status` should include these fields. Human rendered report should mention only when unavailable or relevant.
+`hermes self-improvement status` should include these fields. Human rendered report should mention only when unavailable or relevant.
 
 **Step 4: Run tests**
 
 ```bash
 .venv/bin/python -m pytest tests/test_plugin_tools.py tests/test_scheduled_execution_docs.py -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 **Step 5: Commit**
@@ -878,7 +878,7 @@ git commit -m "docs(self-improvement): clarify memory rollback remains fail-clos
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 Expected:

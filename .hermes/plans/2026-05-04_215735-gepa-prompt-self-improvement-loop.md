@@ -272,18 +272,18 @@ reject:
 既存のシンプル surface を維持する。
 
 ```bash
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve improve
-bin/hermes-self-improve calibrate --dry-run
-bin/hermes-self-improve calibrate
-bin/hermes-self-improve report
-bin/hermes-self-improve status
+hermes self-improvement improve --dry-run
+hermes self-improvement improve
+hermes self-improvement calibrate --dry-run
+hermes self-improvement calibrate
+hermes self-improvement report
+hermes self-improvement status
 ```
 
 追加 flag は最小限。
 
 ```bash
-bin/hermes-self-improve calibrate --target overlay-set --optimizer gepa --dry-run
+hermes self-improvement calibrate --target overlay-set --optimizer gepa --dry-run
 ```
 
 `calibrate` のデフォルトは安全側:
@@ -311,7 +311,7 @@ Status: 実装済み（`90e11e0 feat: record overlay hashes in episodes`）。
 
 ```bash
 python3 -m pytest tests/test_runner_steps.py tests/test_cli_surface.py -q
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement improve --dry-run
 ```
 
 ### Step 2: episode から overlay-set eval cases を作る
@@ -327,7 +327,7 @@ Status: 実装済み（`28f2320 feat: build overlay set eval cases`）。
 
 ```bash
 python3 -m pytest tests/test_runtime_eval_cases.py -q
-bin/hermes-self-improve calibrate --target overlay-set --dry-run
+hermes self-improvement calibrate --target overlay-set --dry-run
 ```
 
 ### Step 3: GEPA で overlay candidate set を作る
@@ -350,7 +350,7 @@ Status: 実装済み。overlay candidate set contract、runtime eval cases、DSP
 
 ```bash
 python3 -m pytest tests/test_gepa_adapter.py tests/test_prompt_candidate_optimizer.py -q
-bin/hermes-self-improve calibrate --target overlay-set --optimizer gepa --max-full-evals 2 --dry-run
+hermes self-improvement calibrate --target overlay-set --optimizer gepa --max-full-evals 2 --dry-run
 ```
 
 ### Step 4: GEPA eval result と acceptance checks をつなぐ
@@ -374,7 +374,7 @@ Status: 実装済み。candidate-set acceptance checks、GEPA result に基づ�
 
 ```bash
 python3 -m pytest tests/test_autonomous_evaluator.py tests/test_cli_surface.py -q
-bin/hermes-self-improve calibrate --target overlay-set --optimizer gepa --dry-run
+hermes self-improvement calibrate --target overlay-set --optimizer gepa --dry-run
 ```
 
 ### Step 5: 出力を compact に保つ
@@ -389,8 +389,8 @@ Status: 実装済み。CLI summary と agent-facing calibrate tool result は ov
 検証:
 
 ```bash
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement improve --dry-run
+hermes self-improvement calibrate --dry-run
 ```
 
 agent-facing tool result は counts / status / artifact path だけ返す。full payload は artifact に逃がす。

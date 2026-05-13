@@ -3,16 +3,16 @@
 Use the repository-local wrapper CLI. The mutation-capable runner surface is intentionally small; `setup` is a safe CLI-only runtime bootstrap:
 
 ```bash
-bin/hermes-self-improve setup
-bin/hermes-self-improve setup --check
-bin/hermes-self-improve setup --reset
-bin/hermes-self-improve setup --reset --yes
-bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24
-bin/hermes-self-improve improve
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement setup
+hermes self-improvement setup --check
+hermes self-improvement setup --reset
+hermes self-improvement setup --reset --yes
+hermes self-improvement status
+hermes self-improvement report --since-hours 24
+hermes self-improvement improve
+hermes self-improvement improve --dry-run
+hermes self-improvement calibrate
+hermes self-improvement calibrate --dry-run
 ```
 
 Semantics:
@@ -36,8 +36,8 @@ Validation after code or docs changes:
 ```bash
 python -m py_compile __init__.py hermes_self_improvement/*.py
 python -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate --dry-run
-bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json
+hermes self-improvement status
+hermes self-improvement improve --dry-run
+hermes self-improvement calibrate --dry-run
+hermes self-improvement calibrate --from-candidate-set /path/to/candidate-set.json
 ```

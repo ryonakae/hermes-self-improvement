@@ -110,7 +110,7 @@ site 名・role 名・ファイル名・関数名・class 名を一括リネー�
 
 **既存 overlay の破棄 (Q13 B)**
 - リネーム完了後、`${HERMES_HOME}/self-improvement/evaluator/active-prompts.json` と `evaluator/prompt-candidates/`, `evaluator/prompt-candidate-sets/` 配下の既存ファイルは新 role 名と hash が一致しないので、リセット手順をドキュメント化:
-  - `bin/hermes-self-improve setup --check` 後に `evaluator/active-prompts.json` を削除し再生成
+  - `hermes self-improvement setup --check` 後に `evaluator/active-prompts.json` を削除し再生成
   - PR1 の README/CLAUDE.md に「リネーム後は既存 overlay リセット必須」を追記
 
 ### PR 2: memory_agent 化一式
@@ -181,10 +181,10 @@ site 名・role 名・ファイル名・関数名・class 名を一括リネー�
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve setup --check
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement setup --check
+hermes self-improvement status
+hermes self-improvement improve --dry-run
+hermes self-improvement calibrate --dry-run
 git diff --check
 ```
 
@@ -206,16 +206,16 @@ PY
 rm -f ${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/active-prompts.json
 rm -rf ${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/prompt-candidates/*
 rm -rf ${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/prompt-candidate-sets/*
-bin/hermes-self-improve setup --check
+hermes self-improvement setup --check
 ```
 
 ### PR 2 (memory_agent 化)
 
 ```bash
 $PY -m pytest tests -q
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve improve   # memory_agent が実際に走ることを確認
-bin/hermes-self-improve report --since-hours 24
+hermes self-improvement improve --dry-run
+hermes self-improvement improve   # memory_agent が実際に走ることを確認
+hermes self-improvement report --since-hours 24
 ```
 
 確認項目:
@@ -234,7 +234,7 @@ bin/hermes-self-improve report --since-hours 24
 
 - PR 1 と PR 2 は別 commit / 別 PR に分ける。PR1 が機能不変であることを diff レビューで担保する。
 - PR 1 完了時点で旧 overlay は破棄され、4 role 分の overlay 候補生成が空からスタートする (リリース前なので問題なし)。
-- PR 2 で memory_agent が安定運用に乗るまで数サイクルの dogfooding が必要。`bin/hermes-self-improve report --since-hours 24` で site 別の挙動を観測。
+- PR 2 で memory_agent が安定運用に乗るまで数サイクルの dogfooding が必要。`hermes self-improvement report --since-hours 24` で site 別の挙動を観測。
 - `mutation_worker.py` / `mutation_policy.py` は据え置き。下位実装層の「mutation」概念語として保持する (Q16 A)。
 - 「mutation」という語は worker / policy / エラーコード (`mutation_agent_unavailable` 等) に残るが、これは下位レイヤーの語彙として正当。skill_agent / memory_agent という中位の対象別命名と階層的に共存する。
 - CLAUDE.md の安全境界記述 (memory mutation は memory tool 経由のみ等) は変更なし。memory_agent も `mutation_worker.execute_memory_tool_operation` 経由で公式 tool を呼ぶ。

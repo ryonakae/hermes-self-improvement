@@ -480,7 +480,7 @@ Docs must distinguish:
 ```bash
 PY=${PYTHON:-.venv/bin/python}
 $PY -m pytest tests/test_plugin_tools.py tests/test_scheduled_execution_docs.py tests/test_memory_recovery.py -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 **Step 4: Commit/push**
@@ -502,7 +502,7 @@ uv sync --group dev
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 Optional smoke tests, only in temp isolated runtimes:

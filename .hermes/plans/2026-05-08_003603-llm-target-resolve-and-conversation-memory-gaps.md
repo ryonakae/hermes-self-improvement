@@ -896,7 +896,7 @@ Expected: all pass.
 **Step 2: Dry-run dogfood**
 
 ```bash
-bin/hermes-self-improve improve --dry-run --json
+hermes self-improvement improve --dry-run --json
 ```
 
 Expected:
@@ -909,7 +909,7 @@ Expected:
 **Step 3: Mutating dogfood only after dry-run looks sane**
 
 ```bash
-bin/hermes-self-improve improve --json
+hermes self-improvement improve --json
 ```
 
 Expected:
@@ -922,7 +922,7 @@ Expected:
 **Step 4: Calibration dry-run**
 
 ```bash
-bin/hermes-self-improve calibrate --dry-run --json
+hermes self-improvement calibrate --dry-run --json
 ```
 
 Expected:

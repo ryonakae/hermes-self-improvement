@@ -24,7 +24,7 @@
 - Use official tools only for mutation: `skill_manage`, official memory/provider tools, and runtime-private prompt overlay promotion.
 - Treat LLM judgment as fuzzy planning/evaluation; deterministic code collects evidence, enforces hard safety gates, validates post-state, and renders compact summaries.
 - Every code slice starts with a focused RED regression test, then implementation, then targeted tests, then full-suite validation.
-- Default validation after code changes: `python -m py_compile __init__.py hermes_self_improvement/*.py`, targeted pytest, `python -m pytest -q`, `git diff --check`, and `bin/hermes-self-improve status` when runtime setup is relevant.
+- Default validation after code changes: `python -m py_compile __init__.py hermes_self_improvement/*.py`, targeted pytest, `python -m pytest -q`, `git diff --check`, and `hermes self-improvement status` when runtime setup is relevant.
 - If tool schemas or plugin registration change, also run plugin discovery smoke from `AGENTS.md`.
 - New artifact fields must be optional/backward-compatible: missing old-artifact fields become `unknown`, `legacy_unscored`, or omitted summary lines; do not backfill by guessing.
 - After every implemented slice, update this plan, `README.md` plan index, and the parent roadmap progress log before commit/push.
@@ -86,8 +86,8 @@
 **Objective:** Run dry-run/replay on recent real inventory data and verify no unsafe mutation occurs.
 
 **Commands:**
-- `bin/hermes-self-improve report --since-hours 72`
-- `bin/hermes-self-improve improve --dry-run`
+- `hermes self-improvement report --since-hours 72`
+- `hermes self-improvement improve --dry-run`
 - Inspect artifact manually before any replay.
 - Replay only if mutation-ready items are low-risk and evidence-backed.
 

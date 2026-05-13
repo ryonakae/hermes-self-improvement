@@ -24,7 +24,7 @@ Out of scope:
 ## Suggested Tasks
 
 1. Inspect `/Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260510T042934Z-abead71fb9de.json`.
-2. Run `bin/hermes-self-improve calibrate --dry-run` and inspect human-readable wording.
+2. Run `hermes self-improvement calibrate --dry-run` and inspect human-readable wording.
 3. If dry-run wording implies actual promotion, patch summary text/tests.
 4. If candidate set is safe and the summary is clear, optionally run mutating calibrate from that candidate set.
 5. Update roadmap/index after verification.
@@ -46,8 +46,8 @@ Implemented on 2026-05-10.
 
 ## Verification
 
-- `bin/hermes-self-improve calibrate --dry-run` showed `action would promote`, with promoted `no` for prompt overlays.
-- `bin/hermes-self-improve calibrate --from-candidate-set /Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260510T044730Z-dccb26ee3720.json` completed with `Calibration: updated` and `action promoted`.
+- `hermes self-improvement calibrate --dry-run` showed `action would promote`, with promoted `no` for prompt overlays.
+- `hermes self-improvement calibrate --from-candidate-set /Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260510T044730Z-dccb26ee3720.json` completed with `Calibration: updated` and `action promoted`.
 - `python -m py_compile __init__.py hermes_self_improvement/*.py`
 - `python -m pytest -q` -> `550 passed, 2 skipped`
 - `git diff --check`

@@ -29,16 +29,16 @@
 ## Desired user-visible behavior
 
 ```bash
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement improve --dry-run
 # scorer: llm-v0.1 or llm fallback result; no live GEPA call
 
-bin/hermes-self-improve report
+hermes self-improvement report
 # scorer: llm-v0.1 or llm fallback result; no live GEPA call
 
-bin/hermes-self-improve improve --scorer gepa
+hermes self-improvement improve --scorer gepa
 # argparse error: invalid choice
 
-bin/hermes-self-improve improve --scorer compare
+hermes self-improvement improve --scorer compare
 # argparse error: invalid choice
 ```
 
@@ -328,9 +328,9 @@ $PY -m pytest tests/test_cli_surface.py tests/test_static_validation.py -q
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py tests/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24 --json > /tmp/self_improvement_report.json
-bin/hermes-self-improve improve --dry-run --json > /tmp/self_improvement_improve.json
+hermes self-improvement status
+hermes self-improvement report --since-hours 24 --json > /tmp/self_improvement_report.json
+hermes self-improvement improve --dry-run --json > /tmp/self_improvement_improve.json
 $PY - <<'PY'
 import json
 for path in ['/tmp/self_improvement_report.json', '/tmp/self_improvement_improve.json']:
@@ -342,17 +342,17 @@ for path in ['/tmp/self_improvement_report.json', '/tmp/self_improvement_improve
     if hits:
         raise SystemExit(1)
 PY
-! bin/hermes-self-improve improve --scorer gepa --dry-run
-! bin/hermes-self-improve improve --scorer compare --dry-run
-! bin/hermes-self-improve report --scorer gepa
-! bin/hermes-self-improve report --scorer compare
+! hermes self-improvement improve --scorer gepa --dry-run
+! hermes self-improvement improve --scorer compare --dry-run
+! hermes self-improvement report --scorer gepa
+! hermes self-improvement report --scorer compare
 git diff --check
 ```
 
 If shell `!` handling is inconvenient in CI/local shell, replace with explicit non-zero checks:
 
 ```bash
-if bin/hermes-self-improve improve --scorer gepa --dry-run; then exit 1; fi
+if hermes self-improvement improve --scorer gepa --dry-run; then exit 1; fi
 ```
 
 ---

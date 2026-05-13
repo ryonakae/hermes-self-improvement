@@ -391,13 +391,13 @@ def write_memory_visibility_proof_report(*, config: dict[str, Any], now: datetim
 Avoid broad new primary command. Prefer:
 
 ```bash
-bin/hermes-self-improve status --json
+hermes self-improvement status --json
 ```
 
 already shows proof summary. For report artifact, add a debug-safe flag only if needed:
 
 ```bash
-bin/hermes-self-improve status --write-memory-proof-report
+hermes self-improvement status --write-memory-proof-report
 ```
 
 If adding a flag feels too much, keep the helper internal and use it in tests/docs only.
@@ -406,7 +406,7 @@ If adding a flag feels too much, keep the helper internal and use it in tests/do
 
 ```bash
 $PY -m pytest tests/test_memory_store_probe.py tests/test_cli_surface.py -q
-bin/hermes-self-improve status --json
+hermes self-improvement status --json
 ```
 
 ### Step 5: Commit
@@ -464,7 +464,7 @@ until live proof truly passes.
 
 ```bash
 $PY -m pytest tests/test_scheduled_execution_docs.py tests/test_plugin_tools.py tests/test_memory_store_probe.py tests/test_builtin_memory_tool_semantics.py -q
-bin/hermes-self-improve status --json
+hermes self-improvement status --json
 ```
 
 ### Step 5: Commit
@@ -486,7 +486,7 @@ uv sync --group dev
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status --json
+hermes self-improvement status --json
 ```
 
 Optional live smoke only when intentionally testing isolated memory runtime:

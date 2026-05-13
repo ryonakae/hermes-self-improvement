@@ -21,8 +21,8 @@
 - Targeted validation run:
   - `.venv/bin/python -m py_compile __init__.py hermes_self_improvement/*.py` passed.
   - `.venv/bin/python -m pytest tests/test_mutation_backend.py tests/test_merge_planner.py tests/test_real_mutation_backend_smoke.py -q` → `22 passed, 1 skipped`.
-  - `bin/hermes-self-improve status` reports `mutation_backend.available=true` and `merge_planner.available=true`.
-  - `bin/hermes-self-improve status --json` currently fails because `status` prints JSON by default and has no `--json` flag.
+  - `hermes self-improvement status` reports `mutation_backend.available=true` and `merge_planner.available=true`.
+  - `hermes self-improvement status --json` currently fails because `status` prints JSON by default and has no `--json` flag.
 
 **Non-negotiable constraints:**
 
@@ -55,7 +55,7 @@
    PY=${PYTHON:-.venv/bin/python}
    $PY -m py_compile __init__.py hermes_self_improvement/*.py
    $PY -m pytest tests/test_mutation_backend.py tests/test_apply_engine.py tests/test_merge_planner.py tests/test_real_mutation_backend_smoke.py -q
-   bin/hermes-self-improve status
+   hermes self-improvement status
    ```
 
 2. Record in implementation notes:
@@ -111,8 +111,8 @@ Do not add a second human output mode in this slice.
 ```bash
 PY=${PYTHON:-.venv/bin/python}
 $PY -m pytest tests/test_cli.py -q
-bin/hermes-self-improve status
-bin/hermes-self-improve status --json
+hermes self-improvement status
+hermes self-improvement status --json
 ```
 
 Both status commands should produce parseable JSON.
@@ -195,7 +195,7 @@ Update `mutation_backend_status()` to include the readiness detail without chang
 ```bash
 PY=${PYTHON:-.venv/bin/python}
 $PY -m pytest tests/test_mutation_backend.py tests/test_plugin_tools.py -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 **Step 5: Commit/push**
@@ -498,7 +498,7 @@ uv sync --group dev
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 Expected:

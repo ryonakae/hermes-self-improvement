@@ -20,7 +20,7 @@ Current state checked before writing this plan:
 
 ```text
 ## main...origin/main
-bin/hermes-self-improve status: OK
+hermes self-improvement status: OK
 plugin enabled: True
 mutation backend: available
 DSPy available: True
@@ -821,10 +821,10 @@ git commit -m "docs(self-improvement): document curator telemetry source of trut
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py tests/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run --json | $PY -m json.tool >/tmp/self_improve_dry_run.json
-bin/hermes-self-improve report --since-hours 24 --json | $PY -m json.tool >/tmp/self_improve_report.json
-bin/hermes-self-improve calibrate --dry-run --json | $PY -m json.tool >/tmp/self_improve_calibrate.json
+hermes self-improvement status
+hermes self-improvement improve --dry-run --json | $PY -m json.tool >/tmp/self_improve_dry_run.json
+hermes self-improvement report --since-hours 24 --json | $PY -m json.tool >/tmp/self_improve_report.json
+hermes self-improvement calibrate --dry-run --json | $PY -m json.tool >/tmp/self_improve_calibrate.json
 ```
 
 Expected:

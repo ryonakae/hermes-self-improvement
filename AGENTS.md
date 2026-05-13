@@ -12,7 +12,7 @@ TDD で進めます。新規機能や振る舞い変更は、`tests/` に失敗�
 
 ```bash
 git status --short
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 無関係な変更を巻き戻さないこと。安全境界に触る変更は `skills/operations/SKILL.md` を先に読みます。
@@ -20,12 +20,12 @@ bin/hermes-self-improve status
 ## よく使うコマンド
 
 ```bash
-bin/hermes-self-improve status                      # 状態確認 (read-only)
-bin/hermes-self-improve report --since-hours 24     # 直近観測の要約 (read-only)
-bin/hermes-self-improve improve --dry-run           # 改善案のプレビュー
-bin/hermes-self-improve calibrate --dry-run         # overlay 調整のプレビュー
-bin/hermes-self-improve improve                     # skill / memory を実際に変更
-bin/hermes-self-improve calibrate                   # evaluator overlay を実際に変更
+hermes self-improvement status                      # 状態確認 (read-only)
+hermes self-improvement report --since-hours 24     # 直近観測の要約 (read-only)
+hermes self-improvement improve --dry-run           # 改善案のプレビュー
+hermes self-improvement calibrate --dry-run         # overlay 調整のプレビュー
+hermes self-improvement improve                     # skill / memory を実際に変更
+hermes self-improvement calibrate                   # evaluator overlay を実際に変更
 ```
 
 primary surface は `improve / calibrate / report / status` の 4 つだけ。`setup` は CLI 専用の bootstrap で agent tool には出しません。`plan / apply / rollback / outcome`、`--execute`、item/hash 指定 flag、legacy command を primary surface に戻さないでください。
@@ -40,7 +40,7 @@ primary surface は `improve / calibrate / report / status` の 4 つだけ。`s
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 git diff --check
 ```
 

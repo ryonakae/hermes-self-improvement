@@ -521,9 +521,9 @@ dry-run executes analyzer + planner, not editor.
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py tests/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve improve --dry-run --json > /tmp/self_improvement_planner_dry_run.json
+hermes self-improvement status
+hermes self-improvement improve --dry-run
+hermes self-improvement improve --dry-run --json > /tmp/self_improvement_planner_dry_run.json
 $PY - <<'PY'
 import json
 payload = json.load(open('/tmp/self_improvement_planner_dry_run.json'))
@@ -540,7 +540,7 @@ if payload.get('dry_run') is not True:
 if not planner:
     raise SystemExit('missing planner result')
 PY
-bin/hermes-self-improve report --since-hours 24 --json > /tmp/self_improvement_report.json
+hermes self-improvement report --since-hours 24 --json > /tmp/self_improvement_report.json
 git diff --check
 ```
 

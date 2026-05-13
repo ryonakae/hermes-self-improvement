@@ -24,7 +24,7 @@
 - Use official tools only for mutation: `skill_manage`, official memory/provider tools, and runtime-private prompt overlay promotion.
 - Treat LLM judgment as fuzzy planning/evaluation; deterministic code collects evidence, enforces hard safety gates, validates post-state, and renders compact summaries.
 - Every code slice starts with a focused RED regression test, then implementation, then targeted tests, then full-suite validation.
-- Default validation after code changes: `python -m py_compile __init__.py hermes_self_improvement/*.py`, targeted pytest, `python -m pytest -q`, `git diff --check`, and `bin/hermes-self-improve status` when runtime setup is relevant.
+- Default validation after code changes: `python -m py_compile __init__.py hermes_self_improvement/*.py`, targeted pytest, `python -m pytest -q`, `git diff --check`, and `hermes self-improvement status` when runtime setup is relevant.
 - If tool schemas or plugin registration change, also run plugin discovery smoke from `AGENTS.md`.
 - New artifact fields must be optional/backward-compatible: missing old-artifact fields become `unknown`, `legacy_unscored`, or omitted summary lines; do not backfill by guessing.
 - After every implemented slice, update this plan, `README.md` plan index, and the parent roadmap progress log before commit/push.
@@ -43,11 +43,11 @@
 - Test/Smoke: local commands below
 
 **Commands:**
-1. `bin/hermes-self-improve report --since-hours 24`
-2. `bin/hermes-self-improve improve --dry-run`
+1. `hermes self-improvement report --since-hours 24`
+2. `hermes self-improvement improve --dry-run`
 3. Inspect summary and artifact for semantic safety.
 4. Run the normal mutation-capable `improve` flow only when all mutation-ready items are low-risk and evidence-backed. Do not add or revive a separate per-item replay/apply surface.
-5. `bin/hermes-self-improve calibrate --dry-run`
+5. `hermes self-improvement calibrate --dry-run`
 6. Execute calibration only when regression passes and wording is clear.
 
 ### Phase 7.2 — Safety threshold review

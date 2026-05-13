@@ -6,7 +6,7 @@
 
 **Architecture:** Keep one existing `improve` flow and one existing `calibrate` flow. Add better evidence, validation, accounting, outcome feedback, and report surfaces inside those flows. Do not add approval queues, extra lanes, broad policy modes, or Hermes core dependencies unless a concrete failure requires them.
 
-**Tech Stack:** Hermes standalone plugin, observer hooks, `bin/hermes-self-improve`, official skill/memory tools, native skill_agent / memory_agent tool harness, runtime-private prompt overlays, DSPy/GEPA through `calibrate`, pytest.
+**Tech Stack:** Hermes standalone plugin, observer hooks, `hermes self-improvement`, official skill/memory tools, native skill_agent / memory_agent tool harness, runtime-private prompt overlays, DSPy/GEPA through `calibrate`, pytest.
 
 ---
 

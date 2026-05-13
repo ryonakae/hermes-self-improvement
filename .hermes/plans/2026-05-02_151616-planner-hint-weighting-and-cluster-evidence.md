@@ -306,9 +306,9 @@ Run:
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve improve --dry-run --json
+hermes self-improvement status
+hermes self-improvement improve --dry-run
+hermes self-improvement improve --dry-run --json
 ```
 
 Plugin registration smoke:

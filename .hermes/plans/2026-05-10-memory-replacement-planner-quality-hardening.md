@@ -26,8 +26,8 @@ Out of scope:
 1. Inspect recent dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260510T034850Z.json` for accepted memory operations.
 2. Add focused tests for unsafe replacement examples and valid duplicate/stale consolidation examples.
 3. Tighten memory planner prompt or operation normalization so unrelated replacement is not classified as mutation-ready.
-4. Re-run `bin/hermes-self-improve improve --dry-run`.
-5. If only safe bounded operations remain, run `bin/hermes-self-improve improve --from-run <artifact>`.
+4. Re-run `hermes self-improvement improve --dry-run`.
+5. If only safe bounded operations remain, run `hermes self-improvement improve --from-run <artifact>`.
 6. Update the roadmap and index.
 
 ## Exit Criteria

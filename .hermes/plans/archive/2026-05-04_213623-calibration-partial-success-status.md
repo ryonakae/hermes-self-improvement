@@ -2,7 +2,7 @@
 
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
-**Goal:** Make `bin/hermes-self-improve calibrate` report and persist prompt-overlay promotion and evaluator calibration outcomes separately, so a successful planner/editor prompt overlay promotion is not mislabeled as a failed calibration when evaluator regression is unavailable.
+**Goal:** Make `hermes self-improvement calibrate` report and persist prompt-overlay promotion and evaluator calibration outcomes separately, so a successful planner/editor prompt overlay promotion is not mislabeled as a failed calibration when evaluator regression is unavailable.
 
 **Architecture:** Split calibration execution into two independent sub-results: `prompt_overlay_updates` and `evaluator_update`. The top-level status should be derived from those sub-results after all attempted work completes. Prompt overlays may promote successfully even when no evaluator candidate exists or evaluator regression is not configured; evaluator failure should not retroactively mark promoted prompt overlays as failed.
 
@@ -362,7 +362,7 @@ Expected: all tests pass.
 **Step 2: Run dry-run calibration**
 
 ```bash
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement calibrate --dry-run
 ```
 
 Expected:
@@ -373,7 +373,7 @@ Expected:
 **Step 3: Run real calibration only if dry-run still shows candidate**
 
 ```bash
-bin/hermes-self-improve calibrate
+hermes self-improvement calibrate
 ```
 
 Expected if planner prompt candidate exists and evaluator regression remains unavailable:

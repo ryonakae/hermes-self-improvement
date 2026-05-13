@@ -8,7 +8,7 @@
 
 **Architecture:** `outcome_observer` の観測窓を rolling window + dedupe に変更する。`calibration` に材料分類サマリと GEPA 起動判定を追加し、`runtime_eval_cases` が recurring/unmatched 観測から bootstrap ケースを作れるようにする。候補生成の入口だけ広げ、promotion gate は既存のまま厳格に保つ。
 
-**Tech Stack:** Python 3, pytest, JSON artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, CLI `bin/hermes-self-improve calibrate`.
+**Tech Stack:** Python 3, pytest, JSON artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, CLI `hermes self-improvement calibrate`.
 
 ---
 
@@ -118,8 +118,8 @@ PY=${PYTHON:-.venv/bin/python}
 $PY -m pytest tests/test_outcome_observer.py tests/test_calibration.py tests/test_runtime_eval_cases.py tests/test_report_integration.py -q
 $PY -m pytest tests -q
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
-bin/hermes-self-improve calibrate --dry-run --json
-bin/hermes-self-improve status
+hermes self-improvement calibrate --dry-run --json
+hermes self-improvement status
 
 git diff --check
 git status --short

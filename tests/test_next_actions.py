@@ -13,7 +13,7 @@ def test_next_actions_for_improve_dry_run_includes_mutating_runner():
 
     assert any(item["kind"] == "run_improve" for item in actions)
     assert "improve --dry-run" in commands
-    assert "bin/hermes-self-improve improve" in commands
+    assert "hermes self-improvement improve" in commands
     rendered = render_next_actions(actions)
     assert "Next actions:" in rendered
     assert "apply" not in rendered

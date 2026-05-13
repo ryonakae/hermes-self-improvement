@@ -53,14 +53,14 @@ Runtime artifact は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下。主�
 ## 日常コマンド
 
 ```bash
-bin/hermes-self-improve setup --check
-bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24 --json
-bin/hermes-self-improve improve
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate
-bin/hermes-self-improve calibrate --dry-run
-bin/hermes-self-improve calibrate --from-candidate-set /path/to/candidate-set.json
+hermes self-improvement setup --check
+hermes self-improvement status
+hermes self-improvement report --since-hours 24 --json
+hermes self-improvement improve
+hermes self-improvement improve --dry-run
+hermes self-improvement calibrate
+hermes self-improvement calibrate --dry-run
+hermes self-improvement calibrate --from-candidate-set /path/to/candidate-set.json
 ```
 
 Primary plugin tools:
@@ -90,7 +90,7 @@ self_improvement_calibrate
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 Registration / tool surface 変更後:

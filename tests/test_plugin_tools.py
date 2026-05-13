@@ -314,7 +314,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                 ]},
                 "evaluator": {"status": "calibration_only", "changed": 0},
             },
-            "next_actions": [{"kind": "run_mutating_improve", "command": "bin/hermes-self-improve improve"}],
+            "next_actions": [{"kind": "run_mutating_improve", "command": "hermes self-improvement improve"}],
         }
 
     mod._handle_self_improvement_improve_tool.__globals__["run_improve"] = fake_run_improve

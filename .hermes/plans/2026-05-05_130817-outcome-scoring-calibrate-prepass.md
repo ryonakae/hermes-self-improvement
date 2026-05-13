@@ -6,7 +6,7 @@
 
 **Architecture:** `improve` は既存どおり episode を append-only で記録する。`calibrate` は実行前に lightweight producer を呼び、未処理観測から `self_improvement_outcome_observation` を生成して `${HERMES_HOME}/self-improvement/outcomes/` に保存する。既存の `outcome_scoring.py` / `credit_assignment.py` / `calibration.py` は、その observation を読んで GEPA / overlay calibration evidence に反映する。
 
-**Tech Stack:** Python 3, pytest, JSON artifact ledgers under `${HERMES_HOME:-~/.hermes}/self-improvement/`, existing plugin CLI `bin/hermes-self-improve`.
+**Tech Stack:** Python 3, pytest, JSON artifact ledgers under `${HERMES_HOME:-~/.hermes}/self-improvement/`, existing plugin CLI `hermes self-improvement`.
 
 ---
 
@@ -783,8 +783,8 @@ Expected: no output / exit 0.
 **Step 4: CLI smoke**
 
 ```bash
-bin/hermes-self-improve status
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement status
+hermes self-improvement calibrate --dry-run
 ```
 
 Expected:

@@ -75,13 +75,13 @@ After implementation:
 
 ```bash
 # Dependency-free regression, still available
-bin/hermes-self-improve gepa-eval --json
+hermes self-improvement gepa-eval --json
 
 # Real DSPy program evaluation without optimizer compile, if dspy is installed
-bin/hermes-self-improve gepa-eval --mode dspy_program --json
+hermes self-improvement gepa-eval --mode dspy_program --json
 
 # Explicit GEPA optimizer compile run
-bin/hermes-self-improve gepa-optimize \
+hermes self-improvement gepa-optimize \
   --mode report_only \
   --trainset evals/proposal_eval_cases.jsonl \
   --valset evals/proposal_eval_cases.jsonl \
@@ -89,14 +89,14 @@ bin/hermes-self-improve gepa-optimize \
   --json
 
 # Decision paths use compare by default
-bin/hermes-self-improve report --since-hours 24 --json
-bin/hermes-self-improve generate-apply-plan --mode dry_run_plan --since-hours 24 --json
+hermes self-improvement report --since-hours 24 --json
+hermes self-improvement generate-apply-plan --mode dry_run_plan --since-hours 24 --json
 
 # Observation/classification can stay cheap
-bin/hermes-self-improve analyze --since-hours 24 --json
+hermes self-improvement analyze --since-hours 24 --json
 
 # Explicit GEPA scorer still available for targeted scorer inspection
-bin/hermes-self-improve report --since-hours 24 --scorer gepa --json
+hermes self-improvement report --since-hours 24 --scorer gepa --json
 ```
 
 `--scorer compare` should compare LLM scoring with the active GEPA scorer. GEPA/LLM comparison is the default decision input for self-improvement apply planning. If GEPA is unavailable, the comparison must show `gepa_scorer_error` clearly. If GEPA and LLM materially disagree, the proposal must be routed to human review / approval-required handling and must not qualify for unattended apply. Materiality is change-type aware: heavier classes use stricter thresholds than typo / pitfall / validation additions, with risk and recommendation disagreement always blocking unattended apply.
@@ -367,7 +367,7 @@ Implementation should follow current DSPy GEPA docs, but hide API differences be
 **Command:**
 
 ```bash
-bin/hermes-self-improve gepa-optimize \
+hermes self-improvement gepa-optimize \
   --mode report_only \
   --trainset evals/proposal_eval_cases.jsonl \
   --valset evals/proposal_eval_cases.jsonl \
@@ -623,7 +623,7 @@ gepa_scorer:
 - Hook/plugin discovery import paths do not import DSPy eagerly.
 - `python3 -m pip install -e .` installs `dspy` as a required project dependency.
 - `config.example.yaml` is tracked, `config.yaml` / `config.local.yaml` are ignored, plugin config supports YAML plus `${ENV}` expansion, and no `.env.example` / `.env` is required for the model config path.
-- `bin/hermes-self-improve gepa-eval --json` uses real DSPy when evaluating the user-facing GEPA path; deterministic behavior is confined to fake-DSPy tests / fixtures.
+- `hermes self-improvement gepa-eval --json` uses real DSPy when evaluating the user-facing GEPA path; deterministic behavior is confined to fake-DSPy tests / fixtures.
 - A fake-DSPy test proves `gepa-optimize` calls `dspy.GEPA(...).compile(student, trainset=..., valset=...)` with metric and budget.
 - A real-DSPy optional smoke can run when DSPy is installed and Hermes-authenticated LLM routing is available.
 - GEPA scorer payloads always force `auto_apply=false`.
@@ -650,16 +650,16 @@ Implementation progress as of 2026-04-28:
 - Added tests for required dependency metadata, no eager DSPy import on plugin load, CLI scorer defaults, and fail-closed runtime GEPA behavior.
 - After Safehouse write access was relaxed, `python3 -m pip install -e .` from the plugin root succeeded. Runtime now reports `dspy_available=true`; installed versions observed were `dspy 3.2.0`, `gepa 0.0.27`, `litellm 1.82.6`, `openai 2.32.0`, and `anthropic 0.96.0`.
 - Dependency inspection showed `hermes-self-improvement` directly requires only `dspy`; `openai` and `litellm` are direct dependencies of `dspy`, while `anthropic` is already present from `hermes-agent` and is only a DSPy optional extra. This does not change the runtime LLM policy: DSPy/GEPA LM calls should use Hermes-authenticated auxiliary model routing, not plugin-managed provider API keys.
-- Validation after install: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`190 passed`), and `bin/hermes-self-improve gepa-eval --json` (`all_passed: true`).
+- Validation after install: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`190 passed`), and `hermes self-improvement gepa-eval --json` (`all_passed: true`).
 - Started the real DSPy program slice: `dspy_program.py` now has lazy `dspy` detection/import helpers, a real `dspy.Signature` / `dspy.Module` / `dspy.Predict` program boundary using `proposal_json`, `findings_json`, `rubric_json`, and structured `score_json`, plus sanitizer gates that clamp score, enforce allowed enums, and force `auto_apply=false`.
 - Wired `score_with_gepa(... mode=dspy_program_eval ...)` to the DSPy program boundary instead of raising the previous “not implemented yet” error; the adapter still fails closed for missing DSPy, disabled GEPA, unsupported DSPy API, compiled artifact mode without path, and unknown modes.
-- Added fake-DSPy unit coverage for the program boundary, invalid JSON fail-closed behavior, adapter handoff, and adapter-level `auto_apply=false` enforcement. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`193 passed`), `bin/hermes-self-improve status`, and `bin/hermes-self-improve gepa-eval --json` (`all_passed: true`).
+- Added fake-DSPy unit coverage for the program boundary, invalid JSON fail-closed behavior, adapter handoff, and adapter-level `auto_apply=false` enforcement. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`193 passed`), `hermes self-improvement status`, and `hermes self-improvement gepa-eval --json` (`all_passed: true`).
 - Added `gepa_metric.py` with a GEPA-compatible feedback metric for proposal scoring. It evaluates score bounds, recommendation/risk matches, confidence floor, `auto_apply=false`, and whether rationale references concrete evidence when findings exist. It returns normalized numeric score plus textual feedback, with a float-only adapter mode for optimizer compatibility.
 - Added lazy eval-case conversion helpers in `gepa_adapter.py`: `eval_case_to_dspy_example()` and `convert_eval_cases_to_dspy_examples()`. They validate `proposal` / `findings` / `expected`, use fakeable `dspy.Example(...).with_inputs(...)`, and record malformed rejected cases for report paths instead of crashing non-optimizer reporting.
-- Added fake-dependency tests for the GEPA metric and DSPy Example conversion. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`200 passed`), `bin/hermes-self-improve status`, `bin/hermes-self-improve gepa-eval --json` (`all_passed: true`), and a normal import smoke confirming `dspy` is not eagerly imported.
-- Implemented the explicit `gepa-optimize` CLI slice. `report_only` mode now allows the command, the CLI accepts `--trainset`, `--valset`, `--max-full-evals`, and `--json`, and the adapter runs `dspy.GEPA(...).compile(student, trainset=..., valset=...)` through a fakeable boundary with the GEPA feedback metric. The optimizer writes compile artifacts under `reports/self-improvement/gepa/YYYY-MM-DD/` and a compiled candidate under `reports/self-improvement/gepa/programs/`, but it does not promote the active evaluator pointer. Added fail-closed budget / malformed eval case guards and fake-DSPy tests. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`203 passed`), `bin/hermes-self-improve status`, `bin/hermes-self-improve gepa-eval --json` (`all_passed: true`), and `bin/hermes-self-improve gepa-optimize --help`.
-- Continued Task 6 by wiring `compiled_program_eval` into the runtime GEPA scorer. The adapter now resolves either `gepa_scorer.compiled_program_path` or a runtime active evaluator pointer, rejects missing/invalid artifacts fail-closed, loads the artifact through the DSPy program boundary, and preserves advisory-only `auto_apply=false`. Repo defaults now include `active_evaluator_pointer_path: null`. Added fake-DSPy coverage for configured compiled artifacts, active pointer resolution, missing artifact rejection, and compiled-program loading. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`207 passed`), `bin/hermes-self-improve status`, `bin/hermes-self-improve gepa-eval --json` (`all_passed: true`), and `git diff --check`.
-- Implemented Task 6.5 change-type-aware scorer comparison policy. Repo/default config now includes `scorer_comparison_policy`; compare scoring selects `strict`, `default`, or `low_risk_prose` thresholds by proposal change type, always blocks risk/recommendation mismatch, records `scorer_comparison_policy` on scored proposals, and apply-plan items preserve that policy metadata while keeping scorer disagreement ineligible for unattended apply. Added tests for strict vs low-risk prose thresholds and risk/recommendation mismatch. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`209 passed`), `bin/hermes-self-improve status`, `bin/hermes-self-improve gepa-eval --json` (`all_passed: true`), and `git diff --check`.
+- Added fake-dependency tests for the GEPA metric and DSPy Example conversion. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`200 passed`), `hermes self-improvement status`, `hermes self-improvement gepa-eval --json` (`all_passed: true`), and a normal import smoke confirming `dspy` is not eagerly imported.
+- Implemented the explicit `gepa-optimize` CLI slice. `report_only` mode now allows the command, the CLI accepts `--trainset`, `--valset`, `--max-full-evals`, and `--json`, and the adapter runs `dspy.GEPA(...).compile(student, trainset=..., valset=...)` through a fakeable boundary with the GEPA feedback metric. The optimizer writes compile artifacts under `reports/self-improvement/gepa/YYYY-MM-DD/` and a compiled candidate under `reports/self-improvement/gepa/programs/`, but it does not promote the active evaluator pointer. Added fail-closed budget / malformed eval case guards and fake-DSPy tests. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`203 passed`), `hermes self-improvement status`, `hermes self-improvement gepa-eval --json` (`all_passed: true`), and `hermes self-improvement gepa-optimize --help`.
+- Continued Task 6 by wiring `compiled_program_eval` into the runtime GEPA scorer. The adapter now resolves either `gepa_scorer.compiled_program_path` or a runtime active evaluator pointer, rejects missing/invalid artifacts fail-closed, loads the artifact through the DSPy program boundary, and preserves advisory-only `auto_apply=false`. Repo defaults now include `active_evaluator_pointer_path: null`. Added fake-DSPy coverage for configured compiled artifacts, active pointer resolution, missing artifact rejection, and compiled-program loading. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`207 passed`), `hermes self-improvement status`, `hermes self-improvement gepa-eval --json` (`all_passed: true`), and `git diff --check`.
+- Implemented Task 6.5 change-type-aware scorer comparison policy. Repo/default config now includes `scorer_comparison_policy`; compare scoring selects `strict`, `default`, or `low_risk_prose` thresholds by proposal change type, always blocks risk/recommendation mismatch, records `scorer_comparison_policy` on scored proposals, and apply-plan items preserve that policy metadata while keeping scorer disagreement ineligible for unattended apply. Added tests for strict vs low-risk prose thresholds and risk/recommendation mismatch. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`209 passed`), `hermes self-improvement status`, `hermes self-improvement gepa-eval --json` (`all_passed: true`), and `git diff --check`.
 - Started Task 6.7 with an approval-gated `evaluator_promote` apply-plan operation. The planner resolves `${reports_dir}/gepa/active-evaluator.json` or configured `active_evaluator_pointer_path`, validates compiled candidate existence and hash, requires a `regression_result_hash`, generates a deterministic active evaluator pointer payload, and uses `create_file` or `replace_entire_file` mutation plus rollback preview. It is approval-required, never unattended. Added tests for create, replace, rollback preview, and candidate hash mismatch. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`212 passed`).
 - Continued Task 6.7 by binding evaluator promotion approvals to candidate and active-pointer state. `create_approval_artifact()` now records evaluator candidate id/path/hash, regression result hash, active pointer path, active-before hash, and rollback strategy for `evaluator_promote`. `validate_approval_artifact()` rejects candidate file drift/missing candidates, regression/hash binding drift, active pointer path drift, and active-before pointer hash drift before approved apply can proceed. Added tests for candidate drift and active pointer drift after approval. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, `python3 -m pytest tests -q` (`214 passed`).
 - Completed an end-to-end `evaluator_promote` approved-apply slice. `apply-approved` now carries `evaluator_promotion` metadata through preview/result, apply attempt, and ledger artifacts while using the existing explicit approval hash + target hash/rollback preview gates and `create_file` / `replace_entire_file` mutation path to write the active evaluator pointer. Added a test that confirms approved apply writes `${reports_dir}/gepa/active-evaluator.json`, records candidate/regression metadata in attempt and ledger, and passes post-write validation. Current validation: `python3 -m py_compile __init__.py hermes_self_improvement/*.py`, targeted approval/evaluator tests (`45 passed`).

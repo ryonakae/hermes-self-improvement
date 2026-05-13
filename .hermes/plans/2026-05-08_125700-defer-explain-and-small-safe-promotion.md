@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the current pipeline: evidence pack → target resolver → planner → bounded skill/memory mutation. Add better evidence labels, summaries, and hints inside those existing structures. LLMs continue to make semantic decisions; deterministic code only supplies compact proof, hard safety metadata, and simple guardrails.
 
-**Tech Stack:** Python, pytest, existing `bin/hermes-self-improve improve --dry-run`, runtime artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, official Hermes `skill_manage`, built-in `memory`, and active external memory provider tools.
+**Tech Stack:** Python, pytest, existing `hermes self-improvement improve --dry-run`, runtime artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, official Hermes `skill_manage`, built-in `memory`, and active external memory provider tools.
 
 ---
 
@@ -466,7 +466,7 @@ Run:
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 git diff --check
 ```
 
@@ -481,7 +481,7 @@ Expected:
 Run:
 
 ```bash
-bin/hermes-self-improve improve --dry-run --scorer llm
+hermes self-improvement improve --dry-run --scorer llm
 ```
 
 Expected:

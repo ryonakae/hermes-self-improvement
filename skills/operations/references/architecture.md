@@ -6,7 +6,7 @@ Use this reference when changing observation, analysis, scorer, or module layout
 
 - `plugin.yaml` declares the standalone user plugin.
 - root `__init__.py` is the Hermes plugin discovery shim. It imports the package implementation and exposes `register` / `main`.
-- `bin/hermes-self-improve` imports `hermes_self_improvement.main` through the package, so normal CLI smoke tests do not rely on direct file execution.
+- `hermes self-improvement` imports `hermes_self_improvement.main` through the package, so normal CLI smoke tests do not rely on direct file execution.
 - Keep implementation imports package-relative; do not add direct-file import fallbacks for unreleased compatibility.
 
 ## Observed hooks

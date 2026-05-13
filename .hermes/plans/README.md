@@ -465,7 +465,7 @@ The prior roadmap remains the broader source of truth:
 
 - `2026-05-05_000647-self-improvement-roadmap-refresh.md`
   - **Status:** active follow-up roadmap.
-  - Records the observed code state through the Slice 8 summary-cleanup work. Completed slices include overlay-set-only calibration, bounded high-signal GEPA case selection, optional explicit candidate-set artifact reuse, clearer calibration component summaries, a dogfood proof where a promoted overlay generation flowed into later episodes/eval cases, and removal of stale prompt-overlay summary duplication. Top-level `hermes self-improvement ...` CLI integration is explicitly out of scope because it requires Hermes core changes; use `bin/hermes-self-improve ...`.
+  - Records the observed code state through the Slice 8 summary-cleanup work. Completed slices include overlay-set-only calibration, bounded high-signal GEPA case selection, optional explicit candidate-set artifact reuse, clearer calibration component summaries, a dogfood proof where a promoted overlay generation flowed into later episodes/eval cases, and removal of stale prompt-overlay summary duplication. Top-level `hermes self-improvement ...` CLI integration is explicitly out of scope because it requires Hermes core changes; use `hermes self-improvement ...`.
 
 The latest completed implementation plan is:
 
@@ -489,7 +489,7 @@ The latest completed implementation records are:
 
 The current implemented baseline is:
 
-- Primary CLI surface: `improve / calibrate / report / status` via `bin/hermes-self-improve`.
+- Primary CLI surface: `improve / calibrate / report / status` via `hermes self-improvement`.
 - Primary tool surface: `self_improvement_improve / self_improvement_calibrate / self_improvement_report / self_improvement_status`.
 - Plugin tool and slash-command surfaces work; top-level `hermes self-improvement ...` remains a Hermes core CLI wiring task and is not required for plugin quality work.
 - `improve` and `calibrate` are mutation-capable by default; `--dry-run` is the preview boundary.

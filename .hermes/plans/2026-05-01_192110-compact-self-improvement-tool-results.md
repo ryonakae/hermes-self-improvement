@@ -12,8 +12,8 @@
 
 ## Current context
 
-- `bin/hermes-self-improve improve --dry-run` の通常出力は `_render_improve_summary()` 経由で短い。
-- `bin/hermes-self-improve improve --dry-run --json` は `run_improve()` の full payload を出すため長い。これは operator/debug 用として残す。
+- `hermes self-improvement improve --dry-run` の通常出力は `_render_improve_summary()` 経由で短い。
+- `hermes self-improvement improve --dry-run --json` は `run_improve()` の full payload を出すため長い。これは operator/debug 用として残す。
 - `self_improvement_improve` tool は現在 `tool_result(run_improve(...))` をそのまま返す。つまり agent が tool を呼ぶと full payload が LLM context に入る。
 - 今回の実測では通常出力は `609 chars / 23 lines`、`--json` は `45,859 chars / 1,115 lines`。
 - `run_improve()` はすでに `artifact_path` を書くので、LLM-facing tool result は詳細を持たず artifact path に誘導できる。
@@ -72,7 +72,7 @@
     "evaluator": {"status": "calibration_only", "changed": 0}
   },
   "next_actions": [
-    {"kind": "run_mutating_improve", "command": "bin/hermes-self-improve improve", "description": "Run self-improvement with mutation enabled by default."}
+    {"kind": "run_mutating_improve", "command": "hermes self-improvement improve", "description": "Run self-improvement with mutation enabled by default."}
   ],
   "full_payload": {
     "available": true,
@@ -158,7 +158,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                 "scorer": {"status": "calibration_only", "changed": 0},
                 "evaluator": {"status": "calibration_only", "changed": 0},
             },
-            "next_actions": [{"kind": "run_mutating_improve", "command": "bin/hermes-self-improve improve"}],
+            "next_actions": [{"kind": "run_mutating_improve", "command": "hermes self-improvement improve"}],
         }
 
     mod._handle_self_improvement_improve_tool.__globals__["run_improve"] = fake_run_improve
@@ -553,9 +553,9 @@ Expected: pass.
 **Step 4: Runtime smoke**
 
 ```bash
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve improve --dry-run --json >/tmp/hermes-self-improve-dry-run.json
+hermes self-improvement status
+hermes self-improvement improve --dry-run
+hermes self-improvement improve --dry-run --json >/tmp/hermes-self-improve-dry-run.json
 python3 - <<'PY'
 from pathlib import Path
 plain = Path('/tmp/hermes-self-improve-dry-run.json').read_text(encoding='utf-8')

@@ -10,12 +10,12 @@ This plugin improves only four target classes:
 Primary commands:
 
 ```bash
-bin/hermes-self-improve improve
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate
-bin/hermes-self-improve calibrate --dry-run
-bin/hermes-self-improve report --since-hours 24
-bin/hermes-self-improve status
+hermes self-improvement improve
+hermes self-improvement improve --dry-run
+hermes self-improvement calibrate
+hermes self-improvement calibrate --dry-run
+hermes self-improvement report --since-hours 24
+hermes self-improvement status
 ```
 
 ## Mutation intent

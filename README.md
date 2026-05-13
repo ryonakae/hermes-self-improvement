@@ -70,8 +70,8 @@ Hermes gateway や CLI を起動中なら、新しいセッションを開くか
 ### 2. 実行時ディレクトリを初期化する
 
 ```bash
-bin/hermes-self-improve setup
-bin/hermes-self-improve status
+hermes self-improvement setup
+hermes self-improvement status
 ```
 
 書き込まずに状態を見るときは `setup --check` と `report --since-hours 24` を使います。
@@ -96,7 +96,7 @@ hermes cron create '0 4 * * *' \
   --name self-improvement-maintenance \
   --deliver local \
   --workdir ~/.hermes/plugins/hermes-self-improvement \
-  '`bin/hermes-self-improve status` で状態を確認し、`bin/hermes-self-improve calibrate`、`bin/hermes-self-improve improve`、`bin/hermes-self-improve report --since-hours 24` を順に実行する。出力は短い要約とアーティファクトのパスだけにする。'
+  '`hermes self-improvement status` で状態を確認し、`hermes self-improvement calibrate`、`hermes self-improvement improve`、`hermes self-improvement report --since-hours 24` を順に実行する。出力は短い要約とアーティファクトのパスだけにする。'
 ```
 
 監視だけ欲しいなら `status` と `report --since-hours 24` を別 job にしてかまいません。
@@ -171,7 +171,7 @@ compact なツール結果には source / hash / path だけを返します。
 
 ```bash
 git status --short
-bin/hermes-self-improve status
+hermes self-improvement status
 
 PY=${PYTHON:-.venv/bin/python}
 $PY -m pytest tests -q

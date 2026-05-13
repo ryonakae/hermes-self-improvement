@@ -50,7 +50,7 @@ hermes-self-improvement/
 ├── gepa_adapter.py
 ├── evals/
 ├── tests/
-└── bin/hermes-self-improve
+└── hermes self-improvement
 ```
 
 The refactor should be mechanical and TDD-guarded: move code in small slices, keep backward-compatible imports where tests or wrapper CLI currently import from `__init__.py`, and run the full plugin test suite after each meaningful slice. Do not add new mutation behavior during this refactor.
@@ -277,7 +277,7 @@ Refactor constraints:
 
 - keep `plugin.yaml` stable unless a new official plugin capability is actually added;
 - keep `register(ctx)` behavior unchanged: register the same hooks, slash command, and CLI command;
-- keep the wrapper CLI working at `hermes-self-improvement/bin/hermes-self-improve`;
+- keep the wrapper CLI working at `hermes self-improvement`;
 - keep existing tests importing from `__init__.py` green by preserving compatibility exports during the transition;
 - no new mutation behavior in this phase;
 - verify after each slice with `python3 -m pytest hermes-self-improvement/tests -q` and at least one wrapper CLI status smoke.
@@ -344,7 +344,7 @@ Decision from 2026-04-27: expose the same guarded self-improvement operations th
 1. Official plugin CLI registration stays in place via `ctx.register_cli_command("self-improvement", ...)`.
    - This follows the documented Hermes plugin interface and should become the primary UX when the active Hermes runtime wires general plugin CLI commands into top-level `hermes self-improvement ...`.
    - Current runtime caveat: plugin discovery and `PluginManager._cli_commands` registration work, but top-level `hermes self-improvement ...` may still be unavailable if the runtime only wires memory-provider CLI discovery.
-2. The standalone wrapper `bin/hermes-self-improve ...` remains as the stable fallback for development, tests, cron prompts, and runtimes where top-level plugin CLI exposure is not yet available.
+2. The standalone wrapper `hermes self-improvement ...` remains as the stable fallback for development, tests, cron prompts, and runtimes where top-level plugin CLI exposure is not yet available.
 3. Agent tools should be registered for parity with CLI operations, not just read-only summaries.
    - Tool handlers must call the same Python core functions as the CLI handlers.
    - Tool handlers must run `validate_mode_action(...)` with `_required_capability_for_command(...)` before invoking any core operation; tools must not bypass the CLI policy gate.
@@ -381,7 +381,7 @@ Completed:
 - guarded `rollback-low-risk` with full `before_snapshot` restore and `--confirm-rollback --expected-ledger-hash <ledger_hash>`;
 - `ledger-report` for human-readable applied / rolled-back / rejected ledger review;
 - `approve` approval artifact creation and `approval-report` validation/reporting, including optional non-mutating `apply-approved` preview status via `--include-previews`;
-- official `ctx.register_cli_command("self-improvement", ...)` registration and standalone `bin/hermes-self-improve` fallback;
+- official `ctx.register_cli_command("self-improvement", ...)` registration and standalone `hermes self-improvement` fallback;
 - interface strategy decision for CLI / wrapper / tools / cron boundaries;
 - plugin tool parity surface via `plugin.yaml` `provides_tools`, `schemas.py`, `plugin_tools.py`, and `register(ctx)` tool registration for status / apply-plan / ledger-report / approval-report / validate-approval / approve / apply-low-risk / rollback-low-risk;
 - Cron / scheduled execution docs that keep scheduling outside the plugin, require fresh self-contained sessions, forbid recursive cron creation, and recommend only dry-run/report commands by default;
@@ -441,8 +441,8 @@ Suggested commands once implementation begins:
 cd /Users/ryo.nakae/.hermes/plugins/hermes-self-improvement
 python3 -m pytest hermes-self-improvement/tests -q
 python3 -m py_compile hermes-self-improvement/__init__.py hermes-self-improvement/*.py
-/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve status --mode report_only
-/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement/bin/hermes-self-improve analyze --since-hours 24 --scorer compare --json
+hermes self-improvement status --mode report_only
+hermes self-improvement analyze --since-hours 24 --scorer compare --json
 ```
 
 ## Risks and tradeoffs

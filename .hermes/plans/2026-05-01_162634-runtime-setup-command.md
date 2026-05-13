@@ -2,7 +2,7 @@
 
 > **For Hermes:** Implement directly in TDD slices. Keep the primary agent/tool surface at `status / report / improve / calibrate`; `setup` is CLI-only bootstrap/readiness, not a self-improvement runner.
 
-**Goal:** Add an idempotent `bin/hermes-self-improve setup` command that creates a clean, current runtime layout under `${HERMES_HOME:-~/.hermes}/self-improvement`, seeds the evaluator/scorer defaults required by current code, and makes first install/readiness explicit. The existing local runtime contents may be deleted/reset during implementation verification.
+**Goal:** Add an idempotent `hermes self-improvement setup` command that creates a clean, current runtime layout under `${HERMES_HOME:-~/.hermes}/self-improvement`, seeds the evaluator/scorer defaults required by current code, and makes first install/readiness explicit. The existing local runtime contents may be deleted/reset during implementation verification.
 
 **Current repo:** `/Users/ryo.nakae/.hermes/plugins/hermes-self-improvement`
 
@@ -85,11 +85,11 @@ Keep `evals/proposal/*` as public regression fixtures. The new `defaults/evaluat
 Add:
 
 ```bash
-bin/hermes-self-improve setup
-bin/hermes-self-improve setup --check
-bin/hermes-self-improve setup --reset
-bin/hermes-self-improve setup --reset --yes
-bin/hermes-self-improve setup --json
+hermes self-improvement setup
+hermes self-improvement setup --check
+hermes self-improvement setup --reset
+hermes self-improvement setup --reset --yes
+hermes self-improvement setup --json
 ```
 
 Semantics:
@@ -251,7 +251,7 @@ Use existing `observer._self_improvement_root(config)` / `_event_path(config)` /
    ```
 3. If not initialized, show actionable next command:
    ```text
-   Next: bin/hermes-self-improve setup
+   Next: hermes self-improvement setup
    ```
 4. Do not make status mutate files.
 
@@ -284,10 +284,10 @@ Use existing `observer._self_improvement_root(config)` / `_event_path(config)` /
 ```bash
 # after tests pass and setup command exists
 rm -rf /Users/ryo.nakae/.hermes/self-improvement
-bin/hermes-self-improve setup --json | python -m json.tool
-bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24 --json | python -m json.tool >/tmp/self_improve_report_after_setup.json
-bin/hermes-self-improve calibrate --dry-run --json | python -m json.tool >/tmp/self_improve_calibrate_after_setup.json
+hermes self-improvement setup --json | python -m json.tool
+hermes self-improvement status
+hermes self-improvement report --since-hours 24 --json | python -m json.tool >/tmp/self_improve_report_after_setup.json
+hermes self-improvement calibrate --dry-run --json | python -m json.tool >/tmp/self_improve_calibrate_after_setup.json
 ```
 
 Expected:
@@ -327,10 +327,10 @@ Use `rm -rf` only for `/Users/ryo.nakae/.hermes/self-improvement` after verifyin
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve setup --check --json | python -m json.tool >/tmp/self_improve_setup_check.json
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run --json | python -m json.tool >/tmp/self_improve_dry_run_after_setup.json
-bin/hermes-self-improve calibrate --dry-run --json | python -m json.tool >/tmp/self_improve_calibrate_after_setup.json
+hermes self-improvement setup --check --json | python -m json.tool >/tmp/self_improve_setup_check.json
+hermes self-improvement status
+hermes self-improvement improve --dry-run --json | python -m json.tool >/tmp/self_improve_dry_run_after_setup.json
+hermes self-improvement calibrate --dry-run --json | python -m json.tool >/tmp/self_improve_calibrate_after_setup.json
 git diff --check
 ```
 

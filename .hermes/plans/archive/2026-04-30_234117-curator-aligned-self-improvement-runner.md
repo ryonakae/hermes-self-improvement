@@ -111,7 +111,7 @@ python -m py_compile hermes_self_improvement/tool_handlers.py hermes_self_improv
 
 **Files:**
 - Modify: `hermes_self_improvement/cli.py`
-- Modify: `bin/hermes-self-improve` only if command help/wrapper behavior requires it
+- Modify: `hermes self-improvement` only if command help/wrapper behavior requires it
 - Test: CLI parser tests, improve/calibrate tests
 
 **Steps:**
@@ -129,9 +129,9 @@ python -m py_compile hermes_self_improvement/tool_handlers.py hermes_self_improv
 **Verification:**
 
 ```bash
-bin/hermes-self-improve --help
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement --help
+hermes self-improvement improve --dry-run
+hermes self-improvement calibrate --dry-run
 python -m pytest tests -q
 ```
 
@@ -409,9 +409,9 @@ Artifact: ~/.hermes/self-improvement/runs/...
 **Verification:**
 
 ```bash
-bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement status
+hermes self-improvement report --since-hours 24
+hermes self-improvement improve --dry-run
 ```
 
 Expected: concise human-readable output.
@@ -486,10 +486,10 @@ Expected: no user-facing references to removed surfaces remain; only historical/
    ```
 4. Run CLI smoke:
    ```bash
-   bin/hermes-self-improve status
-   bin/hermes-self-improve improve --dry-run
-   bin/hermes-self-improve calibrate --dry-run
-   bin/hermes-self-improve report --since-hours 24
+   hermes self-improvement status
+   hermes self-improvement improve --dry-run
+   hermes self-improvement calibrate --dry-run
+   hermes self-improvement report --since-hours 24
    ```
 5. Inspect git diff.
 6. Commit:

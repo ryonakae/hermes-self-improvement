@@ -222,15 +222,15 @@ rm -rf ~/.hermes/self-improvement
 ```bash
 python -m py_compile __init__.py hermes_self_improvement/*.py
 python -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 storage smoke:
 
 ```bash
-bin/hermes-self-improve report --since-hours 1 --scorer heuristic --json
-bin/hermes-self-improve improve --since-hours 1 --json
-bin/hermes-self-improve calibrate --json
+hermes self-improvement report --since-hours 1 --scorer heuristic --json
+hermes self-improvement improve --since-hours 1 --json
+hermes self-improvement calibrate --json
 ```
 
 確認点:
@@ -343,7 +343,7 @@ refactor(self-improvement): move runtime home out of reports
 
 - `~/.hermes/self-improvement/` に既存 artifact が移動済み
 - `~/.hermes/self-improvement/` は存在しない
-- `bin/hermes-self-improve status` が新 event path を表示
+- `hermes self-improvement status` が新 event path を表示
 - `report/improve/calibrate` smoke が通る
 - tests が通る
 - plugin discovery が tools 7 / hooks 11 / error None

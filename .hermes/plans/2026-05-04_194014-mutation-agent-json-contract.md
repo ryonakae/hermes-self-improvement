@@ -2,7 +2,7 @@
 
 ## Goal
 
-`bin/hermes-self-improve improve` の本実行で、planner が editor 対象を選んだあとに `mutation_agent_step_not_json` で止まる問題を解消する。
+`hermes self-improvement improve` の本実行で、planner が editor 対象を選んだあとに `mutation_agent_step_not_json` で止まる問題を解消する。
 
 方針はシンプルにする。
 
@@ -18,7 +18,7 @@
 直近の本実行結果:
 
 ```text
-bin/hermes-self-improve improve
+hermes self-improvement improve
 
 selected for editor: 2
 changed 0 skills
@@ -367,13 +367,13 @@ python3 -m pytest tests -q
 Read-only smoke:
 
 ```bash
-bin/hermes-self-improve improve --dry-run --since-hours 1 --scorer heuristic
+hermes self-improvement improve --dry-run --since-hours 1 --scorer heuristic
 ```
 
 Mutating smoke only after confirmation:
 
 ```bash
-bin/hermes-self-improve improve --since-hours 1 --scorer heuristic
+hermes self-improvement improve --since-hours 1 --scorer heuristic
 ```
 
 ## Risks

@@ -998,7 +998,7 @@ def run_improve(
         result_payload["next_actions"] = [
             {
                 "kind": "run_mutating_improve",
-                "command": f"bin/hermes-self-improve improve --from-run {artifact_path}",
+                "command": f"hermes self-improvement improve --from-run {artifact_path}",
                 "description": "Run self-improvement with mutation enabled for this dry-run artifact after rechecking hard guards.",
             }
         ]
@@ -1142,7 +1142,7 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
             f"- default assets: {defaults.get('status') or 'unknown'}",
         ])
         if not setup.get("initialized"):
-            lines.append("- next: bin/hermes-self-improve setup")
+            lines.append("- next: hermes self-improvement setup")
     lines.extend([
         "Runtime:",
         f"- event path: {payload.get('event_path')}",
@@ -2023,7 +2023,7 @@ def _render_setup_summary(payload: dict[str, Any]) -> str:
     if reasons:
         lines.append("Reasons: " + ", ".join(str(reason) for reason in reasons))
     if not payload.get("initialized") and payload.get("operation") == "check":
-        lines.append("Next: bin/hermes-self-improve setup")
+        lines.append("Next: hermes self-improvement setup")
     return "\n".join(lines)
 
 

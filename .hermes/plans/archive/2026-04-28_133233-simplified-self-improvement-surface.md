@@ -8,7 +8,7 @@
 
 **Architecture:** User-facing surface は `improve / calibrate / plan / apply / rollback / report / status` に集約する。`--execute` を唯一の実変更意思表示にし、hash は user input ではなく内部整合性・drift 検知・ledger 用に閉じ込める。`calibration` は evaluator/scorer 自己調整の設定、`apply_policy` は通常改善の適用範囲として分ける。
 
-**Tech Stack:** Python 3.11, pytest, Hermes user plugin API, existing modules under `hermes_self_improvement/`, wrapper CLI `bin/hermes-self-improve`.
+**Tech Stack:** Python 3.11, pytest, Hermes user plugin API, existing modules under `hermes_self_improvement/`, wrapper CLI `hermes self-improvement`.
 
 ---
 
@@ -47,13 +47,13 @@ The older plans should not drive new implementation directly. Keep them only as 
 Keep these commands:
 
 ```bash
-bin/hermes-self-improve improve [--execute]
-bin/hermes-self-improve calibrate [--execute]
-bin/hermes-self-improve plan
-bin/hermes-self-improve apply <plan-id> [--execute]
-bin/hermes-self-improve rollback <ledger-id>
-bin/hermes-self-improve report
-bin/hermes-self-improve status
+hermes self-improvement improve [--execute]
+hermes self-improvement calibrate [--execute]
+hermes self-improvement plan
+hermes self-improvement apply <plan-id> [--execute]
+hermes self-improvement rollback <ledger-id>
+hermes self-improvement report
+hermes self-improvement status
 ```
 
 Expose matching plugin tools:
@@ -817,10 +817,10 @@ If current hash does not match accepted baseline:
 **CLI:**
 
 ```bash
-bin/hermes-self-improve apply <plan-id>
-bin/hermes-self-improve apply <plan-id> --execute
-bin/hermes-self-improve apply <plan-id> --items step-001,step-002
-bin/hermes-self-improve apply <plan-id> --items step-001,step-002 --execute
+hermes self-improvement apply <plan-id>
+hermes self-improvement apply <plan-id> --execute
+hermes self-improvement apply <plan-id> --items step-001,step-002
+hermes self-improvement apply <plan-id> --items step-001,step-002 --execute
 ```
 
 No `--expected-item-hash`.
@@ -948,9 +948,9 @@ Use:
 **CLI:**
 
 ```bash
-bin/hermes-self-improve calibrate
-bin/hermes-self-improve calibrate --execute
-bin/hermes-self-improve calibrate --json
+hermes self-improvement calibrate
+hermes self-improvement calibrate --execute
+hermes self-improvement calibrate --json
 ```
 
 Non-JSON output:
@@ -1025,10 +1025,10 @@ Flow:
 **CLI:**
 
 ```bash
-bin/hermes-self-improve improve
-bin/hermes-self-improve improve --execute
-bin/hermes-self-improve improve --since-hours 24
-bin/hermes-self-improve improve --json
+hermes self-improvement improve
+hermes self-improvement improve --execute
+hermes self-improvement improve --since-hours 24
+hermes self-improvement improve --json
 ```
 
 No `--mode`.
@@ -1222,8 +1222,8 @@ No `mode`, no `confirm_*`, no `expected_*hash`.
 **CLI:**
 
 ```bash
-bin/hermes-self-improve rollback <ledger-id>
-bin/hermes-self-improve rollback <ledger-id> --execute
+hermes self-improvement rollback <ledger-id>
+hermes self-improvement rollback <ledger-id> --execute
 ```
 
 Preview without `--execute`; actual restore only with `--execute`.
@@ -1284,17 +1284,17 @@ Ledger hash remains internal integrity check.
 - Explain normal flow:
 
   ```bash
-  bin/hermes-self-improve improve
-  bin/hermes-self-improve improve --execute
+  hermes self-improvement improve
+  hermes self-improvement improve --execute
   ```
 
 - Explain manual flow:
 
   ```bash
-  bin/hermes-self-improve calibrate
-  bin/hermes-self-improve plan
-  bin/hermes-self-improve apply <plan-id>
-  bin/hermes-self-improve apply <plan-id> --execute
+  hermes self-improvement calibrate
+  hermes self-improvement plan
+  hermes self-improvement apply <plan-id>
+  hermes self-improvement apply <plan-id> --execute
   ```
 
 - Document config:
@@ -1421,9 +1421,9 @@ self_improvement_retention_prune
 PY=${PYTHON:-python3}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --json
-bin/hermes-self-improve calibrate --json
+hermes self-improvement status
+hermes self-improvement improve --json
+hermes self-improvement calibrate --json
 ```
 
 Plugin discovery check:
@@ -1529,12 +1529,12 @@ Mitigation:
 
 Implementation is complete when:
 
-- `bin/hermes-self-improve improve` previews full loop without mutating targets.
-- `bin/hermes-self-improve improve --execute` runs calibration/plan/apply and mutates only allowed changes.
-- `bin/hermes-self-improve calibrate --execute` can promote evaluator/scorer only after regression pass.
-- `bin/hermes-self-improve plan` writes ordered, conflict-resolved plan artifacts.
-- `bin/hermes-self-improve apply <plan-id> --execute` applies ready policy-allowed steps with partial success ledger.
-- `bin/hermes-self-improve rollback <ledger-id> --execute` restores applied changes when safe.
+- `hermes self-improvement improve` previews full loop without mutating targets.
+- `hermes self-improvement improve --execute` runs calibration/plan/apply and mutates only allowed changes.
+- `hermes self-improvement calibrate --execute` can promote evaluator/scorer only after regression pass.
+- `hermes self-improvement plan` writes ordered, conflict-resolved plan artifacts.
+- `hermes self-improvement apply <plan-id> --execute` applies ready policy-allowed steps with partial success ledger.
+- `hermes self-improvement rollback <ledger-id> --execute` restores applied changes when safe.
 - User-facing CLI has no `approve`, `apply-approved`, `apply-low-risk`, `rollback-low-risk`, `execution_mode`, `expected_*hash`, or `maintenance` primary command.
 - Plugin tool surface is exactly seven simplified tools.
 - Docs and bundled operations skill no longer instruct users/agents to use approval/low-risk/mode/hash ceremony.

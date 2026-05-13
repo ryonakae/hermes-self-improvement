@@ -660,10 +660,10 @@ For each implementation phase:
 PY=${PYTHON:-.venv/bin/python}
 $PY -m compileall -q hermes_self_improvement tests
 $PY -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve calibrate --dry-run
-bin/hermes-self-improve calibrate --dry-run --json
-bin/hermes-self-improve improve --dry-run --since-hours 1 --scorer heuristic
+hermes self-improvement status
+hermes self-improvement calibrate --dry-run
+hermes self-improvement calibrate --dry-run --json
+hermes self-improvement improve --dry-run --since-hours 1 --scorer heuristic
 ```
 
 Plugin registration smoke:

@@ -251,7 +251,7 @@ Expected: focused tests pass.
 
 **Files:**
 - Modify setup path found during implementation.
-- Modify `bin/hermes-self-improve setup --check` behavior only if needed.
+- Modify `hermes self-improvement setup --check` behavior only if needed.
 - Tests near setup/status if present.
 
 **Behavior:**
@@ -263,9 +263,9 @@ Expected: focused tests pass.
 ```bash
 PY=${PYTHON:-.venv/bin/python}
 $PY -m pytest tests -q
-bin/hermes-self-improve setup --check
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement setup --check
+hermes self-improvement status
+hermes self-improvement improve --dry-run
 ```
 
 ---
@@ -301,9 +301,9 @@ bin/hermes-self-improve improve --dry-run
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 git diff --check
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement improve --dry-run
 ```
 
 **Artifact checks:**

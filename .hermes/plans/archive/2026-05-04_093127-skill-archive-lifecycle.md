@@ -509,10 +509,10 @@ Full validation:
 ```bash
 python3 -m py_compile __init__.py hermes_self_improvement/*.py
 python3 -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run --scorer llm
-bin/hermes-self-improve improve --dry-run --json
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement status
+hermes self-improvement improve --dry-run --scorer llm
+hermes self-improvement improve --dry-run --json
+hermes self-improvement calibrate --dry-run
 python3 - <<'PY'
 from hermes_cli.plugins import discover_plugins, get_plugin_manager
 import json

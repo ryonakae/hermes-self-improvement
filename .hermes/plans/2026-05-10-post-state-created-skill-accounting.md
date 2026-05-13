@@ -240,7 +240,7 @@ Because `timeout-workflow` and `sandbox-permission-workflow` now exist, do **not
 2. Optionally run:
 
 ```bash
-bin/hermes-self-improve improve --dry-run --json >/tmp/hsi-dryrun-after-accounting.json
+hermes self-improvement improve --dry-run --json >/tmp/hsi-dryrun-after-accounting.json
 ```
 
 Expected:

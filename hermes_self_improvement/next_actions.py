@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 
-def _current_runner_actions(*, command_prefix: str = "bin/hermes-self-improve", include_mutating_run: bool = True) -> list[dict[str, Any]]:
+def _current_runner_actions(*, command_prefix: str = "hermes self-improvement", include_mutating_run: bool = True) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = [
         {
             "kind": "run_dry_run",
@@ -26,7 +26,7 @@ def _current_runner_actions(*, command_prefix: str = "bin/hermes-self-improve", 
 
 
 
-def build_next_actions_for_improve(result: dict[str, Any], *, command_prefix: str = "bin/hermes-self-improve") -> list[dict[str, Any]]:
+def build_next_actions_for_improve(result: dict[str, Any], *, command_prefix: str = "hermes self-improvement") -> list[dict[str, Any]]:
     dry_run = bool(result.get("dry_run")) or result.get("execute") is False
     return _current_runner_actions(command_prefix=command_prefix, include_mutating_run=dry_run)
 

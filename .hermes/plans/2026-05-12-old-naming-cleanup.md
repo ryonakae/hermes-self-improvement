@@ -142,7 +142,7 @@ AGENTS.md の TDD 方針に従う。
 6. **検証**:
    - `python3 -m py_compile __init__.py hermes_self_improvement/*.py`
    - `python3 -m pytest tests -q` (623 passed 維持、yaml 9 件 pre-existing)
-   - `bin/hermes-self-improve status` (起動できる)
+   - `hermes self-improvement status` (起動できる)
    - `grep -rn '\beditor\b\|run_editor\|conversation_memory\|planner_editor\|planner-editor' hermes_self_improvement *.md` で
      旧命名残骸 0 件を確認 (テストフィクスチャは除外)
 7. **commit 分割**: 上記 1-5 をそれぞれ別 commit、検証は最後の commit に
@@ -158,7 +158,7 @@ PR1 / PR2 は既に main にマージ済み。
 ```bash
 python3 -m py_compile __init__.py hermes_self_improvement/*.py
 python3 -m pytest tests -q
-bin/hermes-self-improve status
+hermes self-improvement status
 grep -rn '\beditor\b\|run_editor\|conversation_memory\|planner_editor\|planner-editor\|native_skill_tool_editor\|editor_instructions\|editor_no_op\|selected_for_editor\|editor_task_count' hermes_self_improvement *.md
 git diff --check
 ```

@@ -61,10 +61,10 @@ Run after each focused slice where useful, then final:
 PY=${PYTHON:-.venv/bin/python}
 $PY -m pytest tests -q
 $PY -m py_compile __init__.py hermes_self_improvement/*.py tests/*.py
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve calibrate --dry-run
-bin/hermes-self-improve report --since-hours 24
+hermes self-improvement status
+hermes self-improvement improve --dry-run
+hermes self-improvement calibrate --dry-run
+hermes self-improvement report --since-hours 24
 ```
 
 Also verify plugin discovery still exposes exactly four tools.

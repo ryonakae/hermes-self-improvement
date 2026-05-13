@@ -8,7 +8,7 @@
 
 **Architecture:** Keep the current `improve` flow and user-facing `apply / defer / skip / block` buckets. Do not add a new lane, approval queue, or apply mode. Add a small memory placement planner layer inside the existing memory step: deterministic fast-paths for obvious `keep` and stale-pair cases, LLM planner output normalization for fuzzy placement cases, and compact summary lines that distinguish `kept`, `would move`, `would merge/replace`, `routed to skill`, and `still needs planner`.
 
-**Tech Stack:** Python, pytest, existing `bin/hermes-self-improve` CLI, existing `run_memory_improvement_step()`, official Hermes memory tool path, existing skill planner/knowledge maintenance route for procedural candidates.
+**Tech Stack:** Python, pytest, existing `hermes self-improvement` CLI, existing `run_memory_improvement_step()`, official Hermes memory tool path, existing skill planner/knowledge maintenance route for procedural candidates.
 
 ---
 
@@ -468,7 +468,7 @@ PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
 git diff --check
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement improve --dry-run
 ```
 
 Expected shape:

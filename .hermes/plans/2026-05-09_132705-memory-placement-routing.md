@@ -8,7 +8,7 @@
 
 **Architecture:** Keep the existing `improve` evidence -> resolver -> planner -> worker flow. Do not add a new lane, approval mode, or resolver mutation action. Add small routing metadata and summary buckets so the memory step can say “not memory, but route to skill/diagnostic/defer/duplicate” instead of collapsing everything into `memory_observation_not_mutation_ready`.
 
-**Tech Stack:** Python, pytest, existing `bin/hermes-self-improve` CLI, existing evidence pack / memory runner / skill planner digest. Mutation stays bounded to official memory and skill tools.
+**Tech Stack:** Python, pytest, existing `hermes self-improvement` CLI, existing evidence pack / memory runner / skill planner digest. Mutation stays bounded to official memory and skill tools.
 
 ---
 
@@ -446,7 +446,7 @@ PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
 git diff --check
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement improve --dry-run
 ```
 
 Expected dry-run shape:

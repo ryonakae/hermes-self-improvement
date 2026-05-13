@@ -242,8 +242,8 @@ Cover:
 Preferred simple interface:
 
 ```bash
-bin/hermes-self-improve improve --dry-run
-bin/hermes-self-improve improve --from-run /path/to/run.json
+hermes self-improvement improve --dry-run
+hermes self-improvement improve --from-run /path/to/run.json
 ```
 
 `--from-run` should be valid only for `improve`, not `report` or `calibrate`.
@@ -863,7 +863,7 @@ git diff --check produces no output
 **Step 2: Dry-run dogfood**
 
 ```bash
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement improve --dry-run
 ```
 
 Check:
@@ -877,7 +877,7 @@ Check:
 **Step 3: Mutating dogfood only if dry-run is sane**
 
 ```bash
-bin/hermes-self-improve improve
+hermes self-improvement improve
 ```
 
 Check:
@@ -890,7 +890,7 @@ Check:
 **Step 4: Calibrate dry-run after dogfood**
 
 ```bash
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement calibrate --dry-run
 ```
 
 Check:
@@ -950,16 +950,16 @@ PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
 git diff --check
-bin/hermes-self-improve status
+hermes self-improvement status
 ```
 
 Dogfood after tests pass:
 
 ```bash
-bin/hermes-self-improve report --since-hours 24 --json
-bin/hermes-self-improve improve --dry-run --from-report /path/to/report.json
-bin/hermes-self-improve improve --from-run /path/to/dry-run.json
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement report --since-hours 24 --json
+hermes self-improvement improve --dry-run --from-report /path/to/report.json
+hermes self-improvement improve --from-run /path/to/dry-run.json
+hermes self-improvement calibrate --dry-run
 ```
 
 Do not promote calibrate candidate sets in this plan unless Ryo explicitly asks or the scheduled daily cron handles it.

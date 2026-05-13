@@ -8,7 +8,7 @@
 
 **Architecture:** Keep the existing `improve` loop and resolver/planner split. The resolver remains attachment-only and returns only `attach_existing_skill / memory_candidate / unresolved / skip_noise`; the planner owns all mutation decisions. Add richer maintenance affordances and inventory context to the existing evidence/planner digest, then let the existing planner/editor/memory mutation path execute safe choices through official tools.
 
-**Tech Stack:** Python, pytest, existing `bin/hermes-self-improve` CLI, existing planner/editor/mutation worker modules, official Hermes `skill_manage` / memory tools only.
+**Tech Stack:** Python, pytest, existing `hermes self-improvement` CLI, existing planner/editor/mutation worker modules, official Hermes `skill_manage` / memory tools only.
 
 ---
 
@@ -17,7 +17,7 @@
 Recent dry-runs show the system now finds useful evidence but does not yet convert it into maintenance actions:
 
 ```text
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement improve --dry-run
 Would apply: 0
 Deferred: 1
 Blocked: 35
@@ -564,7 +564,7 @@ Expected: all pass.
 **Step 2: Run normal dry-run**
 
 ```bash
-bin/hermes-self-improve improve --dry-run
+hermes self-improvement improve --dry-run
 ```
 
 Expected improvement over current baseline:
@@ -577,7 +577,7 @@ Expected improvement over current baseline:
 **Step 3: Run report-context dry-run**
 
 ```bash
-bin/hermes-self-improve improve --dry-run --from-report /Users/ryo.nakae/.hermes/self-improvement/daily/latest.json
+hermes self-improvement improve --dry-run --from-report /Users/ryo.nakae/.hermes/self-improvement/daily/latest.json
 ```
 
 Expected:

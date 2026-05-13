@@ -6,7 +6,7 @@
 
 **Architecture:** Add an inventory candidate source to the current evidence pack before planner execution. Program code only collects compact skill/memory inventory groups and hard safety metadata; the LLM planner/editor decide whether to patch/archive/replace/remove. Skill changes continue through `skill_manage` / Curator archive primitives, memory changes continue through `memory` / provider-native memory tools. Human confirmation is not a primary workflow; unsafe or under-evidenced items become `defer` / `skip` with artifact evidence.
 
-**Tech Stack:** Python, pytest, Hermes plugin runtime, `bin/hermes-self-improve improve`, runtime artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, official Hermes skill/memory tools.
+**Tech Stack:** Python, pytest, Hermes plugin runtime, `hermes self-improvement improve`, runtime artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`, official Hermes skill/memory tools.
 
 ---
 
@@ -734,7 +734,7 @@ Expected: all pass.
 **Step 2: Dry-run proof**
 
 ```bash
-bin/hermes-self-improve improve --dry-run --since-hours 24 --scorer llm
+hermes self-improvement improve --dry-run --since-hours 24 --scorer llm
 ```
 
 Inspect latest run artifact compactly:
@@ -768,7 +768,7 @@ Expected:
 Only after dry-run looks sane:
 
 ```bash
-bin/hermes-self-improve improve --since-hours 24 --scorer llm
+hermes self-improvement improve --since-hours 24 --scorer llm
 ```
 
 Expected:
@@ -780,8 +780,8 @@ Expected:
 **Step 4: Post-run verification**
 
 ```bash
-bin/hermes-self-improve status
-bin/hermes-self-improve report --since-hours 24
+hermes self-improvement status
+hermes self-improvement report --since-hours 24
 git status --short
 ```
 
@@ -819,7 +819,7 @@ git commit -m "docs: plan LLM inventory self-improvement"
 PY=${PYTHON:-.venv/bin/python}
 $PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
-bin/hermes-self-improve improve --dry-run --since-hours 24 --scorer llm
+hermes self-improvement status
+hermes self-improvement improve --dry-run --since-hours 24 --scorer llm
 git diff --check
 ```

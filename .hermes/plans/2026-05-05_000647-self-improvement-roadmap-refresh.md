@@ -51,7 +51,7 @@ full:
 
 smoke:
 - python3 -m py_compile __init__.py hermes_self_improvement/*.py
-- bin/hermes-self-improve calibrate --dry-run
+- hermes self-improvement calibrate --dry-run
 - git diff --check
 → OK
 ```
@@ -61,7 +61,7 @@ Current working boundary:
 ```text
 Hermes core repository is out of scope for this roadmap.
 Do not implement top-level `hermes self-improvement ...` wiring here.
-Use `bin/hermes-self-improve ...` as the reliable CLI surface.
+Use `hermes self-improvement ...` as the reliable CLI surface.
 ```
 
 The current core loop pieces are implemented:
@@ -138,17 +138,17 @@ Keep these fixed unless a newer plan explicitly changes them:
    ```
 2. Run a bounded preview:
    ```bash
-   bin/hermes-self-improve calibrate --dry-run
+   hermes self-improvement calibrate --dry-run
    ```
 3. Read the reported candidate-set artifact with `read_file`/small JSON inspection. Do not paste full JSON into chat.
 4. If the artifact reports `decision promote`, `GEPA selected|improved`, and changed targets, execute exactly that artifact:
    ```bash
-   bin/hermes-self-improve calibrate --from-candidate-set <artifact-path>
+   hermes self-improvement calibrate --from-candidate-set <artifact-path>
    ```
 5. Confirm active overlay pointer changed and includes the promoted `overlay_generation_id`.
 6. Run:
    ```bash
-   bin/hermes-self-improve improve --dry-run --since-hours 1 --scorer heuristic
+   hermes self-improvement improve --dry-run --since-hours 1 --scorer heuristic
    ```
 7. Inspect the new run/episode artifacts and confirm overlay generation/hash fields are recorded.
 8. Run a later `calibrate --dry-run` and confirm candidate-set eval cases can include the newly recorded episode.
@@ -201,9 +201,9 @@ Interpretation: the runtime eval case path is active and episodes contain overla
 **Verification:**
 
 ```bash
-bin/hermes-self-improve status
-bin/hermes-self-improve calibrate --dry-run
-bin/hermes-self-improve improve --dry-run --since-hours 1 --scorer heuristic
+hermes self-improvement status
+hermes self-improvement calibrate --dry-run
+hermes self-improvement improve --dry-run --since-hours 1 --scorer heuristic
 ```
 
 **Commit:**
@@ -258,7 +258,7 @@ Dogfood proof after fix:
 - decision: promote
 - changed targets: planner_overlay, evaluator_overlay
 - selected cases: executed `run_editor` / `skill_patch` examples across planner/editor/evaluator
-- explicit promotion: `bin/hermes-self-improve calibrate --from-candidate-set <artifact>`
+- explicit promotion: `hermes self-improvement calibrate --from-candidate-set <artifact>`
 - result: partial_update because evaluator regression runner is still not configured, but prompt overlay set promoted successfully.
 - active overlay_generation_id: overlay-set-ae9e25cf607d
 - later improve episodes recorded `overlay_generation_id: overlay-set-ae9e25cf607d` and planner overlay hash `ceb78315114084cec64b2b75c5f1c9170df3ca482588928b5fb10ba584c9a371`.
@@ -270,7 +270,7 @@ Dogfood proof after fix:
 
 ```bash
 python3 -m pytest tests/test_prompt_gepa_adapter.py tests/test_prompt_candidate_optimizer.py tests/test_calibration.py -q
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement calibrate --dry-run
 ```
 
 **Commit:**
@@ -323,7 +323,7 @@ Kept:
 ```bash
 python3 -m pytest tests/test_calibration.py tests/test_cli_surface.py tests/test_plugin_tools.py tests/test_feedback_loop.py tests/test_prompt_overlays.py -q
 python3 -m pytest -q
-bin/hermes-self-improve calibrate --dry-run
+hermes self-improvement calibrate --dry-run
 git diff --check
 ```
 
@@ -340,12 +340,12 @@ git commit -m "refactor: simplify calibration summary fields"
 `hermes self-improvement ...` requires Hermes core argparse/plugin CLI wiring. Do not modify Hermes core from this roadmap, and do not add another plugin-local wrapper hack. Continue to use:
 
 ```bash
-bin/hermes-self-improve ...
+hermes self-improvement ...
 ```
 
 Supported plugin surfaces remain:
 
-- `bin/hermes-self-improve ...`
+- `hermes self-improvement ...`
 - agent tools: `self_improvement_status`, `self_improvement_report`, `self_improvement_improve`, `self_improvement_calibrate`
 - slash command: `/self-improvement ...`
 

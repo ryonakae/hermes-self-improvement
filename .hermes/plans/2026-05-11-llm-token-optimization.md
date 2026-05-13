@@ -27,7 +27,7 @@
 
 ### LLM weekly limit ギリギリの制約
 
-ユーザーは anthropic はほぼ使わず OpenAI / Codex 系を主に使う。一般配布プラグインなので anthropic ユーザーにも効く最適化は入れる。`bin/hermes-self-improve improve` / `calibrate` の実走行は今回は避ける。
+ユーザーは anthropic はほぼ使わず OpenAI / Codex 系を主に使う。一般配布プラグインなので anthropic ユーザーにも効く最適化は入れる。`hermes self-improvement improve` / `calibrate` の実走行は今回は避ける。
 
 ### hermes-agent 側の caching 事情(確認済み)
 

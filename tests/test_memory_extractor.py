@@ -97,7 +97,7 @@ def test_reconcile_memory_gap_payload_routes_workflow_shaped_fact_to_skill_route
     payload = {"candidates": [{
         "candidate_id": "m1",
         "target": "memory",
-        "candidate_fact": "Run `bin/hermes-self-improve improve --dry-run` first, then inspect the artifact. Step 1. ...",
+        "candidate_fact": "Run `hermes self-improvement improve --dry-run` first, then inspect the artifact. Step 1. ...",
         "confidence": "medium",
         "relation_to_existing": "missing",
     }]}
