@@ -100,7 +100,7 @@ set -euo pipefail
 cd "$HOME/.hermes/plugins/hermes-self-improvement"
 hermes self-improvement status >/dev/null
 hermes self-improvement calibrate
-hermes self-improvement improve --scorer llm
+hermes self-improvement improve
 hermes self-improvement report --since-hours 24
 ```
 
