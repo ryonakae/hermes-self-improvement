@@ -8,6 +8,12 @@ As of 2026-05-10, the long-term roadmap is:
   - **Status:** active long-term source of truth.
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 7合目. The active milestone is deeper skill quality and knowledge inventory maintenance.
 
+The current active cleanup plan is:
+
+- `2026-05-14-historical-naming-cleanup.md`
+  - **Status:** planned.
+  - Cleans up historical names that survived earlier refactors: `skills_hub` auxiliary routing, old model role docs, removed `llm_scorer` / `run_editor` architecture text, `patch_skill` / `merge_skills` canonical-decision confusion, approval-queue vocabulary, and retired wrapper/path references.
+
 The detailed milestone implementation plans are:
 
 - `2026-05-10-milestone-1-reliable-mutation-accounting.md`
