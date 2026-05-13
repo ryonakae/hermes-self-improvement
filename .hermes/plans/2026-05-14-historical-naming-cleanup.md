@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python, pytest, Hermes plugin CLI, Hermes auxiliary LLM routing, repo-tracked `.hermes/plans/` docs.
 
+**Status:** Implemented on 2026-05-14. Validation passed with `py_compile`, full `pytest tests -q` (`665 passed, 2 skipped`), `hermes self-improvement status`, and `git diff --check`.
+
 ---
 
 ## Scope

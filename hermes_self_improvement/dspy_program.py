@@ -382,8 +382,9 @@ class ProposalScoringSignature:
     """DSPy-compatible scoring contract for Hermes self-improvement proposals.
 
     The dependency-free scaffold below is kept only for bundled `gepa-eval`
-    regression fixtures. Runtime `--scorer gepa` uses the real DSPy program and
-    Hermes auxiliary LM bridge above.
+    regression fixtures. Runtime evaluator calibration uses the real DSPy
+    program through `calibrate`; proposal scoring no longer exposes a GEPA
+    scorer flag.
     """
 
     input_fields = ["proposal", "findings", "rubric"]

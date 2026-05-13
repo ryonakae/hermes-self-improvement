@@ -93,7 +93,8 @@ def test_propose_from_findings_builds_memory_compression_proposal_from_explicit_
     assert proposal["target_path"] == "/tmp/hermes-memories/MEMORY.md"
     assert proposal["before_hash"] == "before123"
     assert proposal["after_text"] == "# Compressed memory\n"
-    assert proposal["recommendation"] == "approval_required"
+    assert proposal["recommendation"] == "defer"
+    assert proposal["reason_code"] == "manual_planner_review_required"
     assert proposal["risk"] == "high"
     assert proposal["auto_apply"] is False
 
@@ -118,7 +119,8 @@ def test_propose_from_findings_builds_skill_lifecycle_proposal_from_explicit_can
     assert proposal["change_type"] == "skill_rename"
     assert proposal["target_path"] == "/tmp/skills/old/SKILL.md"
     assert proposal["destination_path"] == "/tmp/skills/new/SKILL.md"
-    assert proposal["recommendation"] == "approval_required"
+    assert proposal["recommendation"] == "defer"
+    assert proposal["reason_code"] == "manual_planner_review_required"
     assert proposal["risk"] == "high"
     assert proposal["auto_apply"] is False
 

@@ -1,10 +1,8 @@
 """Heuristic proposal scoring used to populate the report / diagnostic signals.
 
-The previous LLM-driven scorer (``_call_llm_scorer``) was an artifact from before
-the global planner existed. The planner now owns all mutation decisions
-independently of these scores, so the LLM call was retired and only the
-deterministic heuristic remains. Output goes to ``render_report`` and
-``diagnostic_signals.build_diagnostic_signals``.
+The historical LLM-driven proposal scorer was retired after the global planner
+became the owner of mutation decisions. The deterministic heuristic remains for
+report ordering and `diagnostic_signals.build_diagnostic_signals`.
 """
 
 from __future__ import annotations

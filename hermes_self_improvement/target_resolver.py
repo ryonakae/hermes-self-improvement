@@ -276,7 +276,7 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
 
     messages, cache_extras = apply_caching(messages, site="target_resolver")
     response = call_llm(
-        task="skills_hub",
+        task="self_improvement",
         provider=provider,
         model=model,
         messages=messages,
@@ -293,7 +293,7 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
         config=config,
         model=model,
         provider=provider,
-        task="skills_hub",
+        task="self_improvement",
         max_tokens=max_tokens,
     )
     return _extract_json_object(response_text)

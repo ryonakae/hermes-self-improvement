@@ -555,6 +555,8 @@ def _normalize_decision(
         return None
     decision = str(raw.get("decision") or "skip").strip()
     raw_maintenance_action = str(raw.get("maintenance_action") or "").strip().lower()
+    # Legacy LLM outputs from the pre-`maintenance_action` schema are accepted
+    # only as inputs and normalized into the current canonical decision shape.
     if decision == "patch_skill":
         decision = "mutate_skill"
         raw_maintenance_action = raw_maintenance_action or "patch"
@@ -726,7 +728,7 @@ def _call_improvement_planner_llm(*, digest: dict[str, Any], config: dict[str, A
     overlay_hash = overlay.get("candidate_hash") if isinstance(overlay, dict) else None
     messages, cache_extras = apply_caching(messages, site="improvement_planner", overlay_hash=overlay_hash)
     response = call_llm(
-        task="skills_hub",
+        task="self_improvement",
         provider=provider,
         model=model,
         messages=messages,
@@ -743,7 +745,7 @@ def _call_improvement_planner_llm(*, digest: dict[str, Any], config: dict[str, A
         config=config,
         model=model,
         provider=provider,
-        task="skills_hub",
+        task="self_improvement",
         max_tokens=max_tokens,
     )
     payload = _extract_json_object(response_text)

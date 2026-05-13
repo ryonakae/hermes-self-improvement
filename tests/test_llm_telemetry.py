@@ -76,7 +76,7 @@ def test_record_llm_call_writes_event(tmp_path):
         config=config,
         model="m1",
         provider="anthropic",
-        task="skills_hub",
+        task="self_improvement",
         max_tokens=1800,
     )
 
@@ -87,7 +87,7 @@ def test_record_llm_call_writes_event(tmp_path):
     assert ev["site"] == "target_resolver"
     assert ev["model"] == "m1"
     assert ev["provider"] == "anthropic"
-    assert ev["task"] == "skills_hub"
+    assert ev["task"] == "self_improvement"
     assert ev["max_tokens"] == 1800
     assert ev["prompt_messages_count"] == 2
     assert ev["prompt_chars_total"] == len("sys") + len("user-prompt")

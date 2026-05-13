@@ -384,9 +384,10 @@ def score_with_gepa(
 ) -> dict[str, Any]:
     """Score proposals with the real DSPy / GEPA evaluator path.
 
-    User-facing ``--scorer gepa`` no longer runs the dependency-free offline
-    scaffold. The offline scorer remains available only through
-    ``evaluate_offline_program`` for regression tests and fixture validation.
+    The historical proposal-scorer CLI path is retired. Runtime evaluator
+    scoring/calibration uses this adapter through `calibrate`; the offline
+    scorer remains available only through ``evaluate_offline_program`` for
+    regression tests and fixture validation.
     """
     gepa_config = config.get("gepa_evaluator") if isinstance(config.get("gepa_evaluator"), dict) else {}
     if not bool(gepa_config.get("enabled", False)):

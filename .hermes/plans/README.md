@@ -11,8 +11,8 @@ As of 2026-05-10, the long-term roadmap is:
 The current active cleanup plan is:
 
 - `2026-05-14-historical-naming-cleanup.md`
-  - **Status:** planned.
-  - Cleans up historical names that survived earlier refactors: `skills_hub` auxiliary routing, old model role docs, removed `llm_scorer` / `run_editor` architecture text, `patch_skill` / `merge_skills` canonical-decision confusion, approval-queue vocabulary, and retired wrapper/path references.
+  - **Status:** implemented.
+  - Cleaned up historical names that survived earlier refactors: `skills_hub` auxiliary routing now uses `self_improvement`; old model role docs and removed `llm_scorer` / `run_editor` architecture text are updated; `patch_skill` / `merge_skills` are documented as legacy-normalized inputs or maintenance subtypes rather than canonical decisions; approval-queue vocabulary in active proposal output is replaced with current defer vocabulary. Validation: `py_compile`, full `pytest tests -q` (`665 passed, 2 skipped`), `hermes self-improvement status`, and `git diff --check` passed.
 
 The detailed milestone implementation plans are:
 

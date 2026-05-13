@@ -310,7 +310,8 @@ def _proposal_for_explicit_candidate(finding: dict[str, Any]) -> dict[str, Any] 
             "target_path": str(target_path),
             "before_hash": finding.get("before_hash"),
             "after_text": after_text,
-            "recommendation": "approval_required",
+            "recommendation": "defer",
+            "reason_code": "manual_planner_review_required",
             "count": finding.get("count") or 0,
             "auto_apply": False,
         }
@@ -333,7 +334,8 @@ def _proposal_for_explicit_candidate(finding: dict[str, Any]) -> dict[str, Any] 
             "evidence_kind": kind,
             "target_path": str(target_path),
             "before_hash": finding.get("before_hash"),
-            "recommendation": "llm_planner_decision" if planner_decided else "approval_required",
+            "recommendation": "llm_planner_decision" if planner_decided else "defer",
+            "reason_code": "planner_decided" if planner_decided else "manual_planner_review_required",
             "count": finding.get("count") or 0,
             "auto_apply": planner_decided,
         }
