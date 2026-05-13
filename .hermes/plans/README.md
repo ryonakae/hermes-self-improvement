@@ -20,6 +20,13 @@ The detailed milestone implementation plans are:
 
 The latest completed implementation plan is:
 
+- `2026-05-10-milestone-7-autonomous-steady-state.md` (phases 7.2 + 7.3)
+  - **Status:** code complete (phases 7.2, 7.3). Operational phases 7.1 (dogfood protocol) and 7.4 (final readiness report) wait on multi-window dogfood runs.
+  - Phase 7.2 exposes calibration thresholds in the `status` payload and renders them under a `Calibration thresholds:` section (`min_evidence_events`, `min_disagreements`, `min_bad_outcomes`, `window_days`), so operators can confirm the safety gates at a glance.
+  - Phase 7.3 surfaces multi-day outcome rollup in the `Outcomes:` section as an `overlay generation performance: best <id> (score), worst <id> (score)` line when scored overlay_generations are available.
+
+The previous completed implementation plan is:
+
 - `2026-05-10-milestone-6-trustworthy-reporting.md` (phases 6.1 + 6.2)
   - **Status:** implemented (code) / phases 6.1 and 6.2 done. Phase 6.3 (Daily Slack template) is operational follow-up against the external automations repo.
   - Phase 6.1 adds a compact `Unresolved:` CLI section that groups deferred / skipped / preview decisions into reason buckets (insufficient evidence / unsupported tool / unsafe destructive action / duplicate prevented / needs planner review) with bounded `next action:` follow-ups pulled from each decision payload.

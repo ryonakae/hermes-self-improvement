@@ -8,8 +8,8 @@
 
 **Goal:** Run unattended daily self-improvement safely: small evidence-backed changes apply, uncertain changes hold, outcomes feed calibration, and reports stay trustworthy.
 
-**Current state:** The building blocks are mostly in place, but steady-state needs repeated dogfood runs, threshold tuning, failure-mode checks, and a clear final readiness report. This is the last milestone and should not be declared complete from one successful run.
-**Execution status:** Final target; do not start completion claims until Milestones 1–6 exit criteria are satisfied and dogfood runs cover multiple windows.
+**Current state:** Code-side support is in place. Phase 7.2 exposes calibration thresholds (`min_evidence_events`, `min_disagreements`, `min_bad_outcomes`, `window_days`) in the `status` payload and renders them under a `Calibration thresholds:` section so operators can confirm the safety gates at a glance. Phase 7.3 surfaces multi-day outcome rollup in the `Outcomes:` section as an `overlay generation performance: best <id> (score), worst <id> (score)` line when overlay_generations has scored entries. Phase 7.1 (dogfood protocol) and phase 7.4 (final readiness report) are operational and depend on repeated dogfood runs, not on additional code work.
+**Execution status:** Code complete (phases 7.2, 7.3). Operational phases 7.1 and 7.4 wait on multi-window dogfood runs before the roadmap can be declared complete.
 
 **Depends on:** Milestones 1–6.
 
@@ -52,6 +52,8 @@
 
 ### Phase 7.2 — Safety threshold review
 
+**Status:** implemented (code).
+
 **Objective:** Tune thresholds so noisy evidence does not trigger overfitting or excessive mutation.
 
 **Files:**
@@ -67,6 +69,8 @@
 3. Keep thresholds explicit in config defaults and report summaries.
 
 ### Phase 7.3 — Multi-day outcome review
+
+**Status:** implemented (code).
 
 **Objective:** Verify changes over several windows before declaring the loop stable.
 

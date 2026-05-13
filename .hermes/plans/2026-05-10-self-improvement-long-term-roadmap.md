@@ -38,7 +38,7 @@ The key product promise is not “make many changes.” It is:
 
 ## Current Position — 2026-05-10
 
-Overall: **about 7合目**.
+Overall: **about 8.4合目** (code-side; operational dogfood + final readiness report still pending).
 
 ### Strong areas
 
