@@ -67,7 +67,7 @@ def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
         tmp_path / "config.yaml",
         """
         model:
-          planner:
+          improvement_planner:
             provider: codex
             model: gpt-test
           evaluator:
@@ -78,7 +78,7 @@ def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
         tmp_path / "config.local.yaml",
         """
         model:
-          planner:
+          improvement_planner:
             timeout: 99
         """,
     )
@@ -86,9 +86,9 @@ def test_yaml_config_precedence_and_env_expansion(tmp_path, monkeypatch):
 
     config = mod.load_config(plugin_yaml)
 
-    assert config["model"]["planner"]["provider"] == "codex"
-    assert config["model"]["planner"]["model"] == "gpt-test"
-    assert config["model"]["planner"]["timeout"] == 99
+    assert config["model"]["improvement_planner"]["provider"] == "codex"
+    assert config["model"]["improvement_planner"]["model"] == "gpt-test"
+    assert config["model"]["improvement_planner"]["timeout"] == 99
     assert config["model"]["evaluator"]["api_key"] == "local-secret"
     assert config["config_sources"] == [str(plugin_yaml), str(local_yaml)]
 

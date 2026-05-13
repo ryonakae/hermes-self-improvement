@@ -89,17 +89,32 @@ hermes curator status
 ### 4. cron で自動化する (任意)
 
 最初は `--dry-run` で動作を確認してから cron に入れます。
-1 本の producer job に `status` → `calibrate` → `improve` → `report` を順に並べる構成が扱いやすいです。
+日次 maintenance は LLM agent を挟まず、`--no-agent` の script-only job として `hermes self-improvement ...` を直接実行するのが安定です。
+
+`~/.hermes/scripts/self-improvement-maintenance.sh` に薄い wrapper を置きます。
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$HOME/.hermes/plugins/hermes-self-improvement"
+hermes self-improvement status >/dev/null
+hermes self-improvement calibrate
+hermes self-improvement improve --scorer llm
+hermes self-improvement report --since-hours 24
+```
+
+cron job はこの script を `--no-agent` で登録します。stdout がそのまま local output に保存されるため、script 側の出力は短い要約とアーティファクトのパスだけにしてください。
 
 ```bash
 hermes cron create '0 4 * * *' \
   --name self-improvement-maintenance \
   --deliver local \
-  --workdir ~/.hermes/plugins/hermes-self-improvement \
-  '`hermes self-improvement status` で状態を確認し、`hermes self-improvement calibrate`、`hermes self-improvement improve`、`hermes self-improvement report --since-hours 24` を順に実行する。出力は短い要約とアーティファクトのパスだけにする。'
+  --script self-improvement-maintenance.sh \
+  --no-agent
 ```
 
-監視だけ欲しいなら `status` と `report --since-hours 24` を別 job にしてかまいません。
+監視だけ欲しいなら `status` と `report --since-hours 24` だけを実行する別 script / job にしてかまいません。
 
 ## コマンド
 
