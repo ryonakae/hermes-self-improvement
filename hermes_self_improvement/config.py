@@ -61,6 +61,15 @@ def _default_config() -> dict[str, Any]:
                 "max_tokens": 1800,
                 "extra_body": {},
             },
+            "target_resolver": {
+                "provider": "auto",
+                "model": "",
+                "base_url": "",
+                "api_key": "",
+                "timeout": 60,
+                "max_tokens": 1800,
+                "extra_body": {},
+            },
             "skill_agent": {
                 "provider": "auto",
                 "model": "",

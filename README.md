@@ -140,11 +140,12 @@ $EDITOR config.local.yaml
 
 API key や provider secret は commit しないでください。
 
-モデルは 4 つの role に振り分けます。
+モデルは 5 つの role に振り分けます。
 
 | key | 用途 |
 |---|---|
 | `model.improvement_planner` | 改善案の採点とスキル計画 |
+| `model.target_resolver` | unmatched evidence の skill / memory target 解決 |
 | `model.skill_agent` | スキル変更エージェント |
 | `model.memory_agent` | メモリ変更エージェント (memory tool 経由の add / replace / remove) |
 | `model.evaluator` | DSPy / GEPA による evaluator / プロンプト / rubric 調整 |
