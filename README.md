@@ -1,75 +1,71 @@
 # hermes-self-improvement
 
-`hermes-self-improvement` は、[Hermes Agent](https://hermes-agent.nousresearch.com/) の実行時の観測データから、スキル、メモリを自己改善するプラグインです。
-さらに [DSPy/GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) で、改善の判断そのものを自己改善します。
+[Hermes Agent](https://hermes-agent.nousresearch.com/) の実行時イベントを観測し、スキルとメモリを自己改善する user plugin です。
+改善判断のプロンプト自体も [DSPy / GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) でチューニングします。
 
-## どう動き、どう自己改善するか
+## 何を解決するか
 
-このプラグインは、Hermes の会話を実行時フックで観測します。Hermes Agent の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) はスキルの利用状況、ライフサイクルなどの状態をよく知っていますが、会話中の細かい失敗などの情報までは取得していません。このプラグインはそこを補い、以下のような情報を記録します。
+Hermes Agent の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) はスキル利用状況とライフサイクルを追跡します。
+ただし、会話中のツール失敗、ユーザーの訂正、メモリ操作の不整合といった細かい信号は拾いません。
+
+このプラグインは runtime hook で次の信号を記録します。
 
 - ツール失敗時の文脈
 - メモリ操作と失敗
-- ユーザーの訂正
-- セッション結果
-- subagent の結果
+- ユーザーからの訂正
+- セッションと subagent の結果
 - LLM / API 失敗のメタデータ
 
-フックは観測だけを行います。観測後の処理は、コマンド名ではなく内部の LLM site で見ると分かりやすくなります。`memory_extractor` は会話 window から memory candidate を抽出し、`target_resolver` は unmatched evidence を skill / memory に attach し、`improvement_planner` は証拠から改善方針を選びます。実行は `skill_agent` (skill mutation) と `memory_agent` (memory mutation) が担い、`evaluator` は結果や候補を評価します。`prompt_optimizer` は判断に使う実行時専用の overlay prompt を調整し、次の実行に反映します。
+hook は記録だけを行います。実際の変更は `improve` と `calibrate` の 2 つの runner が担当します。
+
+## 動作の流れ
 
 ```text
-[1] Hermes の実行
+[1] Hermes 実行
       ↓
-[2] フックでイベントを記録
+[2] hook がイベントを state/events.jsonl に記録
       ↓
-[3] 観測を証拠パックにまとめる (memory_extractor / target_resolver で前処理)
+[3] 観測を証拠パックにまとめる
       ↓
 [4] improvement_planner が改善方針を選ぶ
       ↓
-[5] skill_agent / memory_agent が必要な変更だけを実行
+[5] skill_agent / memory_agent が変更を実行
       ↓
-[6] evaluator が結果や候補を評価し、episode / outcome に保存
+[6] evaluator が結果を episode / outcome に保存
       ↓
-[7] prompt_optimizer が improvement_planner / skill_agent / memory_agent / evaluator の overlay を調整する
+[7] prompt_optimizer が overlay prompt を調整
       │
-      └──── 次の [1] Hermes の実行へ戻る
+      └─→ 次回の Hermes 実行へ
 ```
 
-`improve` は、この流れのうち証拠パック作成、改善方針の選択、スキル / メモリの改善、episode 記録を担います。Curator の主な役割はスキル保守ですが、このプラグインはスキルとメモリの両方を扱います。Curator に直接結びつかない失敗も、前後のイベント文脈を含む unmatched evidence candidate として扱います。証拠パックには knowledge inventory health snapshot、memory の重複 / stale pair、Hermes-created skill の stale singleton、coverage gap candidate も入り、dry-run summary では `Knowledge inventory`、`Coverage gaps`、`Target resolution` として短く表示します。`Target resolution` は recommendation だけでなく、unresolved / memory / skip-noise leaning の代表テーマも最大3件ずつ表示します。`target_resolver` は attachment-only で、`attach_existing_skill / mutate_memory / unresolved / skip_noise` の4分類だけを返します。skill の改修・統合・archive・新規作成・実行判断は `improvement_planner` の責務です。generic な tool failure は「唯一見えている skill」に無理に attach しないよう target-fit / negative-fit signals を受け取ります。スキルの mutate (patch/merge) / archive / create 対象は Hermes が作成した local mutable skill だけです。built-in、hub-installed、plugin-bundled、external-dir など対象外の skill は LLM-facing candidate list にも載せず、必要なら除外件数と理由だけ artifact に残します。観測から durable な手順不足が見えた場合、`improvement_planner` は既存 skill の改修・統合・アーカイブを優先検討し、それでも適切な受け皿がないときだけ `skill_manage(action="create")` 経由の新規 skill 作成を選べます。会話由来の memory gap も対象で、`memory_extractor` がキーワードを候補 window の ranking にだけ使い、意味判断は前後文脈を見た LLM に寄せます。抽出前には既存 built-in memory の compact entry を digest に渡し、抽出後にも既存 memory との類似を見て、重複 add は `skip`、関連する古い内容は `replace` に寄せます。メモリ変更は `memory_agent` が公式 `memory` tool / active external provider tool 経由だけで実行します。`USER.md` / `MEMORY.md` / Skill の置き場所も inventory evidence として LLM に渡し、Hermes 公式の「USER は好み・会話スタイル・期待値、MEMORY は環境事実・規約・学んだこと、Skill は手順・workflow」という境界に沿って判断させます。clear な USER↔MEMORY move は add-before-remove で実行し、曖昧なら `defer` します。明白な stale memory pair は既存の memory mutation planning に `memory_replace` hint として渡せますが、曖昧な pair は `defer` に留めます。raw terminal/execute_code/search output は memory にせず、skill/workflow evidence 側に残します。built-in memory が満杯のときは、まず `memory` tool のエラーに含まれる `current_entries` をもとに統合・削除候補を作って `replace/remove` → `add` を再試行し、それでも入らない場合だけ active external provider があれば provider tool に回します。直近30日（設定値 `calibration.evidence.window_days`）の観測は、重複排除したうえで outcome scoring や GEPA 用の実行時評価ケースに使います。
+`improve` が [3] から [6]、`calibrate` が [7] を回します。
 
-`calibrate` は、`improve` の判断そのものを見直します。[DSPy](https://dspy.ai/) は LLM への指示や評価を Python プログラムとして扱うためのフレームワークで、[GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) は評価ケースを使って指示を改善する optimizer です。repo 管理の base prompt は schema・allowed action/tool・hard safety boundary だけを持つ薄い kernel です。厚い運用指示は runtime-private overlay として `${HERMES_HOME:-~/.hermes}/self-improvement/evaluator/active-prompts.json` に保存され、次の `improve` で使われます。初期 overlay は `defaults/prompt-overlays/*.md` から `setup` 時に materialize されますが、実行時の正本は runtime 側です。overlay は role ごとに 150 行 / 12000 文字までです。
+### 改善対象
 
-## よく使うコマンド
-主なコマンドは以下の4つです。
+| 対象 | 範囲 |
+|---|---|
+| skill | Hermes が作成した local mutable skill。built-in / hub / plugin-bundled / external は対象外 |
+| memory | 公式 memory tool または provider-native memory tool 経由 |
+| evaluator | runtime-private な prompt overlay と eval case |
 
-| コマンド | 役割 | 変更するか |
-|---|---|---|
-| `status` | 実行時ディレクトリ、観測、評価器の状態を見る | しない |
-| `report` | 直近の観測を読み取り、改善材料を要約する | しない |
-| `improve` | 観測からスキル / メモリの改善案を選び、実行する | する |
-| `calibrate` | 改善判断に使う evaluator / プロンプト overlay を調整する | する |
+skill の新規作成は、durable な手順不足が観測から見えて、既存 skill に受け皿がないときだけ `skill_manage(action="create")` で行います。
+memory の配置は Hermes の境界に従います。`USER` は好み・会話スタイル・期待値、`MEMORY` は環境事実・規約・学んだこと、`Skill` は手順・workflow です。
 
-`improve` と `calibrate` は既定で変更可能です。確認だけしたいときは `--dry-run` を付けます。`improve` の判断は、利用者向けには `apply / defer / skip / block` の4つの意味に寄せます。新しい apply mode や承認キューは増やしません。`apply` した変更は常に ledger / artifact に残します。
-
-## 導入方法
+## 導入
 
 ### 1. プラグインを配置する
 
-Hermes が読むプラグインディレクトリにリポジトリを置きます。
+Hermes が読むディレクトリにリポジトリを置き、Python パッケージとして install します。
 
 ```bash
 mkdir -p ~/.hermes/plugins
 git clone git@github.com:ryonakae/hermes-self-improvement.git \
   ~/.hermes/plugins/hermes-self-improvement
 cd ~/.hermes/plugins/hermes-self-improvement
-```
-
-依存関係は Python パッケージとして入れます。DSPy/GEPA を使うので `dspy` が必要です。
-
-```bash
 python3 -m pip install -e .
 ```
 
-Hermes gateway や CLI がすでに起動している場合は、プラグイン検出のために新しいセッションか gateway の再起動が必要です。
+Hermes gateway や CLI を起動中なら、新しいセッションを開くか gateway を再起動してください。
 
 ### 2. 実行時ディレクトリを初期化する
 
@@ -78,26 +74,22 @@ bin/hermes-self-improve setup
 bin/hermes-self-improve status
 ```
 
-読み取り専用で確認するなら次を使います。
-
-```bash
-bin/hermes-self-improve setup --check
-bin/hermes-self-improve report --since-hours 24
-```
+書き込まずに状態を見るときは `setup --check` と `report --since-hours 24` を使います。
 
 ### 3. Curator を pause する
 
-このプラグインは、Hermes Agent の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) のスキル利用状況、ライフサイクル、pinned / archive 状態を判断元として読み取ります。Curator を `disabled` にすると、そのテレメトリもライフサイクル状態も弱くなります。
-Curator による観測を止めず、バックグラウンドレビューだけを止めるために pause します。
+`improve` は Curator のスキル利用状況とライフサイクル状態を判断材料に使います。
+`disabled` にするとこの情報が弱くなります。バックグラウンドレビューだけ止めたい場合は `pause` を使ってください。
 
 ```bash
 hermes curator pause
 hermes curator status
 ```
 
-### 4. cron ジョブを設定する
+### 4. cron で自動化する (任意)
 
-cron では、まず `--dry-run` 付きで動きを確認してください。実運用では、1本の producer job にして `status`、`calibrate`、`improve`、`report` を順に走らせる構成が扱いやすいです。通知先は環境に合わせて変えてください。以下は `local` に保存する薄い例です。
+最初は `--dry-run` で動作を確認してから cron に入れます。
+1 本の producer job に `status` → `calibrate` → `improve` → `report` を順に並べる構成が扱いやすいです。
 
 ```bash
 hermes cron create '0 4 * * *' \
@@ -107,11 +99,21 @@ hermes cron create '0 4 * * *' \
   '`bin/hermes-self-improve status` で状態を確認し、`bin/hermes-self-improve calibrate`、`bin/hermes-self-improve improve`、`bin/hermes-self-improve report --since-hours 24` を順に実行する。出力は短い要約とアーティファクトのパスだけにする。'
 ```
 
-`improve` と `calibrate` は既定で変更可能です。最初は手元で `calibrate --dry-run` と `improve --dry-run` を確認してから cron に入れてください。読み取り専用の監視だけが欲しい場合は、`status` と `report --since-hours 24` だけを別 job にしてもかまいません。
+監視だけ欲しいなら `status` と `report --since-hours 24` を別 job にしてかまいません。
 
-## その他
+## コマンド
 
-### 設定
+| コマンド | 役割 | 変更するか |
+|---|---|---|
+| `status` | 実行時ディレクトリ、観測、評価器の状態を表示 | しない |
+| `report` | 直近の観測を要約 | しない |
+| `improve` | 観測から skill / memory の改善案を選び実行 | する |
+| `calibrate` | 改善判断に使う evaluator / overlay を調整 | する |
+
+`improve` と `calibrate` は既定で変更可能です。プレビューしたいときは `--dry-run` を付けます。
+`improve` の判断は `apply / defer / skip / block` の 4 つに集約します。`apply` した変更は ledger と artifact に常に残します。
+
+## 設定
 
 既定値は `hermes_self_improvement/config.py` にあります。ローカル上書きが必要なときだけ YAML を置きます。
 
@@ -121,83 +123,59 @@ cp config.example.yaml config.yaml
 $EDITOR config.local.yaml
 ```
 
-`config.yaml` と `config.local.yaml` はローカル実行用です。API key や provider secret は commit しないでください。
+API key や provider secret は commit しないでください。
 
-モデル振り分けは4つです。
+モデルは 4 つの role に振り分けます。
 
 | key | 用途 |
 |---|---|
-| `model.improvement_planner` | 改善案の採点と全体スキル計画 |
-| `model.skill_agent` | 選ばれたスキルの変更エージェント |
-| `model.memory_agent` | 選ばれたメモリの変更エージェント (memory tool 経由の add / replace / remove ループ) |
+| `model.improvement_planner` | 改善案の採点とスキル計画 |
+| `model.skill_agent` | スキル変更エージェント |
+| `model.memory_agent` | メモリ変更エージェント (memory tool 経由の add / replace / remove) |
 | `model.evaluator` | DSPy / GEPA による evaluator / プロンプト / rubric 調整 |
 
-### 実行時ファイル
+calibration の evidence しきい値 (window 日数、最少イベント数など) も YAML から調整できます。
+具体的なキーは `config.example.yaml` を参照してください。
+
+## 実行時ファイル
 
 `setup` は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下を作ります。
 
 ```text
 ${HERMES_HOME}/self-improvement/
-  state/events.jsonl
+  state/events.jsonl              # hook イベント + 自身の LLM 呼び出し計測
   state/install.json
   daily/
-  runs/
-  evidence/
+  runs/                           # 実行アーティファクト
+  evidence/                       # 証拠パック
   outcomes/
   ledgers/
-  evaluator/active.json
-  evaluator/active-prompts.json
-  evaluator/defaults/
-  evaluator/programs/
-  evaluator/candidates/
-  evaluator/prompt-candidates/
-  evaluator/prompt-candidate-sets/
-  evaluator/runtime-eval-cases/
-  cache/dspy/
+  evaluator/
+    active.json                   # active evaluator pointer
+    active-prompts.json           # active prompt overlay pointer
+    prompt-candidates/            # role 別の overlay candidate
+    prompt-candidate-sets/        # GEPA が生成した候補セット
+    runtime-eval-cases/           # ユーザー固有の評価ケース
+  cache/dspy/                     # DSPy / GEPA キャッシュ
 ```
 
-主なファイルは次の通りです。`state/events.jsonl` はフックイベントと plugin 自身の LLM 呼び出し計測 (`self_improvement_llm_call`)、`runs/` は実行アーティファクト、`evidence/` は証拠パック、`evaluator/active.json` は active evaluator pointer、`evaluator/active-prompts.json` は active overlay pointer です。`evaluator/prompt-candidates/` には materialized seed や role-level candidate、`evaluator/prompt-candidate-sets/` には DSPy/GEPA の overlay 候補セット、`evaluator/runtime-eval-cases/` にはユーザー固有の評価ケース、`cache/dspy/` には DSPy/GEPA キャッシュを置きます。full prompt text は runtime artifact / 明示的な `--json` に置き、compact tool result には source/hash/path だけを出します。
+full prompt の本文は runtime artifact と `--json` 出力だけに残します。
+compact なツール結果には source / hash / path だけを返します。
 
-### 開発時の確認
+## 開発
 
-まず作業前に状態を見ます。
+着手手順、安全境界、検証コマンドは [`AGENTS.md`](AGENTS.md) にまとめてあります。
+設計と運用上の制約は [`skills/operations/SKILL.md`](skills/operations/SKILL.md) を参照してください。
+
+最低限の確認手順:
 
 ```bash
 git status --short
 bin/hermes-self-improve status
-```
 
-通常変更後はこれを通します。
-
-```bash
 PY=${PYTHON:-.venv/bin/python}
-$PY -m py_compile __init__.py hermes_self_improvement/*.py
 $PY -m pytest tests -q
-bin/hermes-self-improve status
-git diff --check
 ```
-
-プラグイン登録 / tool surface を触ったら、Hermes プラグインマネージャーからも確認します。
-
-```bash
-PY=${PYTHON:-python3}
-$PY - <<'PY'
-from hermes_cli.plugins import discover_plugins, get_plugin_manager
-import json
-
-discover_plugins(force=True)
-info = [p for p in get_plugin_manager().list_plugins() if p['name'] == 'hermes-self-improvement']
-print(json.dumps(info, ensure_ascii=False, indent=2))
-PY
-```
-
-期待値は plugin enabled、error null、tools 4 です。
-
-### 主要ファイル
-
-入口は `plugin.yaml`、root `__init__.py`、`hermes_self_improvement/cli.py`、`hermes_self_improvement/schemas.py`、`hermes_self_improvement/tool_handlers.py` です。観測は `observer.py`、集計と context-windowed evidence は `evidence.py`、LLM target resolve は `target_resolver.py`、会話由来 memory gap は `memory_extractor.py`、改善案の計画は `improvement_planner.py`、skill mutation エージェントは `skill_agent.py` / `skill_agent_backend.py`、memory mutation エージェントは `memory_agent.py` / `memory_agent_backend.py`、calibration は `calibration.py` と `runtime_eval_cases.py`、memory/skill mutation の下位実行層は `mutation_policy.py` と `mutation_worker.py` を見ます。
-
-初めて触るなら、`AGENTS.md`、`skills/operations/SKILL.md`、関係する `.hermes/plans/` を読んでから実装に入ってください。テストは `tests/` にあります。
 
 ## ライセンス
 
