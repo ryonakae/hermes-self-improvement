@@ -12,6 +12,7 @@ from .analysis import AnalysisResult, analyze_events
 from .autonomous_policy import build_autonomous_operation_policy, summarize_autonomous_operation_policy
 from .calibration import collect_calibration_evidence, run_calibration
 from .config import (
+    DEFAULT_CALIBRATION,
     DEFAULT_RETENTION_DAYS,
     get_hermes_home,
     load_config,
@@ -1122,6 +1123,12 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         f"- improve: {'mutation-capable' if policy.get('improve_mutation_capable') else 'read-only'}, skill targets {', '.join(policy.get('improve_skill_targets') or []) or 'none'}",
         f"- defer executes mutation: {bool(policy.get('defer_executes_mutation'))}",
     ]
+    thresholds = payload.get("calibration_thresholds") if isinstance(payload.get("calibration_thresholds"), dict) else {}
+    if thresholds:
+        lines.append("Calibration thresholds:")
+        for key in ("min_evidence_events", "min_disagreements", "min_bad_outcomes", "window_days"):
+            if key in thresholds:
+                lines.append(f"- {key}: {thresholds[key]}")
     setup = payload.get("runtime_setup") if isinstance(payload.get("runtime_setup"), dict) else {}
     if setup:
         active = setup.get("active_evaluator") if isinstance(setup.get("active_evaluator"), dict) else {}
@@ -1406,6 +1413,16 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
     return lines
 
 
+def _format_overlay_generation_value(item: dict[str, Any] | None) -> str:
+    if not isinstance(item, dict) or not item.get("overlay_generation_id"):
+        return ""
+    score = item.get("mean_outcome_score")
+    suffix = ""
+    if isinstance(score, (int, float)) and not isinstance(score, bool):
+        suffix = f" (score {float(score):.2f})"
+    return f"{item.get('overlay_generation_id')}{suffix}"
+
+
 def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
     outcomes = credit_assignment.get("outcomes") if isinstance(credit_assignment.get("outcomes"), dict) else {}
     tracked = int(outcomes.get("tracked") or credit_assignment.get("episode_count") or 0)
@@ -1433,6 +1450,17 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
             for window in ("immediate", "short", "medium", "long")
         ]
         lines.append("- scored window coverage: " + ", ".join(window_parts))
+    overlay_generations = credit_assignment.get("overlay_generations") if isinstance(credit_assignment.get("overlay_generations"), dict) else {}
+    if int(overlay_generations.get("scored") or 0) > 0:
+        parts: list[str] = []
+        best_str = _format_overlay_generation_value(overlay_generations.get("best") if isinstance(overlay_generations.get("best"), dict) else None)
+        worst_str = _format_overlay_generation_value(overlay_generations.get("worst") if isinstance(overlay_generations.get("worst"), dict) else None)
+        if best_str:
+            parts.append(f"best {best_str}")
+        if worst_str and worst_str != best_str:
+            parts.append(f"worst {worst_str}")
+        if parts:
+            lines.append("- overlay generation performance: " + ", ".join(parts))
     if quality_under_observation:
         lines.append(f"- quality under observation: {quality_under_observation}")
     if duplicate_noop_credited:
@@ -2101,6 +2129,12 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "runtime_setup": check_runtime_setup(config),
             "autonomous_policy": summarize_autonomous_operation_policy(policy),
             "autonomous_policy_full": policy,
+            "calibration_thresholds": {
+                "min_evidence_events": int((config.get("calibration", {}).get("evidence", {}) or {}).get("min_evidence_events", DEFAULT_CALIBRATION["evidence"]["min_evidence_events"])),
+                "min_disagreements": int((config.get("calibration", {}).get("evidence", {}) or {}).get("min_disagreements", DEFAULT_CALIBRATION["evidence"]["min_disagreements"])),
+                "min_bad_outcomes": int((config.get("calibration", {}).get("evidence", {}) or {}).get("min_bad_outcomes", DEFAULT_CALIBRATION["evidence"]["min_bad_outcomes"])),
+                "window_days": int((config.get("calibration", {}).get("evidence", {}) or {}).get("window_days", DEFAULT_CALIBRATION["evidence"]["window_days"])),
+            },
             "last_run_artifact": str(_latest_run_artifact(config)) if _latest_run_artifact(config) else None,
             "curator_integration": {
                 "skill_telemetry_source": "Hermes Curator",

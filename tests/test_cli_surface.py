@@ -544,6 +544,65 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- scored window coverage: immediate" in text
 
 
+def test_improve_summary_shows_overlay_generation_performance_when_tracked():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 1, "memory_changes": 0},
+        "step_decisions": {
+            "skill": {"planner": {"decisions": []}, "decisions": [
+                {"decision": "accepted", "changed": True, "result": {"changed_skills": ["alpha"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True}}},
+            ]},
+            "memory": {"decisions": []},
+        },
+        "evidence_pack": {"summary": {}},
+        "credit_assignment": {
+            "outcomes": {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "credit_windows": {"immediate": 2, "short": 0, "medium": 0, "long": 0}},
+            "overlay_generations": {
+                "tracked": 2,
+                "scored": 2,
+                "best": {"overlay_generation_id": "overlay-set-good", "mean_outcome_score": 0.7, "confidence": 0.9, "episodes": 1},
+                "worst": {"overlay_generation_id": "overlay-set-risky", "mean_outcome_score": -0.4, "confidence": 0.7, "episodes": 1},
+            },
+        },
+    })
+
+    assert "- overlay generation performance:" in text
+    assert "best overlay-set-good" in text
+    assert "worst overlay-set-risky" in text
+
+
+def test_render_status_summary_shows_calibration_thresholds():
+    cli = load_cli_module()
+    text = cli._render_status_summary({
+        "plugin": "hermes-self-improvement",
+        "enabled": True,
+        "event_path": "/tmp/events.jsonl",
+        "event_count_sample": 0,
+        "skill_agent_backend": {"available": False},
+        "memory_agent_backend": {"available": False},
+        "autonomous_policy": {
+            "calibrate_mutation_capable": True,
+            "calibrate_requires": "autonomous_evaluator_promote",
+            "improve_mutation_capable": True,
+            "improve_skill_targets": ["local_mutable_active"],
+            "defer_executes_mutation": False,
+        },
+        "calibration_thresholds": {
+            "min_evidence_events": 20,
+            "min_disagreements": 5,
+            "min_bad_outcomes": 2,
+            "window_days": 30,
+        },
+    })
+
+    assert "Calibration thresholds:" in text
+    assert "min_evidence_events: 20" in text
+    assert "min_disagreements: 5" in text
+    assert "min_bad_outcomes: 2" in text
+    assert "window_days: 30" in text
+
+
 def test_prompt_overlay_set_component_renders_generation_id_and_regression_status():
     cli = load_cli_module()
     component = cli._prompt_overlay_set_component({
