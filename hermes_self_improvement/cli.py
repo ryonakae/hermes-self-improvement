@@ -967,6 +967,7 @@ def run_improve(
             "views": evidence_pack.get("views"),
             "skill_candidates": evidence_pack.get("skill_candidates"),
             "active_skill_references": evidence_pack.get("active_skill_references"),
+            "reference_skill_coverage": evidence_pack.get("reference_skill_coverage"),
             "curator_telemetry_summary": evidence_pack.get("curator_telemetry_summary"),
         },
         **({"source_report": source_report_context} if source_report_context else {}),
@@ -1752,6 +1753,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     skill_agent_prompt = prompt_sources.get("skill_agent") if isinstance(prompt_sources.get("skill_agent"), dict) else {}
     evidence_strength_counts = planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {}
     evidence_by_kind = evidence_summary.get("evidence_by_kind") if isinstance(evidence_summary.get("evidence_by_kind"), dict) else {}
+    reference_skill_coverage = [item for item in (evidence_pack.get("reference_skill_coverage") or []) if isinstance(item, dict)]
     inventory_health = evidence_summary.get("inventory_health") if isinstance(evidence_summary.get("inventory_health"), dict) else {}
     inventory_skill_health = inventory_health.get("skill_candidates") if isinstance(inventory_health.get("skill_candidates"), dict) else {}
     inventory_memory_health = inventory_health.get("memory") if isinstance(inventory_health.get("memory"), dict) else {}
@@ -1944,6 +1946,16 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     if target_resolution_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = target_resolution_lines
+    if reference_skill_coverage:
+        coverage_bits = []
+        for item in reference_skill_coverage[:5]:
+            theme = str(item.get("matched_theme") or item.get("theme") or "unknown")
+            name = str(item.get("name") or "unknown")
+            coverage_bits.append(f"{theme} -> {name}")
+        extra = len(reference_skill_coverage) - len(coverage_bits)
+        suffix = f", ... {extra} more" if extra > 0 else ""
+        insert_at = lines.index("Action summary:")
+        lines[insert_at:insert_at] = ["Reference coverage:", f"- {', '.join(coverage_bits)}{suffix}"]
     if maintenance_lines:
         insert_at = lines.index("Action summary:")
         lines[insert_at:insert_at] = maintenance_lines

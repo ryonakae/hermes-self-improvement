@@ -986,3 +986,23 @@ def test_partial_legacy_modules_do_not_reintroduce_removed_helpers():
         assert name not in verification.__dict__, f"apply-phase verification helper should be removed: {name}"
 
     assert importlib.util.find_spec("hermes_self_improvement.outcome_store") is None
+
+
+def test_improve_summary_renders_reference_skill_coverage():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {},
+        "step_decisions": {},
+        "evidence_pack": {
+            "summary": {},
+            "reference_skill_coverage": [
+                {"matched_theme": "timeout_workflow", "name": "timeout-workflow"},
+                {"matched_theme": "patch_tool_workflow", "name": "safe-patch-usage"},
+            ],
+        },
+    })
+
+    assert "Reference coverage:" in text
+    assert "timeout_workflow -> timeout-workflow" in text
+    assert "patch_tool_workflow -> safe-patch-usage" in text
