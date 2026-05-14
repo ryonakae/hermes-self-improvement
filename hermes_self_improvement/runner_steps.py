@@ -18,6 +18,7 @@ from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_skill_agent_instructions
 from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
 from .target_resolver import build_target_resolution_digest, run_target_resolver
+from .evidence import resolve_coverage_alias
 
 
 MEMORY_AGENT_SKIP_HINTS = {"skip_duplicate", "skip_sensitive", "defer_unclear"}
@@ -91,9 +92,6 @@ def _dispatch_memory_agent(
 
 MEMORY_SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
 RAW_TOOL_OUTPUT_MEMORY_SOURCES = {"terminal", "execute_code", "search_files", "read_file", "patch"}
-CREATE_SKILL_COVERAGE_ALIASES = {
-    "patch-tool-workflow": "safe-patch-usage",
-}
 MEMORY_REPLACE_STOPWORDS = {
     "the", "and", "for", "with", "from", "that", "this", "into", "only", "when", "then",
     "する", "ある", "いる", "こと", "ため", "よう", "では", "ます", "です", "として",
@@ -922,7 +920,8 @@ def run_skill_improvement_step(
                 "rationale": planner_decision.get("rationale"),
             }
             task = build_skill_create_agent_task(skill_name=skill_name, evidence=attached_evidence, planner_decision=planner_decision, config=config)
-            covered_by = CREATE_SKILL_COVERAGE_ALIASES.get(skill_name)
+            alias_name = resolve_coverage_alias(skill_name, {"safe-patch-usage", "timeout-workflow", "sandbox-permission-workflow"})
+            covered_by = alias_name if alias_name and _local_skill_exists(alias_name, config=config) else None
             if _local_skill_exists(skill_name, config=config):
                 decisions.append({
                     **base_decision,
@@ -931,9 +930,11 @@ def run_skill_improvement_step(
                     "changed": False,
                     "noop_outcome": "duplicate_prevented",
                     "covered_by_existing_skill": skill_name,
+                    "rationale": f"Existing skill {skill_name} already covers this proposed workflow; duplicate creation is unnecessary.",
+                    "next_action": "no_mutation_needed_existing_coverage",
                 })
                 continue
-            if covered_by and _local_skill_exists(covered_by, config=config):
+            if covered_by:
                 decisions.append({
                     **base_decision,
                     "decision": "skip",
@@ -941,6 +942,8 @@ def run_skill_improvement_step(
                     "changed": False,
                     "noop_outcome": "covered_by_existing_skill",
                     "covered_by_existing_skill": covered_by,
+                    "rationale": f"Existing skill {covered_by} covers this proposed workflow; do not create a duplicate local skill.",
+                    "next_action": "use_existing_reference_skill",
                 })
                 continue
             if not mutate:

@@ -1645,6 +1645,7 @@ _UNRESOLVED_REASON_GROUPS = (
     ("duplicate prevented", (
         "create_skill_duplicate_existing_skill",
         "create_skill_duplicates_reference_skill",
+        "create_skill_covered_by_existing_skill",
         "memory_duplicate_existing",
     )),
     ("needs planner review", (
@@ -1683,6 +1684,9 @@ def _unresolved_summary_lines(
             continue
         buckets[label] = buckets.get(label, 0) + 1
         next_action = str(item.get("next_action") or "").strip()
+        covered_by = str(item.get("covered_by_existing_skill") or item.get("covered_by_reference_skill") or "").strip()
+        if covered_by:
+            next_action = f"covered by {covered_by}" + (f"; {next_action}" if next_action else "")
         if next_action:
             next_actions.setdefault(label, [])
             if next_action not in next_actions[label]:

@@ -159,3 +159,24 @@ def test_build_evidence_pack_includes_knowledge_coverage_candidates_for_unmatche
 
     assert pack["summary"]["coverage_candidate_count"] >= 1
     assert any(item["kind"] == "knowledge_coverage_candidate" for item in pack["evidence"])
+
+
+def test_build_evidence_pack_includes_reference_skill_coverage_without_mutation_candidates():
+    now = datetime.now(timezone.utc)
+    events = [
+        {"event": "post_tool_call", "session_id": "s1", "tool_name": "patch", "status": "error", "error_kind": "unknown_error", "result_preview": "path required"},
+        {"event": "post_tool_call", "session_id": "s1", "tool_name": "patch", "status": "error", "error_kind": "not_found", "result_preview": "old_string not found"},
+    ]
+
+    pack = build_evidence_pack(events, now, now, curator_telemetry={"candidates": []})
+
+    assert pack["skill_candidates"] == []
+    assert pack["reference_skill_coverage"] == [{
+        "name": "safe-patch-usage",
+        "description": "Reference coverage for patch_tool_workflow",
+        "state": "active",
+        "mutable": False,
+        "provenance": "reference",
+        "source": "coverage_alias",
+        "matched_theme": "patch_tool_workflow",
+    }]

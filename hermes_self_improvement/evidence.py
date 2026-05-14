@@ -188,6 +188,17 @@ def _slug_seed(text: str, *, max_tokens: int = 5) -> str:
 
 COVERAGE_FIT_KINDS = ("exact_duplicate", "partial_overlap", "reference_only", "no_existing_fit")
 
+# Shared coverage aliases: observed workflow boundary -> existing reference skill.
+# These prevent duplicate create proposals without making reference skills mutation targets.
+COVERAGE_ALIAS_BY_WORKFLOW_NAME = {
+    "patch-tool-workflow": "safe-patch-usage",
+    "patch-tool": "safe-patch-usage",
+    "timeout-workflow": "timeout-workflow",
+    "long-running-tool-execution": "timeout-workflow",
+    "sandbox-permission-workflow": "sandbox-permission-workflow",
+    "permission-denied": "sandbox-permission-workflow",
+}
+
 _COVERAGE_FIT_STOPWORDS = {"the", "and", "for", "with", "from", "into", "of", "a", "an", "to", "in", "on"}
 
 
@@ -197,6 +208,47 @@ def _coverage_name_tokens(name: str) -> set[str]:
         for token in "".join(ch.lower() if ch.isalnum() else " " for ch in str(name or "")).split()
         if token and len(token) >= 3 and token not in _COVERAGE_FIT_STOPWORDS
     }
+
+
+def coverage_alias_for_name(name: str) -> str | None:
+    slug = _slug_seed(name)
+    return COVERAGE_ALIAS_BY_WORKFLOW_NAME.get(slug)
+
+
+def resolve_coverage_alias(name: str, existing_skill_names: list[str] | set[str] | tuple[str, ...]) -> str | None:
+    alias = coverage_alias_for_name(name)
+    if not alias:
+        return None
+    existing = {str(item) for item in existing_skill_names if str(item)}
+    return alias if alias in existing else None
+
+
+def build_reference_skill_coverage_from_evidence(evidence: list[dict[str, Any]], *, limit: int = 20) -> list[dict[str, Any]]:
+    coverage: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        item_coverage = item.get("coverage") if isinstance(item.get("coverage"), dict) else {}
+        theme = str(item.get("theme") or item_coverage.get("workflow_boundary") or item_coverage.get("gap_kind") or "").strip()
+        if not theme:
+            continue
+        alias = coverage_alias_for_name(theme)
+        if not alias or alias in seen:
+            continue
+        seen.add(alias)
+        coverage.append({
+            "name": alias,
+            "description": _redact_text(f"Reference coverage for {theme}", max_chars=180),
+            "state": "active",
+            "mutable": False,
+            "provenance": "reference",
+            "source": "coverage_alias",
+            "matched_theme": theme,
+        })
+        if len(coverage) >= limit:
+            break
+    return coverage
 
 
 def compute_coverage_fit_for_name(
@@ -227,10 +279,9 @@ def compute_coverage_fit_for_name(
     if slug in editable:
         bundle.update({"kind": "exact_duplicate", "fit_skills": [slug], "match_target": "editable"})
         return bundle
-    if slug in reference:
-        bundle.update({"kind": "reference_only", "fit_skills": [slug], "match_target": "reference"})
-        return bundle
     if not candidate_tokens:
+        if slug in reference:
+            bundle.update({"kind": "reference_only", "fit_skills": [slug], "match_target": "reference"})
         return bundle
     partial_editable = sorted(
         skill_name
@@ -242,9 +293,19 @@ def compute_coverage_fit_for_name(
         for skill_name in reference
         if len(_coverage_name_tokens(skill_name) & candidate_tokens) >= min_token_overlap
     )
+    editable_alias = resolve_coverage_alias(slug, editable)
+    if editable_alias and editable_alias not in partial_editable:
+        partial_editable.insert(0, editable_alias)
     if partial_editable:
         fit = partial_editable + [name for name in partial_reference if name not in partial_editable]
-        bundle.update({"kind": "partial_overlap", "fit_skills": fit[:3], "match_target": "editable_partial"})
+        bundle.update({"kind": "partial_overlap", "fit_skills": fit[:3], "match_target": "editable_partial" if not editable_alias else "editable_alias"})
+        return bundle
+    if slug in reference:
+        bundle.update({"kind": "reference_only", "fit_skills": [slug], "match_target": "reference"})
+        return bundle
+    reference_alias = resolve_coverage_alias(slug, reference)
+    if reference_alias:
+        bundle.update({"kind": "reference_only", "fit_skills": [reference_alias], "match_target": "reference_alias"})
         return bundle
     if partial_reference:
         bundle.update({"kind": "reference_only", "fit_skills": partial_reference[:3], "match_target": "reference_partial"})
@@ -1195,6 +1256,7 @@ def build_evidence_pack(
         memory_entries=memory_entries,
         inventory_evidence=inventory_evidence,
     )
+    reference_skill_coverage = build_reference_skill_coverage_from_evidence(evidence)
     return {
         "schema_name": SCHEMA_NAME,
         "schema_version": SCHEMA_VERSION,
@@ -1217,6 +1279,7 @@ def build_evidence_pack(
         "evidence": evidence,
         "views": views,
         "skill_candidates": skill_candidates,
+        "reference_skill_coverage": reference_skill_coverage,
         "inventory_health": inventory_health,
         "rejected_skill_candidates": rejected_skill_candidates,
         "curator_telemetry_summary": _curator_summary(curator_telemetry),

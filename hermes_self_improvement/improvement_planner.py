@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from .autonomous_loop import normalize_autonomous_decision
-from .evidence import compute_coverage_fit_for_name, filter_llm_skill_candidates
+from .evidence import compute_coverage_fit_for_name, filter_llm_skill_candidates, resolve_coverage_alias
 from .observer import _redact_text
 from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 from .target_hints import extract_target_hints
@@ -347,11 +347,18 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
 
     summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
     reference_skills = []
-    for item in raw_candidates:
+    reference_sources = []
+    reference_sources.extend(raw_candidates)
+    if isinstance(evidence_pack.get("reference_skill_coverage"), list):
+        reference_sources.extend(evidence_pack.get("reference_skill_coverage") or [])
+    for item in reference_sources:
         if not isinstance(item, dict):
             continue
         name = str(item.get("name") or "")
-        if not name or name in candidate_by_name:
+        if not name or name in candidate_by_name or any(existing.get("name") == name for existing in reference_skills):
+            continue
+        state = str(item.get("state") or "active")
+        if state == "archived":
             continue
         reference_skills.append({
             "name": name,
@@ -513,15 +520,21 @@ def _normalize_create_skill_decision(
             "evidence_ids": [],
             "noop_outcome": "duplicate_prevented",
             "covered_by_existing_skill": proposed,
+            "rationale": f"Existing mutable skill {proposed} already covers this proposed workflow; duplicate creation is unnecessary.",
+            "next_action": "no_mutation_needed_existing_coverage",
         }
-    if proposed in (reference_skill_names or set()):
+    reference_skill_names = reference_skill_names or set()
+    covered_reference = proposed if proposed in reference_skill_names else resolve_coverage_alias(proposed, reference_skill_names)
+    if covered_reference:
         return {
             "skill": proposed,
             "decision": "skip",
             "reason": "create_skill_duplicates_reference_skill",
             "evidence_ids": [],
             "noop_outcome": "covered_by_existing_skill",
-            "covered_by_reference_skill": proposed,
+            "covered_by_reference_skill": covered_reference,
+            "rationale": f"Existing reference skill {covered_reference} covers this proposed workflow; do not create a duplicate local skill.",
+            "next_action": "use_existing_reference_skill",
         }
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item) in available_evidence_ids]
     if not evidence_ids:

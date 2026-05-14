@@ -385,3 +385,60 @@ def test_target_fit_signals_keep_generic_repeated_failure_deferred_without_bound
     signals = digest["candidates"][0]["target_fit_signals"]
     assert "missing_workflow_boundary" in signals["negative"]
     assert signals["recommendation"] == "unresolved"
+
+
+def test_target_resolution_digest_includes_reference_coverage_without_attach_target():
+    pack = {"evidence": [{
+        "id": "coverage_timeout",
+        "kind": "knowledge_coverage_candidate",
+        "theme": "timeout_workflow",
+        "count": 8,
+        "coverage": {"workflow_boundary": "timeout workflow", "evidence_count": 8},
+    }]}
+    skill_candidates = [
+        {"name": "timeout-workflow", "description": "Long running timeout workflow", "mutable": False, "provenance": "builtin", "state": "active"},
+        {"name": "herm-tui-development", "description": "Herm TUI workflow", "mutable": True, "provenance": "curator_agent_created", "state": "active"},
+    ]
+
+    digest = build_target_resolution_digest(pack, skill_candidates=skill_candidates)
+
+    assert digest["reference_skill_coverage"] == [{
+        "name": "timeout-workflow",
+        "description": "Long running timeout workflow",
+        "state": "active",
+        "mutable": False,
+        "pinned": False,
+        "provenance": "builtin",
+    }]
+    assert "timeout-workflow" not in [item["name"] for item in digest["skill_targets"]]
+    signals = digest["candidates"][0]["target_fit_signals"]
+    assert signals["reference_positive_skills"] == ["timeout-workflow"]
+    assert signals.get("positive_skills", []) == []
+    assert signals["recommendation"] == "unresolved"
+
+
+def test_target_resolver_blocks_attach_to_reference_coverage_if_llm_tries():
+    digest = {
+        "candidates": [{"id": "coverage_timeout"}],
+        "skill_targets": [],
+        "skill_targets_other_names": [],
+        "reference_skill_coverage": [{"name": "timeout-workflow", "mutable": False, "provenance": "builtin", "state": "active"}],
+    }
+
+    from hermes_self_improvement.target_resolver import run_target_resolver
+
+    def fake_resolver(*, digest, config):
+        return {"resolutions": [{
+            "candidate_id": "coverage_timeout",
+            "resolution_kind": "attach_existing_skill",
+            "target_kind": "skill",
+            "target": "timeout-workflow",
+            "confidence": "high",
+            "suggested_action": "apply",
+        }]}
+
+    result = run_target_resolver(digest, config={"_target_resolver_func": fake_resolver})
+
+    row = result["resolutions"][0]
+    assert row["decision_hint"] == "block"
+    assert row["block_reason"] == "unknown_target"

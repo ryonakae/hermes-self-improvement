@@ -662,3 +662,81 @@ def test_planner_quality_report_counts_hint_attachment_match_kinds():
     assert report["evidence_strength_counts"] == {"weak": 1}
     assert report["weak_only_candidate_count"] == 1
     assert report["weak_only_selected_count"] == 1
+
+
+def test_planner_digest_marks_alias_reference_coverage_for_patch_tool_workflow():
+    pack_data = pack()
+    pack_data["skill_candidates"].append({
+        "name": "safe-patch-usage",
+        "description": "Safe patch usage workflow",
+        "mutable": False,
+        "provenance": "builtin",
+        "state": "active",
+    })
+    pack_data["evidence"].append({
+        "id": "coverage_patch",
+        "kind": "knowledge_coverage_candidate",
+        "theme": "patch_tool_workflow",
+        "coverage": {"workflow_boundary": "patch tool workflow", "evidence_count": 6},
+        "target_resolution_hint": {
+            "maintenance_affordance": {"workflow_boundary": "patch tool workflow"},
+        },
+        "likely_targets": [{"target": "skill", "weight": 0.8}],
+    })
+    pack_data["views"]["skill"].append("coverage_patch")
+
+    digest = build_improvement_planner_digest(pack_data)
+    coverage_fit = digest["knowledge_maintenance"]["maintenance_candidates"][-1]["coverage_fit"]
+
+    assert coverage_fit["kind"] == "reference_only"
+    assert coverage_fit["fit_skills"] == ["safe-patch-usage"]
+    assert coverage_fit["match_target"] == "reference_alias"
+
+
+def test_planner_normalizes_create_skill_duplicate_with_program_owned_rationale():
+    def fake_planner(*, digest, config):
+        return {"decisions": [{
+            "decision": "create_skill",
+            "proposed_skill_name": "demo-skill",
+            "evidence_ids": ["ev2"],
+            "rationale": "no existing fit; new skill justified",
+        }]}
+
+    result = run_improvement_planner(build_improvement_planner_digest(pack()), config={"_improvement_planner_func": fake_planner})
+    decision = result["decisions"][0]
+
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "create_skill_duplicate_existing_skill"
+    assert decision["noop_outcome"] == "duplicate_prevented"
+    assert decision["covered_by_existing_skill"] == "demo-skill"
+    assert "new skill justified" not in decision.get("rationale", "").lower()
+    assert decision["next_action"] == "no_mutation_needed_existing_coverage"
+
+
+def test_planner_normalizes_create_skill_alias_covered_by_reference_skill():
+    pack_data = pack()
+    pack_data["skill_candidates"].append({
+        "name": "safe-patch-usage",
+        "description": "Safe patch usage",
+        "mutable": False,
+        "provenance": "builtin",
+        "state": "active",
+    })
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{
+            "decision": "create_skill",
+            "proposed_skill_name": "patch-tool-workflow",
+            "evidence_ids": ["ev2"],
+            "rationale": "no existing fit; new skill justified",
+        }]}
+
+    result = run_improvement_planner(build_improvement_planner_digest(pack_data), config={"_improvement_planner_func": fake_planner})
+    decision = result["decisions"][0]
+
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "create_skill_duplicates_reference_skill"
+    assert decision["noop_outcome"] == "covered_by_existing_skill"
+    assert decision["covered_by_reference_skill"] == "safe-patch-usage"
+    assert "new skill justified" not in decision.get("rationale", "").lower()
+    assert decision["next_action"] == "use_existing_reference_skill"

@@ -93,6 +93,7 @@ Overall: **about 8.4合目** (code-side; operational dogfood + final readiness r
 
 - **Duplicate / existing coverage decisions:** around 7.8合目.
   - `patch-tool-workflow` style duplicates are now recorded as meaningful no-ops such as `covered_by_existing_skill` / `duplicate_prevented`, shown in summaries, preserved into episodes, and given a conservative positive outcome component when duplicate creation is prevented.
+  - 2026-05-14 dogfood exposed a remaining hardening gap: reference/root skills such as `timeout-workflow` and `safe-patch-usage` could exist, but not be visible enough during target resolution/planning, so a `create_skill` proposal could later be stopped as a duplicate with contradictory top-level rationale. Implemented follow-up: `2026-05-14-reference-coverage-and-apply-calibration.md` adds separate reference-skill coverage, shared workflow aliases, coherent duplicate/no-op rationale, and report next-action details while keeping reference skills non-mutating.
   - Milestone 2 phase 2.1 added a deterministic `coverage_fit` bundle (`exact_duplicate / partial_overlap / reference_only / no_existing_fit`) attached to each maintenance candidate, with matched skill names and evidence count rendered compactly in the planner prompt.
   - Milestone 2 phase 2.2 propagates `maintenance_action` (patch / merge) and the merge `target_skill` from the planner decision into the skill_agent task and prompt. The skill_agent now sees `maintenance_action: patch|merge` (plus `target_skill: <name>` for merge) as an explicit instruction line and as fields in the program-owned task summary, so the patch/merge sub-action is wired end-to-end through the existing native skill patch harness without inventing a new mutation lane.
   - Milestone 2 phase 2.3 made archive execution gated by an injected official archive tool: without `_skill_archive_fn` the runner returns `archive_skill_preview` with `reason="archive_blocked_no_official_tool"` instead of calling the Hermes internal `skill_usage.archive_skill` silently, and pinned / reference / state-mismatched archive candidates remain `skip` at the planner stage with distinct reasons (`archive_blocked_by_pinned` / `archive_blocked_by_active_reference` / `archive_blocked_by_provenance` / `archive_blocked_by_already_archived` / `archive_blocked_by_lifecycle_state` / `archive_blocked_by_invalid_successor`). For merge, the skill_agent prompt now spells out the merge semantics (patch the source skill with a migration pointer to `target_skill`, treat the archive as preview only, no direct deletion).
@@ -153,6 +154,10 @@ Detailed milestone plans are split by file so execution can proceed without bloa
 - [Milestone 5 — Outcome and credit assignment](2026-05-10-milestone-5-outcome-credit-assignment.md)
 - [Milestone 6 — Reporting that prevents confusion](2026-05-10-milestone-6-trustworthy-reporting.md)
 - [Milestone 7 — Autonomous steady state](2026-05-10-milestone-7-autonomous-steady-state.md)
+
+Active hardening slice:
+
+- [Reference coverage and apply calibration](2026-05-14-reference-coverage-and-apply-calibration.md) — Milestone 2/4/6 follow-up for reference/root skill coverage, duplicate no-op rationale coherence, and less-timid create-skill behavior for genuinely uncovered recurring workflows.
 
 ## Milestones
 

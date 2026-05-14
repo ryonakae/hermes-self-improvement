@@ -8,7 +8,13 @@ As of 2026-05-10, the long-term roadmap is:
   - **Status:** active long-term source of truth.
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 7合目. The active milestone is deeper skill quality and knowledge inventory maintenance.
 
-The current active cleanup plan is:
+The current active hardening plan is:
+
+- `2026-05-14-reference-coverage-and-apply-calibration.md`
+  - **Status:** implemented.
+  - Fixes the 2026-05-14 daily-run issue where reference/root skills such as `timeout-workflow` / `safe-patch-usage` were not visible enough during planning, causing `create_skill` proposals to be stopped later as duplicates with contradictory rationale. The implementation keeps `skill_candidates` limited to mutable Hermes-created skills, adds separate `reference_skill_coverage`, uses shared alias coverage, produces coherent duplicate/no-op rationale and next actions, and keeps strong uncovered workflow evidence eligible for bounded `create_skill`. Validation: focused tests (`141 passed`), full `pytest tests -q` (`671 passed, 2 skipped`), `py_compile`, `git diff --check`, `hermes self-improvement status --json`, and `improve --dry-run --json` passed.
+
+The latest completed cleanup plan is:
 
 - `2026-05-14-historical-naming-cleanup.md`
   - **Status:** implemented.

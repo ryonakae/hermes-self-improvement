@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from .observer import _redact_text
+from .evidence import resolve_coverage_alias
 from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
@@ -113,11 +114,27 @@ def normalize_target_resolver_payload(
     return {"resolutions": resolutions}
 
 
-def _target_fit_signals(item: dict[str, Any], skill_candidates: list[dict[str, Any]]) -> dict[str, Any]:
+def _skill_name_matches_theme(skill: dict[str, Any], theme: str) -> bool:
+    name = str(skill.get("name") or "").lower()
+    desc = str(skill.get("description") or skill.get("summary") or "").lower()
+    haystack = f"{name} {desc}"
+    theme_norm = theme.replace("_", "-")
+    theme_tokens = {token for token in theme_norm.split("-") if token}
+    if theme_norm and theme_norm in name:
+        return True
+    return bool(theme_tokens and len(theme_tokens & {token for token in haystack.replace("_", "-").split("-") if token}) >= 2)
+
+
+def _target_fit_signals(
+    item: dict[str, Any],
+    mutable_skill_candidates: list[dict[str, Any]],
+    reference_skill_candidates: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     positive: list[str] = []
+    positive_skills: list[str] = []
+    reference_positive_skills: list[str] = []
     negative: list[str] = []
     theme = str(item.get("theme") or "")
-    theme_tokens = {token for token in theme.replace("_", "-").split("-") if token}
     count = int(item.get("count") or ((item.get("coverage") or {}).get("evidence_count") if isinstance(item.get("coverage"), dict) else 0) or 0)
     coverage = item.get("coverage") if isinstance(item.get("coverage"), dict) else {}
     workflow_boundary = str(coverage.get("workflow_boundary") or "").strip()
@@ -127,15 +144,20 @@ def _target_fit_signals(item: dict[str, Any], skill_candidates: list[dict[str, A
         negative.append("generic_tool_failure")
         if count > 1 and not workflow_boundary:
             negative.append("missing_workflow_boundary")
-    for skill in skill_candidates:
-        name = str(skill.get("name") or "").lower()
-        desc = str(skill.get("description") or skill.get("summary") or "").lower()
-        haystack = f"{name} {desc}"
-        if theme and theme.replace("_", "-") in name:
+    for skill in mutable_skill_candidates:
+        name = str(skill.get("name") or "")
+        if _skill_name_matches_theme(skill, theme):
             positive.append("name_theme_overlap")
-        elif theme_tokens and len(theme_tokens & {token for token in haystack.replace("_", "-").split("-") if token}) >= 2:
-            positive.append("name_theme_overlap")
-    if len(skill_candidates) == 1 and not positive and item.get("kind") in {"unmatched_improvement_candidate", "tool_error_cluster_evidence"}:
+            positive_skills.append(name)
+    reference_names = [str(skill.get("name") or "") for skill in (reference_skill_candidates or []) if isinstance(skill, dict) and skill.get("name")]
+    alias = resolve_coverage_alias(theme or workflow_boundary, reference_names)
+    for skill in reference_skill_candidates or []:
+        name = str(skill.get("name") or "")
+        if not name:
+            continue
+        if name == alias or _skill_name_matches_theme(skill, theme):
+            reference_positive_skills.append(name)
+    if len(mutable_skill_candidates) == 1 and not positive and item.get("kind") in {"unmatched_improvement_candidate", "tool_error_cluster_evidence"}:
         negative.append("single_visible_target")
     if "low_recurrence" in negative:
         recommendation = "skip_noise"
@@ -143,11 +165,17 @@ def _target_fit_signals(item: dict[str, Any], skill_candidates: list[dict[str, A
         recommendation = "attach_existing_skill"
     else:
         recommendation = "unresolved"
-    return {
+    result = {
         "positive": sorted(set(positive)),
         "negative": sorted(set(negative)),
         "recommendation": recommendation,
     }
+    if positive_skills:
+        result["positive_skills"] = sorted(set(positive_skills))
+    if reference_positive_skills:
+        result["reference_positive_skills"] = sorted(set(reference_positive_skills))
+        result["coverage_hint"] = "covered_by_reference"
+    return result
 
 
 def _skill_has_evidence_relevance(skill: dict[str, Any], unresolved: list[dict[str, Any]]) -> bool:
@@ -180,6 +208,20 @@ def build_target_resolution_digest(
     memory_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
+    mutable_candidates = [item for item in skill_candidates if isinstance(item, dict) and item.get("name") and bool(item.get("mutable", True))]
+    reference_sources = list(skill_candidates)
+    if isinstance(evidence_pack.get("reference_skill_coverage"), list):
+        reference_sources.extend(evidence_pack.get("reference_skill_coverage") or [])
+    reference_candidates = []
+    seen_reference_names: set[str] = set()
+    for item in reference_sources:
+        if not isinstance(item, dict) or not item.get("name") or bool(item.get("mutable", True)):
+            continue
+        name = str(item.get("name") or "")
+        if name in seen_reference_names or str(item.get("state") or "active") not in {"", "active", "stale"}:
+            continue
+        seen_reference_names.add(name)
+        reference_candidates.append(item)
     unresolved = []
     for item in evidence:
         if not isinstance(item, dict):
@@ -195,19 +237,15 @@ def build_target_resolution_digest(
             "rationale": _redact_text(str(item.get("rationale") or item.get("summary") or ""), max_chars=260),
             "representative_failures": item.get("representative_failures") if isinstance(item.get("representative_failures"), list) else [],
             "context_windows": item.get("context_windows") if isinstance(item.get("context_windows"), list) else [],
-            "target_fit_signals": _target_fit_signals(item, skill_candidates),
+            "target_fit_signals": _target_fit_signals(item, mutable_candidates, reference_candidates),
             **({"target_resolution_hint": item.get("target_resolution_hint")} if isinstance(item.get("target_resolution_hint"), dict) else {}),
             **({"coverage": item.get("coverage")} if isinstance(item.get("coverage"), dict) else {}),
         }
         unresolved.append(row)
     detailed_targets: list[dict[str, Any]] = []
     names_only_targets: list[dict[str, Any]] = []
-    for item in skill_candidates:
+    for item in mutable_candidates:
         if not isinstance(item, dict) or not item.get("name"):
-            continue
-        is_mutable = bool(item.get("mutable", True))
-        if not is_mutable:
-            # Non-mutable skills are never attach candidates; drop entirely.
             continue
         name = str(item.get("name") or "")
         if _skill_has_evidence_relevance(item, unresolved):
@@ -227,6 +265,17 @@ def build_target_resolution_digest(
         "candidates": unresolved[:20],
         "skill_targets": detailed_targets,
         "skill_targets_other_names": names_only_targets,
+        "reference_skill_coverage": [
+            {
+                "name": str(item.get("name") or ""),
+                "description": _redact_text(str(item.get("description") or item.get("summary") or ""), max_chars=180),
+                "state": item.get("state"),
+                "mutable": False,
+                "pinned": bool(item.get("pinned")),
+                "provenance": item.get("provenance") or item.get("source"),
+            }
+            for item in reference_candidates[:20]
+        ],
         "memory_context": memory_context or {},
     }
 
@@ -246,6 +295,7 @@ TARGET_RESOLVER_SYSTEM = (
     "Two skill lists are provided: 'skill_targets' carry full descriptions for skills that already look related to one or more candidates; "
     "'skill_targets_other_names' carry only mutable skill names for everything else. "
     "You may still attach to a name from skill_targets_other_names if the skill name itself clearly fits a candidate; otherwise prefer skill_targets. "
+    "Reference skill coverage may be provided separately; use it only as coverage context, never as an attach target. "
     "Do not decide skill creation, editing, archive, or execution actions; the planner owns mutation decisions."
 )
 

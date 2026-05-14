@@ -235,7 +235,7 @@ def test_skill_step_skips_create_skill_when_local_skill_already_exists(tmp_path)
     (skills_root / "patch-tool-workflow" / "SKILL.md").write_text("---\nname: patch-tool-workflow\n---\n", encoding="utf-8")
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low"}]}
+        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low", "rationale": "no existing fit; new skill justified"}]}
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
@@ -248,6 +248,8 @@ def test_skill_step_skips_create_skill_when_local_skill_already_exists(tmp_path)
     assert decision["reason"] == "create_skill_duplicate_existing_skill"
     assert decision["noop_outcome"] == "duplicate_prevented"
     assert decision["covered_by_existing_skill"] == "patch-tool-workflow"
+    assert "new skill justified" not in decision.get("rationale", "").lower()
+    assert decision["next_action"] == "no_mutation_needed_existing_coverage"
     assert "task" not in decision
 
 
@@ -258,7 +260,7 @@ def test_skill_step_skips_create_skill_when_existing_alias_covers_workflow(tmp_p
     (skills_root / "safe-patch-usage" / "SKILL.md").write_text("---\nname: safe-patch-usage\n---\n", encoding="utf-8")
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low"}]}
+        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low", "rationale": "no existing fit; new skill justified"}]}
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
@@ -271,6 +273,8 @@ def test_skill_step_skips_create_skill_when_existing_alias_covers_workflow(tmp_p
     assert decision["reason"] == "create_skill_covered_by_existing_skill"
     assert decision["noop_outcome"] == "covered_by_existing_skill"
     assert decision["covered_by_existing_skill"] == "safe-patch-usage"
+    assert "new skill justified" not in decision.get("rationale", "").lower()
+    assert decision["next_action"] == "use_existing_reference_skill"
     assert "task" not in decision
 
 

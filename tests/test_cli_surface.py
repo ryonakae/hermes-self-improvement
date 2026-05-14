@@ -649,7 +649,7 @@ def test_improve_summary_renders_unresolved_section_with_next_actions():
                     {"decision": "skip", "reason": "insufficient_attached_evidence", "skill": "alpha", "next_action": "attach concrete evidence or keep as unresolved maintenance candidate"},
                     {"decision": "archive_skill_preview", "reason": "archive_blocked_no_official_tool", "skill": "beta", "skip_detail": "no_official_archive_tool_available", "next_action": "defer_archive_until_official_skill_archive_tool_is_available"},
                     {"decision": "skip", "reason": "archive_blocked_by_pinned", "skill": "gamma"},
-                    {"decision": "skip", "reason": "create_skill_duplicate_existing_skill", "skill": "delta", "noop_outcome": "duplicate_prevented"},
+                    {"decision": "skip", "reason": "create_skill_covered_by_existing_skill", "skill": "delta", "noop_outcome": "covered_by_existing_skill", "covered_by_existing_skill": "safe-patch-usage", "next_action": "no_mutation_needed_existing_coverage", "rationale": "Existing skill coverage prevents duplicate creation."},
                     {"decision": "skip", "reason": "planner_defer_without_attached_evidence", "skill": "epsilon"},
                 ],
             },
@@ -664,6 +664,8 @@ def test_improve_summary_renders_unresolved_section_with_next_actions():
     assert "unsafe destructive action" in text
     assert "needs planner review" in text
     assert "attach concrete evidence" in text
+    assert "safe-patch-usage" in text
+    assert "no_mutation_needed_existing_coverage" in text
 
 
 def test_improve_summary_reports_quality_patch_candidates_and_quality_patched():
