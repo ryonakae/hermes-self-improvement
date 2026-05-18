@@ -10,6 +10,20 @@
 
 ---
 
+## Implementation status
+
+Updated 2026-05-18:
+
+- ✅ Plan created/reviewed and committed: `305e259 docs: plan memory agent signal handoff`.
+- ✅ Outcome normalization + inventory handoff + prompt contract committed: `44f04cb feat: route memory inventory to memory agent`.
+- ✅ `environment_fact_signal` generation, compact memory-agent handoff, candidate caps, and `current_entries_omitted_count` committed: `a8b3e38 feat: add compact environment memory signals`.
+- ✅ Structural memory-extractor ranking committed: `4fa11a2 feat: rank memory windows by structural signals`.
+- ✅ Suspicious-only `memory_placement_candidate` handoff committed: `73460a8 feat: route suspicious memory placement to agent`.
+- ✅ Verification after each slice passed; latest full run: `686 passed, 2 skipped`.
+- ⚠️ Runtime dogfood note: the in-process `self_improvement_improve` tool appears to use the already-loaded plugin module, so immediate dry-run artifacts in the same Hermes session may not reflect freshly committed code until process/plugin reload.
+
+---
+
 ## Current problem
 
 Observed 2026-05-18 behavior:
