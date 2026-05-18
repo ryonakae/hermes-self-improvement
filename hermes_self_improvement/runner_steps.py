@@ -26,13 +26,51 @@ MEMORY_AGENT_CONSTRAINTS = (
     "Use only memory tool and submit_mutation_result.",
     "Do not use terminal/file/git/direct filesystem tools.",
 )
-MEMORY_AGENT_DISPATCH_KINDS = {"memory_gap_candidate"}
+MEMORY_AGENT_DISPATCH_KINDS = {"memory_gap_candidate", "memory_inventory_candidate"}
+
+
+def _compact_inventory_entries(entries: list[Any]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    for entry in entries[:4]:
+        if not isinstance(entry, dict):
+            continue
+        old_text = _redact_text(str(entry.get("old_text") or "").strip(), max_chars=260)
+        if not old_text:
+            continue
+        compact.append({
+            "target": str(entry.get("target") or "memory"),
+            "old_text": old_text,
+            "summary": _redact_text(str(entry.get("summary") or old_text), max_chars=180),
+            "hash": str(entry.get("hash") or ""),
+        })
+    return compact
+
+
+def _memory_inventory_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
+    inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
+    entries = _compact_inventory_entries(inventory.get("entries") if isinstance(inventory.get("entries"), list) else [])
+    if not entries:
+        return None
+    return {
+        "candidate_id": item.get("id"),
+        "candidate_kind": "memory_inventory_candidate",
+        "inventory_kind": str(inventory.get("group_kind") or ""),
+        "entries": entries,
+        "hints": [
+            _redact_text(str(hint), max_chars=180)
+            for hint in (inventory.get("hints") if isinstance(inventory.get("hints"), list) else [])[:4]
+        ],
+        "target_resolution_hint": item.get("target_resolution_hint") if isinstance(item.get("target_resolution_hint"), dict) else {},
+        "risk": item.get("risk") or "medium",
+    }
 
 
 def _memory_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
     kind = str(item.get("kind") or "")
     if kind not in MEMORY_AGENT_DISPATCH_KINDS:
         return None
+    if kind == "memory_inventory_candidate":
+        return _memory_inventory_agent_candidate_from_evidence(item)
     memory = item.get("memory") if isinstance(item.get("memory"), dict) else None
     if not memory:
         return None
@@ -1277,8 +1315,10 @@ def run_memory_improvement_step(
         evidence_id = str(item.get("id") or "")
         if any(decision.get("evidence_id") == evidence_id for decision in decisions):
             continue
-        if item.get("kind") == "memory_inventory_candidate":
+        if item.get("kind") == "memory_inventory_candidate" and _memory_agent_candidate_from_evidence(item) is None:
             decisions.append({"evidence_id": evidence_id, **_memory_non_operation_route(item)})
+            continue
+        if item.get("kind") == "memory_inventory_candidate":
             continue
         operation = _memory_operation_from_evidence(item)
         if not operation:

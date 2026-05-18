@@ -120,17 +120,14 @@ def test_memory_inventory_rejects_remove_without_old_text():
     assert result["decisions"][0]["reason"] == "memory_old_text_missing"
 
 
-def test_memory_inventory_without_operation_is_deferred_not_blocked():
-    result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config={}, mutate=False)
+def test_memory_inventory_without_operation_is_handed_to_memory_agent_preview():
+    result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config={"_memory_agent_backend": object()}, mutate=False)
 
     assert result["changed"] == 0
-    assert result["decisions"] == [{
-        "evidence_id": "mem-inv-1",
-        "decision": "defer",
-        "reason": "memory_inventory_needs_planner",
-        "suggested_route": "memory_planner",
-        "changed": False,
-    }]
+    assert result["decisions"] == []
+    assert result["memory_agent"]["status"] == "preview"
+    assert result["memory_agent"]["candidate_count"] == 1
+    assert result["memory_agent"]["candidates"][0]["candidate_kind"] == "memory_inventory_candidate"
 
 
 def test_memory_placement_without_operation_is_deferred_for_routing():

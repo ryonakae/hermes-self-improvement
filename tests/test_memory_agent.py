@@ -19,6 +19,7 @@ from hermes_self_improvement.memory_agent_backend import (
     build_memory_agent_backend,
     memory_agent_backend_status,
     native_memory_agent_tool_schemas,
+    validate_memory_agent_success_result,
 )
 
 
@@ -100,6 +101,23 @@ def test_build_memory_agent_prompt_mentions_memory_tool_and_skill_classification
     assert "Skill vs memory classification" in prompt
 
 
+def test_build_memory_agent_prompt_describes_candidate_kinds_as_hints():
+    prompt = build_memory_agent_prompt(task(candidates=[{
+        "candidate_id": "memory_inv_1",
+        "candidate_kind": "memory_inventory_candidate",
+        "inventory_kind": "stale_fact_pair",
+        "entries": [
+            {"target": "memory", "old_text": "Old Hermes path is /opt/data", "hash": "old"},
+            {"target": "memory", "old_text": "Hermes runtime root is ~/.hermes", "hash": "new"},
+        ],
+    }]))
+
+    assert "Candidate kinds" in prompt
+    assert "memory_inventory_candidate" in prompt
+    assert "environment_fact_signal" in prompt
+    assert "hints, not tool instructions" in prompt
+
+
 def test_parse_memory_agent_result_rejects_text_and_missing_success():
     assert parse_memory_agent_result("not json")["error"] == "memory_agent_result_text_unsupported"
     assert parse_memory_agent_result({"ok": True})["error"] == "memory_agent_result_missing_success"
@@ -119,6 +137,40 @@ def test_parse_memory_agent_result_normalizes_changed_alias_only_with_full_contr
 
     incomplete = {"success": True, "outcome": "changed"}
     assert parse_memory_agent_result(incomplete)["error"] == "memory_agent_result_used_tools_missing"
+
+
+def test_parse_memory_agent_result_normalizes_successful_reported_outcome_with_changes():
+    payload = success_result()
+    payload["outcome"] = "applied_after_capacity_recovery"
+
+    parsed = parse_memory_agent_result(payload)
+
+    assert parsed["success"] is True
+    assert parsed["outcome"] == "applied"
+    assert parsed["reported_outcome"] == "applied_after_capacity_recovery"
+    assert parsed["changed_memories"] == ["m1"]
+
+
+def test_validate_memory_agent_success_result_normalizes_successful_reported_outcome_with_changes():
+    payload = success_result()
+    payload["outcome"] = "applied_after_capacity_recovery"
+
+    parsed = validate_memory_agent_success_result(payload)
+
+    assert parsed["success"] is True
+    assert parsed["outcome"] == "applied"
+    assert parsed["reported_outcome"] == "applied_after_capacity_recovery"
+    assert parsed["changed_memories"] == ["m1"]
+
+
+def test_memory_agent_result_rejects_unknown_successful_outcome_without_change_trace():
+    payload = success_result()
+    payload["outcome"] = "applied_after_capacity_recovery"
+    payload["changed_memories"] = []
+    payload["removed_memories"] = []
+
+    assert parse_memory_agent_result(dict(payload))["error"] == "memory_agent_result_invalid_outcome"
+    assert validate_memory_agent_success_result(dict(payload))["error"] == "memory_agent_result_invalid_outcome"
 
 
 def test_parse_memory_agent_result_accepts_non_mutating_outcome():

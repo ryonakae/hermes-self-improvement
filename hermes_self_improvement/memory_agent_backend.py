@@ -27,6 +27,21 @@ NON_MUTATING_AGENT_OUTCOMES = {
 }
 
 
+def normalize_memory_agent_outcome(result: dict[str, Any]) -> dict[str, Any] | None:
+    outcome = str(result.get("outcome") or "applied")
+    if outcome == "changed":
+        result["outcome"] = "applied"
+        return None
+    if outcome == "applied" or outcome in NON_MUTATING_AGENT_OUTCOMES:
+        result["outcome"] = outcome
+        return None
+    if result.get("changed_memories") or result.get("removed_memories"):
+        result["reported_outcome"] = outcome
+        result["outcome"] = "applied"
+        return None
+    return {"success": False, "error": "memory_agent_result_invalid_outcome", "outcome": outcome}
+
+
 @dataclass(frozen=True)
 class MemoryAgentBackendLimits:
     max_tool_calls: int = 8
@@ -256,12 +271,9 @@ def validate_memory_agent_success_result(result: dict[str, Any]) -> dict[str, An
         return {"success": False, "error": "memory_agent_result_missing_success"}
     if not result.get("success"):
         return result
-    outcome = str(result.get("outcome") or "applied")
-    if outcome == "changed":
-        outcome = "applied"
-    if outcome != "applied" and outcome not in NON_MUTATING_AGENT_OUTCOMES:
-        return {"success": False, "error": "memory_agent_result_invalid_outcome", "outcome": outcome}
-    result["outcome"] = outcome
+    outcome_error = normalize_memory_agent_outcome(result)
+    if outcome_error:
+        return outcome_error
     for key in ("used_tools", "changed_memories", "removed_memories", "verification_notes", "rollback_hints"):
         if key not in result or not isinstance(result.get(key), list):
             return {"success": False, "error": f"memory_agent_result_{key}_missing"}

@@ -30,6 +30,24 @@ def _conversation_candidate(candidate_id: str = "m1", routing_hint: str = "new")
     }
 
 
+def _inventory_candidate(candidate_id: str = "memory_inv_1") -> dict:
+    return {
+        "id": candidate_id,
+        "kind": "memory_inventory_candidate",
+        "source": "inventory",
+        "likely_targets": [{"target": "memory", "weight": 0.9}],
+        "inventory": {
+            "group_kind": "stale_fact_pair",
+            "entries": [
+                {"target": "memory", "old_text": "Old Hermes path is /opt/data", "summary": "Old Hermes path is /opt/data", "hash": "old"},
+                {"target": "memory", "old_text": "Hermes runtime root is ~/.hermes", "summary": "Hermes runtime root is ~/.hermes", "hash": "new"},
+            ],
+            "hints": ["planner should consider replace/remove for stale fact pairs"],
+        },
+        "risk": "medium",
+    }
+
+
 def _success_payload(*, changed: list[str] | None = None, removed: list[str] | None = None) -> dict:
     return {
         "success": True,
@@ -119,6 +137,47 @@ def test_run_memory_improvement_step_reports_agent_result_in_decisions():
     assert agent_block["status"] == "completed"
     assert agent_block["changed"] >= 1
     assert "result" in agent_block
+
+
+def test_run_memory_improvement_step_previews_inventory_candidates_for_memory_agent():
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_inventory_candidate()]),
+        config={"_memory_agent_backend": object()},
+        mutate=False,
+    )
+
+    agent_block = result["memory_agent"]
+    assert agent_block["status"] == "preview"
+    assert agent_block["candidate_count"] == 1
+    handed = agent_block["candidates"][0]
+    assert handed["candidate_id"] == "memory_inv_1"
+    assert handed["candidate_kind"] == "memory_inventory_candidate"
+    assert handed["inventory_kind"] == "stale_fact_pair"
+    assert len(handed["entries"]) == 2
+    assert all(len(entry["old_text"]) <= 260 for entry in handed["entries"])
+    assert not any(decision.get("evidence_id") == "memory_inv_1" and decision.get("reason") == "memory_inventory_needs_planner" for decision in result["decisions"])
+
+
+def test_run_memory_improvement_step_dispatches_inventory_candidates_to_memory_agent_when_mutating():
+    received_tasks: list[dict] = []
+
+    class FakeBackend:
+        def run(self, prompt, task, config=None):
+            received_tasks.append(task)
+            return _success_payload(changed=["memory_inv_1"])
+
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_inventory_candidate()]),
+        config={"_memory_agent_backend": FakeBackend()},
+        mutate=True,
+    )
+
+    assert result["memory_agent"]["status"] == "completed"
+    assert len(received_tasks) == 1
+    handed = received_tasks[0]["candidates"][0]
+    assert handed["candidate_kind"] == "memory_inventory_candidate"
+    assert handed["entries"][0]["old_text"] == "Old Hermes path is /opt/data"
+    assert not any(decision.get("evidence_id") == "memory_inv_1" and decision.get("reason") == "memory_inventory_needs_planner" for decision in result["decisions"])
 
 
 def test_run_memory_improvement_step_no_op_without_backend_injection():

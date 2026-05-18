@@ -25,7 +25,7 @@ Observed 2026-05-18 behavior:
 1. **Do not broaden raw input blindly.** Keep raw events and full tool output out of the memory-agent prompt. Artifacts may contain detail; LLM handoff stays compact.
 2. **Use language-agnostic structure first.** Prefer typed event fields and sequence patterns: failure followed by user/assistant corrective turn, changed path/env token, retry success, repeated same error cluster, candidate contradicts existing memory specifics.
 3. **Use lexical markers only as weak ranking hints.** If retained, markers must be configurable/secondary and never the sole gate for candidate generation.
-4. **Let LLM judge fuzzy placement.** Once compact material is selected, `memory_agent` decides memory vs user vs skill-route vs skip. GEPA can improve that judgment prompt over time.
+4. **Let LLM decide fuzzy placement.** Once compact material is selected, `memory_agent` decides memory vs user vs skill-route vs skip. GEPA can improve that decision prompt over time.
 5. **Keep executor safety hard.** Secrets, raw tool output, workflow-shaped text, unsupported provider operations, ambiguous replace/delete, topic mismatch, and direct-store writes remain blocked.
 6. **No new lane or approval queue.** Extend existing evidence -> memory step -> episode/report flow.
 
@@ -208,7 +208,7 @@ Expected: PASS.
 
 ## Task 4: Route only suspicious placement candidates to memory-agent
 
-**Objective:** Avoid sending all 25+ placement-review entries to the LLM while still allowing ambiguous USER/MEMORY/Skill placement to be judged.
+**Objective:** Avoid sending all 25+ placement-review entries to the LLM while still allowing ambiguous USER/MEMORY/Skill placement to be decided.
 
 **Files:**
 - Modify: `hermes_self_improvement/runner_steps.py`
@@ -597,7 +597,7 @@ Do not let the same inventory/placement evidence both produce a defer/skip decis
 If `memory_agent` prompt assumes every candidate has `candidate_fact`, update the prompt/task schema before expanding dispatch kinds. The prompt must explain candidate kinds generically:
 
 - `memory_gap_candidate`: proposed fact with optional `old_text`.
-- `memory_inventory_candidate`: compact existing entries requiring add/replace/remove/skip judgment.
+- `memory_inventory_candidate`: compact existing entries requiring add/replace/remove/skip decision.
 - `memory_placement_candidate`: suspicious placement only; decide keep/move/skill-route/skip.
 - `environment_fact_signal`: structural hint from failures/retries/value deltas; not a command.
 
@@ -639,4 +639,4 @@ After Tasks 3, 4, 7, and 8, add a small cleanup pass to simplify `_memory_non_op
 - The new structural signal generator should probably live in `evidence.py` first. If it grows, extract a small `memory_signals.py` later, but avoid a new abstraction in the first slice.
 - `environment_fact_signal` should be allowed to route to skill if the LLM sees procedure rather than fact. This should be a normal memory-agent skip/convert outcome, not a separate pipeline.
 - If `memory_agent` prompt currently assumes all candidates have `candidate_fact`, update it to describe candidate kinds generically.
-- GEPA will optimize the judgment prompt later; this plan focuses on making the right compact materials available to that prompt.
+- GEPA will optimize the decision prompt later; this plan focuses on making the right compact materials available to that prompt.
