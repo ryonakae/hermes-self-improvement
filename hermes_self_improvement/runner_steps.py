@@ -98,7 +98,8 @@ def _memory_inventory_agent_candidate_from_evidence(item: dict[str, Any]) -> dic
 
 
 def _environment_fact_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
-    signal = item.get("signal") if isinstance(item.get("signal"), dict) else {}
+    raw_signal = item.get("signal")
+    signal: dict[str, Any] = raw_signal if isinstance(raw_signal, dict) else {}
     value_tokens = [
         _redact_text(str(token), max_chars=120)
         for token in (signal.get("value_tokens") if isinstance(signal.get("value_tokens"), list) else [])[:8]
@@ -111,6 +112,12 @@ def _environment_fact_agent_candidate_from_evidence(item: dict[str, Any]) -> dic
         "candidate_kind": "environment_fact_signal",
         "candidate_fact_hint": _redact_text(str(signal.get("candidate_fact_hint") or ""), max_chars=240),
         "signal_reason": str(signal.get("reason") or ""),
+        "signal_quality": str(signal.get("signal_quality") or ""),
+        "stable_identifiers": [
+            _redact_text(str(value), max_chars=120)
+            for value in (signal.get("stable_identifiers") if isinstance(signal.get("stable_identifiers"), list) else [])[:4]
+            if str(value).strip()
+        ],
         "value_tokens": value_tokens,
         "support": {
             "tool_name": signal.get("tool_name"),

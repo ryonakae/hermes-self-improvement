@@ -74,6 +74,35 @@ def test_rank_conversation_windows_prefers_structural_failure_retry_over_lexical
     assert windows[0]["rank_signals"]["has_value_token_delta"] is True
 
 
+def test_memory_extractor_structural_ranking_ignores_generic_value_tokens():
+    events = [
+        {
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "error",
+            "result_preview": "HEAD PATH /main /dev/null",
+        },
+        {
+            "event": "post_llm_call",
+            "session_id": "s1",
+            "user_message_preview": "普通の相談です",
+        },
+        {
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "success",
+            "result_preview": "HEAD PATH /dev/null",
+        },
+    ]
+
+    windows = build_memory_extractor_windows(events, limit=10)
+
+    assert windows[0]["rank_reason"] == "sampled_context"
+    assert windows[0]["rank_signals"]["has_value_token_delta"] is False
+
+
 def test_conversation_window_includes_surrounding_context():
     events = [
         {"event": "post_llm_call", "session_id": "s1", "assistant_response_preview": "I will edit Hermes core"},

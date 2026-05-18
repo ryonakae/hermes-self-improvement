@@ -8,13 +8,13 @@ As of 2026-05-10, the long-term roadmap is:
   - **Status:** active long-term source of truth.
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 7合目. The active milestone is deeper skill quality and knowledge inventory maintenance.
 
-The current active hardening plan is:
+The latest completed hardening plan is:
 
 - `2026-05-18-environment-fact-signal-hardening.md`
-  - **Status:** planned / awaiting implementation.
-  - Filters noisy generic value tokens from `environment_fact_signal` (`HEAD`, `PATH`, `/main`, `/dev/null`, truncated fragments) while preserving durable signals such as repeated ambiguous skill-name resolution and real path/env/socket/config deltas. Keeps the existing memory-agent handoff broad, but improves signal quality before prompt handoff.
+  - **Status:** implemented.
+  - Filters noisy generic value tokens from `environment_fact_signal` (`HEAD`, `PATH`, `/main`, `/dev/null`, truncated/escaped fragments, weak root-level fragments) while preserving durable signals such as repeated ambiguous skill-name resolution and real path/env/socket/config deltas. Keeps the existing memory-agent handoff broad, but improves signal quality before prompt handoff. Validation: `py_compile`, focused evidence/memory-agent tests (`39 passed`), full `pytest tests -q` (`690 passed, 2 skipped`), `git diff --check`, and `improve --dry-run --json` artifact inspection passed.
 
-The latest completed hardening plan is:
+The previous completed hardening plan is:
 
 - `2026-05-18-memory-agent-signal-handoff.md`
   - **Status:** implemented.

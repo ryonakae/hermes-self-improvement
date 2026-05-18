@@ -12,7 +12,15 @@
 
 ## Current state
 
-After gateway reload, the new memory handoff code is active:
+Implemented 2026-05-18:
+
+- Generic value tokens and obvious fragments are filtered before `environment_fact_signal` creation: `HEAD`, `PATH`, `/main`, `/dev/null`, `FETCH_HEAD`, backslash/escape-contaminated tokens, globs, root-level path fragments, and weak bare filename tokens.
+- Durable ambiguous skill-name resolution is preserved with `$HERMES_HOME/...` normalized value tokens and compact `stable_identifiers`.
+- `_self_improvement_root` ending in `/self-improvement` is treated as the child runtime directory and normalized via its parent Hermes home.
+- Runner handoff includes compact `signal_quality` and `stable_identifiers` without raw failure/success text.
+- Validation passed: focused tests (`39 passed`), full `pytest tests -q` (`690 passed, 2 skipped`), `py_compile`, `git diff --check`, and dry-run artifact inspection.
+
+Original baseline after gateway reload:
 
 - `MEMORY_AGENT_DISPATCH_KINDS`: `memory_gap_candidate`, `memory_inventory_candidate`, `memory_placement_candidate`, `environment_fact_signal`.
 - Latest dry-run artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260518T062506Z.json`.

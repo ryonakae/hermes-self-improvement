@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import config as si_config
 from .observer import _analysis_events, _redact_text, _sha256_text
 from .target_hints import extract_target_hints
 SCHEMA_NAME = "self_improvement_evidence_pack"
@@ -798,28 +800,170 @@ _VALUE_TOKEN_PATTERN = re.compile(
     r"|\b[A-Za-z0-9_.-]+\.(?:sock|json|ya?ml|md|py)\b"
 )
 
+_GENERIC_VALUE_TOKENS = {
+    "~",
+    "HEAD",
+    "FETCH_HEAD",
+    "PATH",
+    "PIPE",
+    "USER",
+    "HOME",
+    "PWD",
+    "OLDPWD",
+    "SHELL",
+    "/dev/null",
+    "/main",
+    "/HEAD",
+}
+_GENERIC_PATH_SUFFIXES = ("...upstream/main", "...origin/main")
+_RUNTIME_ROOT_PLACEHOLDER = "$HERMES_HOME"
 
-def _normalize_value_token(token: str) -> str:
+
+def _candidate_runtime_roots(config: dict[str, Any] | None = None) -> list[Path]:
+    roots: list[Path] = []
+    cfg = config or {}
+    for value in (cfg.get("_hermes_home"), os.environ.get("HERMES_HOME")):
+        if value:
+            roots.append(Path(str(value)).expanduser())
+    self_root = cfg.get("_self_improvement_root")
+    if self_root:
+        self_path = Path(str(self_root)).expanduser()
+        roots.append(self_path.parent if self_path.name == "self-improvement" else self_path)
+    roots.append(si_config.get_hermes_home())
+    out: list[Path] = []
+    seen: set[str] = set()
+    for root in roots:
+        try:
+            resolved = root.resolve()
+        except Exception:
+            resolved = root.expanduser()
+        key = str(resolved)
+        if key and key not in seen:
+            seen.add(key)
+            out.append(resolved)
+    return out
+
+
+def _normalize_runtime_root_token(token: str, *, config: dict[str, Any] | None = None) -> str:
+    text = str(token or "").strip()
+    for root in _candidate_runtime_roots(config):
+        root_text = str(root)
+        if text == root_text:
+            return _RUNTIME_ROOT_PLACEHOLDER
+        if text.startswith(root_text + "/"):
+            return f"{_RUNTIME_ROOT_PLACEHOLDER}/" + text[len(root_text) + 1:]
+    return text
+
+
+def _normalize_runtime_roots_in_text(text: str, *, config: dict[str, Any] | None = None) -> str:
+    out = str(text or "")
+    roots = sorted((str(root) for root in _candidate_runtime_roots(config)), key=len, reverse=True)
+    for root_text in roots:
+        if root_text:
+            out = out.replace(root_text, _RUNTIME_ROOT_PLACEHOLDER)
+    return out
+
+
+def _looks_generic_value_token(token: str) -> bool:
+    text = str(token or "").strip()
+    if not text:
+        return True
+    if text in _GENERIC_VALUE_TOKENS:
+        return True
+    if "\\" in text:
+        return True
+    if "*" in text:
+        return True
+    if "\\n" in text or "\n" in text:
+        return True
+    if "…[truncated" in text or "...[truncated" in text:
+        return True
+    if any(text.endswith(suffix) for suffix in _GENERIC_PATH_SUFFIXES):
+        return True
+    if text.startswith(_RUNTIME_ROOT_PLACEHOLDER + "/"):
+        return False
+    if re.fullmatch(r"/[^/]+", text):
+        return True
+    if re.fullmatch(r"/[^/]+\.(?:sock|json|ya?ml|md|py)", text):
+        return True
+    if re.fullmatch(r"/[A-Za-z0-9_.-]{1,8}", text):
+        return True
+    return False
+
+
+def _is_durable_value_token(token: str) -> bool:
+    text = str(token or "")
+    if _looks_generic_value_token(text):
+        return False
+    if text.startswith(_RUNTIME_ROOT_PLACEHOLDER + "/"):
+        return True
+    if text.startswith("~/.hermes/"):
+        return True
+    if text.startswith("~/") and text.count("/") >= 2:
+        return True
+    if "/" in text and text.endswith((".sock", ".json", ".yaml", ".yml", ".md", ".py")):
+        return True
+    if "/" in text and len(text) >= 12:
+        return True
+    return False
+
+
+def _normalize_value_token(token: str, *, config: dict[str, Any] | None = None) -> str:
     text = str(token or "").strip().strip("'\"`.,;:)}]")
+    text = _normalize_runtime_root_token(text, config=config)
     text = re.sub(r"^/Users/[^/]+", "~", text)
     text = re.sub(r"^/home/[^/]+", "~", text)
     return _redact_text(text, max_chars=120)
 
 
-def _extract_value_tokens_from_text(text: str, *, limit: int = 8) -> list[str]:
+def _extract_value_tokens_from_text(text: str, *, limit: int = 8, config: dict[str, Any] | None = None) -> list[str]:
     if _looks_secret(text):
         return []
     tokens: list[str] = []
     seen: set[str] = set()
     for match in _VALUE_TOKEN_PATTERN.finditer(str(text or "")):
-        token = _normalize_value_token(match.group(0))
-        if not token or _looks_secret(token) or token in seen:
+        token = _normalize_value_token(match.group(0), config=config)
+        if not token or _looks_secret(token) or _looks_generic_value_token(token) or token in seen:
             continue
         seen.add(token)
         tokens.append(token)
         if len(tokens) >= limit:
             break
     return tokens
+
+
+def _extract_stable_identifiers(text: str) -> list[str]:
+    identifiers: list[str] = []
+    weak_keys = {"name", "path", "file", "tool", "kind", "type"}
+    for match in re.finditer(r"'([a-z0-9][a-z0-9_-]{2,})'", str(text or ""), re.IGNORECASE):
+        value = match.group(1)
+        if value.lower() in weak_keys:
+            continue
+        if value not in identifiers:
+            identifiers.append(value)
+        if len(identifiers) >= 4:
+            break
+    return identifiers
+
+
+def _durable_value_tokens(value_tokens: list[str]) -> list[str]:
+    durable: list[str] = []
+    for token in value_tokens:
+        if _is_durable_value_token(token) and token not in durable:
+            durable.append(token)
+    return durable
+
+
+def _environment_signal_quality(failure: dict[str, Any], success: dict[str, Any], value_tokens: list[str]) -> str | None:
+    tool_name = str(failure.get("tool_name") or "")
+    failure_text = _event_text_for_value_tokens(failure)
+    success_text = _event_text_for_value_tokens(success)
+    combined = f"{failure_text}\n{success_text}".lower()
+    if tool_name in {"skill_view", "skill_manage"} and "ambiguous skill name" in combined:
+        return "ambiguous_skill_resolution"
+    if len(_durable_value_tokens(value_tokens)) >= 2:
+        return "durable_value_delta"
+    return None
 
 
 def _event_text_for_value_tokens(ev: dict[str, Any]) -> str:
@@ -830,7 +974,7 @@ def _event_text_for_value_tokens(ev: dict[str, Any]) -> str:
     )
 
 
-def collect_environment_fact_signals(events: list[dict[str, Any]], *, limit: int = 10) -> list[dict[str, Any]]:
+def collect_environment_fact_signals(events: list[dict[str, Any]], *, limit: int = 10, config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     signals: list[dict[str, Any]] = []
     seen: set[str] = set()
     for index, ev in enumerate(events):
@@ -839,7 +983,8 @@ def collect_environment_fact_signals(events: list[dict[str, Any]], *, limit: int
         status = str(ev.get("status") or "").lower()
         if status not in {"error", "warning", "failed", "failure"}:
             continue
-        failure_tokens = _extract_value_tokens_from_text(_event_text_for_value_tokens(ev))
+        failure_text = _event_text_for_value_tokens(ev)
+        failure_tokens = _extract_value_tokens_from_text(failure_text, config=config)
         if not failure_tokens:
             continue
         tool_name = str(ev.get("tool_name") or "")
@@ -854,7 +999,8 @@ def collect_environment_fact_signals(events: list[dict[str, Any]], *, limit: int
             later_status = str(later.get("status") or "").lower()
             if later_status not in {"ok", "success", "completed"}:
                 continue
-            success_tokens = _extract_value_tokens_from_text(_event_text_for_value_tokens(later))
+            success_text = _event_text_for_value_tokens(later)
+            success_tokens = _extract_value_tokens_from_text(success_text, config=config)
             changed_tokens = [token for token in [*failure_tokens, *success_tokens] if token]
             unique_tokens = []
             for token in changed_tokens:
@@ -862,17 +1008,26 @@ def collect_environment_fact_signals(events: list[dict[str, Any]], *, limit: int
                     unique_tokens.append(token)
             if len(unique_tokens) < 2 or set(failure_tokens) == set(success_tokens):
                 continue
+            quality = _environment_signal_quality(ev, later, unique_tokens)
+            if quality is None:
+                continue
+            signal_tokens = _durable_value_tokens(unique_tokens)
+            if len(signal_tokens) < 2:
+                continue
             stable = {
                 "reason": "failure_retry_value_delta",
+                "signal_quality": quality,
                 "tool_name": tool_name,
                 "error_kind": str(ev.get("error_kind") or ""),
                 "session_id": session_id,
                 "failure_count": 1,
                 "success_after_correction": True,
-                "value_tokens": unique_tokens[:8],
+                "value_tokens": signal_tokens[:8],
                 "candidate_fact_hint": "A tool failure was followed by a same-tool retry with different stable path/env value tokens.",
-                "support_preview": _redact_text(str(ev.get("result_preview") or ev.get("args_preview") or ""), max_chars=180),
+                "support_preview": _redact_text(_normalize_runtime_roots_in_text(str(ev.get("result_preview") or ev.get("args_preview") or ""), config=config), max_chars=180),
             }
+            if quality == "ambiguous_skill_resolution":
+                stable["stable_identifiers"] = _extract_stable_identifiers(f"{failure_text}\n{success_text}")
             signal_id = "env_fact_" + _sha256_text(json.dumps(stable, ensure_ascii=False, sort_keys=True))[:12]
             dedup_key = f"{session_id}:{tool_name}:{stable['error_kind']}:{','.join(stable['value_tokens'])}"
             if dedup_key in seen:
@@ -1293,6 +1448,7 @@ def build_evidence_pack(
     *,
     curator_telemetry: dict[str, Any] | None = None,
     memory_paths: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     analysis_events, filtered_partial_count, reclassified_count = _analysis_events(events)
     evidence: list[dict[str, Any]] = []
@@ -1336,7 +1492,7 @@ def build_evidence_pack(
     if coverage_evidence:
         evidence.extend(coverage_evidence)
         kind_counts["knowledge_coverage_candidate"] += len(coverage_evidence)
-    environment_fact_signals = collect_environment_fact_signals(events)
+    environment_fact_signals = collect_environment_fact_signals(events, config=config)
     if environment_fact_signals:
         evidence.extend(environment_fact_signals)
         kind_counts["environment_fact_signal"] += len(environment_fact_signals)

@@ -5,7 +5,7 @@ import re
 from difflib import SequenceMatcher
 from typing import Any
 
-from .evidence import build_context_window
+from .evidence import build_context_window, _looks_generic_value_token, _normalize_value_token as _normalize_evidence_value_token
 from .observer import _redact_text, _sha256_text
 from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 
@@ -37,10 +37,7 @@ _VALUE_TOKEN_PATTERN = re.compile(
 
 
 def _normalize_value_token(token: str) -> str:
-    text = str(token or "").strip().strip("'\"`.,;:)}]")
-    text = re.sub(r"^/Users/[^/]+", "~", text)
-    text = re.sub(r"^/home/[^/]+", "~", text)
-    return text
+    return _normalize_evidence_value_token(token)
 
 
 def _value_tokens_from_event(ev: dict[str, Any]) -> set[str]:
@@ -49,7 +46,11 @@ def _value_tokens_from_event(ev: dict[str, Any]) -> set[str]:
         for key in ("args_preview", "result_preview", "user_message_preview", "assistant_response_preview", "message")
         if ev.get(key)
     )
-    return {_normalize_value_token(match.group(0)) for match in _VALUE_TOKEN_PATTERN.finditer(text)}
+    return {
+        token
+        for token in (_normalize_value_token(match.group(0)) for match in _VALUE_TOKEN_PATTERN.finditer(text))
+        if token and not _looks_generic_value_token(token)
+    }
 
 
 def _rank_window_signals(events: list[dict[str, Any]], index: int, *, radius: int = 3) -> dict[str, Any]:

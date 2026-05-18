@@ -157,7 +157,7 @@ def test_evidence_pack_adds_environment_fact_signal_for_failure_retry_value_delt
             "tool_name": "terminal",
             "status": "error",
             "error_kind": "not_found",
-            "args_preview": '{"command":"git status","workdir":"/Users/alice/old-repo"}',
+            "args_preview": '{"command":"git status","workdir":"/Users/alice/projects/old-repo"}',
             "result_preview": "fatal: not a git repository",
         },
         {
@@ -179,7 +179,7 @@ def test_evidence_pack_adds_environment_fact_signal_for_failure_retry_value_delt
     assert signal["signal"]["reason"] == "failure_retry_value_delta"
     assert signal["signal"]["tool_name"] == "terminal"
     assert signal["signal"]["success_after_correction"] is True
-    assert "~/old-repo" in signal["signal"]["value_tokens"]
+    assert "~/projects/old-repo" in signal["signal"]["value_tokens"]
     assert "~/.hermes/plugins/hermes-self-improvement" in signal["signal"]["value_tokens"]
     assert "/Users/alice" not in json.dumps(signal, ensure_ascii=False)
 
@@ -195,6 +195,110 @@ def test_evidence_pack_does_not_make_environment_signal_for_repeated_timeout_wit
     pack = build_evidence_pack(events, since, until)
 
     assert not any(item["kind"] == "environment_fact_signal" for item in pack["evidence"])
+
+
+def test_environment_fact_signal_filters_generic_value_tokens():
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    events = [
+        {
+            "ts": since.isoformat(),
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "error",
+            "error_kind": "terminal_nonzero_exit",
+            "args_preview": '{"command":"git fetch origin main","workdir":"/opt/hermes-data/hermes-agent"}',
+            "result_preview": "HEAD PATH /main /main...upstream/main /dev/null /HEAD FETCH_HEAD /model_metadata.py\\",
+        },
+        {
+            "ts": since.isoformat(),
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "ok",
+            "args_preview": '{"command":"git status","workdir":"/opt/hermes-data/hermes-agent"}',
+            "result_preview": "On branch main HEAD PATH /dev/null",
+        },
+    ]
+
+    pack = build_evidence_pack(events, since, until)
+
+    assert not any(item["kind"] == "environment_fact_signal" for item in pack["evidence"])
+
+
+def test_environment_fact_signal_preserves_ambiguous_skill_resolution_with_custom_hermes_home(monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", "/opt/hermes-data")
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    events = [
+        {
+            "ts": since.isoformat(),
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "skill_view",
+            "status": "error",
+            "error_kind": "unknown_error",
+            "args_preview": '{"name":"hermes-self-evolution-repo-review"}',
+            "result_preview": "Ambiguous skill name 'hermes-self-evolution-repo-review': /opt/hermes-data/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md and /opt/hermes-data/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md",
+        },
+        {
+            "ts": since.isoformat(),
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "skill_view",
+            "status": "success",
+            "args_preview": '{"name":"hermes-custom/hermes-self-evolution-repo-review"}',
+            "result_preview": "loaded /opt/hermes-data/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md",
+        },
+    ]
+
+    pack = build_evidence_pack(events, since, until)
+    signal = next(item for item in pack["evidence"] if item["kind"] == "environment_fact_signal")
+
+    assert signal["signal"]["signal_quality"] == "ambiguous_skill_resolution"
+    assert "/opt/hermes-data" not in json.dumps(signal, ensure_ascii=False)
+    assert "$HERMES_HOME/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md" in signal["signal"]["value_tokens"]
+    assert "$HERMES_HOME/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md" in signal["signal"]["value_tokens"]
+    assert "/skill-name" not in signal["signal"]["value_tokens"]
+    assert signal["signal"].get("stable_identifiers") == ["hermes-self-evolution-repo-review"]
+
+
+def test_environment_fact_signal_normalizes_self_improvement_root_parent():
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    events = [
+        {
+            "ts": since.isoformat(),
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "skill_view",
+            "status": "error",
+            "error_kind": "unknown_error",
+            "args_preview": '{"name":"hermes-self-evolution-repo-review"}',
+            "result_preview": "Ambiguous skill name 'hermes-self-evolution-repo-review': /opt/hermes-data/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md and /opt/hermes-data/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md",
+        },
+        {
+            "ts": since.isoformat(),
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "skill_view",
+            "status": "success",
+            "args_preview": '{"name":"hermes-custom/hermes-self-evolution-repo-review"}',
+            "result_preview": "loaded /opt/hermes-data/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md",
+        },
+    ]
+
+    pack = build_evidence_pack(
+        events,
+        since,
+        until,
+        config={"_self_improvement_root": "/opt/hermes-data/self-improvement"},
+    )
+    signal = next(item for item in pack["evidence"] if item["kind"] == "environment_fact_signal")
+
+    assert "$HERMES_HOME/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md" in signal["signal"]["value_tokens"]
+    assert "$HERMES_HOME/self-improvement/skills" not in json.dumps(signal, ensure_ascii=False)
 
 
 def test_build_cluster_evidence_requires_existing_candidate_and_repeated_cluster():
