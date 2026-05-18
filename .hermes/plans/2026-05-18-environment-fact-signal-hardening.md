@@ -4,7 +4,7 @@
 
 **Goal:** Reduce noisy `environment_fact_signal` candidates while preserving durable environment-memory signals such as repeated ambiguous skill-name resolution.
 
-**Architecture:** Keep the existing evidence -> compact signal -> memory_agent handoff flow. Add a small structural token classifier and signal-quality gate in `evidence.py`, then keep runner-side handoff simple and bounded. Do not narrow candidate ingress so much that useful weak/medium signals disappear; filter generic tokens and diagnostic-only transitions before the memory-agent prompt.
+**Architecture:** Keep the existing evidence -> compact signal -> memory_agent handoff flow. Add a small structural token classifier and signal-quality gate in `evidence.py`, then keep runner-side handoff simple and bounded. Do not hardcode `~/.hermes` as the only durable runtime root; derive runtime/home roots from Hermes config/environment (`hermes_constants.get_hermes_home()` via this plugin's `config.get_hermes_home()`, `HERMES_HOME`, `_self_improvement_root`, and `_hermes_home` where available) and normalize emitted examples relative to that root. Do not narrow candidate ingress so much that useful weak/medium signals disappear; filter generic tokens and diagnostic-only transitions before the memory-agent prompt.
 
 **Tech Stack:** Python, pytest, existing `hermes_self_improvement.evidence`, `runner_steps`, and dry-run artifact verification.
 
@@ -42,9 +42,9 @@ The ingress widening worked. The remaining problem is signal quality: generic to
 
 - Generic value tokens such as `HEAD`, `PATH`, `/main`, `/dev/null`, `/HEAD`, `/main...upstream/main`, and newline/escape-contaminated fragments are removed before signal creation.
 - If filtering leaves fewer than two meaningful value tokens, no `environment_fact_signal` is emitted for that failure/retry pair.
-- Repeated ambiguous skill-name resolution remains eligible as a durable environment signal, with useful tokens such as:
-  - `~/.hermes/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md`
-  - `~/.hermes/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md`
+- Repeated ambiguous skill-name resolution remains eligible as a durable environment signal, with useful tokens normalized against the active Hermes runtime root rather than assuming `~/.hermes`, such as:
+  - `${HERMES_HOME}/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md` rendered compactly as `$HERMES_HOME/skills/...` or `<HERMES_HOME>/skills/...` in artifacts/prompts.
+  - `${HERMES_HOME}/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md` rendered the same way.
   - the ambiguous skill name, if available as a stable identifier.
 - `environment_fact_signal` carries a compact quality reason or signal subtype, e.g. `signal_quality: durable_value_delta` / `ambiguous_skill_resolution`.
 - Memory-agent preview shows fewer diagnostic-only environment signals while preserving durable candidates.
@@ -77,7 +77,7 @@ def test_environment_fact_signal_filters_generic_value_tokens():
             "tool_name": "terminal",
             "status": "error",
             "error_kind": "terminal_nonzero_exit",
-            "args_preview": '{"command":"git fetch origin main","workdir":"/Users/alice/.hermes/hermes-agent"}',
+            "args_preview": '{"command":"git fetch origin main","workdir":"/opt/hermes-data/hermes-agent"}',
             "result_preview": "HEAD PATH /main /main...upstream/main /dev/null /HEAD FETCH_HEAD",
         },
         {
@@ -86,7 +86,7 @@ def test_environment_fact_signal_filters_generic_value_tokens():
             "session_id": "s1",
             "tool_name": "terminal",
             "status": "ok",
-            "args_preview": '{"command":"git status","workdir":"/Users/alice/.hermes/hermes-agent"}',
+            "args_preview": '{"command":"git status","workdir":"/opt/hermes-data/hermes-agent"}',
             "result_preview": "On branch main HEAD PATH /dev/null",
         },
     ]
@@ -109,9 +109,9 @@ Expected before implementation: FAIL because a signal is emitted.
 
 ---
 
-## Task 2: Add regression test that ambiguous skill resolution is preserved
+## Task 2: Add regression test that ambiguous skill resolution is preserved across non-default Hermes homes
 
-**Objective:** Ensure the filter does not throw away the useful repeated ambiguous skill-name case.
+**Objective:** Ensure the filter does not throw away the useful repeated ambiguous skill-name case, and does not assume every user uses `~/.hermes`.
 
 **Files:**
 
@@ -121,7 +121,8 @@ Expected before implementation: FAIL because a signal is emitted.
 **Step 1: Write failing or characterization test**
 
 ```python
-def test_environment_fact_signal_preserves_ambiguous_skill_resolution():
+def test_environment_fact_signal_preserves_ambiguous_skill_resolution_with_custom_hermes_home(monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", "/opt/hermes-data")
     since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
     until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
     events = [
@@ -133,7 +134,7 @@ def test_environment_fact_signal_preserves_ambiguous_skill_resolution():
             "status": "error",
             "error_kind": "unknown_error",
             "args_preview": '{"name":"hermes-self-evolution-repo-review"}',
-            "result_preview": "Ambiguous skill name 'hermes-self-evolution-repo-review': /Users/alice/.hermes/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md and /Users/alice/.hermes/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md",
+            "result_preview": "Ambiguous skill name 'hermes-self-evolution-repo-review': /opt/hermes-data/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md and /opt/hermes-data/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md",
         },
         {
             "ts": since.isoformat(),
@@ -142,7 +143,7 @@ def test_environment_fact_signal_preserves_ambiguous_skill_resolution():
             "tool_name": "skill_view",
             "status": "success",
             "args_preview": '{"name":"hermes-custom/hermes-self-evolution-repo-review"}',
-            "result_preview": "loaded /Users/alice/.hermes/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md",
+            "result_preview": "loaded /opt/hermes-data/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md",
         },
     ]
 
@@ -150,10 +151,9 @@ def test_environment_fact_signal_preserves_ambiguous_skill_resolution():
     signal = next(item for item in pack["evidence"] if item["kind"] == "environment_fact_signal")
 
     assert signal["signal"]["signal_quality"] == "ambiguous_skill_resolution"
-    # Guards against the current regex producing a bare "~" token plus a separate path fragment.
-    assert "~" not in signal["signal"]["value_tokens"]
-    assert "~/.hermes/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md" in signal["signal"]["value_tokens"]
-    assert "~/.hermes/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md" in signal["signal"]["value_tokens"]
+    assert "/opt/hermes-data" not in json.dumps(signal, ensure_ascii=False)
+    assert "$HERMES_HOME/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md" in signal["signal"]["value_tokens"]
+    assert "$HERMES_HOME/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md" in signal["signal"]["value_tokens"]
     assert "hermes-self-evolution-repo-review" in signal["signal"].get("stable_identifiers", [])
 ```
 
@@ -170,19 +170,51 @@ Expected: FAIL until `signal_quality` / stable identifier extraction exists.
 
 ---
 
-## Task 3: Implement token quality filtering in `evidence.py`
+## Task 3: Implement runtime-root-aware token quality filtering in `evidence.py`
 
-**Objective:** Filter generic / fragment / diagnostic-only tokens before building `environment_fact_signal`.
+**Objective:** Filter generic / fragment / diagnostic-only tokens before building `environment_fact_signal`, while recognizing the active Hermes runtime root from configuration/environment rather than a fixed `~/.hermes` path.
 
 **Files:**
 
 - Modify: `hermes_self_improvement/evidence.py`
 
-**Step 1: Add explicit generic token constants**
+**Step 1: Add runtime-root helpers and explicit generic token constants**
 
-Near `_VALUE_TOKEN_PATTERN`, add small allow/deny helpers:
+Near `_VALUE_TOKEN_PATTERN`, add small runtime-root and allow/deny helpers. Prefer the plugin's existing `config.get_hermes_home()` fallback, because Hermes profiles and non-default installs may use a different root than `~/.hermes`.
 
 ```python
+from .config import get_hermes_home
+
+
+def _candidate_runtime_roots(config: dict[str, Any] | None = None) -> list[Path]:
+    roots: list[Path] = []
+    cfg = config or {}
+    for value in (cfg.get("_hermes_home"), cfg.get("_self_improvement_root"), os.environ.get("HERMES_HOME")):
+        if value:
+            roots.append(Path(str(value)).expanduser())
+    roots.append(get_hermes_home())
+    out: list[Path] = []
+    for root in roots:
+        try:
+            resolved = root.resolve()
+        except Exception:
+            resolved = root.expanduser()
+        if resolved not in out:
+            out.append(resolved)
+    return out
+
+
+def _normalize_runtime_root_token(token: str, *, config: dict[str, Any] | None = None) -> str:
+    text = str(token or "").strip()
+    for root in _candidate_runtime_roots(config):
+        root_text = str(root)
+        if text == root_text:
+            return "$HERMES_HOME"
+        if text.startswith(root_text + "/"):
+            return "$HERMES_HOME/" + text[len(root_text) + 1:]
+    return text
+
+
 _GENERIC_VALUE_TOKENS = {
     "~",  # artifact from the current regex alternative; never useful alone
     "HEAD",
@@ -227,16 +259,30 @@ def _looks_generic_value_token(token: str) -> bool:
 
 Keep this conservative, but document the trade-off: short container paths such as `/app`, `/src`, or `/build` may be meaningful in some environments. This plan intentionally drops them as weak fragments for now; if dogfood later shows a real durable `/app`-style environment fact, add a narrow allowlist with regression coverage instead of broadly allowing short root paths.
 
-Do not drop full paths under `~/.hermes/...`, `.sock`, `.json`, `.yaml`, `.md`, or `.py`.
+Do not drop full paths under `$HERMES_HOME/...`, other known runtime-root-relative paths, `.sock`, `.json`, `.yaml`, `.md`, or `.py`.
 
 **Step 3: Use helper in extraction**
 
-Update `_extract_value_tokens_from_text`:
+Update `_normalize_value_token` and `_extract_value_tokens_from_text` so runtime-root normalization happens before generic filtering:
 
 ```python
+def _normalize_value_token(token: str, *, config: dict[str, Any] | None = None) -> str:
+    text = str(token or "").strip().strip("'\"`.,;:)}]")
+    text = re.sub(r"^/Users/[^/]+", "~", text)
+    text = re.sub(r"^/home/[^/]+", "~", text)
+    text = _normalize_runtime_root_token(text, config=config)
+    return _redact_text(text, max_chars=120)
+```
+
+Then:
+
+```python
+token = _normalize_value_token(match.group(0), config=config)
 if not token or _looks_secret(token) or _looks_generic_value_token(token) or token in seen:
     continue
 ```
+
+Thread `config` through `collect_environment_fact_signals(..., config=config)` and `build_evidence_pack(..., config=config)` only if a config object is already available at the call site. If not, use environment/default `get_hermes_home()` inside the helper; do not add a broad API change just for this slice.
 
 **Step 4: Re-run focused tests**
 
@@ -284,8 +330,10 @@ def _is_durable_value_token(token: str) -> bool:
     text = str(token or "")
     if _looks_generic_value_token(text):
         return False
-    if text.startswith("~/.hermes/"):
+    if text.startswith("$HERMES_HOME/"):
         return True
+    if text.startswith("~/.hermes/"):
+        return True  # compatibility fallback when HERMES_HOME is unavailable
     if text.startswith("~/") and text.count("/") >= 2:
         return True
     if text.endswith((".sock", ".json", ".yaml", ".yml", ".md", ".py")):
@@ -295,7 +343,7 @@ def _is_durable_value_token(token: str) -> bool:
     return False
 ```
 
-This intentionally keeps real paths and config/socket/model-provider file references, but drops short fragments. `~/` is not automatically durable; require either `~/.hermes/...`, a useful file/config suffix, or enough path depth to avoid preserving `~/tmp`-style noise.
+This intentionally keeps real paths and config/socket/model-provider file references, but drops short fragments. `$HERMES_HOME/...` is the preferred durable runtime-root representation. `~/.hermes/...` is only a compatibility fallback for tests or standalone environments where Hermes' home resolver is unavailable; do not make it the only special case. `~/` is not automatically durable; require either a runtime-root-relative token, a useful file/config suffix, or enough path depth to avoid preserving `~/tmp`-style noise.
 
 **Step 3: Wire quality into `collect_environment_fact_signals`**
 
@@ -392,7 +440,9 @@ def test_memory_extractor_structural_ranking_ignores_generic_value_tokens():
 Either:
 
 - import narrow helpers from `evidence.py` if doing so does not create an import cycle, or
-- mirror the small `_looks_generic_value_token` behavior in `memory_extractor.py` with a comment pointing to `evidence.py`.
+- mirror the small `_looks_generic_value_token` and runtime-root normalization behavior in `memory_extractor.py` with a comment pointing to `evidence.py`.
+
+The ranking path should not privilege `~/.hermes` either. If a path under the active runtime root is seen, normalize it to `$HERMES_HOME/...` before deciding whether it is a meaningful value delta.
 
 Prefer a shared helper only if it stays simple. Do not move broad evidence code into a new module just for this hardening slice.
 
@@ -465,7 +515,7 @@ Expected: PASS.
 **Files:**
 
 - No code files unless dogfood reveals a bug.
-- Runtime artifacts under `~/.hermes/self-improvement/`.
+- Runtime artifacts under `${HERMES_HOME:-~/.hermes}/self-improvement/`.
 
 **Step 1: Run focused tests**
 
@@ -571,12 +621,22 @@ The goal is not perfect semantic judgment in regex. Program code should only rem
 
 ### Examples to preserve
 
-- `~/.hermes/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md`
-- `~/.hermes/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md`
+- `$HERMES_HOME/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md`
+- `$HERMES_HOME/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md`
+- `$HERMES_HOME/google_token.json` or another runtime-root-relative config/token path when it is non-secret metadata and not the secret value itself
 - `~/.docker/run/docker.sock`
-- `~/.hermes/google_token.json`
-- `~/.hermes/plugins/hermes-self-improvement`
+- `~/some-non-hermes/project/config.yaml` when it is a full durable path, not a short fragment
 - stable skill identifiers such as `hermes-self-evolution-repo-review`
+
+### Runtime root portability
+
+Do not treat `~/.hermes` as the only durable Hermes install location. Use Hermes' home resolver when available:
+
+- `hermes_constants.get_hermes_home()` through `hermes_self_improvement.config.get_hermes_home()`.
+- `HERMES_HOME` for standalone/plugin test processes.
+- `_hermes_home` / `_self_improvement_root` from config payloads when a caller already has them.
+
+Emit compact placeholders such as `$HERMES_HOME/...` rather than absolute local paths in signal artifacts and memory-agent candidates. This keeps artifacts portable across profiles, Docker/bind-mounted installs, and users who set a non-default Hermes home.
 
 ### If dry-run still shows many diagnostic-only signals
 
