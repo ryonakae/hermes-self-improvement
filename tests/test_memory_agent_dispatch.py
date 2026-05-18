@@ -69,6 +69,23 @@ def _environment_signal_candidate(candidate_id: str = "env_fact_1") -> dict:
     }
 
 
+def _placement_candidate(candidate_id: str = "memory_place_1", *, old_text: str = "Run `pytest tests -q` after editing.", current_store: str = "memory") -> dict:
+    return {
+        "id": candidate_id,
+        "kind": "memory_placement_candidate",
+        "source": "inventory",
+        "likely_targets": [{"target": "memory", "weight": 0.7}, {"target": "skill", "weight": 0.3}],
+        "inventory": {
+            "group_kind": "placement_review",
+            "current_store": current_store,
+            "old_text": old_text,
+            "summary": old_text,
+            "allowed_recommendations": ["keep", "move_user_to_memory", "move_memory_to_user", "convert_to_skill_update", "convert_to_new_skill", "skip_noise"],
+        },
+        "risk": "medium",
+    }
+
+
 def _success_payload(*, changed: list[str] | None = None, removed: list[str] | None = None) -> dict:
     return {
         "success": True,
@@ -217,6 +234,41 @@ def test_run_memory_improvement_step_previews_environment_fact_signals_for_memor
     assert handed["signal_reason"] == "failure_retry_value_delta"
     assert handed["value_tokens"] == ["~/old-repo", "~/.hermes/plugins/hermes-self-improvement"]
     assert handed["support"]["success_after_correction"] is True
+
+
+def test_run_memory_improvement_step_previews_suspicious_placement_candidates_for_memory_agent():
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_placement_candidate()]),
+        config={"_memory_agent_backend": object()},
+        mutate=False,
+    )
+
+    agent_block = result["memory_agent"]
+    assert agent_block["status"] == "preview"
+    handed = agent_block["candidates"][0]
+    assert handed["candidate_id"] == "memory_place_1"
+    assert handed["candidate_kind"] == "memory_placement_candidate"
+    assert handed["current_store"] == "memory"
+    assert handed["placement_text"] == "Run `pytest tests -q` after editing."
+    assert handed["suggested_route"] == "placement_review"
+
+
+def test_run_memory_improvement_step_keeps_plain_placement_candidate_out_of_memory_agent():
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_placement_candidate(old_text="Ryo prefers concise reports.", current_store="user")]),
+        config={"_memory_agent_backend": object()},
+        mutate=False,
+    )
+
+    assert result["memory_agent"]["status"] == "no_candidates"
+    assert result["decisions"] == [{
+        "evidence_id": "memory_place_1",
+        "decision": "skip",
+        "reason": "keep_current_user",
+        "suggested_route": "none",
+        "changed": False,
+        "operation": {"operation": "memory_keep", "target": "user", "reason": "planner omitted existing placement candidate; keep current store"},
+    }]
 
 
 def test_memory_agent_preview_caps_candidates_per_kind_and_reports_omitted_counts():
