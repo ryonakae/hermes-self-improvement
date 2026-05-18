@@ -20,6 +20,8 @@ Updated 2026-05-18:
 - ✅ Structural memory-extractor ranking committed: `4fa11a2 feat: rank memory windows by structural signals`.
 - ✅ Suspicious-only `memory_placement_candidate` handoff committed: `73460a8 feat: route suspicious memory placement to agent`.
 - ✅ Verification after each slice passed; latest full run: `686 passed, 2 skipped`.
+- ✅ Gateway reload dogfood confirmed the code is active: `environment_fact_signal`, inventory, placement, and gap candidates all reach memory-agent preview with per-kind counts and omitted counts.
+- ⚠️ Follow-up hardening plan: `2026-05-18-environment-fact-signal-hardening.md` filters generic value-token noise while preserving durable ambiguous skill-name resolution signals.
 - ⚠️ Runtime dogfood note: the in-process `self_improvement_improve` tool appears to use the already-loaded plugin module, so immediate dry-run artifacts in the same Hermes session may not reflect freshly committed code until process/plugin reload.
 
 ---

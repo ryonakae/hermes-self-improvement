@@ -10,9 +10,15 @@ As of 2026-05-10, the long-term roadmap is:
 
 The current active hardening plan is:
 
-- `2026-05-18-memory-agent-signal-handoff.md`
+- `2026-05-18-environment-fact-signal-hardening.md`
   - **Status:** planned / awaiting implementation.
-  - Extends the memory improvement handoff without broad raw-event prompt bloat: compact `memory_inventory_candidate` and structurally detected durable environment/correction fact signals become eligible for `memory_agent`; plain placement reviews remain mostly deterministic keep/skip; successful non-canonical memory-agent outcomes normalize to `applied` when same-run change traces exist. The plan explicitly avoids language-specific correction keywords as the primary gate for a generally distributed plugin.
+  - Filters noisy generic value tokens from `environment_fact_signal` (`HEAD`, `PATH`, `/main`, `/dev/null`, truncated fragments) while preserving durable signals such as repeated ambiguous skill-name resolution and real path/env/socket/config deltas. Keeps the existing memory-agent handoff broad, but improves signal quality before prompt handoff.
+
+The latest completed hardening plan is:
+
+- `2026-05-18-memory-agent-signal-handoff.md`
+  - **Status:** implemented.
+  - Extends the memory improvement handoff without broad raw-event prompt bloat: compact `memory_inventory_candidate` and structurally detected durable environment/correction fact signals become eligible for `memory_agent`; suspicious placement reviews are selectively handed off; successful non-canonical memory-agent outcomes normalize to `applied` when same-run change traces exist. Validation reached `686 passed, 2 skipped`; gateway reload dogfood confirmed the new candidate counts and omitted-count metadata are active.
 
 The previous active hardening plan is:
 
