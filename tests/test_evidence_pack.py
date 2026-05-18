@@ -264,30 +264,34 @@ def test_environment_fact_signal_preserves_ambiguous_skill_resolution_with_custo
     assert signal["signal"].get("stable_identifiers") == ["hermes-self-evolution-repo-review"]
 
 
-def test_environment_fact_signal_normalizes_self_improvement_root_parent():
-    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
-    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
-    events = [
+def _ambiguous_skill_resolution_pair(since: datetime, *, session_id: str, skill_name: str) -> list[dict]:
+    return [
         {
             "ts": since.isoformat(),
             "event": "post_tool_call",
-            "session_id": "s1",
+            "session_id": session_id,
             "tool_name": "skill_view",
             "status": "error",
             "error_kind": "unknown_error",
-            "args_preview": '{"name":"hermes-self-evolution-repo-review"}',
-            "result_preview": "Ambiguous skill name 'hermes-self-evolution-repo-review': /opt/hermes-data/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md and /opt/hermes-data/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md",
+            "args_preview": f'{{"name":"{skill_name}"}}',
+            "result_preview": f"Ambiguous skill name '{skill_name}': /opt/hermes-data/skills/hermes-custom/{skill_name}/SKILL.md and /opt/hermes-data/skills/hermes-custom/hermes-development-maintenance/references/{skill_name}.md",
         },
         {
             "ts": since.isoformat(),
             "event": "post_tool_call",
-            "session_id": "s1",
+            "session_id": session_id,
             "tool_name": "skill_view",
             "status": "success",
-            "args_preview": '{"name":"hermes-custom/hermes-self-evolution-repo-review"}',
-            "result_preview": "loaded /opt/hermes-data/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md",
+            "args_preview": f'{{"name":"hermes-custom/{skill_name}"}}',
+            "result_preview": f"loaded /opt/hermes-data/skills/hermes-custom/{skill_name}/SKILL.md",
         },
     ]
+
+
+def test_environment_fact_signal_normalizes_self_improvement_root_parent():
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    events = _ambiguous_skill_resolution_pair(since, session_id="s1", skill_name="hermes-self-evolution-repo-review")
 
     pack = build_evidence_pack(
         events,
@@ -299,6 +303,45 @@ def test_environment_fact_signal_normalizes_self_improvement_root_parent():
 
     assert "$HERMES_HOME/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md" in signal["signal"]["value_tokens"]
     assert "$HERMES_HOME/self-improvement/skills" not in json.dumps(signal, ensure_ascii=False)
+
+
+def test_environment_fact_signal_aggregates_duplicate_ambiguous_skill_resolution(monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", "/opt/hermes-data")
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    events = [
+        *_ambiguous_skill_resolution_pair(since, session_id="s1", skill_name="hermes-self-evolution-repo-review"),
+        *_ambiguous_skill_resolution_pair(since, session_id="s2", skill_name="hermes-self-evolution-repo-review"),
+    ]
+
+    pack = build_evidence_pack(events, since, until)
+    signals = [item for item in pack["evidence"] if item["kind"] == "environment_fact_signal"]
+
+    assert len(signals) == 1
+    signal = signals[0]["signal"]
+    assert signal["signal_quality"] == "ambiguous_skill_resolution"
+    assert signal["occurrence_count"] == 2
+    assert signal["session_ids"] == ["s1", "s2"]
+    assert signal["stable_identifiers"] == ["hermes-self-evolution-repo-review"]
+
+
+def test_environment_fact_signal_keeps_distinct_ambiguous_skill_identifiers_separate(monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", "/opt/hermes-data")
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    events = [
+        *_ambiguous_skill_resolution_pair(since, session_id="s1", skill_name="hermes-self-evolution-repo-review"),
+        *_ambiguous_skill_resolution_pair(since, session_id="s2", skill_name="hermes-standalone-plugin-development"),
+    ]
+
+    pack = build_evidence_pack(events, since, until)
+    signals = [item for item in pack["evidence"] if item["kind"] == "environment_fact_signal"]
+
+    assert len(signals) == 2
+    assert {tuple(item["signal"].get("stable_identifiers") or []) for item in signals} == {
+        ("hermes-self-evolution-repo-review",),
+        ("hermes-standalone-plugin-development",),
+    }
 
 
 def test_build_cluster_evidence_requires_existing_candidate_and_repeated_cluster():

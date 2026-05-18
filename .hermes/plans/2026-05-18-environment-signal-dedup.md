@@ -12,6 +12,14 @@
 
 ## Current state
 
+Implemented 2026-05-18:
+
+- Duplicate `environment_fact_signal` items now aggregate by compact semantic key rather than session id.
+- Repeated `ambiguous_skill_resolution` for `hermes-self-evolution-repo-review` collapsed into one memory-agent candidate with `occurrence_count: 4` in dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260518T171627Z.json`.
+- Runner handoff includes `occurrence_count` and bounded `session_ids`, without raw event payloads.
+- Distinct ambiguous skill identifiers remain separate.
+- Validation passed: focused evidence/memory-agent tests (`27 passed`), full `pytest tests -q` (`692 passed, 2 skipped`), `py_compile`, `git diff --check`, and dry-run artifact inspection.
+
 Implemented before this plan:
 
 - `memory_inventory_candidate`, suspicious `memory_placement_candidate`, `memory_gap_candidate`, and `environment_fact_signal` can reach `memory_agent`.
@@ -19,7 +27,7 @@ Implemented before this plan:
 - Runtime paths are normalized to `$HERMES_HOME/...` where possible.
 - `environment_fact_signal` handoff includes `signal_quality` and `stable_identifiers`.
 
-Observed remaining issue in dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260518T072820Z.json`:
+Original observed issue in dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260518T072820Z.json`:
 
 - `environment_fact_signal` still reaches the per-kind cap: `6 kept, 4 omitted`.
 - Multiple candidates represent the same ambiguous skill-name resolution, for example `hermes-self-evolution-repo-review` resolving to the same two `$HERMES_HOME/skills/...` paths.

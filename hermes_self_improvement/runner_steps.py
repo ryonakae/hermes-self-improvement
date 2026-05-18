@@ -118,6 +118,12 @@ def _environment_fact_agent_candidate_from_evidence(item: dict[str, Any]) -> dic
             for value in (signal.get("stable_identifiers") if isinstance(signal.get("stable_identifiers"), list) else [])[:4]
             if str(value).strip()
         ],
+        "occurrence_count": int(signal.get("occurrence_count") or 1),
+        "session_ids": [
+            _redact_text(str(value), max_chars=80)
+            for value in (signal.get("session_ids") if isinstance(signal.get("session_ids"), list) else [])[:6]
+            if str(value).strip()
+        ],
         "value_tokens": value_tokens,
         "support": {
             "tool_name": signal.get("tool_name"),

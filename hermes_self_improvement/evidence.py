@@ -974,9 +974,52 @@ def _event_text_for_value_tokens(ev: dict[str, Any]) -> str:
     )
 
 
+def _environment_signal_dedup_key(signal: dict[str, Any]) -> tuple[Any, ...]:
+    stable_identifiers = signal.get("stable_identifiers") if isinstance(signal.get("stable_identifiers"), list) else []
+    value_tokens = signal.get("value_tokens") if isinstance(signal.get("value_tokens"), list) else []
+    return (
+        str(signal.get("signal_quality") or ""),
+        str(signal.get("tool_name") or ""),
+        str(signal.get("error_kind") or ""),
+        tuple(str(value) for value in stable_identifiers),
+        tuple(str(value) for value in value_tokens),
+    )
+
+
+def _merge_environment_signal(existing: dict[str, Any], incoming: dict[str, Any]) -> None:
+    signal = existing["signal"] if isinstance(existing.get("signal"), dict) else {}
+    incoming_signal = incoming["signal"] if isinstance(incoming.get("signal"), dict) else {}
+    signal["occurrence_count"] = int(signal.get("occurrence_count") or 1) + int(incoming_signal.get("occurrence_count") or 1)
+    session_ids = list(signal.get("session_ids") if isinstance(signal.get("session_ids"), list) else [])
+    incoming_session = str(incoming_signal.get("session_id") or "")
+    if incoming_session and incoming_session not in session_ids and len(session_ids) < 6:
+        session_ids.append(incoming_session)
+    if session_ids:
+        signal["session_ids"] = session_ids
+    previews = list(signal.get("support_previews") if isinstance(signal.get("support_previews"), list) else [])
+    incoming_preview = str(incoming_signal.get("support_preview") or "")
+    if incoming_preview and incoming_preview not in previews and len(previews) < 3:
+        previews.append(incoming_preview)
+    if previews:
+        signal["support_previews"] = previews
+    existing["signal"] = signal
+
+
+def _make_environment_fact_signal_item(stable: dict[str, Any]) -> dict[str, Any]:
+    signal_id = "env_fact_" + _sha256_text(json.dumps(stable, ensure_ascii=False, sort_keys=True))[:12]
+    return {
+        "id": signal_id,
+        "kind": "environment_fact_signal",
+        "source": "structural_evidence",
+        "likely_targets": _targets(("memory", 0.8), ("skill", 0.2)),
+        "signal": stable,
+        "risk": "medium",
+    }
+
+
 def collect_environment_fact_signals(events: list[dict[str, Any]], *, limit: int = 10, config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     signals: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
     for index, ev in enumerate(events):
         if ev.get("event") != "post_tool_call":
             continue
@@ -1028,19 +1071,18 @@ def collect_environment_fact_signals(events: list[dict[str, Any]], *, limit: int
             }
             if quality == "ambiguous_skill_resolution":
                 stable["stable_identifiers"] = _extract_stable_identifiers(f"{failure_text}\n{success_text}")
-            signal_id = "env_fact_" + _sha256_text(json.dumps(stable, ensure_ascii=False, sort_keys=True))[:12]
-            dedup_key = f"{session_id}:{tool_name}:{stable['error_kind']}:{','.join(stable['value_tokens'])}"
-            if dedup_key in seen:
-                continue
-            seen.add(dedup_key)
-            signals.append({
-                "id": signal_id,
-                "kind": "environment_fact_signal",
-                "source": "structural_evidence",
-                "likely_targets": _targets(("memory", 0.8), ("skill", 0.2)),
-                "signal": stable,
-                "risk": "medium",
-            })
+            stable["occurrence_count"] = 1
+            if session_id:
+                stable["session_ids"] = [session_id]
+            if stable.get("support_preview"):
+                stable["support_previews"] = [stable["support_preview"]]
+            item = _make_environment_fact_signal_item(stable)
+            dedup_key = _environment_signal_dedup_key(stable)
+            if dedup_key in by_key:
+                _merge_environment_signal(by_key[dedup_key], item)
+                break
+            by_key[dedup_key] = item
+            signals.append(item)
             break
         if len(signals) >= limit:
             break

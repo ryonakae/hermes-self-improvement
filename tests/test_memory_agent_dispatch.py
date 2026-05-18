@@ -64,6 +64,8 @@ def _environment_signal_candidate(candidate_id: str = "env_fact_1") -> dict:
             "value_tokens": ["~/old-repo", "~/.hermes/plugins/hermes-self-improvement"],
             "signal_quality": "ambiguous_skill_resolution",
             "stable_identifiers": ["hermes-self-evolution-repo-review"],
+            "occurrence_count": 3,
+            "session_ids": ["s1", "s2", "s3"],
             "candidate_fact_hint": "A tool failure was followed by a same-tool retry with different stable path/env value tokens.",
             "support_preview": "fatal: not a git repository",
         },
@@ -237,6 +239,8 @@ def test_run_memory_improvement_step_previews_environment_fact_signals_for_memor
     assert handed["value_tokens"] == ["~/old-repo", "~/.hermes/plugins/hermes-self-improvement"]
     assert handed["signal_quality"] == "ambiguous_skill_resolution"
     assert handed["stable_identifiers"] == ["hermes-self-evolution-repo-review"]
+    assert handed["occurrence_count"] == 3
+    assert handed["session_ids"] == ["s1", "s2", "s3"]
     assert handed["support"]["success_after_correction"] is True
 
 
