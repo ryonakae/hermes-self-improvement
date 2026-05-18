@@ -146,6 +146,57 @@ def test_evidence_pack_adds_compact_cluster_evidence_for_repeated_tool_failures(
     assert "abc123" not in json.dumps(cluster, ensure_ascii=False)
 
 
+def test_evidence_pack_adds_environment_fact_signal_for_failure_retry_value_delta():
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    events = [
+        {
+            "ts": since.isoformat(),
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "error",
+            "error_kind": "not_found",
+            "args_preview": '{"command":"git status","workdir":"/Users/alice/old-repo"}',
+            "result_preview": "fatal: not a git repository",
+        },
+        {
+            "ts": since.isoformat(),
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "ok",
+            "args_preview": '{"command":"git status","workdir":"/Users/alice/.hermes/plugins/hermes-self-improvement"}',
+            "result_preview": "On branch main",
+        },
+    ]
+
+    pack = build_evidence_pack(events, since, until)
+    signal = next(item for item in pack["evidence"] if item["kind"] == "environment_fact_signal")
+
+    assert pack["summary"]["evidence_by_kind"]["environment_fact_signal"] == 1
+    assert signal["id"] in pack["views"]["memory"]
+    assert signal["signal"]["reason"] == "failure_retry_value_delta"
+    assert signal["signal"]["tool_name"] == "terminal"
+    assert signal["signal"]["success_after_correction"] is True
+    assert "~/old-repo" in signal["signal"]["value_tokens"]
+    assert "~/.hermes/plugins/hermes-self-improvement" in signal["signal"]["value_tokens"]
+    assert "/Users/alice" not in json.dumps(signal, ensure_ascii=False)
+
+
+def test_evidence_pack_does_not_make_environment_signal_for_repeated_timeout_without_value_token():
+    since = datetime(2026, 4, 30, 0, 0, tzinfo=timezone.utc)
+    until = datetime(2026, 4, 30, 1, 0, tzinfo=timezone.utc)
+    events = [
+        {"ts": since.isoformat(), "event": "post_tool_call", "session_id": "s1", "tool_name": "terminal", "status": "warning", "error_kind": "timeout", "result_preview": "command timed out"},
+        {"ts": since.isoformat(), "event": "post_tool_call", "session_id": "s1", "tool_name": "terminal", "status": "warning", "error_kind": "timeout", "result_preview": "command timed out again"},
+    ]
+
+    pack = build_evidence_pack(events, since, until)
+
+    assert not any(item["kind"] == "environment_fact_signal" for item in pack["evidence"])
+
+
 def test_build_cluster_evidence_requires_existing_candidate_and_repeated_cluster():
     findings = [
         {"kind": "tool_error_cluster", "tool_name": "patch", "error_kind": "schema_or_validation", "count": 1, "severity": "low", "examples": []},

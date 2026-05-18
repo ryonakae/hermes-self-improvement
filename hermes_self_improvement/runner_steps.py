@@ -26,7 +26,39 @@ MEMORY_AGENT_CONSTRAINTS = (
     "Use only memory tool and submit_mutation_result.",
     "Do not use terminal/file/git/direct filesystem tools.",
 )
-MEMORY_AGENT_DISPATCH_KINDS = {"memory_gap_candidate", "memory_inventory_candidate"}
+MEMORY_AGENT_DISPATCH_KINDS = {"memory_gap_candidate", "memory_inventory_candidate", "environment_fact_signal"}
+MEMORY_AGENT_CANDIDATE_CAPS = {
+    "memory_gap_candidate": 6,
+    "memory_inventory_candidate": 6,
+    "environment_fact_signal": 6,
+    "memory_placement_candidate": 4,
+}
+MEMORY_AGENT_CURRENT_ENTRY_CAP = 20
+
+
+def _candidate_kind_for_counts(candidate: dict[str, Any]) -> str:
+    return str(candidate.get("candidate_kind") or candidate.get("kind") or "memory_gap_candidate")
+
+
+def _cap_memory_agent_candidates(candidates: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int], dict[str, int]]:
+    kept: list[dict[str, Any]] = []
+    kept_counts: dict[str, int] = {}
+    omitted_counts: dict[str, int] = {}
+    for candidate in candidates:
+        kind = _candidate_kind_for_counts(candidate)
+        cap = MEMORY_AGENT_CANDIDATE_CAPS.get(kind, 6)
+        current = kept_counts.get(kind, 0)
+        if current >= cap:
+            omitted_counts[kind] = omitted_counts.get(kind, 0) + 1
+            continue
+        kept_counts[kind] = current + 1
+        kept.append(candidate)
+    return kept, kept_counts, omitted_counts
+
+
+def _compact_current_entries_for_memory_agent(entries: list[Any]) -> tuple[list[Any], int]:
+    compact = entries[:MEMORY_AGENT_CURRENT_ENTRY_CAP]
+    return compact, max(0, len(entries) - len(compact))
 
 
 def _compact_inventory_entries(entries: list[Any]) -> list[dict[str, Any]]:
@@ -65,12 +97,42 @@ def _memory_inventory_agent_candidate_from_evidence(item: dict[str, Any]) -> dic
     }
 
 
+def _environment_fact_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
+    signal = item.get("signal") if isinstance(item.get("signal"), dict) else {}
+    value_tokens = [
+        _redact_text(str(token), max_chars=120)
+        for token in (signal.get("value_tokens") if isinstance(signal.get("value_tokens"), list) else [])[:8]
+        if str(token).strip()
+    ]
+    if not value_tokens:
+        return None
+    return {
+        "candidate_id": item.get("id"),
+        "candidate_kind": "environment_fact_signal",
+        "candidate_fact_hint": _redact_text(str(signal.get("candidate_fact_hint") or ""), max_chars=240),
+        "signal_reason": str(signal.get("reason") or ""),
+        "value_tokens": value_tokens,
+        "support": {
+            "tool_name": signal.get("tool_name"),
+            "error_kind": signal.get("error_kind"),
+            "failure_count": signal.get("failure_count"),
+            "success_after_correction": bool(signal.get("success_after_correction")),
+            "support_preview": _redact_text(str(signal.get("support_preview") or ""), max_chars=180),
+        },
+        "target": "memory",
+        "confidence": "medium",
+        "risk": item.get("risk") or "medium",
+    }
+
+
 def _memory_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
     kind = str(item.get("kind") or "")
     if kind not in MEMORY_AGENT_DISPATCH_KINDS:
         return None
     if kind == "memory_inventory_candidate":
         return _memory_inventory_agent_candidate_from_evidence(item)
+    if kind == "environment_fact_signal":
+        return _environment_fact_agent_candidate_from_evidence(item)
     memory = item.get("memory") if isinstance(item.get("memory"), dict) else None
     if not memory:
         return None
@@ -108,13 +170,24 @@ def _dispatch_memory_agent(
         candidates.append(candidate)
     if not candidates:
         return {"status": "no_candidates"}
+    candidates, candidate_counts, omitted_counts = _cap_memory_agent_candidates(candidates)
     if not mutate:
-        return {"status": "preview", "candidate_count": len(candidates), "candidates": candidates}
+        return {
+            "status": "preview",
+            "candidate_count": len(candidates),
+            "candidate_counts_by_kind": candidate_counts,
+            "omitted_candidate_counts_by_kind": omitted_counts,
+            "candidates": candidates,
+        }
+    current_entries, current_entries_omitted = _compact_current_entries_for_memory_agent(
+        cfg.get("_memory_current_entries") if isinstance(cfg.get("_memory_current_entries"), list) else []
+    )
     task = {
         "type": "memory_agent_task",
         "task_kind": "memory_apply",
         "candidates": candidates,
-        "current_entries": cfg.get("_memory_current_entries") if isinstance(cfg.get("_memory_current_entries"), list) else [],
+        "current_entries": current_entries,
+        "current_entries_omitted_count": current_entries_omitted,
         "constraints": list(MEMORY_AGENT_CONSTRAINTS),
         "evidence_ids": [c.get("candidate_id") for c in candidates],
     }
@@ -123,6 +196,9 @@ def _dispatch_memory_agent(
     return {
         "status": status,
         "candidate_count": len(candidates),
+        "candidate_counts_by_kind": candidate_counts,
+        "omitted_candidate_counts_by_kind": omitted_counts,
+        "current_entries_omitted_count": current_entries_omitted,
         "changed": len(result.get("changed_memories") or []) if result.get("success") else 0,
         "result": result,
     }

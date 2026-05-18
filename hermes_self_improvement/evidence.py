@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -791,6 +792,106 @@ def collect_knowledge_coverage_candidates(
     return out
 
 
+_VALUE_TOKEN_PATTERN = re.compile(
+    r"(?:~|/Users/[^\s\"'`:,}]+|/home/[^\s\"'`:,}]+|/[A-Za-z0-9_.-][^\s\"'`:,}]*)"
+    r"|\b[A-Z][A-Z0-9_]{2,}\b"
+    r"|\b[A-Za-z0-9_.-]+\.(?:sock|json|ya?ml|md|py)\b"
+)
+
+
+def _normalize_value_token(token: str) -> str:
+    text = str(token or "").strip().strip("'\"`.,;:)}]")
+    text = re.sub(r"^/Users/[^/]+", "~", text)
+    text = re.sub(r"^/home/[^/]+", "~", text)
+    return _redact_text(text, max_chars=120)
+
+
+def _extract_value_tokens_from_text(text: str, *, limit: int = 8) -> list[str]:
+    if _looks_secret(text):
+        return []
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for match in _VALUE_TOKEN_PATTERN.finditer(str(text or "")):
+        token = _normalize_value_token(match.group(0))
+        if not token or _looks_secret(token) or token in seen:
+            continue
+        seen.add(token)
+        tokens.append(token)
+        if len(tokens) >= limit:
+            break
+    return tokens
+
+
+def _event_text_for_value_tokens(ev: dict[str, Any]) -> str:
+    return "\n".join(
+        str(ev.get(key) or "")
+        for key in ("args_preview", "result_preview", "user_message_preview", "assistant_response_preview", "message")
+        if ev.get(key)
+    )
+
+
+def collect_environment_fact_signals(events: list[dict[str, Any]], *, limit: int = 10) -> list[dict[str, Any]]:
+    signals: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, ev in enumerate(events):
+        if ev.get("event") != "post_tool_call":
+            continue
+        status = str(ev.get("status") or "").lower()
+        if status not in {"error", "warning", "failed", "failure"}:
+            continue
+        failure_tokens = _extract_value_tokens_from_text(_event_text_for_value_tokens(ev))
+        if not failure_tokens:
+            continue
+        tool_name = str(ev.get("tool_name") or "")
+        session_id = str(ev.get("session_id") or "")
+        for later in events[index + 1:index + 6]:
+            if later.get("event") != "post_tool_call":
+                continue
+            if str(later.get("tool_name") or "") != tool_name:
+                continue
+            if session_id and str(later.get("session_id") or "") != session_id:
+                continue
+            later_status = str(later.get("status") or "").lower()
+            if later_status not in {"ok", "success", "completed"}:
+                continue
+            success_tokens = _extract_value_tokens_from_text(_event_text_for_value_tokens(later))
+            changed_tokens = [token for token in [*failure_tokens, *success_tokens] if token]
+            unique_tokens = []
+            for token in changed_tokens:
+                if token not in unique_tokens:
+                    unique_tokens.append(token)
+            if len(unique_tokens) < 2 or set(failure_tokens) == set(success_tokens):
+                continue
+            stable = {
+                "reason": "failure_retry_value_delta",
+                "tool_name": tool_name,
+                "error_kind": str(ev.get("error_kind") or ""),
+                "session_id": session_id,
+                "failure_count": 1,
+                "success_after_correction": True,
+                "value_tokens": unique_tokens[:8],
+                "candidate_fact_hint": "A tool failure was followed by a same-tool retry with different stable path/env value tokens.",
+                "support_preview": _redact_text(str(ev.get("result_preview") or ev.get("args_preview") or ""), max_chars=180),
+            }
+            signal_id = "env_fact_" + _sha256_text(json.dumps(stable, ensure_ascii=False, sort_keys=True))[:12]
+            dedup_key = f"{session_id}:{tool_name}:{stable['error_kind']}:{','.join(stable['value_tokens'])}"
+            if dedup_key in seen:
+                continue
+            seen.add(dedup_key)
+            signals.append({
+                "id": signal_id,
+                "kind": "environment_fact_signal",
+                "source": "structural_evidence",
+                "likely_targets": _targets(("memory", 0.8), ("skill", 0.2)),
+                "signal": stable,
+                "risk": "medium",
+            })
+            break
+        if len(signals) >= limit:
+            break
+    return signals
+
+
 def build_cluster_evidence(findings: list[dict[str, Any]], *, candidate_names: list[str], limit: int = 10) -> list[dict[str, Any]]:
     clusters: list[dict[str, Any]] = []
     for finding in findings:
@@ -1235,6 +1336,10 @@ def build_evidence_pack(
     if coverage_evidence:
         evidence.extend(coverage_evidence)
         kind_counts["knowledge_coverage_candidate"] += len(coverage_evidence)
+    environment_fact_signals = collect_environment_fact_signals(events)
+    if environment_fact_signals:
+        evidence.extend(environment_fact_signals)
+        kind_counts["environment_fact_signal"] += len(environment_fact_signals)
     skill_inventory_evidence = collect_skill_inventory_candidates(curator_telemetry)
     memory_entries = _memory_entries(memory_paths or {}) if isinstance(memory_paths, dict) else []
     memory_inventory_evidence = collect_memory_inventory_candidates(memory_paths)

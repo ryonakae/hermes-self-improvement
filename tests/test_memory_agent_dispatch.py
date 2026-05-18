@@ -48,6 +48,27 @@ def _inventory_candidate(candidate_id: str = "memory_inv_1") -> dict:
     }
 
 
+def _environment_signal_candidate(candidate_id: str = "env_fact_1") -> dict:
+    return {
+        "id": candidate_id,
+        "kind": "environment_fact_signal",
+        "source": "structural_evidence",
+        "likely_targets": [{"target": "memory", "weight": 0.8}, {"target": "skill", "weight": 0.2}],
+        "signal": {
+            "reason": "failure_retry_value_delta",
+            "tool_name": "terminal",
+            "error_kind": "not_found",
+            "session_id": "s1",
+            "failure_count": 1,
+            "success_after_correction": True,
+            "value_tokens": ["~/old-repo", "~/.hermes/plugins/hermes-self-improvement"],
+            "candidate_fact_hint": "A tool failure was followed by a same-tool retry with different stable path/env value tokens.",
+            "support_preview": "fatal: not a git repository",
+        },
+        "risk": "medium",
+    }
+
+
 def _success_payload(*, changed: list[str] | None = None, removed: list[str] | None = None) -> dict:
     return {
         "success": True,
@@ -178,6 +199,64 @@ def test_run_memory_improvement_step_dispatches_inventory_candidates_to_memory_a
     assert handed["candidate_kind"] == "memory_inventory_candidate"
     assert handed["entries"][0]["old_text"] == "Old Hermes path is /opt/data"
     assert not any(decision.get("evidence_id") == "memory_inv_1" and decision.get("reason") == "memory_inventory_needs_planner" for decision in result["decisions"])
+
+
+def test_run_memory_improvement_step_previews_environment_fact_signals_for_memory_agent():
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_environment_signal_candidate()]),
+        config={"_memory_agent_backend": object()},
+        mutate=False,
+    )
+
+    agent_block = result["memory_agent"]
+    assert agent_block["status"] == "preview"
+    handed = agent_block["candidates"][0]
+    assert handed["candidate_id"] == "env_fact_1"
+    assert handed["candidate_kind"] == "environment_fact_signal"
+    assert handed["candidate_fact_hint"].startswith("A tool failure")
+    assert handed["signal_reason"] == "failure_retry_value_delta"
+    assert handed["value_tokens"] == ["~/old-repo", "~/.hermes/plugins/hermes-self-improvement"]
+    assert handed["support"]["success_after_correction"] is True
+
+
+def test_memory_agent_preview_caps_candidates_per_kind_and_reports_omitted_counts():
+    candidates = [_conversation_candidate(f"m{i}") for i in range(8)]
+    result = run_memory_improvement_step(
+        evidence_pack=_pack(candidates),
+        config={"_memory_agent_backend": object()},
+        mutate=False,
+    )
+
+    agent_block = result["memory_agent"]
+    assert agent_block["status"] == "preview"
+    assert agent_block["candidate_count"] == 6
+    assert agent_block["candidate_counts_by_kind"] == {"memory_gap_candidate": 6}
+    assert agent_block["omitted_candidate_counts_by_kind"] == {"memory_gap_candidate": 2}
+
+
+def test_memory_agent_task_caps_current_entries_and_reports_omitted_count():
+    received_tasks: list[dict] = []
+
+    class FakeBackend:
+        def run(self, prompt, task, config=None):
+            received_tasks.append(task)
+            return _success_payload()
+
+    current_entries = [
+        {"target": "memory", "old_text": f"entry {index}", "summary": f"entry {index}"}
+        for index in range(25)
+    ]
+
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_conversation_candidate()]),
+        config={"_memory_agent_backend": FakeBackend(), "_memory_current_entries": current_entries},
+        mutate=True,
+    )
+
+    assert result["memory_agent"]["status"] == "completed"
+    task_payload = received_tasks[0]
+    assert len(task_payload["current_entries"]) == 20
+    assert task_payload["current_entries_omitted_count"] == 5
 
 
 def test_run_memory_improvement_step_no_op_without_backend_injection():
