@@ -10,6 +10,12 @@ As of 2026-05-10, the long-term roadmap is:
 
 The current active hardening plan is:
 
+- `2026-05-18-memory-agent-signal-handoff.md`
+  - **Status:** planned / awaiting implementation.
+  - Extends the memory improvement handoff without broad raw-event prompt bloat: compact `memory_inventory_candidate` and structurally detected durable environment/correction fact signals become eligible for `memory_agent`; plain placement reviews remain mostly deterministic keep/skip; successful non-canonical memory-agent outcomes normalize to `applied` when same-run change traces exist. The plan explicitly avoids language-specific correction keywords as the primary gate for a generally distributed plugin.
+
+The previous active hardening plan is:
+
 - `2026-05-14-reference-coverage-and-apply-calibration.md`
   - **Status:** implemented.
   - Fixes the 2026-05-14 daily-run issue where reference/root skills such as `timeout-workflow` / `safe-patch-usage` were not visible enough during planning, causing `create_skill` proposals to be stopped later as duplicates with contradictory rationale. The implementation keeps `skill_candidates` limited to mutable Hermes-created skills, adds separate `reference_skill_coverage`, uses shared alias coverage, produces coherent duplicate/no-op rationale and next actions, and keeps strong uncovered workflow evidence eligible for bounded `create_skill`. Validation: focused tests (`141 passed`), full `pytest tests -q` (`671 passed, 2 skipped`), `py_compile`, `git diff --check`, `hermes self-improvement status --json`, and `improve --dry-run --json` passed.
