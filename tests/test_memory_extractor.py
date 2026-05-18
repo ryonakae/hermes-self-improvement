@@ -41,6 +41,39 @@ def test_rank_conversation_windows_prefers_user_correction_but_keeps_other_windo
     assert windows[0]["rank_reason"] in {"correction_like", "preference_like"}
 
 
+def test_rank_conversation_windows_prefers_structural_failure_retry_over_lexical_hint():
+    events = [
+        {
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "error",
+            "args_preview": '{"workdir":"/Users/alice/old-repo"}',
+        },
+        {
+            "event": "post_llm_call",
+            "session_id": "s1",
+            "user_message_preview": "Use /Users/alice/.hermes/plugins/hermes-self-improvement for this repository.",
+        },
+        {
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "ok",
+            "args_preview": '{"workdir":"/Users/alice/.hermes/plugins/hermes-self-improvement"}',
+        },
+        {"event": "post_llm_call", "session_id": "s2", "user_message_preview": "それは違う。plugin側だけで進めて"},
+    ]
+
+    windows = build_memory_extractor_windows(events, limit=10)
+
+    assert windows[0]["center_index"] == 1
+    assert windows[0]["rank_reason"] == "structural_failure_retry_value_delta"
+    assert windows[0]["rank_signals"]["has_prior_failure"] is True
+    assert windows[0]["rank_signals"]["has_retry_after_failure"] is True
+    assert windows[0]["rank_signals"]["has_value_token_delta"] is True
+
+
 def test_conversation_window_includes_surrounding_context():
     events = [
         {"event": "post_llm_call", "session_id": "s1", "assistant_response_preview": "I will edit Hermes core"},

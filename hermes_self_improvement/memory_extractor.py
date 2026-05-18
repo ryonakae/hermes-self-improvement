@@ -29,6 +29,70 @@ def _rank_reason(ev: dict[str, Any]) -> str:
     return "sampled_context"
 
 
+_VALUE_TOKEN_PATTERN = re.compile(
+    r"(?:~|/Users/[^\s\"'`:,}]+|/home/[^\s\"'`:,}]+|/[A-Za-z0-9_.-][^\s\"'`:,}]*)"
+    r"|\b[A-Z][A-Z0-9_]{2,}\b"
+    r"|\b[A-Za-z0-9_.-]+\.(?:sock|json|ya?ml|md|py)\b"
+)
+
+
+def _normalize_value_token(token: str) -> str:
+    text = str(token or "").strip().strip("'\"`.,;:)}]")
+    text = re.sub(r"^/Users/[^/]+", "~", text)
+    text = re.sub(r"^/home/[^/]+", "~", text)
+    return text
+
+
+def _value_tokens_from_event(ev: dict[str, Any]) -> set[str]:
+    text = "\n".join(
+        str(ev.get(key) or "")
+        for key in ("args_preview", "result_preview", "user_message_preview", "assistant_response_preview", "message")
+        if ev.get(key)
+    )
+    return {_normalize_value_token(match.group(0)) for match in _VALUE_TOKEN_PATTERN.finditer(text)}
+
+
+def _rank_window_signals(events: list[dict[str, Any]], index: int, *, radius: int = 3) -> dict[str, Any]:
+    center = events[index]
+    session_id = str(center.get("session_id") or "")
+    prior = events[max(0, index - radius):index]
+    later = events[index + 1:index + radius + 1]
+    prior_failures = [
+        ev for ev in prior
+        if ev.get("event") == "post_tool_call"
+        and (not session_id or str(ev.get("session_id") or "") == session_id)
+        and str(ev.get("status") or "").lower() in {"error", "warning", "failed", "failure"}
+    ]
+    retry_successes = [
+        ev for ev in later
+        if ev.get("event") == "post_tool_call"
+        and (not session_id or str(ev.get("session_id") or "") == session_id)
+        and str(ev.get("status") or "").lower() in {"ok", "success", "completed"}
+    ]
+    prior_tokens = set().union(*[_value_tokens_from_event(ev) for ev in prior_failures], set())
+    center_tokens = _value_tokens_from_event(center)
+    later_tokens = set().union(*[_value_tokens_from_event(ev) for ev in retry_successes], set())
+    changed_tokens = (prior_tokens | center_tokens | later_tokens)
+    has_value_token_delta = bool(changed_tokens) and (bool(prior_tokens ^ later_tokens) or bool(center_tokens - prior_tokens))
+    lexical = _rank_reason(center)
+    return {
+        "has_user_turn": bool(center.get("user_message_preview")),
+        "has_prior_failure": bool(prior_failures),
+        "has_retry_after_failure": bool(retry_successes),
+        "has_value_token_delta": has_value_token_delta,
+        "lexical_correction_hint": lexical == "correction_like",
+        "lexical_preference_hint": lexical == "preference_like",
+    }
+
+
+def _rank_reason_from_signals(signals: dict[str, Any], lexical_reason: str) -> str:
+    if signals.get("has_prior_failure") and signals.get("has_retry_after_failure") and signals.get("has_value_token_delta"):
+        return "structural_failure_retry_value_delta"
+    if signals.get("has_prior_failure") and signals.get("has_value_token_delta"):
+        return "structural_failure_value_delta"
+    return lexical_reason
+
+
 def build_memory_extractor_windows(
     events: list[dict[str, Any]],
     *,
@@ -42,11 +106,14 @@ def build_memory_extractor_windows(
             continue
         if not ev.get("user_message_preview"):
             continue
-        reason = _rank_reason(ev)
+        lexical_reason = _rank_reason(ev)
+        signals = _rank_window_signals(events, index, radius=radius)
+        reason = _rank_reason_from_signals(signals, lexical_reason)
         window = build_context_window(events, center_index=index, radius=radius, full_radius=full_radius)
         window["rank_reason"] = reason
+        window["rank_signals"] = signals
         windows.append(window)
-    priority = {"correction_like": 0, "preference_like": 1, "sampled_context": 2}
+    priority = {"structural_failure_retry_value_delta": 0, "structural_failure_value_delta": 1, "correction_like": 2, "preference_like": 3, "sampled_context": 4}
     windows.sort(key=lambda item: (priority.get(str(item.get("rank_reason")), 9), int(item.get("center_index") or 0)))
     return windows[:limit]
 
