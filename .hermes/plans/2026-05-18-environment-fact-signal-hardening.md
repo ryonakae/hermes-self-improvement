@@ -150,13 +150,14 @@ def test_environment_fact_signal_preserves_ambiguous_skill_resolution():
     signal = next(item for item in pack["evidence"] if item["kind"] == "environment_fact_signal")
 
     assert signal["signal"]["signal_quality"] == "ambiguous_skill_resolution"
-    assert "~/ .hermes" not in " ".join(signal["signal"]["value_tokens"])
+    # Guards against the current regex producing a bare "~" token plus a separate path fragment.
+    assert "~" not in signal["signal"]["value_tokens"]
     assert "~/.hermes/skills/hermes-custom/hermes-self-evolution-repo-review/SKILL.md" in signal["signal"]["value_tokens"]
     assert "~/.hermes/skills/hermes-custom/hermes-development-maintenance/references/hermes-self-evolution-repo-review.md" in signal["signal"]["value_tokens"]
     assert "hermes-self-evolution-repo-review" in signal["signal"].get("stable_identifiers", [])
 ```
 
-Adjust the exact assertion names if the implementation uses `signal_subtype` instead of `signal_quality`; keep the semantic expectation.
+Adjust the exact assertion names only if there is a compelling reason to rename the field before implementation; the preferred field name is `signal_quality`.
 
 **Step 2: Run focused test**
 
@@ -183,10 +184,11 @@ Near `_VALUE_TOKEN_PATTERN`, add small allow/deny helpers:
 
 ```python
 _GENERIC_VALUE_TOKENS = {
+    "~",  # artifact from the current regex alternative; never useful alone
     "HEAD",
     "FETCH_HEAD",
     "PATH",
-    "PIPE",
+    "PIPE",  # observed as a standalone env-like artifact in tool output; drop unless a future test proves it meaningful
     "USER",
     "HOME",
     "PWD",
@@ -218,12 +220,14 @@ def _looks_generic_value_token(token: str) -> bool:
         return True
     if any(text.endswith(suffix) for suffix in _GENERIC_PATH_SUFFIXES):
         return True
-    if re.fullmatch(r"/[A-Za-z0-9_.-]{1,8}", text) and text not in {"~/.hermes"}:
+    if re.fullmatch(r"/[A-Za-z0-9_.-]{1,8}", text):
         return True
     return False
 ```
 
-Keep this conservative. It is acceptable to drop short root-ish fragments. Do not drop full paths under `~/.hermes/...`, `.sock`, `.json`, `.yaml`, `.md`, or `.py`.
+Keep this conservative, but document the trade-off: short container paths such as `/app`, `/src`, or `/build` may be meaningful in some environments. This plan intentionally drops them as weak fragments for now; if dogfood later shows a real durable `/app`-style environment fact, add a narrow allowlist with regression coverage instead of broadly allowing short root paths.
+
+Do not drop full paths under `~/.hermes/...`, `.sock`, `.json`, `.yaml`, `.md`, or `.py`.
 
 **Step 3: Use helper in extraction**
 
@@ -280,7 +284,9 @@ def _is_durable_value_token(token: str) -> bool:
     text = str(token or "")
     if _looks_generic_value_token(text):
         return False
-    if text.startswith("~/.hermes/") or text.startswith("~/"):
+    if text.startswith("~/.hermes/"):
+        return True
+    if text.startswith("~/") and text.count("/") >= 2:
         return True
     if text.endswith((".sock", ".json", ".yaml", ".yml", ".md", ".py")):
         return True
@@ -289,7 +295,7 @@ def _is_durable_value_token(token: str) -> bool:
     return False
 ```
 
-This intentionally keeps real paths and config/socket/model-provider file references, but drops short fragments.
+This intentionally keeps real paths and config/socket/model-provider file references, but drops short fragments. `~/` is not automatically durable; require either `~/.hermes/...`, a useful file/config suffix, or enough path depth to avoid preserving `~/tmp`-style noise.
 
 **Step 3: Wire quality into `collect_environment_fact_signals`**
 
@@ -338,7 +344,70 @@ Expected: PASS.
 
 ---
 
-## Task 5: Keep runner handoff compact but include quality metadata
+## Task 5: Apply the same generic-token filtering to memory-extractor ranking
+
+**Objective:** Keep `memory_extractor` structural window ranking from being promoted by the same generic tokens filtered out of `environment_fact_signal`.
+
+**Files:**
+
+- Modify: `hermes_self_improvement/memory_extractor.py`
+- Test: `tests/test_memory_extractor.py`
+
+**Step 1: Add regression test**
+
+Add a test near `test_rank_conversation_windows_prefers_structural_failure_retry_over_lexical_hint`:
+
+```python
+def test_memory_extractor_structural_ranking_ignores_generic_value_tokens():
+    events = [
+        {
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "error",
+            "result_preview": "HEAD PATH /main /dev/null",
+        },
+        {
+            "event": "post_llm_call",
+            "session_id": "s1",
+            "user_message_preview": "普通の相談です",
+        },
+        {
+            "event": "post_tool_call",
+            "session_id": "s1",
+            "tool_name": "terminal",
+            "status": "success",
+            "result_preview": "HEAD PATH /dev/null",
+        },
+    ]
+
+    windows = build_memory_extractor_windows(events, limit=10)
+
+    assert windows[0]["rank_reason"] == "sampled_context"
+    assert windows[0]["rank_signals"]["has_value_token_delta"] is False
+```
+
+**Step 2: Implement without creating a large abstraction layer**
+
+Either:
+
+- import narrow helpers from `evidence.py` if doing so does not create an import cycle, or
+- mirror the small `_looks_generic_value_token` behavior in `memory_extractor.py` with a comment pointing to `evidence.py`.
+
+Prefer a shared helper only if it stays simple. Do not move broad evidence code into a new module just for this hardening slice.
+
+**Step 3: Run focused test**
+
+```bash
+PY=${PYTHON:-.venv/bin/python}
+$PY -m pytest tests/test_memory_extractor.py::test_memory_extractor_structural_ranking_ignores_generic_value_tokens -q
+```
+
+Expected: PASS.
+
+---
+
+## Task 6: Keep runner handoff compact but include quality metadata
 
 **Objective:** Give `memory_agent` enough signal context to decide durable-vs-diagnostic without expanding raw payloads.
 
@@ -389,7 +458,7 @@ Expected: PASS.
 
 ---
 
-## Task 6: Dogfood the artifact counts after hardening
+## Task 7: Dogfood the artifact counts after hardening
 
 **Objective:** Verify that noise drops but durable candidates remain.
 
@@ -444,13 +513,13 @@ PY
 
 Expected:
 
-- `environment_fact_signal` count should be lower than the noisy baseline of 10 unless new real events occurred.
+- `environment_fact_signal` count should usually be lower than the noisy baseline of 10 when running over the same event window. If new real events entered the 24h window, compare candidate samples instead of treating the raw count as a hard failure.
 - `candidate_counts_by_kind.environment_fact_signal` should still be non-zero if ambiguous skill resolution or real durable path/env deltas exist.
 - Generic tokens should not appear in memory-agent candidate `value_tokens`.
 
 ---
 
-## Task 7: Update docs/status and commit
+## Task 8: Update docs/status and commit
 
 **Objective:** Keep the repo-tracked plan index accurate.
 
