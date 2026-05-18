@@ -8,6 +8,12 @@ As of 2026-05-10, the long-term roadmap is:
   - **Status:** active long-term source of truth.
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 7合目. The active milestone is deeper skill quality and knowledge inventory maintenance.
 
+The current active hardening plan is:
+
+- `2026-05-18-environment-signal-dedup.md`
+  - **Status:** planned / awaiting implementation.
+  - Aggregates duplicate `environment_fact_signal` candidates, especially repeated `ambiguous_skill_resolution`, so memory-agent per-kind caps are not wasted on identical signals. Preserves compact audit metadata such as `occurrence_count` and bounded `session_ids` without passing raw events to memory-agent.
+
 The latest completed hardening plan is:
 
 - `2026-05-18-environment-fact-signal-hardening.md`
