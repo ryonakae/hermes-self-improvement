@@ -189,9 +189,17 @@ from .config import get_hermes_home
 def _candidate_runtime_roots(config: dict[str, Any] | None = None) -> list[Path]:
     roots: list[Path] = []
     cfg = config or {}
-    for value in (cfg.get("_hermes_home"), cfg.get("_self_improvement_root"), os.environ.get("HERMES_HOME")):
+    for value in (cfg.get("_hermes_home"), os.environ.get("HERMES_HOME")):
         if value:
             roots.append(Path(str(value)).expanduser())
+    self_root = cfg.get("_self_improvement_root")
+    if self_root:
+        self_path = Path(str(self_root)).expanduser()
+        # _self_improvement_root usually points to ${HERMES_HOME}/self-improvement, not HERMES_HOME itself.
+        if self_path.name == "self-improvement":
+            roots.append(self_path.parent)
+        else:
+            roots.append(self_path)
     roots.append(get_hermes_home())
     out: list[Path] = []
     for root in roots:
@@ -268,9 +276,9 @@ Update `_normalize_value_token` and `_extract_value_tokens_from_text` so runtime
 ```python
 def _normalize_value_token(token: str, *, config: dict[str, Any] | None = None) -> str:
     text = str(token or "").strip().strip("'\"`.,;:)}]")
+    text = _normalize_runtime_root_token(text, config=config)
     text = re.sub(r"^/Users/[^/]+", "~", text)
     text = re.sub(r"^/home/[^/]+", "~", text)
-    text = _normalize_runtime_root_token(text, config=config)
     return _redact_text(text, max_chars=120)
 ```
 
@@ -282,7 +290,7 @@ if not token or _looks_secret(token) or _looks_generic_value_token(token) or tok
     continue
 ```
 
-Thread `config` through `collect_environment_fact_signals(..., config=config)` and `build_evidence_pack(..., config=config)` only if a config object is already available at the call site. If not, use environment/default `get_hermes_home()` inside the helper; do not add a broad API change just for this slice.
+Thread `config` through `collect_environment_fact_signals(..., config=config)` and `build_evidence_pack(..., config=config)` only if a config object is already available at the call site. If not, use environment/default `get_hermes_home()` inside the helper; do not add a broad API change just for this slice. Add a regression test for `_self_improvement_root` specifically: when config contains `"_self_improvement_root": "/opt/hermes-data/self-improvement"`, a token under `/opt/hermes-data/skills/...` must normalize to `$HERMES_HOME/skills/...`, not `$HERMES_HOME/../skills` or `$HERMES_HOME/self-improvement/...`.
 
 **Step 4: Re-run focused tests**
 
@@ -634,7 +642,7 @@ Do not treat `~/.hermes` as the only durable Hermes install location. Use Hermes
 
 - `hermes_constants.get_hermes_home()` through `hermes_self_improvement.config.get_hermes_home()`.
 - `HERMES_HOME` for standalone/plugin test processes.
-- `_hermes_home` / `_self_improvement_root` from config payloads when a caller already has them.
+- `_hermes_home` from config payloads when a caller already has it; for `_self_improvement_root`, derive its parent only when it ends in `/self-improvement`.
 
 Emit compact placeholders such as `$HERMES_HOME/...` rather than absolute local paths in signal artifacts and memory-agent candidates. This keeps artifacts portable across profiles, Docker/bind-mounted installs, and users who set a non-default Hermes home.
 
