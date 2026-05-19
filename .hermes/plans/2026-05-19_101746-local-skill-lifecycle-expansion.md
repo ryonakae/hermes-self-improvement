@@ -90,15 +90,27 @@ Expected: any remaining matches are historical descriptions or implementation id
 - Possibly create: `hermes_self_improvement/skill_inventory.py`
 - Test: `tests/test_curator_telemetry.py` or new `tests/test_skill_inventory.py`
 
-**Inventory source preference:**
+**Inventory source decision, based on current Hermes code inspection:**
 
-Use the most direct Hermes skill inventory source available, in this order:
+Do **not** use `skills_list` or `hermes skills list --source local` as the primary implementation source.
 
-1. Prefer an internal Hermes API / plugin API if one exists that returns the same data as `hermes skills list --source local`, including each skill's resolved path/source.
-2. If no stable internal API exists, use the built-in `skills_list` tool surface only if it exposes enough path/source metadata to distinguish `$HERMES_HOME` skills from `skills.external_dirs` skills.
-3. If neither API/tool is sufficient, shell out to `hermes skills list --source local --json` or equivalent CLI output, but keep this isolated behind one inventory adapter and covered by tests.
+Observed current behavior:
 
-Important filtering rule: `--source local` may include skills from `config.yaml` `skills.external_dirs`. Treat those as read-only/protected. Only skills whose resolved `SKILL.md` path is under the active `$HERMES_HOME/skills/` tree are editable candidates. Use `hermes_constants.get_hermes_home()` or the runtime config equivalent; do not hardcode `~/.hermes`.
+- Agent tool `tools.skills_tool.skills_list()` returns only `name`, `description`, and `category`; it does **not** return resolved `SKILL.md` path, root, source directory, pinned/archive state, or enough provenance to distinguish `$HERMES_HOME/skills` from `skills.external_dirs`.
+- CLI `hermes skills list --source local` is display-only Rich table output. It has no `--json` flag today, and it also does not show paths.
+- CLI `--source local` classifies everything not hub-installed and not bundled-manifest built-in as `local`; because it uses `_find_all_skills()`, which scans both `$HERMES_HOME/skills` and `skills.external_dirs`, external-dir skills can appear as `local` in this CLI view.
+- Internal helper `tools.skills_tool._find_all_skills()` is also insufficient as-is because it scans local + external dirs, deduplicates by name, and drops path/root metadata.
+- Useful internal primitives do exist: `hermes_constants.get_skills_dir()` / `get_hermes_home()`, `agent.skill_utils.get_external_skills_dirs()`, `agent.skill_utils.get_all_skills_dirs()`, and `agent.skill_utils.iter_skill_index_files()`. These should be used to build a plugin-local inventory adapter with explicit path/root classification.
+
+Implementation direction:
+
+1. Create a plugin-local inventory adapter that scans `get_skills_dir()` directly with `iter_skill_index_files(local_root, "SKILL.md")` and records each resolved `SKILL.md` path.
+2. Use `get_external_skills_dirs()` only to classify/exclude external read-only skills and detect ambiguous names, not to create editable candidates.
+3. Keep Curator telemetry as usage/lifecycle metadata that is merged onto path-resolved inventory records.
+4. Do not shell out to `hermes skills list` for primary inventory unless Hermes later adds stable JSON output with resolved path/root metadata.
+5. Do not rely on agent tool `skills_list` for this lifecycle scanner; it is useful for LLM progressive disclosure, not for mutation safety.
+
+Important filtering rule: only skills whose resolved `SKILL.md` path is under the active `$HERMES_HOME/skills/` tree are editable candidates. Skills under `skills.external_dirs` are read-only/protected even if `hermes skills list --source local` displays them as local. Use `hermes_constants.get_skills_dir()` / `get_hermes_home()`; do not hardcode `~/.hermes`.
 
 **Design:**
 
@@ -178,15 +190,17 @@ Expected: all focused tests pass.
 **Steps:**
 
 1. Load Curator telemetry as before for usage/lifecycle facts.
-2. Load local skill inventory through the chosen adapter (`hermes skills list --source local` equivalent preferred), retaining resolved path/source metadata.
-3. Filter inventory so only skills under `$HERMES_HOME/skills/` become editable candidates; skills under `skills.external_dirs` are protected `external_readonly` even if the CLI labels them local.
-4. Merge Curator telemetry with the filtered local skill inventory.
-5. Preserve Curator usage metadata when available.
-6. Include all editable active/stale local skills in `evidence_pack["skill_candidates"]`.
-7. Include protected skills in a compact `protected_skill_references` or rejected list for reporting, not as mutation candidates.
-8. If a coverage alias matches an editable skill, keep it in `skill_candidates` and annotate coverage fit; do not put it only in `reference_skill_coverage`.
-9. Replace stale copy such as `no Hermes-created local mutable skill matches this boundary` in `evidence.py` with the new local-unprotected boundary language.
-10. Cap the LLM-facing editable candidate list to a bounded size, for example the top 50 by relevance/usage plus all directly matched coverage/evidence targets. Record any overflow count and excluded names in artifacts, not prompt text.
+2. Load local skill inventory through the new path-aware adapter, not through `skills_list` / `hermes skills list` table output.
+3. Scan `get_skills_dir()` directly and record resolved `SKILL.md` path, skill dir, category, name, description, state, and root.
+4. Scan `get_external_skills_dirs()` separately for collision/protection metadata; mark matching names as `external_readonly` or `ambiguous_name` where appropriate, but do not create editable candidates from external dirs.
+5. Filter inventory so only skills under `$HERMES_HOME/skills/` become editable candidates.
+6. Merge Curator telemetry with the filtered local skill inventory.
+7. Preserve Curator usage metadata when available.
+8. Include all editable active/stale local skills in `evidence_pack["skill_candidates"]`.
+9. Include protected skills in a compact `protected_skill_references` or rejected list for reporting, not as mutation candidates.
+10. If a coverage alias matches an editable skill, keep it in `skill_candidates` and annotate coverage fit; do not put it only in `reference_skill_coverage`.
+11. Replace stale copy such as `no Hermes-created local mutable skill matches this boundary` in `evidence.py` with the new local-unprotected boundary language.
+12. Cap the LLM-facing editable candidate list to a bounded size, for example the top 50 by relevance/usage plus all directly matched coverage/evidence targets. Record any overflow count and excluded names in artifacts, not prompt text.
 
 **Regression fixture:**
 
