@@ -8,6 +8,12 @@ As of 2026-05-10, the long-term roadmap is:
   - **Status:** active long-term source of truth.
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 7合目. The active milestone is deeper skill quality and knowledge inventory maintenance.
 
+The current active hardening plan is:
+
+- `2026-05-19_101746-local-skill-lifecycle-expansion.md`
+  - **Status:** planned / awaiting implementation.
+  - Expands skill lifecycle handling from narrow `agent_created_report()` candidates to all Hermes-changeable local unprotected skills. Protected skills remain excluded (built-in, hub/vendor, plugin-bundled, external read-only, pinned, archived, ambiguous), while editable local skills can be patched, merged/absorbed, reference-rewritten, and Curator-style archived. This plan also fixes the 2026-05-19 duplicate creation failure where `sandbox-permission-workflow` was treated as reference-only and `hermes-sandbox-permission-workflow` was created.
+
 The latest completed hardening plan is:
 
 - `2026-05-18-environment-signal-dedup.md`
