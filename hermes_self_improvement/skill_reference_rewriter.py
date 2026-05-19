@@ -210,10 +210,16 @@ def _iter_skill_markdown_files(root: Path) -> list[Path]:
     return sorted({path.resolve() for path in files if path.is_file()})
 
 
+def _is_within_skill_dir(path: Path, skill: str) -> bool:
+    return skill in {part for part in path.parts}
+
+
 def _scan_local_skill_markdown(root: Path, skill: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     refs: list[dict[str, Any]] = []
     unresolved: list[dict[str, Any]] = []
     for path in _iter_skill_markdown_files(root):
+        if _is_within_skill_dir(path, skill):
+            continue
         try:
             text = path.read_text(encoding="utf-8")
         except Exception:
@@ -276,6 +282,140 @@ def _scan_historical_reports(path: Path | None, skill: str) -> list[dict[str, An
         if skill in text:
             ignored.append(_ignored("historical_reports", file_path, "historical_reference_ignored"))
     return ignored
+
+
+def _parse_field_path(field: str) -> list[str | int]:
+    parts: list[str | int] = []
+    for chunk in str(field or "").split("."):
+        if not chunk:
+            continue
+        match = re.fullmatch(r"([^\[]+)(?:\[(\d+)\])?", chunk)
+        if not match:
+            raise ValueError(f"unsupported_reference_field:{field}")
+        parts.append(match.group(1))
+        if match.group(2) is not None:
+            parts.append(int(match.group(2)))
+    return parts
+
+
+def _get_path_value(root: Any, parts: list[str | int]) -> Any:
+    value = root
+    for part in parts:
+        value = value[part]
+    return value
+
+
+def _set_path_value(root: Any, parts: list[str | int], new_value: Any) -> None:
+    if not parts:
+        raise ValueError("empty_reference_field")
+    parent = _get_path_value(root, parts[:-1]) if len(parts) > 1 else root
+    parent[parts[-1]] = new_value
+
+
+def _replace_skill_token(text: str, old: str, new: str) -> str:
+    return _token_pattern(old).sub(new, text)
+
+
+def _apply_json_reference(ref: dict[str, Any], *, old: str, new: str) -> dict[str, Any]:
+    path = Path(str(ref.get("path") or ""))
+    field = str(ref.get("field") or "")
+    data = _load_json(path)
+    if data is None:
+        return {"success": False, "error": "reference_json_unreadable", "reference": ref}
+    try:
+        parts = _parse_field_path(field)
+        current = _get_path_value(data, parts)
+        if ref.get("rewrite") == "replace_exact":
+            if str(current) != old:
+                return {"success": False, "error": "reference_value_no_longer_matches", "reference": ref}
+            _set_path_value(data, parts, new)
+        elif ref.get("rewrite") == "replace_exact_text" and isinstance(current, str):
+            updated = _replace_skill_token(current, old, new)
+            if updated == current:
+                return {"success": False, "error": "reference_text_no_longer_matches", "reference": ref}
+            _set_path_value(data, parts, updated)
+        else:
+            return {"success": False, "error": "unsupported_json_reference_rewrite", "reference": ref}
+    except Exception as exc:
+        return {"success": False, "error": f"reference_json_update_failed:{exc}", "reference": ref}
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return {"success": True, "reference": ref}
+
+
+def _apply_yaml_reference(ref: dict[str, Any], *, old: str, new: str) -> dict[str, Any]:
+    if yaml is None:
+        return {"success": False, "error": "yaml_unavailable", "reference": ref}
+    path = Path(str(ref.get("path") or ""))
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        parts = _parse_field_path(str(ref.get("field") or ""))
+        current = _get_path_value(data, parts)
+        if str(current) != old:
+            return {"success": False, "error": "reference_value_no_longer_matches", "reference": ref}
+        _set_path_value(data, parts, new)
+    except Exception as exc:
+        return {"success": False, "error": f"reference_yaml_update_failed:{exc}", "reference": ref}
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    return {"success": True, "reference": ref}
+
+
+def _apply_text_reference(ref: dict[str, Any], *, old: str, new: str) -> dict[str, Any]:
+    path = Path(str(ref.get("path") or ""))
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return {"success": False, "error": f"reference_text_unreadable:{exc}", "reference": ref}
+    updated = _replace_skill_token(text, old, new)
+    if updated == text:
+        return {"success": False, "error": "reference_text_no_longer_matches", "reference": ref}
+    path.write_text(updated, encoding="utf-8")
+    return {"success": True, "reference": ref}
+
+
+def apply_skill_reference_rewrite_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    old = str((plan or {}).get("skill") or "").strip()
+    new = str((plan or {}).get("successor") or "").strip()
+    refs = [item for item in (plan or {}).get("references") or [] if isinstance(item, dict)]
+    unresolved = [item for item in (plan or {}).get("unresolved_references") or [] if isinstance(item, dict)]
+    if unresolved or not (plan or {}).get("can_rewrite"):
+        return {
+            "success": False,
+            "error": "reference_rewrite_plan_has_unresolved_references",
+            "unresolved_references": unresolved,
+            "rewritten_references": [],
+            "rewritten_reference_count": 0,
+        }
+    if not old:
+        return {"success": False, "error": "reference_rewrite_missing_skill", "rewritten_references": [], "rewritten_reference_count": 0}
+    if refs and not new:
+        return {"success": False, "error": "reference_rewrite_missing_successor", "rewritten_references": [], "rewritten_reference_count": 0}
+
+    rewritten: list[dict[str, Any]] = []
+    for ref in refs:
+        surface = str(ref.get("surface") or "")
+        rewrite = str(ref.get("rewrite") or "")
+        if surface == "cron_jobs":
+            result = _apply_json_reference(ref, old=old, new=new)
+        elif surface == "hermes_config":
+            result = _apply_yaml_reference(ref, old=old, new=new)
+        elif surface in {"cron_script", "local_skill_markdown"} and rewrite == "replace_exact_text":
+            result = _apply_text_reference(ref, old=old, new=new)
+        else:
+            result = {"success": False, "error": "unsupported_reference_rewrite", "reference": ref}
+        if not result.get("success"):
+            return {
+                "success": False,
+                "error": result.get("error") or "reference_rewrite_failed",
+                "failed_reference": ref,
+                "rewritten_references": rewritten,
+                "rewritten_reference_count": len(rewritten),
+            }
+        rewritten.append(ref)
+    return {
+        "success": True,
+        "rewritten_references": rewritten,
+        "rewritten_reference_count": len(rewritten),
+    }
 
 
 def build_skill_reference_rewrite_plan(skill: str, successor: str, *, config: dict[str, Any] | None = None) -> dict[str, Any]:

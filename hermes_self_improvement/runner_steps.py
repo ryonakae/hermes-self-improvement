@@ -19,7 +19,7 @@ from .prompts import base_prompt_hash, render_skill_agent_instructions
 from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
 from .target_resolver import build_target_resolution_digest, run_target_resolver
 from .evidence import resolve_coverage_alias
-from .skill_reference_rewriter import build_skill_reference_rewrite_plan
+from .skill_reference_rewriter import apply_skill_reference_rewrite_plan, build_skill_reference_rewrite_plan
 
 
 MEMORY_AGENT_SKIP_HINTS = {"skip_duplicate", "skip_sensitive", "defer_unclear"}
@@ -1178,9 +1178,29 @@ def run_skill_improvement_step(
                     "archive_context": archive_context,
                     "skip_detail": "no_official_archive_tool_available",
                     "next_action": "defer_archive_until_official_skill_archive_tool_is_available",
+                    **({"reference_rewrite_plan": reference_rewrite_plan} if reference_rewrite_plan else {}),
                 })
                 continue
+            reference_rewrite_result = None
+            if reference_rewrite_plan and reference_rewrite_plan.get("references"):
+                reference_rewrite_result = apply_skill_reference_rewrite_plan(reference_rewrite_plan)
+                if not reference_rewrite_result.get("success"):
+                    decisions.append({
+                        **base_decision,
+                        "decision": "defer",
+                        "reason": "archive_deferred_reference_rewrite_failed",
+                        "changed": False,
+                        "archive_reason": planner_decision.get("archive_reason"),
+                        "archive_context": archive_context,
+                        "reference_rewrite_plan": reference_rewrite_plan,
+                        "reference_rewrite_result": reference_rewrite_result,
+                        "next_action": "fix_reference_rewrite_failure_before_archive",
+                    })
+                    continue
             result = execute_skill_archive_operation(archive_context, archive_fn=archive_fn)
+            if reference_rewrite_result is not None:
+                result["rewritten_references"] = reference_rewrite_result.get("rewritten_references") or []
+                result["rewritten_reference_count"] = int(reference_rewrite_result.get("rewritten_reference_count") or 0)
             changed = bool(result.get("success"))
             if changed:
                 changed_skills.append(skill_name)
@@ -1191,6 +1211,8 @@ def run_skill_improvement_step(
                 "changed": changed,
                 "archive_reason": planner_decision.get("archive_reason"),
                 "archive_context": archive_context,
+                **({"reference_rewrite_plan": reference_rewrite_plan} if reference_rewrite_plan else {}),
+                **({"reference_rewrite_result": reference_rewrite_result} if reference_rewrite_result is not None else {}),
                 "result": result,
             })
             continue
@@ -1227,7 +1249,66 @@ def run_skill_improvement_step(
             })
             continue
         result = run_skill_agent_task(task, config=config, backend=backend)
-        changed = bool(result.get("success") and (result.get("changed_skills") or result.get("created_skills") or result.get("deleted_skills")))
+        merge_archive_result = None
+        if result.get("success") and str(planner_decision.get("maintenance_action") or "") == "merge":
+            successor = str(planner_decision.get("target_skill") or "").strip()
+            archive_fn = (config or {}).get("_skill_archive_fn")
+            archive_candidates = [str(name).strip() for name in (result.get("archive_candidates") or []) if str(name).strip()]
+            archived_skills: list[str] = []
+            rewritten_references: list[dict[str, Any]] = []
+            rewritten_reference_count = 0
+            merge_archive_result = {"success": True, "archived_skills": [], "rewritten_references": [], "rewritten_reference_count": 0}
+            for archive_candidate in archive_candidates:
+                if archive_candidate == successor or archive_candidate not in {str(name) for name in result.get("merged_from") or []}:
+                    merge_archive_result = {"success": False, "error": "merge_archive_candidate_not_validated", "archive_candidate": archive_candidate}
+                    break
+                reference_rewrite_plan = build_skill_reference_rewrite_plan(archive_candidate, successor, config=config)
+                if not reference_rewrite_plan.get("can_rewrite"):
+                    merge_archive_result = {
+                        "success": False,
+                        "error": "merge_archive_deferred_unresolved_reference_rewrites",
+                        "archive_candidate": archive_candidate,
+                        "reference_rewrite_plan": reference_rewrite_plan,
+                    }
+                    break
+                if archive_fn is None:
+                    merge_archive_result = {
+                        "success": False,
+                        "error": "archive_blocked_no_official_tool",
+                        "archive_candidate": archive_candidate,
+                        "reference_rewrite_plan": reference_rewrite_plan,
+                    }
+                    break
+                reference_rewrite_result = {"success": True, "rewritten_references": [], "rewritten_reference_count": 0}
+                if reference_rewrite_plan.get("references"):
+                    reference_rewrite_result = apply_skill_reference_rewrite_plan(reference_rewrite_plan)
+                    if not reference_rewrite_result.get("success"):
+                        merge_archive_result = {
+                            "success": False,
+                            "error": "merge_archive_reference_rewrite_failed",
+                            "archive_candidate": archive_candidate,
+                            "reference_rewrite_plan": reference_rewrite_plan,
+                            "reference_rewrite_result": reference_rewrite_result,
+                        }
+                        break
+                archive_context = {"action": "archive", "name": archive_candidate, "reason": "merged_into_successor", "successor": successor, "before_state": (candidate_by_name.get(archive_candidate) or {}).get("state")}
+                archive_result = execute_skill_archive_operation(archive_context, archive_fn=archive_fn)
+                if not archive_result.get("success"):
+                    merge_archive_result = {"success": False, "error": archive_result.get("error") or "merge_archive_failed", "archive_candidate": archive_candidate, "archive_result": archive_result}
+                    break
+                archived_skills.append(archive_candidate)
+                rewritten = reference_rewrite_result.get("rewritten_references") or []
+                rewritten_references.extend(item for item in rewritten if isinstance(item, dict))
+                rewritten_reference_count += int(reference_rewrite_result.get("rewritten_reference_count") or 0)
+            else:
+                merge_archive_result = {
+                    "success": True,
+                    "archived_skills": archived_skills,
+                    "rewritten_references": rewritten_references,
+                    "rewritten_reference_count": rewritten_reference_count,
+                }
+                changed_skills.extend(archived_skills)
+        changed = bool(result.get("success") and (result.get("changed_skills") or result.get("created_skills") or result.get("deleted_skills") or (merge_archive_result or {}).get("archived_skills")))
         if changed:
             changed_skills.extend(str(name) for name in (result.get("changed_skills") or []))
             changed_skills.extend(str(name) for name in (result.get("created_skills") or []))
@@ -1236,6 +1317,7 @@ def run_skill_improvement_step(
             "decision": "accepted" if result.get("success") else "rejected",
             "reason": result.get("reason") or result.get("error") or result.get("outcome") or "skill_agent_completed",
             "changed": changed,
+            **({"merge_archive_result": merge_archive_result} if merge_archive_result is not None else {}),
             "result": result,
         })
 

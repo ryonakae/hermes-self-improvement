@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from hermes_self_improvement.skill_reference_rewriter import build_skill_reference_rewrite_plan
+from hermes_self_improvement.skill_reference_rewriter import apply_skill_reference_rewrite_plan, build_skill_reference_rewrite_plan
 
 
 def test_cron_skills_list_rewrites_exact_skill_reference(tmp_path):
@@ -248,3 +248,61 @@ def test_no_active_reference_allows_archive_rewrite_plan(tmp_path):
     assert plan["references"] == []
     assert plan["unresolved_references"] == []
     assert plan["historical_references_ignored"] == []
+
+
+def test_apply_reference_rewrite_plan_updates_json_text_yaml_and_markdown(tmp_path):
+    jobs_path = tmp_path / "jobs.json"
+    scripts_root = tmp_path / "scripts"
+    scripts_root.mkdir()
+    script = scripts_root / "job.sh"
+    script.write_text("hermes --skills old-skill\n", encoding="utf-8")
+    jobs_path.write_text(
+        json.dumps({"jobs": [{"name": "active", "enabled": True, "skills": ["old-skill"], "prompt": "Use old-skill.", "script": "job.sh"}]}),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("skills:\n  preload:\n    - old-skill\n", encoding="utf-8")
+    skills_root = tmp_path / "skills"
+    consumer = skills_root / "consumer" / "SKILL.md"
+    consumer.parent.mkdir(parents=True)
+    consumer.write_text("---\nname: consumer\n---\nUse old-skill.\n", encoding="utf-8")
+
+    plan = build_skill_reference_rewrite_plan(
+        "old-skill",
+        "new-skill",
+        config={
+            "_cron_jobs_path": str(jobs_path),
+            "_scripts_root": str(scripts_root),
+            "_skills_root": str(skills_root),
+            "_hermes_config_path": str(config_path),
+        },
+    )
+    assert plan["can_rewrite"] is True
+
+    result = apply_skill_reference_rewrite_plan(plan)
+
+    assert result["success"] is True
+    assert result["rewritten_reference_count"] == 5
+    assert {item["path"] for item in result["rewritten_references"]} == {str(jobs_path), str(script), str(config_path), str(consumer)}
+    jobs = json.loads(jobs_path.read_text(encoding="utf-8"))
+    assert jobs["jobs"][0]["skills"] == ["new-skill"]
+    assert jobs["jobs"][0]["prompt"] == "Use new-skill."
+    assert script.read_text(encoding="utf-8") == "hermes --skills new-skill\n"
+    assert "new-skill" in config_path.read_text(encoding="utf-8")
+    assert "old-skill" not in consumer.read_text(encoding="utf-8")
+
+
+def test_apply_reference_rewrite_plan_refuses_unresolved_plan(tmp_path):
+    jobs_path = tmp_path / "jobs.json"
+    jobs_path.write_text(json.dumps({"jobs": [{"name": "active", "enabled": True, "prompt": "old-skill-extra"}]}), encoding="utf-8")
+    plan = build_skill_reference_rewrite_plan(
+        "old-skill",
+        "new-skill",
+        config={"_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
+    )
+
+    result = apply_skill_reference_rewrite_plan(plan)
+
+    assert result["success"] is False
+    assert result["error"] == "reference_rewrite_plan_has_unresolved_references"
+    assert "old-skill-extra" in jobs_path.read_text(encoding="utf-8")

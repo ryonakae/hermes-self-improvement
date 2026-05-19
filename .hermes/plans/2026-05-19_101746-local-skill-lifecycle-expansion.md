@@ -387,6 +387,8 @@ $PY -m pytest tests/test_skill_archive_evidence.py tests/test_skill_reference_re
 
 **Objective:** Allow active cleanup: merge, update references, then archive duplicate/superseded source skills through official Curator-style archive.
 
+**Status:** implemented in this slice. Mutating archive now applies deterministic active reference rewrites only after the official archive hook is available and before archive execution; unresolved/failed rewrites defer archive. Merge results with validated `archive_candidates` now rewrite references to `target_skill`, archive merged source candidates through the official archive hook, and record `merge_archive_result` with archived skills and rewritten references. Dry-run remains preview-only.
+
 **Files:**
 - Modify: `hermes_self_improvement/cli.py`
 - Modify: `hermes_self_improvement/mutation_worker.py`

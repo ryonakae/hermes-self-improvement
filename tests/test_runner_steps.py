@@ -440,7 +440,7 @@ def test_skill_step_executes_archive_with_curator_primitive_when_mutating(tmp_pa
 
     def fake_archive(name):
         calls.append(name)
-        return {"success": True, "message": "archived"}
+        return {"success": True}
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
@@ -448,13 +448,108 @@ def test_skill_step_executes_archive_with_curator_primitive_when_mutating(tmp_pa
         mutate=True,
     )
 
-    decision = result["decisions"][0]
     assert calls == ["old-skill"]
-    assert result["changed"] == 1
-    assert result["changed_skills"] == ["old-skill"]
+    decision = result["decisions"][0]
     assert decision["decision"] == "accepted"
+    assert decision["changed"] is True
     assert decision["reason"] == "skill_archive_completed"
     assert decision["result"]["tool_name"] == "skill_usage.archive_skill"
+    assert result["changed_skills"] == ["old-skill"]
+
+
+def test_skill_step_rewrites_references_before_archive_when_mutating(tmp_path):
+    jobs_path = tmp_path / "jobs.json"
+    jobs_path.write_text(json.dumps({"jobs": [{"name": "active", "enabled": True, "skills": ["old-skill"], "prompt": "Use old-skill."}]}), encoding="utf-8")
+    calls = []
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "duplicate", "successor": "new-skill"}]}
+
+    def fake_archive(name):
+        jobs = json.loads(jobs_path.read_text(encoding="utf-8"))
+        calls.append((name, jobs["jobs"][0]["skills"], jobs["jobs"][0]["prompt"]))
+        return {"success": True}
+
+    pack = archive_evidence_pack()
+    pack["evidence"][0]["successor"] = "new-skill"
+    pack["skill_candidates"].append({"name": "new-skill", "state": "active", "source": "curator", "usage": {}})
+    result = run_skill_improvement_step(
+        evidence_pack=pack,
+        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
+        mutate=True,
+    )
+
+    assert calls == [("old-skill", ["new-skill"], "Use new-skill.")]
+    decision = result["decisions"][0]
+    assert decision["decision"] == "accepted"
+    assert decision["reference_rewrite_result"]["rewritten_reference_count"] == 2
+    assert decision["result"]["rewritten_references"] == decision["reference_rewrite_result"]["rewritten_references"]
+
+
+def test_skill_step_archives_merge_archive_candidates_after_reference_rewrite(tmp_path):
+    jobs_path = tmp_path / "jobs.json"
+    jobs_path.write_text(json.dumps({"jobs": [{"name": "active", "enabled": True, "skills": ["old-skill"]}]}), encoding="utf-8")
+    skills_root = tmp_path / "skills"
+    write_skill(skills_root, "old-skill")
+    write_skill(skills_root, "new-skill")
+    archive_calls = []
+
+    def fake_planner(*, digest, config):
+        return {
+            "decisions": [
+                {
+                    "skill": "old-skill",
+                    "decision": "mutate_skill",
+                    "maintenance_action": "merge",
+                    "target_skill": "new-skill",
+                    "evidence_ids": ["ev1"],
+                }
+            ]
+        }
+
+    def fake_backend(prompt, task, config):
+        return {
+            "success": True,
+            "outcome": "applied",
+            "used_tools": [
+                {"tool": "skill_view", "name": "old-skill", "success": True},
+                {"tool": "skill_view", "name": "new-skill", "success": True},
+                {"tool": "skill_manage", "action": "patch", "name": "new-skill", "success": True},
+            ],
+            "changed_skills": ["new-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "merged_from": ["old-skill"],
+            "archive_candidates": ["old-skill"],
+            "reported_outcome": "merged useful content",
+            "verification_notes": ["read source and target; patched successor only"],
+            "rollback_hints": ["revert new-skill patch if merge is wrong"],
+        }
+
+    def fake_archive(name):
+        jobs = json.loads(jobs_path.read_text(encoding="utf-8"))
+        archive_calls.append((name, jobs["jobs"][0]["skills"]))
+        return {"success": True}
+
+    result = run_skill_improvement_step(
+        evidence_pack=evidence_pack_for("old-skill", candidates=[{"name": "old-skill", "state": "stale", "source": "curator", "usage": {}}, {"name": "new-skill", "state": "active", "source": "curator", "usage": {}}]),
+        config={
+            "_improvement_planner_func": fake_planner,
+            "_skill_agent_backend": fake_backend,
+            "_skill_archive_fn": fake_archive,
+            "_cron_jobs_path": str(jobs_path),
+            "_skills_root": str(skills_root),
+            "_mutable_local_skill_roots": [str(skills_root)],
+        },
+        mutate=True,
+    )
+
+    assert archive_calls == [("old-skill", ["new-skill"])]
+    decision = result["decisions"][0]
+    assert decision["decision"] == "accepted"
+    assert decision["merge_archive_result"]["archived_skills"] == ["old-skill"]
+    assert decision["merge_archive_result"]["rewritten_reference_count"] == 1
+    assert result["changed_skills"] == ["new-skill", "old-skill"]
 
 
 def test_skill_step_skips_curator_candidate_without_hook_evidence():
