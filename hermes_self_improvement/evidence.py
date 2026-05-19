@@ -1148,6 +1148,14 @@ def _normalize_skill_group_key(name: str) -> str:
     return "-".join(tokens[:3] if len(tokens) >= 3 else tokens[:2]) or str(name or "").lower()
 
 
+def _canonical_skill_name_for_duplicate(name: str) -> str | None:
+    text = str(name or "").strip()
+    for prefix in ("hermes-", "herm-"):
+        if text.startswith(prefix) and len(text) > len(prefix):
+            return text[len(prefix):]
+    return None
+
+
 IMMUTABLE_SKILL_PROVENANCE = {"external", "external-dir", "external_readonly", "hub", "hub-installed", "builtin", "built-in", "plugin", "plugin-bundled", "bundled"}
 LOCAL_CHANGEABLE_SKILL_PROVENANCE = {"agent_created", "curator_agent_created", "hermes_created", "local_agent_created", "curator", "local_unprotected", "local_skill_inventory"}
 
@@ -1189,6 +1197,37 @@ def filter_llm_skill_candidates(candidates: list[Any]) -> tuple[list[dict[str, A
 
 def _skill_inventory_candidate_allowed(item: dict[str, Any]) -> bool:
     return skill_candidate_filter_reason(item) is None
+
+
+def collect_skill_duplicate_lifecycle_candidates(curator_telemetry: dict[str, Any] | None, *, limit: int = 10) -> list[dict[str, Any]]:
+    if not isinstance(curator_telemetry, dict):
+        return []
+    candidates, _filtered = filter_llm_skill_candidates(curator_telemetry.get("candidates") or [])
+    by_name = {str(item.get("name") or ""): item for item in candidates if isinstance(item, dict) and item.get("name")}
+    out: list[dict[str, Any]] = []
+    for name in sorted(by_name):
+        successor = _canonical_skill_name_for_duplicate(name)
+        if not successor or successor not in by_name:
+            continue
+        source = by_name[name]
+        target = by_name[successor]
+        if skill_candidate_filter_reason(source) or skill_candidate_filter_reason(target):
+            continue
+        out.append({
+            "id": f"skill_lifecycle_duplicate:{name}->{successor}",
+            "kind": "skill_lifecycle_candidate",
+            "source": "inventory",
+            "target_skill": name,
+            "successor": successor,
+            "action": "skill_archive",
+            "archive_reason": "duplicate_skill",
+            "rationale": "Hermes-prefixed local skill duplicates an existing canonical local skill; merge useful content into the canonical skill and archive the duplicate when references are safe.",
+            "likely_targets": _targets(("skill", 0.95)),
+            "risk": "medium",
+        })
+        if len(out) >= limit:
+            break
+    return out
 
 
 def collect_skill_inventory_candidates(curator_telemetry: dict[str, Any] | None, *, limit: int = 20) -> list[dict[str, Any]]:
@@ -1539,6 +1578,10 @@ def build_evidence_pack(
         evidence.extend(environment_fact_signals)
         kind_counts["environment_fact_signal"] += len(environment_fact_signals)
     skill_inventory_evidence = collect_skill_inventory_candidates(curator_telemetry)
+    skill_duplicate_lifecycle_evidence = collect_skill_duplicate_lifecycle_candidates(curator_telemetry)
+    if skill_duplicate_lifecycle_evidence:
+        evidence.extend(skill_duplicate_lifecycle_evidence)
+        kind_counts["skill_lifecycle_candidate"] += len(skill_duplicate_lifecycle_evidence)
     memory_entries = _memory_entries(memory_paths or {}) if isinstance(memory_paths, dict) else []
     memory_inventory_evidence = collect_memory_inventory_candidates(memory_paths)
     memory_placement_evidence = collect_memory_placement_candidates(memory_paths)

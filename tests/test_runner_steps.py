@@ -414,21 +414,24 @@ def test_skill_step_mutating_archive_without_successor_defers_when_active_refere
     assert decision["reference_rewrite_plan"]["unresolved_references"][0]["reason"] == "missing_successor_for_rewrite"
 
 
-def test_skill_step_falls_back_to_archive_preview_when_no_official_archive_tool_is_injected(tmp_path):
+def test_skill_step_reports_archive_tool_failure_when_official_archive_tool_fails(tmp_path):
     def fake_planner(*, digest, config):
         return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
 
+    def failing_archive(name):
+        raise RuntimeError("archive unavailable")
+
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
-        config={"_improvement_planner_func": fake_planner, "_cron_jobs_path": str(tmp_path / "jobs.json"), "_skills_root": str(tmp_path / "skills")},
+        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": failing_archive, "_cron_jobs_path": str(tmp_path / "jobs.json"), "_skills_root": str(tmp_path / "skills")},
         mutate=True,
     )
 
     decision = result["decisions"][0]
     assert result["changed"] == 0
-    assert decision["decision"] == "archive_skill_preview"
-    assert decision["reason"] == "archive_blocked_no_official_tool"
-    assert decision["skip_detail"] == "no_official_archive_tool_available"
+    assert decision["decision"] == "rejected"
+    assert decision["changed"] is False
+    assert decision["reason"].startswith("skill_archive_tool_unavailable:")
     assert decision["archive_reason"] == "obsolete_marker"
 
 

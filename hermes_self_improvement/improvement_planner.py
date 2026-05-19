@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from .autonomous_loop import normalize_autonomous_decision
-from .evidence import compute_coverage_fit_for_name, filter_llm_skill_candidates, resolve_coverage_alias
+from .evidence import compute_coverage_fit_for_name, filter_llm_skill_candidates, resolve_coverage_alias, _canonical_skill_name_for_duplicate
 from .observer import _redact_text
 from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
 from .target_hints import extract_target_hints
@@ -455,7 +455,18 @@ def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
         strong_count = int(row.get("strong_evidence_count") or 0)
         medium_count = int(row.get("medium_evidence_count") or 0)
         weak_count = int(row.get("weak_evidence_count") or 0)
-        if evidence_ids and (strong_count or medium_count):
+        if row.get("archive_markers") and row.get("successor_validation") == "valid_active_skill":
+            decisions.append({
+                "skill": name,
+                "decision": "archive_skill",
+                "priority": "medium",
+                "risk": "medium",
+                "archive_reason": str((row.get("archive_markers") or ["skill_lifecycle_candidate"])[0]),
+                "successor": row.get("successor_skill"),
+                "evidence_ids": evidence_ids,
+                "rationale": "Attached lifecycle evidence marks this skill as a duplicate/superseded candidate with a valid successor.",
+            })
+        elif evidence_ids and (strong_count or medium_count):
             decisions.append({
                 "skill": name,
                 "decision": "mutate_skill",
@@ -524,7 +535,10 @@ def _normalize_create_skill_decision(
             "next_action": "no_mutation_needed_existing_coverage",
         }
     editable_fit = compute_coverage_fit_for_name(proposed, editable_skill_names=list(candidate_names))
-    if editable_fit.get("kind") in {"exact_duplicate", "partial_overlap"} and not str(raw.get("existing_skill_gap") or "").strip():
+    canonical_duplicate = _canonical_skill_name_for_duplicate(proposed)
+    if canonical_duplicate and canonical_duplicate in candidate_names:
+        editable_fit = {"kind": "exact_duplicate", "match_target": "editable", "fit_skills": [canonical_duplicate]}
+    if editable_fit.get("kind") in {"exact_duplicate", "partial_overlap"}:
         covered_existing = (editable_fit.get("fit_skills") or [""])[0]
         return {
             "skill": proposed,
@@ -612,17 +626,21 @@ def _normalize_decision(
     if decision == "mutate_skill" and not evidence_ids:
         decision = "skip"
         forced_skip_reason = "mutate_skill_without_attached_evidence"
+    allowed_archive_markers = set(archive_markers_by_candidate.get(skill) or [])
+    candidate = candidate_by_name.get(skill) or {}
+    if decision == "skip" and "duplicate_skill" in allowed_archive_markers and candidate.get("successor_validation") == "valid_active_skill":
+        decision = "archive_skill"
+        forced_skip_reason = None
     if decision == "archive_skill" and not archive_markers_by_candidate.get(skill):
         decision = "skip"
         forced_skip_reason = "archive_without_lifecycle_evidence"
     if decision == "archive_skill":
-        candidate = candidate_by_name.get(skill) or {}
         provenance = str(candidate.get("provenance") or candidate.get("source") or "")
         state = str(candidate.get("state") or "")
         if candidate.get("pinned"):
             decision = "skip"
             forced_skip_reason = "archive_blocked_by_pinned"
-        elif int(candidate.get("active_reference_count") or 0) > 0:
+        elif int(candidate.get("active_reference_count") or 0) > 0 and "duplicate_skill" not in allowed_archive_markers:
             decision = "skip"
             forced_skip_reason = "archive_blocked_by_active_reference"
         elif provenance in {"external", "hub", "builtin", "plugin", "plugin-bundled"}:
@@ -667,7 +685,7 @@ def _normalize_decision(
             normalized["archive_reason"] = archive_reason
         elif allowed_reasons:
             normalized["archive_reason"] = sorted(allowed_reasons)[0]
-        successor = str(raw.get("successor") or "").strip()
+        successor = str(raw.get("successor") or candidate.get("successor_skill") or "").strip()
         if successor:
             normalized["successor"] = successor
     elif decision in {"mutate_memory", "calibrate_evaluator", "defer"}:
@@ -733,7 +751,20 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     for row in candidate_rows:
         name = str(row.get("name") or "")
         if name and name not in seen:
-            decisions.append({"skill": name, "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []})
+            markers = [str(marker) for marker in (row.get("archive_markers") or []) if str(marker)]
+            if "duplicate_skill" in markers and row.get("successor_validation") == "valid_active_skill":
+                decisions.append({
+                    "skill": name,
+                    "decision": "archive_skill",
+                    "evidence_ids": [str(eid) for eid in (row.get("evidence_ids") or []) if str(eid)],
+                    "archive_reason": "duplicate_skill",
+                    "successor": row.get("successor_skill"),
+                    "priority": "medium",
+                    "risk": "medium",
+                    "rationale": "Lifecycle evidence marks this Hermes-prefixed duplicate as safe to archive after successor/reference checks.",
+                })
+            else:
+                decisions.append({"skill": name, "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []})
     return _planner_result(decisions, digest=digest, status="completed", prompt_source=prompt_source)
 
 

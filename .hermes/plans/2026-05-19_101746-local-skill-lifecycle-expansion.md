@@ -478,6 +478,8 @@ $PY -m pytest tests/test_cli.py tests/test_tool_handlers.py -q
 
 ## Task 9: Dogfood against the 2026-05-19 duplicate case
 
+**Status:** implemented and dogfooded. Regression coverage now prevents `hermes-*` prefixed duplicate create when a canonical editable local skill exists, emits deterministic duplicate lifecycle archive evidence for `hermes-sandbox-permission-workflow -> sandbox-permission-workflow`, and keeps duplicate archive decisions selected even when the LLM planner omits or skips them. Mutating dogfood archived the duplicate through `skill_usage.archive_skill` and rewrote four active references before archive.
+
 **Objective:** Prove the new behavior would not recreate `hermes-sandbox-permission-workflow`, and can clean it up if it already exists.
 
 **Files:**

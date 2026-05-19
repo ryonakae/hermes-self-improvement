@@ -1167,20 +1167,6 @@ def run_skill_improvement_step(
                     "next_action": "resolve_or_support_reference_rewrites_before_archive",
                 })
                 continue
-            archive_fn = (config or {}).get("_skill_archive_fn")
-            if archive_fn is None:
-                decisions.append({
-                    **base_decision,
-                    "decision": "archive_skill_preview",
-                    "reason": "archive_blocked_no_official_tool",
-                    "changed": False,
-                    "archive_reason": planner_decision.get("archive_reason"),
-                    "archive_context": archive_context,
-                    "skip_detail": "no_official_archive_tool_available",
-                    "next_action": "defer_archive_until_official_skill_archive_tool_is_available",
-                    **({"reference_rewrite_plan": reference_rewrite_plan} if reference_rewrite_plan else {}),
-                })
-                continue
             reference_rewrite_result = None
             if reference_rewrite_plan and reference_rewrite_plan.get("references"):
                 reference_rewrite_result = apply_skill_reference_rewrite_plan(reference_rewrite_plan)
@@ -1197,7 +1183,8 @@ def run_skill_improvement_step(
                         "next_action": "fix_reference_rewrite_failure_before_archive",
                     })
                     continue
-            result = execute_skill_archive_operation(archive_context, archive_fn=archive_fn)
+            archive_fn = (config or {}).get("_skill_archive_fn")
+            result = execute_skill_archive_operation(archive_context, archive_fn=archive_fn if callable(archive_fn) else None)
             if reference_rewrite_result is not None:
                 result["rewritten_references"] = reference_rewrite_result.get("rewritten_references") or []
                 result["rewritten_reference_count"] = int(reference_rewrite_result.get("rewritten_reference_count") or 0)

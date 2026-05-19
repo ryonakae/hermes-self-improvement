@@ -1,13 +1,31 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
+from pathlib import Path
 from typing import Any, Callable
 
 from .memory_store_probe import capture_builtin_memory_state
 
 
+def _ensure_hermes_agent_on_path() -> None:
+    candidates = [
+        Path(os.environ.get("HERMES_AGENT_ROOT", "")).expanduser() if os.environ.get("HERMES_AGENT_ROOT") else None,
+        Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "hermes-agent",
+        Path(__file__).resolve().parents[2] / "hermes-agent",
+    ]
+    for candidate in candidates:
+        if candidate and (candidate / "tools" / "skills_tool.py").exists():
+            path = str(candidate)
+            if path not in sys.path:
+                sys.path.insert(0, path)
+            return
+
+
 def _load_skill_manage() -> Callable[..., str]:
     try:
+        _ensure_hermes_agent_on_path()
         from tools.skill_manager_tool import skill_manage  # type: ignore
     except Exception as exc:  # pragma: no cover - depends on Hermes runtime path
         raise RuntimeError(f"skill_manage_unavailable:{exc}") from exc
@@ -30,6 +48,7 @@ def _load_memory_tool() -> Callable[..., str]:
 
 
 def _load_skill_archive() -> Callable[[str], Any]:
+    _ensure_hermes_agent_on_path()
     from tools import skill_usage  # type: ignore
 
     return skill_usage.archive_skill
@@ -155,8 +174,11 @@ def execute_skill_archive_operation(context: dict[str, Any], *, archive_fn: Call
     name = str(args.get("name") or "").strip()
     if not name:
         return {"success": False, "error": "skill_archive_args_missing:name"}
-    fn = archive_fn or _load_skill_archive()
-    raw = fn(name)
+    try:
+        fn = archive_fn or _load_skill_archive()
+        raw = fn(name)
+    except Exception as exc:
+        return {"success": False, "error": f"skill_archive_tool_unavailable:{exc}", "tool_name": "skill_usage.archive_skill", "tool_args": {"name": name}}
     parsed = raw if isinstance(raw, dict) else {"success": True, "message": str(raw or "")}
     parsed.setdefault("success", True)
     parsed["tool_name"] = "skill_usage.archive_skill"
