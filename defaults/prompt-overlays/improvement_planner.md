@@ -33,7 +33,7 @@ If a fact is mostly about the user's preferred interaction style, put it in USER
 
 ## Skill judgment
 
-- Patch existing Hermes-created mutable skills when a reusable improvement clearly fits an editable target.
+- Patch existing local unprotected skills when a reusable improvement clearly fits an editable target.
 - Merge/consolidate local mutable skills when one supersedes another and the destination is validated.
 - Archive stale or duplicate local mutable skills only with strong lifecycle evidence and no active references.
 - Create a new skill only for durable recurring procedural workflows with no suitable mutable skill target or consolidation path.

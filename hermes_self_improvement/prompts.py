@@ -109,7 +109,7 @@ def _render_editable_skills_quality_section(digest: dict[str, Any]) -> str:
         return ""
     lines = [
         "## Editable skills with quality signals",
-        "Skills below already exist as editable local mutable Hermes-created candidates. When quality_signals.needs_patch is true and missing_sections is non-empty, prefer mutate_skill with maintenance_action=\"patch\" to add only those missing sections, not create_skill or broad rewrite.",
+        "Skills below already exist as editable local unprotected candidates. When quality_signals.needs_patch is true and missing_sections is non-empty, prefer mutate_skill with maintenance_action=\"patch\" to add only those missing sections, not create_skill or broad rewrite.",
     ]
     for item in editable[:20]:
         signals = item.get("quality_signals") or {}

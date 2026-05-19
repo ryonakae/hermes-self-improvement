@@ -136,7 +136,7 @@ def render_candidate_markdown(candidate: dict[str, Any], evidence_by_id: dict[st
         "- Procedural workflows belong in skills; compact stable facts belong in memory.",
         "",
         "## Safety boundaries",
-        "- Mutate only allowed Hermes-created local mutable skills or official memory targets.",
+        "- Mutate only local unprotected skills under $HERMES_HOME/skills or official memory targets.",
         "- Do not infer control decisions by parsing this Markdown.",
     ])
     return "\n".join(lines).rstrip() + "\n"

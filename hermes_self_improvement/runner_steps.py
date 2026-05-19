@@ -953,7 +953,7 @@ def build_skill_create_agent_task(
         non_goals = [
             "Do not create a skill for one-off project state or user facts that belong in memory.",
             "Do not create a skill just to bypass immutability of built-in, hub-installed, plugin-bundled, or external-dir skills.",
-            "Do not duplicate an existing Hermes-created skill.",
+            "Do not duplicate an existing local unprotected skill.",
         ]
     return {
         "type": "skill_agent_task",

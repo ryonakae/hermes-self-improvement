@@ -150,7 +150,7 @@ def test_planner_allows_create_skill_for_missing_reusable_workflow():
                     "decision": "create_skill",
                     "proposed_skill_name": "patch-tool-workflow",
                     "evidence_ids": ["ev2"],
-                    "reason": "recurring patch failures are not covered by an existing Hermes-created skill",
+                    "reason": "recurring patch failures are not covered by an existing local unprotected skill",
                     "risk": "low",
                 }
             ]
@@ -184,6 +184,39 @@ def test_planner_rejects_create_skill_when_existing_hermes_skill_matches_name():
     assert decision["reason"] == "create_skill_duplicate_existing_skill"
     assert decision["noop_outcome"] == "duplicate_prevented"
     assert decision["covered_by_existing_skill"] == "demo-skill"
+
+
+def test_planner_rejects_create_skill_when_existing_local_unprotected_skill_covers_workflow():
+    pack_data = pack()
+    pack_data["skill_candidates"] = [
+        {
+            "name": "sandbox-permission-workflow",
+            "state": "active",
+            "source": "local_skill_inventory",
+            "provenance": "local_unprotected",
+            "mutable": True,
+        }
+    ]
+
+    def fake_planner(*, digest, config):
+        return {
+            "decisions": [
+                {
+                    "decision": "create_skill",
+                    "proposed_skill_name": "hermes-sandbox-permission-workflow",
+                    "evidence_ids": ["ev2"],
+                    "reason": "sandbox permission workflow seems missing",
+                }
+            ]
+        }
+
+    result = run_improvement_planner(build_improvement_planner_digest(pack_data), config={"_improvement_planner_func": fake_planner})
+    decision = result["decisions"][0]
+
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "create_skill_duplicates_existing_local_skill"
+    assert decision["noop_outcome"] == "duplicate_prevented"
+    assert decision["covered_by_existing_skill"] == "sandbox-permission-workflow"
 
 
 def test_run_improvement_planner_uses_injected_planner_and_normalizes_decisions():

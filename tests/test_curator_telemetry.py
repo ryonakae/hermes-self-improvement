@@ -60,7 +60,7 @@ def test_normalize_rejects_pinned_archived_and_nonlocal_provenance():
     assert by_name["bundled-skill"]["reason"] == "bundled"
     assert by_name["hub-skill"]["reason"] == "hub"
     assert by_name["plugin-skill"]["reason"] == "plugin_bundled"
-    assert by_name["external-skill"]["reason"] == "external"
+    assert by_name["external-skill"]["reason"] == "external_readonly"
     assert by_name["ambiguous-skill"]["reason"] == "ambiguous_provenance"
     assert by_name["immutable-skill"]["reason"] == "not_mutable"
     assert payload["summary"]["rejected_by_reason"]["pinned"] == 1
@@ -98,13 +98,17 @@ def test_load_curator_telemetry_reads_fixture_usage_file(tmp_path):
     assert payload["rejected"][0]["reason"] == "pinned"
 
 
-def test_load_curator_telemetry_corrupt_usage_file_fails_closed(tmp_path):
+def test_load_curator_telemetry_corrupt_usage_file_preserves_path_inventory_with_warning(tmp_path):
     home = tmp_path / ".hermes"
     skills = home / "skills"
-    skills.mkdir(parents=True)
+    (skills / "local-skill").mkdir(parents=True)
+    (skills / "local-skill" / "SKILL.md").write_text("---\nname: local-skill\ndescription: local\n---\n", encoding="utf-8")
     (skills / ".usage.json").write_text("{not-json", encoding="utf-8")
 
     payload = load_curator_telemetry({"hermes_home": str(home)})
 
-    assert payload["available"] is False
-    assert payload["reasons"] == ["curator_telemetry_unreadable"]
+    assert payload["available"] is True
+    assert payload["reasons"] == ["curator_usage_unreadable"]
+    assert payload["summary"]["lifecycle_metadata_status"] == "unreadable"
+    assert [item["name"] for item in payload["candidates"]] == ["local-skill"]
+    assert payload["candidates"][0]["lifecycle_metadata_status"] == "unreadable"

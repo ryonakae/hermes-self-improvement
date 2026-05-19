@@ -332,7 +332,7 @@ def _looks_secret(text: str) -> bool:
     return any(marker in lowered for marker in SECRET_MARKERS)
 
 
-_NON_EDITABLE_PROVENANCES = {"builtin", "hub", "plugin", "plugin-bundled", "external", "external-dir"}
+_NON_EDITABLE_PROVENANCES = {"builtin", "hub", "plugin", "plugin-bundled", "external", "external-dir", "external_readonly"}
 
 
 def _classify_skill_inventory_targets(skills: list[dict[str, Any]] | None) -> tuple[list[str], list[str]]:
@@ -725,7 +725,7 @@ def make_knowledge_coverage_candidate(
     planner_may_create_skill = resolution_kind == "unresolved" and gap_kind == "recurring_workflow_without_skill"
     if planner_may_create_skill:
         coverage["not_memory_because"] = "procedural recurring workflow"
-        coverage["not_existing_skill_because"] = "no Hermes-created local mutable skill matches this boundary"
+        coverage["not_existing_skill_because"] = "no local unprotected skill matches this boundary"
     hint = {
         "resolution_kind": resolution_kind,
         "requires_existing_target": resolution_kind == "attach_existing_skill",
@@ -1148,8 +1148,8 @@ def _normalize_skill_group_key(name: str) -> str:
     return "-".join(tokens[:3] if len(tokens) >= 3 else tokens[:2]) or str(name or "").lower()
 
 
-IMMUTABLE_SKILL_PROVENANCE = {"external", "external-dir", "hub", "hub-installed", "builtin", "built-in", "plugin", "plugin-bundled", "bundled"}
-HERMES_CREATED_SKILL_PROVENANCE = {"agent_created", "curator_agent_created", "hermes_created", "local_agent_created", "curator"}
+IMMUTABLE_SKILL_PROVENANCE = {"external", "external-dir", "external_readonly", "hub", "hub-installed", "builtin", "built-in", "plugin", "plugin-bundled", "bundled"}
+LOCAL_CHANGEABLE_SKILL_PROVENANCE = {"agent_created", "curator_agent_created", "hermes_created", "local_agent_created", "curator", "local_unprotected", "local_skill_inventory"}
 
 
 def skill_candidate_filter_reason(item: dict[str, Any]) -> str | None:
@@ -1167,7 +1167,7 @@ def skill_candidate_filter_reason(item: dict[str, Any]) -> str | None:
     marker = provenance or source
     if marker in IMMUTABLE_SKILL_PROVENANCE:
         return marker
-    if marker and marker not in HERMES_CREATED_SKILL_PROVENANCE:
+    if marker and marker not in LOCAL_CHANGEABLE_SKILL_PROVENANCE:
         return "ambiguous_provenance"
     return None
 
@@ -1228,7 +1228,7 @@ def collect_skill_inventory_candidates(curator_telemetry: dict[str, Any] | None,
         out.append(make_skill_inventory_candidate(
             group_kind="stale_singleton_skill",
             target_names=[name],
-            rationale="A stale Hermes-created mutable skill may need archive, refresh, or skip after planner review.",
+            rationale="A stale local unprotected skill may need archive, refresh, or skip after planner review.",
             hints=["planner may choose archive_skill, mutate_skill, or skip", "do not archive if active references or successor checks fail"],
             risk="medium",
             skills=[item],

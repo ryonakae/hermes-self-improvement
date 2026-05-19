@@ -560,6 +560,29 @@ Commit only after tests and dry-run pass.
 
 ---
 
+## Implementation progress
+
+### 2026-05-19 first slice
+
+Implemented Tasks 1-4 foundation:
+
+- Updated active policy/docs wording from the old `Hermes-created` boundary to `$HERMES_HOME/skills/` local unprotected skills.
+- Added path-aware local skill inventory in `curator_telemetry.py` that scans the active local skills directory, merges usage metadata, marks editable local skills as `local_unprotected`, and protects pinned / archived / bundled / hub / external read-only / ambiguous names.
+- Updated evidence filtering so `local_unprotected` / `local_skill_inventory` candidates are LLM-visible mutation targets.
+- Fed editable local skills into target-resolution and planner flows; `sandbox-permission-workflow`-class skills are now editable targets, not reference-only coverage.
+- Added a deterministic duplicate-create guard: a proposed `create_skill` that overlaps an existing local unprotected skill is normalized to a no-op skip with `create_skill_duplicates_existing_local_skill`, unless the planner supplies a concrete `existing_skill_gap`.
+
+Validation so far:
+
+```bash
+PY=${PYTHON:-.venv/bin/python}
+$PY -m pytest tests/test_skill_inventory.py tests/test_curator_telemetry.py tests/test_target_resolver.py tests/test_skill_planner.py -q
+# 57 passed
+```
+
+Remaining tasks: Task 5 merge/absorb semantics, Task 6 active reference rewrite planning, Task 7 archive execution after rewrites, Task 8 lifecycle reporting, Task 9 dogfood against the duplicate case, Task 10 full validation/rollout.
+
+
 ## Review checklist for this plan
 
 - Does the plan remove the false “agent-created only” boundary?

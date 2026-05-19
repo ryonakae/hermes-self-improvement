@@ -417,7 +417,7 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
         ],
         "maintenance_candidates": maintenance_candidates[:20],
         "hard_boundaries": [
-            "Only Hermes-created local mutable active/stale skills are mutation targets.",
+            "Only local unprotected active/stale skills under $HERMES_HOME/skills are mutation targets.",
             "Reference skills are duplicate/coverage context only and must not be patched, merged into, archived, or created over.",
             "New skill creation is one option, not the default; prefer patch/merge/archive when evidence supports it.",
         ],
@@ -522,6 +522,20 @@ def _normalize_create_skill_decision(
             "covered_by_existing_skill": proposed,
             "rationale": f"Existing mutable skill {proposed} already covers this proposed workflow; duplicate creation is unnecessary.",
             "next_action": "no_mutation_needed_existing_coverage",
+        }
+    editable_fit = compute_coverage_fit_for_name(proposed, editable_skill_names=list(candidate_names))
+    if editable_fit.get("kind") in {"exact_duplicate", "partial_overlap"} and not str(raw.get("existing_skill_gap") or "").strip():
+        covered_existing = (editable_fit.get("fit_skills") or [""])[0]
+        return {
+            "skill": proposed,
+            "decision": "skip",
+            "reason": "create_skill_duplicates_existing_local_skill",
+            "evidence_ids": [],
+            "noop_outcome": "duplicate_prevented",
+            "covered_by_existing_skill": covered_existing,
+            "coverage_fit": editable_fit,
+            "rationale": f"Existing local unprotected skill {covered_existing} overlaps this proposed workflow; patch/skip/defer instead of creating a duplicate.",
+            "next_action": "patch_or_skip_existing_local_skill",
         }
     reference_skill_names = reference_skill_names or set()
     covered_reference = proposed if proposed in reference_skill_names else resolve_coverage_alias(proposed, reference_skill_names)

@@ -26,7 +26,7 @@ hermes self-improvement status
 
 Skill changes must go through official skill tools only. The runner may use `skills_list`, `skill_view`, and `skill_manage`; it must not use terminal, file tools, git, browser, direct filesystem access, provider internals, or arbitrary repo docs/config mutation.
 
-Allowed skill targets are mutable local user/Hermes-created skills. Built-in, hub-installed, plugin-bundled, external-dir, pinned, ambiguous, or stale targets are rejected or skipped.
+Allowed skill targets are local unprotected skills under `$HERMES_HOME/skills/`. Built-in, hub-installed, plugin-bundled, external-dir, pinned, archived, ambiguous, or unresolvable targets are protected and rejected or skipped.
 
 ## Memory safety
 

@@ -417,6 +417,35 @@ def test_target_resolution_digest_includes_reference_coverage_without_attach_tar
     assert signals["recommendation"] == "unresolved"
 
 
+def test_target_resolution_digest_surfaces_local_unprotected_reference_as_editable_target():
+    pack = {"evidence": [{
+        "id": "coverage_sandbox",
+        "kind": "knowledge_coverage_candidate",
+        "theme": "sandbox_permission_workflow",
+        "count": 4,
+        "coverage": {"workflow_boundary": "sandbox permission workflow", "evidence_count": 4},
+    }]}
+    skill_candidates = [
+        {
+            "name": "sandbox-permission-workflow",
+            "description": "Handle sandbox permission prompts safely",
+            "mutable": True,
+            "changeability": "editable",
+            "provenance": "local_unprotected",
+            "source": "local_skill_inventory",
+            "state": "active",
+        }
+    ]
+
+    digest = build_target_resolution_digest(pack, skill_candidates=skill_candidates)
+
+    assert [item["name"] for item in digest["skill_targets"]] == ["sandbox-permission-workflow"]
+    assert digest["reference_skill_coverage"] == []
+    signals = digest["candidates"][0]["target_fit_signals"]
+    assert signals["positive_skills"] == ["sandbox-permission-workflow"]
+    assert signals["recommendation"] == "attach_existing_skill"
+
+
 def test_target_resolver_blocks_attach_to_reference_coverage_if_llm_tries():
     digest = {
         "candidates": [{"id": "coverage_timeout"}],

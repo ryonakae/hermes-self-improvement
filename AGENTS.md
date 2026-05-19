@@ -65,7 +65,7 @@ PY
 - runtime hook 内で LLM 呼び出し、GEPA optimizer、skill patch、memory edit、重い集計を動かさない
 - 改善対象は `skill` / `memory` / `evaluator` の 3 種類だけ。Hermes core、plugin 自身の README / AGENTS / config / plans / bundled skill、任意 docs/config は対象外
 - `improve` の semantic decision は `apply / defer / skip / block` の 4 つに寄せる。新しい apply mode、承認キュー、別 lane を増やさない
-- skill mutation は `skill_manage` など公式 skill tools 経由のみ。Hermes-created local mutable skill だけを candidate にし、built-in / hub-installed / plugin-bundled / external-dir / ambiguous provenance は LLM-facing list に出さない
+- skill mutation は `skill_manage` など公式 skill tools 経由のみ。candidate は `$HERMES_HOME/skills/` 配下の local unprotected skill に限る。built-in / hub-installed / plugin-bundled / external-dir / pinned / archived / ambiguous は LLM-facing mutation target に出さず、artifact に除外件数・理由だけ残す。edit には patch / merge・absorb / reference rewrite / Curator-style archive を含める。
 - memory mutation は memory tool / provider-native memory tool 経由のみ。built-in memory file や provider DB を直接編集しない。CLI/standalone 実行でも公式 `tools.memory_tool.MemoryStore` を load して `memory_tool(..., store=store)` で呼ぶ
 - built-in memory 満杯時は `current_entries` を見て `replace/remove` で統合してから `add` を再試行する。それでも入らなければ active external provider tool に fallback する
 - conversation-derived memory gap は改善対象。キーワードは window ranking にだけ使い、semantic gate にしない
