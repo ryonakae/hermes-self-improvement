@@ -11,8 +11,8 @@ As of 2026-05-10, the long-term roadmap is:
 The current active hardening plans are:
 
 - `2026-05-19-mutation-tool-call-limit-simplification.md`
-  - **Status:** planned / awaiting implementation.
-  - Removes plugin-facing `mutation.max_iterations` before release, makes `mutation.max_tool_calls` the single operator-facing native mutation limit, raises its default to 12, and derives internal skill-agent / memory-agent LLM rounds as `max_tool_calls + 2` without reading Hermes core `agent.max_turns`.
+  - **Status:** implemented.
+  - Removed plugin-facing `mutation.max_iterations` before release, made `mutation.max_tool_calls` the single operator-facing native mutation limit, raised its default to 12, and derives internal skill-agent / memory-agent LLM rounds as `max_tool_calls + 2` without reading Hermes core `agent.max_turns`. Validation: focused mutation/config tests (`98 passed`), full `pytest tests -q` (`698 passed, 2 skipped`), `py_compile`, `git diff --check`, and dry-run artifact inspection passed.
 - `2026-05-19_101746-local-skill-lifecycle-expansion.md`
   - **Status:** planned / awaiting implementation.
   - Expands skill lifecycle handling from narrow `agent_created_report()` candidates to all Hermes-changeable local unprotected skills. Protected skills remain excluded (built-in, hub/vendor, plugin-bundled, external read-only, pinned, archived, ambiguous), while editable local skills can be patched, merged/absorbed, reference-rewritten, and Curator-style archived. This plan also fixes the 2026-05-19 duplicate creation failure where `sandbox-permission-workflow` was treated as reference-only and `hermes-sandbox-permission-workflow` was created.

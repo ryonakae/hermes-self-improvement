@@ -5,9 +5,10 @@
 # Do not commit real API keys or provider secrets. For custom endpoints, prefer
 # ${ENV_VAR} references in the local file.
 
-# Optional: disable mutating runs without changing CLI usage.
+# Optional: disable or bound mutating runs without changing CLI usage.
 # mutation:
 #   enabled: false
+#   max_tool_calls: 12
 
 # Optional: customize models only when auto routing is not enough.
 # improvement_planner plans skill/memory proposals, target_resolver resolves

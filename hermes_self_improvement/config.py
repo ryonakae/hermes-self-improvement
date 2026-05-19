@@ -101,8 +101,7 @@ def _default_config() -> dict[str, Any]:
         "mutation": {
             "backend": "native_skill_tool",
             "enabled": True,
-            "max_tool_calls": 8,
-            "max_iterations": 6,
+            "max_tool_calls": 12,
         },
         "gepa_evaluator": {
             "enabled": True,

@@ -180,8 +180,16 @@ def test_validate_skill_improve_rejects_changed_outcome_without_target_change_tr
 
 
 def test_backend_limits_are_fail_closed():
-    limits = SkillAgentBackendLimits(max_tool_calls=0, max_iterations=0, timeout_seconds=0)
+    limits = SkillAgentBackendLimits(max_tool_calls=0, timeout_seconds=0)
     assert limits.check()["status"] == "failed"
+    assert limits.check()["reasons"] == ["max_tool_calls_must_be_positive", "timeout_seconds_must_be_positive"]
+
+
+def test_skill_agent_limits_only_configures_tool_calls_and_timeout():
+    limits = SkillAgentBackendLimits.from_config({"mutation": {"max_tool_calls": 12}})
+
+    assert limits.max_tool_calls == 12
+    assert not hasattr(limits, "max_iterations")
 
 
 def test_skill_tool_executor_rejects_disallowed_tool():
@@ -558,19 +566,49 @@ def test_native_backend_rejects_disallowed_tool_request():
     assert backend.run("prompt", {}, {})["error"] == "disallowed_tool_requested"
 
 
-def test_native_backend_stops_after_max_iterations():
+def test_native_backend_stops_when_max_tool_calls_are_exhausted():
     backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
         llm_call=lambda messages, **kwargs: _tool_response("skill_view", {"name": "demo"}),
-        limits=SkillAgentBackendLimits(max_tool_calls=10, max_iterations=1),
+        limits=SkillAgentBackendLimits(max_tool_calls=1),
     )
 
     result = backend.run("prompt", {}, {})
 
     assert result["error"] == "skill_agent_limits_exceeded"
+    assert result["reasons"] == ["max_tool_calls_exceeded"]
     assert result["tool_call_count"] == 1
     assert result["tool_call_counts_by_name"] == {"skill_view": 1}
     assert result["last_tool"] == "skill_view"
+
+
+def test_native_backend_allows_submit_after_max_tool_calls():
+    responses = iter([
+        _tool_response("skill_view", {"name": "demo"}, call_id="call_view"),
+        _tool_response(
+            "submit_mutation_result",
+            {
+                "success": True,
+                "outcome": "applied",
+                "changed_skills": [],
+                "created_skills": [],
+                "deleted_skills": [],
+                "verification_notes": [],
+                "rollback_hints": [],
+            },
+            call_id="call_final",
+        ),
+    ])
+    backend = NativeSkillAgentBackend(
+        tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {"success": True}, skill_manage_fn=lambda **_: {}),
+        llm_call=lambda messages, **kwargs: next(responses),
+        limits=SkillAgentBackendLimits(max_tool_calls=1),
+    )
+
+    result = backend.run("prompt", {}, {})
+
+    assert result["success"] is True
+    assert result["used_tools"] == [{"tool": "skill_view", "success": True, "name": "demo"}]
 
 
 def test_native_backend_requires_submit_result_tool_call():

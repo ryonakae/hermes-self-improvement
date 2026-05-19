@@ -173,6 +173,13 @@ def test_memory_agent_result_rejects_unknown_successful_outcome_without_change_t
     assert validate_memory_agent_success_result(dict(payload))["error"] == "memory_agent_result_invalid_outcome"
 
 
+def test_memory_agent_limits_only_configures_tool_calls_and_timeout():
+    limits = MemoryAgentBackendLimits.from_config({"mutation": {"max_tool_calls": 12}})
+
+    assert limits.max_tool_calls == 12
+    assert not hasattr(limits, "max_iterations")
+
+
 def test_parse_memory_agent_result_accepts_non_mutating_outcome():
     parsed = parse_memory_agent_result({
         "success": True,
@@ -358,13 +365,47 @@ def test_native_backend_stops_on_max_tool_calls_limit():
     backend = NativeMemoryAgentBackend(
         tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
         llm_call=fake_llm,
-        limits=MemoryAgentBackendLimits(max_tool_calls=0, max_iterations=1, timeout_seconds=10),
+        limits=MemoryAgentBackendLimits(max_tool_calls=0, timeout_seconds=10),
     )
 
     result = MemoryAgentRunner(backend=backend).run(task(), config={})
     assert result["success"] is False
     # limits.check は max_tool_calls<1 を invalid とするのでまず limits_invalid で fail-closed
     assert result["error"] in {"memory_agent_limits_invalid", "memory_agent_limits_exceeded"}
+
+
+def test_native_memory_backend_stops_when_max_tool_calls_are_exhausted():
+    backend = NativeMemoryAgentBackend(
+        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
+        llm_call=lambda messages, **kwargs: _tool_call_message("memory", {"action": "add", "target": "memory", "content": "a"}),
+        limits=MemoryAgentBackendLimits(max_tool_calls=1, timeout_seconds=10),
+    )
+
+    result = MemoryAgentRunner(backend=backend).run(task(), config={})
+
+    assert result["success"] is False
+    assert result["error"] == "memory_agent_limits_exceeded"
+    assert result["reasons"] == ["max_tool_calls_exceeded"]
+    assert result["last_tool"] == "memory"
+
+
+def test_native_memory_backend_allows_submit_after_max_tool_calls():
+    responses = iter([
+        _tool_call_message("memory", {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."}, call_id="call_1"),
+        _tool_call_message("submit_mutation_result", success_result(changed=["Hermes runtime root is ~/.hermes."]), call_id="call_2"),
+    ])
+
+    backend = NativeMemoryAgentBackend(
+        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
+        llm_call=lambda messages, **kwargs: next(responses),
+        limits=MemoryAgentBackendLimits(max_tool_calls=1, timeout_seconds=10),
+    )
+
+    result = MemoryAgentRunner(backend=backend).run(task(), config={})
+
+    assert result["success"] is True
+    assert result["changed_memories"] == ["Hermes runtime root is ~/.hermes."]
+    assert result["used_tools"] == [{"tool": "memory", "action": "add", "target": "memory", "success": True}]
 
 
 def test_build_memory_agent_backend_uses_injected_backend():

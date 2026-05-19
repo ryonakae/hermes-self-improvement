@@ -44,8 +44,7 @@ def normalize_memory_agent_outcome(result: dict[str, Any]) -> dict[str, Any] | N
 
 @dataclass(frozen=True)
 class MemoryAgentBackendLimits:
-    max_tool_calls: int = 8
-    max_iterations: int = 6
+    max_tool_calls: int = 12
     timeout_seconds: int = 45
 
     @classmethod
@@ -55,7 +54,6 @@ class MemoryAgentBackendLimits:
         model_memory = model.get("memory_agent") if isinstance(model.get("memory_agent"), dict) else {}
         return cls(
             max_tool_calls=max(0, _coerce_int(mutation.get("max_tool_calls"), cls.max_tool_calls)),
-            max_iterations=max(0, _coerce_int(mutation.get("max_iterations"), cls.max_iterations)),
             timeout_seconds=max(1, _coerce_int(model_memory.get("timeout") or mutation.get("timeout_seconds"), cls.timeout_seconds)),
         )
 
@@ -63,8 +61,6 @@ class MemoryAgentBackendLimits:
         reasons: list[str] = []
         if self.max_tool_calls < 1:
             reasons.append("max_tool_calls_must_be_positive")
-        if self.max_iterations < 1:
-            reasons.append("max_iterations_must_be_positive")
         if self.timeout_seconds < 1:
             reasons.append("timeout_seconds_must_be_positive")
         return {"status": "failed" if reasons else "ok", "reasons": reasons}
@@ -354,7 +350,8 @@ class NativeMemoryAgentBackend:
         memory_agent_cfg = _model_memory_agent_config(config)
         cached_initial, cache_extras = apply_caching(messages, site="memory_agent")
         messages = cached_initial
-        for _iteration in range(self.limits.max_iterations):
+        max_llm_rounds = self.limits.max_tool_calls + 2
+        for _iteration in range(max_llm_rounds):
             try:
                 response = self._llm(messages, tools=tools, config=config, extra_body=cache_extras)
             except RuntimeError as exc:
@@ -438,7 +435,7 @@ class NativeMemoryAgentBackend:
                 mutation_intents.append(intent_entry)
                 actual_used.append(trace_entry)
                 messages.append(_tool_result_message(call, result))
-        return _with_last_safe_step({"success": False, "error": "memory_agent_limits_exceeded", "reasons": ["max_iterations_exceeded"]}, actual_used)
+        return _with_last_safe_step({"success": False, "error": "memory_agent_limits_exceeded", "reasons": ["max_llm_rounds_exceeded"]}, actual_used)
 
 
 @dataclass

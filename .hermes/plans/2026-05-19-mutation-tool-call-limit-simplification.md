@@ -507,6 +507,26 @@ One final LLM round is needed for `submit_mutation_result` after the last allowe
 
 ---
 
+## Implementation result
+
+Implemented in this slice:
+
+- Removed `mutation.max_iterations` from default config and active config examples.
+- Set `mutation.max_tool_calls` default to `12`.
+- Removed `max_iterations` from `SkillAgentBackendLimits` and `MemoryAgentBackendLimits`.
+- Derived each native backend's internal LLM round guard as `max_tool_calls + 2`.
+- Preserved `submit_mutation_result` as a non-counted finalizer, so one allowed mutation/tool call can still be followed by final structured reporting.
+- Replaced the terminal loop fallback reason with `max_llm_rounds_exceeded`; repeated real tool calls still fail earlier with `max_tool_calls_exceeded`, which is the intended primary safety boundary.
+- Updated `config.yaml` / `config.example.yaml` to expose only `max_tool_calls` under `mutation`.
+
+Validation:
+
+- Focused tests: `98 passed` (`tests/test_memory_agent.py`, `tests/test_memory_agent_dispatch.py`, `tests/test_mutation_backend.py`, `tests/test_config_precedence.py`).
+- Full verification: `python -m py_compile __init__.py hermes_self_improvement/*.py`, `python -m pytest tests -q` (`698 passed, 2 skipped`), and `git diff --check` passed.
+- Dry-run artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260519T061607Z.json` showed memory-agent preview with 39 candidates and no omitted per-kind counts; mutating apply was intentionally not run because it would write real memories.
+
+---
+
 ## Completion criteria
 
 - `mutation.max_iterations` no longer exists in code defaults, backend limit dataclasses, or active config examples.

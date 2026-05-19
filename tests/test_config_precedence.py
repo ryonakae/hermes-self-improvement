@@ -44,6 +44,17 @@ def test_load_config_precedence_cli_over_env_over_local_over_code_defaults(tmp_p
     assert mod.load_config(repo_config)["retention_days"] == 20
 
 
+def test_default_mutation_config_exposes_only_max_tool_calls(tmp_path):
+    mod = load_plugin_module()
+    repo_config = tmp_path / "missing.yaml"
+
+    config = mod.load_config(repo_config)
+
+    assert config["mutation"]["max_tool_calls"] == 12
+    assert "max_iterations" not in config["mutation"]
+    assert config["gepa_evaluator"]["max_iterations"] == 0
+
+
 def test_load_config_records_yaml_sources_and_missing_cli_rejects(tmp_path):
     mod = load_plugin_module()
     repo_config = write_yaml(tmp_path / "config.yaml", "retention_days: 10")
