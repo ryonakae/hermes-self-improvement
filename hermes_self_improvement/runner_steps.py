@@ -27,12 +27,6 @@ MEMORY_AGENT_CONSTRAINTS = (
     "Do not use terminal/file/git/direct filesystem tools.",
 )
 MEMORY_AGENT_DISPATCH_KINDS = {"memory_gap_candidate", "memory_inventory_candidate", "memory_placement_candidate", "environment_fact_signal"}
-MEMORY_AGENT_CANDIDATE_CAPS = {
-    "memory_gap_candidate": 6,
-    "memory_inventory_candidate": 6,
-    "environment_fact_signal": 6,
-    "memory_placement_candidate": 4,
-}
 MEMORY_AGENT_CURRENT_ENTRY_CAP = 20
 
 
@@ -40,20 +34,12 @@ def _candidate_kind_for_counts(candidate: dict[str, Any]) -> str:
     return str(candidate.get("candidate_kind") or candidate.get("kind") or "memory_gap_candidate")
 
 
-def _cap_memory_agent_candidates(candidates: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int], dict[str, int]]:
-    kept: list[dict[str, Any]] = []
-    kept_counts: dict[str, int] = {}
-    omitted_counts: dict[str, int] = {}
+def _memory_agent_candidate_counts(candidates: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
     for candidate in candidates:
         kind = _candidate_kind_for_counts(candidate)
-        cap = MEMORY_AGENT_CANDIDATE_CAPS.get(kind, 6)
-        current = kept_counts.get(kind, 0)
-        if current >= cap:
-            omitted_counts[kind] = omitted_counts.get(kind, 0) + 1
-            continue
-        kept_counts[kind] = current + 1
-        kept.append(candidate)
-    return kept, kept_counts, omitted_counts
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
 
 
 def _compact_current_entries_for_memory_agent(entries: list[Any]) -> tuple[list[Any], int]:
@@ -212,7 +198,8 @@ def _dispatch_memory_agent(
         candidates.append(candidate)
     if not candidates:
         return {"status": "no_candidates"}
-    candidates, candidate_counts, omitted_counts = _cap_memory_agent_candidates(candidates)
+    candidate_counts = _memory_agent_candidate_counts(candidates)
+    omitted_counts: dict[str, int] = {}
     if not mutate:
         return {
             "status": "preview",

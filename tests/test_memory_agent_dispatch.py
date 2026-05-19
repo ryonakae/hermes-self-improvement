@@ -279,7 +279,7 @@ def test_run_memory_improvement_step_keeps_plain_placement_candidate_out_of_memo
     }]
 
 
-def test_memory_agent_preview_caps_candidates_per_kind_and_reports_omitted_counts():
+def test_memory_agent_preview_hands_off_all_prefiltered_candidates_without_per_kind_cap():
     candidates = [_conversation_candidate(f"m{i}") for i in range(8)]
     result = run_memory_improvement_step(
         evidence_pack=_pack(candidates),
@@ -289,9 +289,9 @@ def test_memory_agent_preview_caps_candidates_per_kind_and_reports_omitted_count
 
     agent_block = result["memory_agent"]
     assert agent_block["status"] == "preview"
-    assert agent_block["candidate_count"] == 6
-    assert agent_block["candidate_counts_by_kind"] == {"memory_gap_candidate": 6}
-    assert agent_block["omitted_candidate_counts_by_kind"] == {"memory_gap_candidate": 2}
+    assert agent_block["candidate_count"] == 8
+    assert agent_block["candidate_counts_by_kind"] == {"memory_gap_candidate": 8}
+    assert agent_block["omitted_candidate_counts_by_kind"] == {}
 
 
 def test_memory_agent_task_caps_current_entries_and_reports_omitted_count():
