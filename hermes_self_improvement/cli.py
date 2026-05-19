@@ -218,10 +218,29 @@ def _summarize_run_skill_lifecycle(payload: dict[str, Any]) -> dict[str, Any]:
     planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
     decisions = [item for item in (skill_step.get("decisions") or []) if isinstance(item, dict)]
     blocked_by_reason: dict[str, int] = {}
+    rewritten_references = 0
+    deferred_references = 0
+    archived_skill_names: list[str] = []
     for item in decisions:
         reason = str(item.get("reason") or "")
         if reason.startswith("archive_blocked") or reason == "archive_without_lifecycle_evidence":
             blocked_by_reason[reason] = blocked_by_reason.get(reason, 0) + 1
+        if reason in {"archive_deferred_unresolved_reference_rewrites", "archive_deferred_reference_rewrite_failed"}:
+            deferred_references += 1
+        result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
+        rewritten_references += int(result_payload.get("rewritten_reference_count") or 0)
+        if item.get("decision") == "accepted" and isinstance(item.get("planner_decision"), dict) and item["planner_decision"].get("decision") == "archive_skill":
+            name = str(item.get("skill") or "").strip()
+            if name and name not in archived_skill_names:
+                archived_skill_names.append(name)
+        merge_archive = item.get("merge_archive_result") if isinstance(item.get("merge_archive_result"), dict) else {}
+        rewritten_references += int(merge_archive.get("rewritten_reference_count") or 0)
+        for name in merge_archive.get("archived_skills") or []:
+            skill_name = str(name or "").strip()
+            if skill_name and skill_name not in archived_skill_names:
+                archived_skill_names.append(skill_name)
+        if merge_archive and not merge_archive.get("success") and "reference" in str(merge_archive.get("error") or ""):
+            deferred_references += 1
     archive_skill_count = int(planner_summary.get("archive_skill_count") or 0)
     would_archive = sum(1 for item in decisions if item.get("decision") == "archive_skill_preview")
     archived = sum(
@@ -233,12 +252,15 @@ def _summarize_run_skill_lifecycle(payload: dict[str, Any]) -> dict[str, Any]:
         and item.get("changed")
     )
     blocked = sum(blocked_by_reason.values())
-    if not any((archive_skill_count, would_archive, archived, blocked)):
+    if not any((archive_skill_count, would_archive, archived, blocked, rewritten_references, deferred_references)):
         return {}
     return {
         "archive_skill_count": archive_skill_count,
         "would_archive": would_archive,
         "archived": archived,
+        "rewritten_references": rewritten_references,
+        "deferred_references": deferred_references,
+        "archived_skills": archived_skill_names,
         "blocked": blocked,
         "blocked_by_reason": dict(sorted(blocked_by_reason.items())),
     }
@@ -352,8 +374,14 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
                     f"archive candidates {int(lifecycle.get('archive_skill_count') or 0)}, "
                     f"would archive {int(lifecycle.get('would_archive') or 0)}, "
                     f"archived {int(lifecycle.get('archived') or 0)}, "
+                    f"references rewritten {int(lifecycle.get('rewritten_references') or 0)}, "
+                    f"deferred references {int(lifecycle.get('deferred_references') or 0)}, "
                     f"blocked {int(lifecycle.get('blocked') or 0)}"
                 )
+                archived_skills = [str(name) for name in (lifecycle.get("archived_skills") or []) if str(name)]
+                if archived_skills:
+                    suffix = f", ... {len(archived_skills) - 5} more" if len(archived_skills) > 5 else ""
+                    lines.append(f"  - archived skills: {', '.join(archived_skills[:5])}{suffix}")
                 blocked_by_reason = lifecycle.get("blocked_by_reason") if isinstance(lifecycle.get("blocked_by_reason"), dict) else {}
                 for reason, count in sorted(blocked_by_reason.items()):
                     lines.append(f"  - {reason}: {count}")
@@ -1329,6 +1357,9 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
     patched = 0
     created_names: list[str] = []
     patched_names: list[str] = []
+    archived = 0
+    rewritten_references = 0
+    archived_names: list[str] = []
     post_validated = 0
     validation_rejected = 0
     validation_unknown = 0
@@ -1362,6 +1393,16 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
             patched += len(patched_values)
             note_names(created_names, created_values)
             note_names(patched_names, patched_values)
+            planner_decision = item.get("planner_decision") if isinstance(item.get("planner_decision"), dict) else {}
+            if planner_decision.get("decision") == "archive_skill":
+                archived += 1
+                note_names(archived_names, [item.get("skill")])
+                rewritten_references += int(result_payload.get("rewritten_reference_count") or 0)
+            merge_archive = item.get("merge_archive_result") if isinstance(item.get("merge_archive_result"), dict) else {}
+            archived_values = merge_archive.get("archived_skills") or []
+            archived += len(archived_values)
+            note_names(archived_names, archived_values)
+            rewritten_references += int(merge_archive.get("rewritten_reference_count") or 0)
         tally_post_validation(result_payload)
         if result_payload.get("error") == "skill_agent_post_validation_failed":
             post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
@@ -1386,7 +1427,7 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
             noop_counts[outcome] = noop_counts.get(outcome, 0) + 1
     lines = [
         "Actual results:",
-        f"- actual mutations: skill created {created}, skill patched {patched}, memory {memory_changed}",
+        f"- actual mutations: skill created {created}, skill patched {patched}, skill archived {archived}, references rewritten {rewritten_references}, memory {memory_changed}",
     ]
     if created_names:
         suffix = f", ... {len(created_names) - 5} more" if len(created_names) > 5 else ""
@@ -1394,6 +1435,11 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
     if patched_names:
         suffix = f", ... {len(patched_names) - 5} more" if len(patched_names) > 5 else ""
         lines.append(f"- patched skills: {', '.join(patched_names[:5])}{suffix}")
+    if archived_names:
+        suffix = f", ... {len(archived_names) - 5} more" if len(archived_names) > 5 else ""
+        lines.append(f"- archived skills: {', '.join(archived_names[:5])}{suffix}")
+    if rewritten_references:
+        lines.append(f"- rewritten references: {rewritten_references}")
     lines.append(f"- validation: post-validated {post_validated}, rejected {validation_rejected}, unknown {validation_unknown}")
     if validation_unknown_modes:
         parts = [f"{mode} {count}" for mode, count in sorted(validation_unknown_modes.items())]
@@ -1787,6 +1833,21 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         and isinstance(item.get("planner_decision"), dict)
         and item["planner_decision"].get("decision") == "archive_skill"
     )
+    rewritten_references = 0
+    deferred_references = 0
+    for item in skill_decisions:
+        if not isinstance(item, dict):
+            continue
+        result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
+        rewritten_references += int(result_payload.get("rewritten_reference_count") or 0)
+        merge_archive = item.get("merge_archive_result") if isinstance(item.get("merge_archive_result"), dict) else {}
+        archived += len(merge_archive.get("archived_skills") or [])
+        rewritten_references += int(merge_archive.get("rewritten_reference_count") or 0)
+        reason = str(item.get("reason") or "")
+        if reason in {"archive_deferred_unresolved_reference_rewrites", "archive_deferred_reference_rewrite_failed"}:
+            deferred_references += 1
+        if merge_archive and not merge_archive.get("success") and "reference" in str(merge_archive.get("error") or ""):
+            deferred_references += 1
     blocked_archive = sum(
         1
         for item in skill_decisions
@@ -1908,7 +1969,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Skill lifecycle:",
-        f"- archive candidates {archive_skill_count}, would archive {would_archive}, archived {archived}, blocked {blocked_archive}",
+        f"- archive candidates {archive_skill_count}, would archive {would_archive}, archived {archived}, references rewritten {rewritten_references}, deferred references {deferred_references}, blocked {blocked_archive}",
         "Memory improvements:",
         f"- changed {int(summary.get('memory_changes') or 0)} memories",
         f"- related lookups: completed {lookup_counts['completed']}, unavailable {lookup_counts['unavailable']}, failed {lookup_counts['failed']}, skipped {lookup_counts['skipped']}",

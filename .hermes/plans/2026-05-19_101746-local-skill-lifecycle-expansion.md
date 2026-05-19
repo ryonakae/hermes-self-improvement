@@ -435,6 +435,8 @@ $PY -m pytest tests/test_runner_steps.py tests/test_mutation_worker.py tests/tes
 
 **Objective:** Make lifecycle activity visible without confusing candidates with executed mutations.
 
+**Status:** implemented in this slice. Actual-result summaries now distinguish `skill archived` and `references rewritten` from created/patched skill changes, include archived skill names, and carry lifecycle counts into operational report sections and compact tool output (`skill_lifecycle`). Dry-run remains expressed as would-archive previews rather than executed mutations.
+
 **Files:**
 - Modify: `hermes_self_improvement/cli.py`
 - Modify: `hermes_self_improvement/tool_handlers.py`

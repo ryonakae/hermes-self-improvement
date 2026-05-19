@@ -122,6 +122,42 @@ def _compact_step(name: str, step: Any) -> dict[str, Any]:
     return out
 
 
+def _compact_skill_lifecycle(decisions: Any) -> dict[str, Any]:
+    archived_skills: list[str] = []
+    rewritten_references = 0
+    deferred_references = 0
+    would_archive = 0
+    def note_archived(values: Any) -> None:
+        for value in values or []:
+            name = str(value or "").strip()
+            if name and name not in archived_skills:
+                archived_skills.append(name)
+    for item in decisions or []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("decision") == "archive_skill_preview":
+            would_archive += 1
+        reason = str(item.get("reason") or "")
+        if reason in {"archive_deferred_unresolved_reference_rewrites", "archive_deferred_reference_rewrite_failed"}:
+            deferred_references += 1
+        result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
+        if item.get("decision") == "accepted" and isinstance(item.get("planner_decision"), dict) and item["planner_decision"].get("decision") == "archive_skill":
+            note_archived([item.get("skill")])
+            rewritten_references += int(result_payload.get("rewritten_reference_count") or 0)
+        merge_archive = item.get("merge_archive_result") if isinstance(item.get("merge_archive_result"), dict) else {}
+        note_archived(merge_archive.get("archived_skills") or [])
+        rewritten_references += int(merge_archive.get("rewritten_reference_count") or 0)
+        if merge_archive and not merge_archive.get("success") and "reference" in str(merge_archive.get("error") or ""):
+            deferred_references += 1
+    return {
+        "would_archive": would_archive,
+        "archived": len(archived_skills),
+        "archived_skills": archived_skills[:10],
+        "rewritten_references": rewritten_references,
+        "deferred_references": deferred_references,
+    }
+
+
 def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     evidence_pack = result.get("evidence_pack") if isinstance(result.get("evidence_pack"), dict) else {}
     evidence_summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
@@ -136,6 +172,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     autonomous_policy = result.get("autonomous_policy") if isinstance(result.get("autonomous_policy"), dict) else {}
     action_summary = _action_summary_from_steps(step_decisions)
+    skill_lifecycle = _compact_skill_lifecycle(skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else [])
     artifact_path = result.get("artifact_path")
     return {
         "schema_name": "self_improvement_tool_result_summary",
@@ -147,6 +184,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "artifact_path": artifact_path,
         "summary": result.get("summary") if isinstance(result.get("summary"), dict) else {},
         "action_summary": action_summary,
+        "skill_lifecycle": skill_lifecycle,
         "actionable": _actionable_summary(action_summary),
         "autonomous_policy": autonomous_policy,
         "curator_telemetry": {
@@ -199,6 +237,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
                     "skill_agent_prompt_chars": planner_quality.get("skill_agent_prompt_chars") if isinstance(planner_quality.get("skill_agent_prompt_chars"), dict) else {},
                 },
             },
+            "skill_lifecycle": skill_lifecycle,
             "memory": _compact_step("memory", step_decisions.get("memory")),
             "evaluator": _compact_step("evaluator", step_decisions.get("evaluator")),
         },

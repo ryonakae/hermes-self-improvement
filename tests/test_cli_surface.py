@@ -388,7 +388,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "skill_agent stopped/rejected: skipped_superseded 1, submit_result_missing 2" in text
     assert "Verbose natural-language reason" not in text
     assert "Skill lifecycle:" in text
-    assert "- archive candidates 1, would archive 1, archived 0, blocked 0" in text
+    assert "- archive candidates 1, would archive 1, archived 0, references rewritten 0, deferred references 0, blocked 0" in text
     assert "Memory improvements:" in text
     assert "- changed 1 memories" in text
     assert "Curator telemetry:" in text
@@ -527,7 +527,7 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     })
 
     assert "Actual results:" in text
-    assert "- actual mutations: skill created 1, skill patched 1, memory 1" in text
+    assert "- actual mutations: skill created 1, skill patched 1, skill archived 0, references rewritten 0, memory 1" in text
     assert "- created skills: timeout-workflow" in text
     assert "- patched skills: sandbox-permission-workflow" in text
     assert "- validation: post-validated 2, rejected 1, unknown 0" in text
@@ -723,7 +723,7 @@ def test_improve_summary_reports_write_only_unverified_memory_as_validation_unkn
     })
 
     assert "Actual results:" in text
-    assert "- actual mutations: skill created 0, skill patched 0, memory 3" in text
+    assert "- actual mutations: skill created 0, skill patched 0, skill archived 0, references rewritten 0, memory 3" in text
     assert "- validation: post-validated 1, rejected 0, unknown 2" in text
     assert "- validation unknown breakdown: provider_write_only 2" in text
 
@@ -900,6 +900,8 @@ def test_operational_report_sections_include_runner_artifact_summary():
                 "archive_skill_count": 2,
                 "would_archive": 1,
                 "archived": 0,
+                "rewritten_references": 3,
+                "deferred_references": 1,
                 "blocked": 1,
                 "blocked_by_reason": {"archive_blocked_by_active_reference": 1},
             },
@@ -914,8 +916,38 @@ def test_operational_report_sections_include_runner_artifact_summary():
     assert "latest evidence 2, ignored 3" in text
     assert "runtime-private eval cases: 4" in text
     assert "Skill lifecycle" in text
-    assert "archive candidates 2, would archive 1, archived 0, blocked 1" in text
+    assert "archive candidates 2, would archive 1, archived 0, references rewritten 3, deferred references 1, blocked 1" in text
     assert "archive_blocked_by_active_reference: 1" in text
+
+
+def test_actual_results_include_archived_skills_and_rewritten_references():
+    cli = load_cli_module()
+    lines = cli._actual_result_summary_lines(
+        summary={"memory_changes": 0},
+        skill_decisions=[
+            {
+                "decision": "accepted",
+                "changed": True,
+                "planner_decision": {"decision": "archive_skill"},
+                "result": {"rewritten_reference_count": 2},
+                "skill": "obsolete-skill",
+            },
+            {
+                "decision": "accepted",
+                "changed": True,
+                "planner_decision": {"decision": "mutate_skill", "maintenance_action": "merge"},
+                "result": {"changed_skills": ["new-skill"]},
+                "merge_archive_result": {"archived_skills": ["old-skill"], "rewritten_reference_count": 1},
+            },
+        ],
+        memory_decisions=[],
+        planner_decisions=[],
+    )
+    text = "\n".join(lines)
+
+    assert "skill created 0, skill patched 1, skill archived 2, references rewritten 3, memory 0" in text
+    assert "- archived skills: obsolete-skill, old-skill" in text
+    assert "- rewritten references: 3" in text
 
 
 def test_package_init_does_not_reexport_removed_primary_surface_helpers():
