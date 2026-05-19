@@ -928,6 +928,7 @@ def build_skill_agent_task(
     if maintenance_action:
         task["maintenance_action"] = maintenance_action
         if maintenance_action == "merge" and merge_target_skill:
+            task["targets"] = {"source_skill": skill_name, "target_skill": merge_target_skill}
             task["target_skill"] = merge_target_skill
     return task
 

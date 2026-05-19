@@ -65,6 +65,31 @@ def test_runner_builds_prompt_with_only_allowed_skill_names_and_constraints(tmp_
     assert "file tools" in prompt and "git" in prompt and "direct filesystem" in prompt
 
 
+def test_runner_accepts_merge_improve_task_with_source_and_target(tmp_path):
+    root = tmp_path / "skills"
+    write_skill(root, "old-skill")
+    write_skill(root, "new-skill")
+    merge_task = task(targets={"source_skill": "old-skill", "target_skill": "new-skill"})
+    merge_task["maintenance_action"] = "merge"
+
+    validation = validate_skill_agent_task(merge_task, config={"_mutable_local_skill_roots": [root]})
+
+    assert validation["status"] == "ok"
+    assert validation["targets"] == {"source_skill": "old-skill", "target_skill": "new-skill"}
+
+
+def test_runner_rejects_merge_improve_task_with_same_source_and_target(tmp_path):
+    root = tmp_path / "skills"
+    write_skill(root, "same-skill")
+    merge_task = task(targets={"source_skill": "same-skill", "target_skill": "same-skill"})
+    merge_task["maintenance_action"] = "merge"
+
+    validation = validate_skill_agent_task(merge_task, config={"_mutable_local_skill_roots": [root]})
+
+    assert validation["status"] == "failed"
+    assert "merge_self_successor_forbidden" in validation["reasons"]
+
+
 def test_runner_rejects_task_with_non_local_targets_before_launching_agent(tmp_path):
     mutable_root = tmp_path / "skills"
     external = tmp_path / "external"

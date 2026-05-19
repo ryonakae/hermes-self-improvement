@@ -279,6 +279,8 @@ $PY -m pytest tests/test_improvement_planner.py tests/test_target_resolver.py -q
 
 **Objective:** Let the planner ask for merge/absorption and let the skill agent perform it through official skill tools.
 
+**Status:** implemented in this slice. The task now carries `{source_skill, target_skill}` for merge, the skill-agent prompt requires reading both skills and patching only the successor, the native backend validates merge result structure and tool traces, rejects self-successor/source-mutation merges, and post-validates the patched successor.
+
 **Files:**
 - Modify: `hermes_self_improvement/prompts.py`
 - Modify: `hermes_self_improvement/skill_agent.py`
@@ -291,7 +293,7 @@ For `mutate_skill` + `maintenance_action="merge"`:
 
 1. Read source skill and target/successor skill.
 2. Patch the successor with only non-duplicative useful content.
-3. Add a short migration pointer to the source if the source remains active until archive.
+3. Do not mutate the source in this step; source cleanup belongs to reference-rewrite/archive follow-up.
 4. Do not delete the source.
 5. Return structured result:
 

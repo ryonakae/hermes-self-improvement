@@ -179,6 +179,154 @@ def test_validate_skill_improve_rejects_changed_outcome_without_target_change_tr
     assert result["error"] == "skill_agent_result_changed_skill_missing"
 
 
+def test_validate_merge_skill_success_requires_target_patch_and_structured_merge_fields():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "merged useful content",
+            "used_tools": [
+                {"tool": "skill_view", "name": "old-skill", "success": True},
+                {"tool": "skill_view", "name": "new-skill", "success": True},
+                {"tool": "skill_manage", "action": "patch", "name": "new-skill", "success": True},
+            ],
+            "changed_skills": ["new-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "merged_from": ["old-skill"],
+            "archive_candidates": ["old-skill"],
+            "verification_notes": ["read source and target; patched successor only"],
+            "rollback_hints": ["revert new-skill patch if merge is wrong"],
+            "_task_kind": "skill_improve",
+            "_maintenance_action": "merge",
+            "_expected_target": "old-skill",
+            "_merge_target_skill": "new-skill",
+            "_allowed_targets": ["old-skill", "new-skill"],
+        }
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["reported_outcome"] == "merged useful content"
+    assert result["changed_skills"] == ["new-skill"]
+    assert result["merged_from"] == ["old-skill"]
+    assert result["archive_candidates"] == ["old-skill"]
+
+
+def test_validate_merge_skill_rejects_target_patch_without_reading_both_skills():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "applied",
+            "used_tools": [
+                {"tool": "skill_view", "name": "old-skill", "success": True},
+                {"tool": "skill_manage", "action": "patch", "name": "new-skill", "success": True},
+            ],
+            "changed_skills": ["new-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "merged_from": ["old-skill"],
+            "archive_candidates": ["old-skill"],
+            "verification_notes": ["patched successor"],
+            "rollback_hints": [],
+            "_task_kind": "skill_improve",
+            "_maintenance_action": "merge",
+            "_expected_target": "old-skill",
+            "_merge_target_skill": "new-skill",
+            "_allowed_targets": ["old-skill", "new-skill"],
+        }
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "skill_agent_result_merge_read_trace_missing"
+
+
+def test_validate_merge_skill_rejects_source_mutation_even_when_target_was_patched():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "applied",
+            "used_tools": [
+                {"tool": "skill_view", "name": "old-skill", "success": True},
+                {"tool": "skill_view", "name": "new-skill", "success": True},
+                {"tool": "skill_manage", "action": "patch", "name": "old-skill", "success": True},
+                {"tool": "skill_manage", "action": "patch", "name": "new-skill", "success": True},
+            ],
+            "changed_skills": ["old-skill", "new-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "merged_from": ["old-skill"],
+            "archive_candidates": ["old-skill"],
+            "verification_notes": ["patched source and target"],
+            "rollback_hints": [],
+            "_task_kind": "skill_improve",
+            "_maintenance_action": "merge",
+            "_expected_target": "old-skill",
+            "_merge_target_skill": "new-skill",
+            "_allowed_targets": ["old-skill", "new-skill"],
+        }
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "skill_agent_result_merge_source_change_forbidden"
+
+
+def test_validate_merge_skill_rejects_successor_delete_trace():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "applied",
+            "used_tools": [
+                {"tool": "skill_view", "name": "old-skill", "success": True},
+                {"tool": "skill_view", "name": "new-skill", "success": True},
+                {"tool": "skill_manage", "action": "delete", "name": "new-skill", "success": True},
+            ],
+            "changed_skills": ["new-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "merged_from": ["old-skill"],
+            "archive_candidates": ["old-skill"],
+            "verification_notes": ["deleted successor"],
+            "rollback_hints": [],
+            "_task_kind": "skill_improve",
+            "_maintenance_action": "merge",
+            "_expected_target": "old-skill",
+            "_merge_target_skill": "new-skill",
+            "_allowed_targets": ["old-skill", "new-skill"],
+        }
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "skill_agent_result_merge_target_patch_trace_missing"
+
+
+def test_validate_merge_skill_rejects_source_as_own_successor():
+    result = validate_backend_success_result(
+        {
+            "success": True,
+            "outcome": "applied",
+            "used_tools": [
+                {"tool": "skill_view", "name": "same-skill", "success": True},
+                {"tool": "skill_manage", "action": "patch", "name": "same-skill", "success": True},
+            ],
+            "changed_skills": ["same-skill"],
+            "created_skills": [],
+            "deleted_skills": [],
+            "merged_from": ["same-skill"],
+            "archive_candidates": ["same-skill"],
+            "verification_notes": ["invalid self merge"],
+            "rollback_hints": [],
+            "_task_kind": "skill_improve",
+            "_maintenance_action": "merge",
+            "_expected_target": "same-skill",
+            "_merge_target_skill": "same-skill",
+            "_allowed_targets": ["same-skill"],
+        }
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "skill_agent_result_merge_self_successor_forbidden"
+
+
 def test_backend_limits_are_fail_closed():
     limits = SkillAgentBackendLimits(max_tool_calls=0, timeout_seconds=0)
     assert limits.check()["status"] == "failed"
@@ -265,6 +413,60 @@ def test_native_backend_executes_skill_tools_and_finalizer():
     assert "Markdown brief:" in first_user_message
     assert "# Candidate brief: demo" in first_user_message
     assert "Task JSON:" not in first_user_message
+
+
+def test_native_backend_post_validates_merge_target_skill():
+    responses = iter([
+        _tool_response("skill_view", {"name": "old-skill"}, call_id="call_source_view"),
+        _tool_response("skill_view", {"name": "new-skill"}, call_id="call_target_view"),
+        _tool_response(
+            "skill_manage",
+            {"action": "patch", "name": "new-skill", "old_string": "old", "new_string": "merged durable guidance"},
+            call_id="call_patch_target",
+        ),
+        _tool_response(
+            "submit_mutation_result",
+            {
+                "success": True,
+                "outcome": "merged duplicate guidance",
+                "changed_skills": ["new-skill"],
+                "created_skills": [],
+                "deleted_skills": [],
+                "merged_from": ["old-skill"],
+                "archive_candidates": ["old-skill"],
+                "verification_notes": ["read both skills; patched new-skill"],
+                "rollback_hints": [],
+            },
+            call_id="call_final",
+        ),
+    ])
+    viewed = []
+
+    def fake_skill_view(**kwargs):
+        viewed.append(kwargs)
+        return {"success": True, "content": "# New\n\nmerged durable guidance\n\n## Verification\n- Read back."}
+
+    backend = NativeSkillAgentBackend(
+        tool_executor=SkillToolExecutor(
+            skills_list_fn=lambda **_: {"success": True, "skills": []},
+            skill_view_fn=fake_skill_view,
+            skill_manage_fn=lambda **_: {"success": True},
+        ),
+        llm_call=lambda messages, **kwargs: next(responses),
+    )
+
+    result = backend.run(
+        "prompt",
+        {"targets": {"source_skill": "old-skill", "target_skill": "new-skill"}, "task_kind": "skill_improve", "maintenance_action": "merge"},
+        {},
+    )
+
+    assert result["success"] is True
+    assert result["changed_skills"] == ["new-skill"]
+    assert result["merged_from"] == ["old-skill"]
+    assert result["post_validation"]["status"] == "passed"
+    assert result["post_validation"]["target"] == "new-skill"
+    assert viewed[-1] == {"name": "new-skill"}
 
 
 def test_native_backend_post_validates_created_skill():

@@ -136,13 +136,16 @@ def test_build_skill_agent_task_carries_merge_maintenance_action_with_target_ski
     )
 
     assert task["maintenance_action"] == "merge"
+    assert task["targets"] == {"source_skill": "old-skill", "target_skill": "new-skill"}
     assert task["target_skill"] == "new-skill"
     assert "maintenance_action: merge" in task["instructions"]
     assert "target_skill: new-skill" in task["instructions"]
     instructions = task["instructions"]
-    assert "patch old-skill" in instructions or "patch the source skill" in instructions
-    assert "archive" in instructions.lower()
-    assert "preview" in instructions.lower()
+    assert "read old-skill" in instructions.lower()
+    assert "read new-skill" in instructions.lower()
+    assert "patch new-skill" in instructions or "patch the successor" in instructions
+    assert "merged_from" in instructions
+    assert "archive_candidates" in instructions
     assert "do not delete" in instructions.lower() or "no direct deletion" in instructions.lower()
 
 

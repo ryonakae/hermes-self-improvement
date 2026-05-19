@@ -17,6 +17,7 @@ NON_MUTATING_AGENT_OUTCOMES = {
     "stopped_uncertain_needs_review",
 }
 _REQUIRED_SUCCESS_FIELDS = ("used_tools", "changed_skills", "created_skills", "deleted_skills", "verification_notes", "rollback_hints")
+_MERGE_SUCCESS_FIELDS = ("merged_from", "archive_candidates")
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,8 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     allowed_targets = set(result.get("_allowed_targets") or [])
     expected_target = str(result.get("_expected_target") or "").strip()
     task_kind = str(result.get("_task_kind") or "").strip()
+    maintenance_action = str(result.get("_maintenance_action") or "").strip().lower()
+    merge_target_skill = str(result.get("_merge_target_skill") or "").strip()
     if task_kind == "skill_create" and expected_target:
         created_list = [str(name) for name in result.get("created_skills") or []]
         has_create_trace = _tool_trace_has_skill_manage(result.get("used_tools") or [], action="create", name=expected_target)
@@ -97,11 +100,35 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
         outcome = str(result.get("outcome") or "")
         if outcome not in NON_MUTATING_AGENT_OUTCOMES:
             changed_targets = {str(name) for name in result.get("changed_skills") or []}
-            if expected_target not in changed_targets:
-                return {"success": False, "error": "skill_agent_result_changed_skill_missing"}
-            if not _tool_trace_has_skill_manage(result.get("used_tools") or [], action=None, name=expected_target):
-                return {"success": False, "error": "skill_agent_result_change_tool_trace_missing"}
-    for key in ("_allowed_targets", "_expected_target", "_task_kind"):
+            if maintenance_action == "merge":
+                trace = result.get("used_tools") or []
+                if not merge_target_skill:
+                    return {"success": False, "error": "skill_agent_result_merge_target_missing"}
+                if merge_target_skill == expected_target:
+                    return {"success": False, "error": "skill_agent_result_merge_self_successor_forbidden"}
+                for key in _MERGE_SUCCESS_FIELDS:
+                    if key not in result or not isinstance(result.get(key), list):
+                        return {"success": False, "error": f"skill_agent_result_{key}_missing"}
+                if expected_target not in {str(name) for name in result.get("merged_from") or []}:
+                    return {"success": False, "error": "skill_agent_result_merged_from_missing", "expected_source": expected_target}
+                if expected_target not in {str(name) for name in result.get("archive_candidates") or []}:
+                    return {"success": False, "error": "skill_agent_result_archive_candidate_missing", "expected_source": expected_target}
+                if result.get("deleted_skills"):
+                    return {"success": False, "error": "skill_agent_result_merge_deleted_source_forbidden", "deleted_skills": result.get("deleted_skills")}
+                if expected_target in changed_targets:
+                    return {"success": False, "error": "skill_agent_result_merge_source_change_forbidden", "changed_skills": sorted(changed_targets)}
+                if merge_target_skill not in changed_targets:
+                    return {"success": False, "error": "skill_agent_result_merge_target_change_missing", "expected_target": merge_target_skill}
+                if not _tool_trace_has_successful_tool(trace, tool="skill_view", name=expected_target) or not _tool_trace_has_successful_tool(trace, tool="skill_view", name=merge_target_skill):
+                    return {"success": False, "error": "skill_agent_result_merge_read_trace_missing"}
+                if not _tool_trace_has_skill_manage_action(trace, actions={"patch", "edit"}, name=merge_target_skill):
+                    return {"success": False, "error": "skill_agent_result_merge_target_patch_trace_missing", "expected_target": merge_target_skill}
+            else:
+                if expected_target not in changed_targets:
+                    return {"success": False, "error": "skill_agent_result_changed_skill_missing"}
+                if not _tool_trace_has_skill_manage(result.get("used_tools") or [], action=None, name=expected_target):
+                    return {"success": False, "error": "skill_agent_result_change_tool_trace_missing"}
+    for key in ("_allowed_targets", "_expected_target", "_task_kind", "_maintenance_action", "_merge_target_skill"):
         result.pop(key, None)
     return result
 
@@ -111,12 +138,31 @@ SKILL_CONTENT_TOO_LONG_CHARS = 12000
 
 
 def _tool_trace_has_skill_manage(trace: list[Any], *, action: str | None, name: str) -> bool:
+    actions = None if action is None else {action}
+    return _tool_trace_has_skill_manage_action(trace, actions=actions, name=name)
+
+
+def _tool_trace_has_skill_manage_action(trace: list[Any], *, actions: set[str] | None, name: str) -> bool:
     for item in trace:
         if not isinstance(item, dict):
             continue
         if str(item.get("tool") or item.get("tool_name") or "") != "skill_manage":
             continue
-        if action is not None and str(item.get("action") or "") != action:
+        if actions is not None and str(item.get("action") or "") not in actions:
+            continue
+        if str(item.get("name") or "") != name:
+            continue
+        if item.get("success") is False:
+            continue
+        return True
+    return False
+
+
+def _tool_trace_has_successful_tool(trace: list[Any], *, tool: str, name: str) -> bool:
+    for item in trace:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("tool") or item.get("tool_name") or "") != tool:
             continue
         if str(item.get("name") or "") != name:
             continue
@@ -259,10 +305,12 @@ def _needs_skill_post_validation(result: dict[str, Any], *, task_kind: str, expe
 def _task_allowed_targets(task: dict[str, Any]) -> set[str]:
     targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
     names = set()
-    for key in ("primary_skill", "source_skill", "new_skill"):
+    for key in ("primary_skill", "source_skill", "target_skill", "new_skill"):
         value = targets.get(key)
         if value:
             names.add(str(value))
+    if task.get("target_skill"):
+        names.add(str(task.get("target_skill")))
     return names
 
 
@@ -480,6 +528,8 @@ def native_skill_agent_tool_schemas() -> list[dict[str, Any]]:
                 "changed_skills": {"type": "array", "items": {"type": "string"}},
                 "created_skills": {"type": "array", "items": {"type": "string"}},
                 "deleted_skills": {"type": "array", "items": {"type": "string"}},
+                "merged_from": {"type": "array", "items": {"type": "string"}},
+                "archive_candidates": {"type": "array", "items": {"type": "string"}},
                 "verification_notes": {"type": "array", "items": {"type": "string"}},
                 "rollback_hints": {"type": "array", "items": {"type": "string"}},
             },
@@ -710,12 +760,18 @@ class NativeSkillAgentBackend:
                         final["_allowed_targets"] = sorted(allowed_targets)
                     targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
                     task_kind = str(task.get("task_kind") or "")
-                    expected_target = str(targets.get("new_skill") or targets.get("primary_skill") or "")
+                    expected_target = str(targets.get("new_skill") or targets.get("source_skill") or targets.get("primary_skill") or "")
                     final["_task_kind"] = task_kind
                     final["_expected_target"] = expected_target
+                    if task.get("maintenance_action"):
+                        final["_maintenance_action"] = str(task.get("maintenance_action") or "")
+                    merge_target = str(targets.get("target_skill") or task.get("target_skill") or "")
+                    if merge_target:
+                        final["_merge_target_skill"] = merge_target
                     validated = validate_backend_success_result(final)
-                    if _needs_skill_post_validation(validated, task_kind=task_kind, expected_target=expected_target):
-                        post_validation = _post_validate_skill_target(self.tool_executor, target=expected_target, task_kind=task_kind, used_tools=validated.get("mutation_intents") or validated.get("used_tools") or [])
+                    post_validation_target = merge_target if str(task.get("maintenance_action") or "").strip().lower() == "merge" and merge_target else expected_target
+                    if _needs_skill_post_validation(validated, task_kind=task_kind, expected_target=post_validation_target):
+                        post_validation = _post_validate_skill_target(self.tool_executor, target=post_validation_target, task_kind=task_kind, used_tools=validated.get("mutation_intents") or validated.get("used_tools") or [])
                         validated["post_validation"] = post_validation
                         if post_validation.get("status") != "passed":
                             return {

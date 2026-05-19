@@ -300,9 +300,11 @@ def render_skill_agent_instructions(
             sections.extend([
                 "",
                 "Merge semantics:",
-                f"- patch {skill_name} so its content points users to {merge_target_skill} (migration note or stub) instead of duplicating procedure.",
-                f"- treat the archive of {skill_name} as a preview / future step. Do not delete {skill_name} in this run; no direct deletion of the source skill.",
-                f"- enrich {merge_target_skill} only with what the attached evidence explicitly supports, never with speculative content.",
+                f"- read {skill_name} and read {merge_target_skill} before deciding whether anything is worth merging.",
+                f"- patch {merge_target_skill} / patch the successor only with non-duplicative procedural guidance that the source or evidence actually adds.",
+                f"- do not patch, edit, delete, or otherwise mutate {skill_name}; do not delete the source; source cleanup belongs to archive/reference-rewrite follow-up steps.",
+                f"- return merged_from: [\"{skill_name}\"] and archive_candidates: [\"{skill_name}\"] when useful content was merged into {merge_target_skill}.",
+                f"- treat archive of {skill_name} as a preview / future step until the archive executor and reference rewrite checks run.",
             ])
         if maintenance_action == "patch":
             candidate_quality = candidate.get("quality_signals") if isinstance(candidate.get("quality_signals"), dict) else {}

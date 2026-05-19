@@ -73,7 +73,7 @@ class SkillAgentRunner:
 def _target_names(task: dict[str, Any]) -> dict[str, str]:
     targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
     names: dict[str, str] = {}
-    for key in ("primary_skill", "source_skill", "new_skill"):
+    for key in ("primary_skill", "source_skill", "target_skill", "new_skill"):
         value = targets.get(key)
         if not value:
             continue
@@ -98,8 +98,12 @@ def validate_skill_agent_task(task: dict[str, Any], *, config: dict[str, Any] | 
 
     required_existing: set[str] = set()
     allow_missing: set[str] = set()
+    maintenance_action = str(task.get("maintenance_action") or "").strip().lower()
     if task_kind in {"skill_improve", "skill_large_rewrite", "skill_delete", "skill_write_file", "skill_remove_file"}:
-        required_existing.add("primary_skill")
+        if task_kind == "skill_improve" and maintenance_action == "merge":
+            required_existing.update({"source_skill", "target_skill"})
+        else:
+            required_existing.add("primary_skill")
     if task_kind == "skill_create":
         allow_missing.add("new_skill")
     if task_kind == "skill_rename":
@@ -107,6 +111,8 @@ def validate_skill_agent_task(task: dict[str, Any], *, config: dict[str, Any] | 
         allow_missing.add("new_skill")
     if task_kind == "skill_merge":
         required_existing.update({"source_skill", "primary_skill"})
+    if maintenance_action == "merge" and targets.get("source_skill") == targets.get("target_skill"):
+        reasons.append("merge_self_successor_forbidden")
 
     for key in required_existing:
         if key not in targets:
