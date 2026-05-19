@@ -19,6 +19,7 @@ from .prompts import base_prompt_hash, render_skill_agent_instructions
 from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
 from .target_resolver import build_target_resolution_digest, run_target_resolver
 from .evidence import resolve_coverage_alias
+from .skill_reference_rewriter import build_skill_reference_rewrite_plan
 
 
 MEMORY_AGENT_SKIP_HINTS = {"skip_duplicate", "skip_sensitive", "defer_unclear"}
@@ -1141,6 +1142,8 @@ def run_skill_improvement_step(
                 "successor": planner_decision.get("successor"),
                 "before_state": candidate.get("state"),
             }
+            successor = str(planner_decision.get("successor") or "").strip()
+            reference_rewrite_plan = build_skill_reference_rewrite_plan(skill_name, successor, config=config)
             if not mutate:
                 decisions.append({
                     **base_decision,
@@ -1149,6 +1152,19 @@ def run_skill_improvement_step(
                     "changed": False,
                     "archive_reason": planner_decision.get("archive_reason"),
                     "archive_context": archive_context,
+                    **({"reference_rewrite_plan": reference_rewrite_plan} if reference_rewrite_plan else {}),
+                })
+                continue
+            if reference_rewrite_plan and not reference_rewrite_plan.get("can_rewrite"):
+                decisions.append({
+                    **base_decision,
+                    "decision": "defer",
+                    "reason": "archive_deferred_unresolved_reference_rewrites",
+                    "changed": False,
+                    "archive_reason": planner_decision.get("archive_reason"),
+                    "archive_context": archive_context,
+                    "reference_rewrite_plan": reference_rewrite_plan,
+                    "next_action": "resolve_or_support_reference_rewrites_before_archive",
                 })
                 continue
             archive_fn = (config or {}).get("_skill_archive_fn")

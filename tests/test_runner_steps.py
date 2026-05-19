@@ -330,13 +330,97 @@ def test_skill_step_dry_run_records_archive_preview_without_mutating():
     assert decision["archive_reason"] == "obsolete_marker"
 
 
-def test_skill_step_falls_back_to_archive_preview_when_no_official_archive_tool_is_injected():
+def test_skill_step_archive_preview_includes_reference_rewrite_plan(tmp_path):
+    jobs_path = tmp_path / "jobs.json"
+    jobs_path.write_text(json.dumps({"jobs": [{"name": "active", "enabled": True, "skills": ["old-skill"]}]}), encoding="utf-8")
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "duplicate", "successor": "new-skill"}]}
+
+    pack = archive_evidence_pack()
+    pack["evidence"][0]["successor"] = "new-skill"
+    pack["skill_candidates"].append({"name": "new-skill", "state": "active", "source": "curator", "usage": {}})
+    result = run_skill_improvement_step(
+        evidence_pack=pack,
+        config={"_improvement_planner_func": fake_planner, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
+        mutate=False,
+    )
+
+    decision = result["decisions"][0]
+    assert decision["decision"] == "archive_skill_preview"
+    assert decision["reference_rewrite_plan"]["can_rewrite"] is True
+    assert decision["reference_rewrite_plan"]["references"] == [
+        {
+            "surface": "cron_jobs",
+            "path": str(jobs_path),
+            "field": "jobs[0].skills[0]",
+            "rewrite": "replace_exact",
+            "active": True,
+            "job": "active",
+        }
+    ]
+
+
+def test_skill_step_mutating_archive_defers_when_reference_rewrite_has_unresolved_active_reference(tmp_path):
+    jobs_path = tmp_path / "jobs.json"
+    jobs_path.write_text(json.dumps({"jobs": [{"name": "active", "enabled": True, "prompt": "old-skill-extra is ambiguous"}]}), encoding="utf-8")
+    calls = []
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "duplicate", "successor": "new-skill"}]}
+
+    def fake_archive(name):
+        calls.append(name)
+        return {"success": True}
+
+    pack = archive_evidence_pack()
+    pack["evidence"][0]["successor"] = "new-skill"
+    pack["skill_candidates"].append({"name": "new-skill", "state": "active", "source": "curator", "usage": {}})
+    result = run_skill_improvement_step(
+        evidence_pack=pack,
+        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
+        mutate=True,
+    )
+
+    decision = result["decisions"][0]
+    assert calls == []
+    assert decision["decision"] == "defer"
+    assert decision["reason"] == "archive_deferred_unresolved_reference_rewrites"
+    assert decision["reference_rewrite_plan"]["unresolved_references"][0]["reason"] == "ambiguous_substring_reference"
+
+
+def test_skill_step_mutating_archive_without_successor_defers_when_active_reference_exists(tmp_path):
+    jobs_path = tmp_path / "jobs.json"
+    jobs_path.write_text(json.dumps({"jobs": [{"name": "active", "enabled": True, "skills": ["old-skill"]}]}), encoding="utf-8")
+    calls = []
+
+    def fake_planner(*, digest, config):
+        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
+
+    def fake_archive(name):
+        calls.append(name)
+        return {"success": True}
+
+    result = run_skill_improvement_step(
+        evidence_pack=archive_evidence_pack(),
+        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
+        mutate=True,
+    )
+
+    decision = result["decisions"][0]
+    assert calls == []
+    assert decision["decision"] == "defer"
+    assert decision["reason"] == "archive_deferred_unresolved_reference_rewrites"
+    assert decision["reference_rewrite_plan"]["unresolved_references"][0]["reason"] == "missing_successor_for_rewrite"
+
+
+def test_skill_step_falls_back_to_archive_preview_when_no_official_archive_tool_is_injected(tmp_path):
     def fake_planner(*, digest, config):
         return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
-        config={"_improvement_planner_func": fake_planner},
+        config={"_improvement_planner_func": fake_planner, "_cron_jobs_path": str(tmp_path / "jobs.json"), "_skills_root": str(tmp_path / "skills")},
         mutate=True,
     )
 
@@ -348,7 +432,7 @@ def test_skill_step_falls_back_to_archive_preview_when_no_official_archive_tool_
     assert decision["archive_reason"] == "obsolete_marker"
 
 
-def test_skill_step_executes_archive_with_curator_primitive_when_mutating():
+def test_skill_step_executes_archive_with_curator_primitive_when_mutating(tmp_path):
     calls = []
 
     def fake_planner(*, digest, config):
@@ -360,7 +444,7 @@ def test_skill_step_executes_archive_with_curator_primitive_when_mutating():
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
-        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive},
+        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(tmp_path / "jobs.json"), "_skills_root": str(tmp_path / "skills")},
         mutate=True,
     )
 

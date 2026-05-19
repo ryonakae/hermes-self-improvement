@@ -327,6 +327,8 @@ $PY -m pytest tests/test_skill_agent.py tests/test_mutation_backend.py -q
 
 **Objective:** Treat active references as rewrite work, not automatic archive blockers.
 
+**Status:** implemented in this slice. Added deterministic rewrite planning for active cron skills/prompt/script references, Hermes config skill lists, and local skill Markdown/references; historical report mentions are explicitly ignored. Archive dry-runs now include the reference rewrite plan, and mutating archive is deferred when unresolved active references remain. Actual rewrite application is left to Task 7 before archive execution.
+
 **Files:**
 - Modify: `hermes_self_improvement/skill_archive_evidence.py`
 - Possibly create: `hermes_self_improvement/skill_reference_rewriter.py`
