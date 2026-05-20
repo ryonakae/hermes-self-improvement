@@ -92,6 +92,38 @@ def base_config(tmp_path: Path, **calibration_overrides):
     return {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": calibration}
 
 
+def seed_runtime_default_evaluator(config: dict) -> None:
+    setup_runtime = importlib.import_module("hermes_self_improvement.setup_runtime")
+    setup_runtime.run_setup(config, reset=True)
+
+
+def write_candidate_assets(tmp_path: Path, *, expected: dict | None = None) -> dict:
+    evaluator = tmp_path / "proposal-evaluator.json"
+    rubric = tmp_path / "proposal-rubric.json"
+    cases = tmp_path / "proposal-cases.jsonl"
+    evaluator.write_text('{"schema_name":"self_improvement_default_evaluator","evaluator_id":"test"}\n', encoding="utf-8")
+    rubric.write_text('{"version":"test"}\n', encoding="utf-8")
+    cases.write_text(
+        json.dumps({
+            "id": "case-1",
+            "proposal": {"id": "p1"},
+            "findings": [],
+            "expected": expected or {"auto_apply": False},
+        }, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "type": "evaluator_calibration_candidate",
+        "mode": "dspy_program_eval",
+        "evaluator_id": "test",
+        "evaluator_path": str(evaluator),
+        "rubric_path": str(rubric),
+        "eval_cases_path": str(cases),
+        "compiled_program_path": None,
+        "candidate_hash": "sha256:candidate",
+    }
+
+
 def test_calibration_disabled_returns_no_op(tmp_path):
     mod = load_plugin_module()
 
@@ -356,20 +388,20 @@ def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
 
     text = cli._render_calibration_summary({
         "current_status": "partial_update",
-        "reasons": ["evaluator_regression_runner_not_configured"],
+        "reasons": ["evaluator_candidate_not_concrete"],
         "active_changed": True,
         "evidence_summary": {"total_events": 20, "disagreements": 5, "bad_outcomes": 0},
-        "regression": {"status": "failed", "reason": "regression_runner_not_configured"},
+        "regression": {"status": "skipped", "reason": "candidate_not_concrete"},
         "prompt_overlays": {
             "improvement_planner": {"candidate": True, "promoted": True, "reason": "planner_quality_signals"},
         },
-        "evaluator_update": {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False},
+        "evaluator_update": {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False},
     })
 
     assert "Calibration: partial_update" in text
-    assert "Reason: evaluator_regression_runner_not_configured" in text
+    assert "Reason: evaluator_candidate_not_concrete" in text
     assert "Evaluator:" in text
-    assert "- status: failed, reason regression_runner_not_configured" in text
+    assert "- status: skipped, reason candidate_not_concrete" in text
     assert "Prompt overlays:" in text
     assert "planner: candidate yes, promoted yes" in text
 
@@ -433,11 +465,11 @@ def test_calibration_summary_separates_overlay_set_from_failed_evaluator():
 
     text = cli._render_calibration_summary({
         "current_status": "failed",
-        "reasons": ["regression_runner_not_configured"],
+        "reasons": ["eval_case_failures"],
         "active_changed": False,
         "evidence_summary": {"total_events": 20, "disagreements": 0, "bad_outcomes": 0},
-        "regression": {"status": "failed", "reason": "regression_runner_not_configured"},
-        "evaluator_update": {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False},
+        "regression": {"status": "failed", "reason": "eval_case_failures"},
+        "evaluator_update": {"status": "failed", "reason": "eval_case_failures", "active_changed": False},
         "overlay_candidate_set": {
             "status": "evaluated",
             "decision": "keep_candidate",
@@ -451,7 +483,7 @@ def test_calibration_summary_separates_overlay_set_from_failed_evaluator():
 
     assert "Component status:" in text
     assert "- prompt overlay set: evaluated, action keep_candidate, GEPA no_improvement, changed 0" in text
-    assert "- evaluator: failed, reason regression_runner_not_configured, active changed no" in text
+    assert "- evaluator: failed, reason eval_case_failures, active changed no" in text
     assert "Regression:" not in text
 
 
@@ -504,11 +536,210 @@ def test_calibration_summary_labels_evaluated_promote_as_would_promote():
     assert "planner: candidate yes, promoted no" in text
 
 
-def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
+def test_calibration_execute_skips_evaluator_update_for_metadata_only_candidate(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     cfg = base_config(tmp_path)
     active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
+    write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
+    write_review_outcome(cfg, {"outcome": "rejected_by_user", "source": "user"}, "rejected.json")
+
+    def should_not_run(**_kwargs):
+        raise AssertionError("metadata-only evaluator candidate should not run regression")
+
+    monkeypatch.setattr(calibration, "_run_calibration_regression", should_not_run)
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert result["current_status"] in {"no_op", "partial_update"}
+    assert result["evaluator_update"]["status"] == "skipped"
+    assert result["evaluator_update"]["reason"] == "candidate_not_concrete"
+    assert active_pointer.exists() is False
+
+
+def test_evaluator_candidate_concreteness_requires_assets(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+
+    assert calibration._is_concrete_evaluator_candidate({"type": "evaluator_calibration_candidate"}) is False
+    assert calibration._is_concrete_evaluator_candidate({
+        "type": "evaluator_calibration_candidate",
+        "mode": "dspy_program_eval",
+        "evaluator_path": str(tmp_path / "proposal-evaluator.json"),
+        "rubric_path": str(tmp_path / "proposal-rubric.json"),
+        "eval_cases_path": str(tmp_path / "proposal-cases.jsonl"),
+    }) is True
+    assert calibration._is_concrete_evaluator_candidate({
+        "type": "evaluator_calibration_candidate",
+        "mode": "compiled_program_eval",
+        "compiled_program_path": str(tmp_path / "compiled.json"),
+        "rubric_path": str(tmp_path / "proposal-rubric.json"),
+        "eval_cases_path": str(tmp_path / "proposal-cases.jsonl"),
+    }) is True
+
+
+def test_run_calibration_regression_passes_candidate_eval_cases(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    candidate = write_candidate_assets(tmp_path)
+    seen = {}
+
+    def fake_score(**kwargs):
+        seen.update(kwargs)
+        return [{
+            "id": "case-1",
+            "passed": True,
+            "score": {"id": "p1", "score": 50, "recommendation": "defer", "risk": "medium", "confidence": "medium", "auto_apply": False},
+            "checks": [{"name": "auto_apply", "passed": True}],
+        }]
+
+    monkeypatch.setattr(calibration, "_score_evaluator_cases", fake_score)
+
+    result = calibration._run_calibration_regression(candidate=candidate, config={"_self_improvement_root": str(tmp_path / "self-improvement")})
+
+    assert result["status"] == "passed"
+    assert result["case_count"] == 1
+    assert result["failed_count"] == 0
+    assert Path(result["artifact_path"]).exists()
+    assert "evaluator/regression" in result["artifact_path"]
+    assert seen["candidate"]["evaluator_path"] == candidate["evaluator_path"]
+
+
+def test_run_calibration_regression_fails_when_candidate_asset_missing(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    candidate = write_candidate_assets(tmp_path)
+    Path(candidate["rubric_path"]).unlink()
+
+    result = calibration._run_calibration_regression(candidate=candidate, config={"_self_improvement_root": str(tmp_path / "self-improvement")})
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "candidate_asset_missing"
+    assert "rubric_path" in result["missing_assets"]
+    assert Path(result["artifact_path"]).exists()
+
+
+def test_run_calibration_regression_fails_on_eval_case_mismatch(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    candidate = write_candidate_assets(tmp_path)
+    monkeypatch.setattr(calibration, "_score_evaluator_cases", lambda **_kwargs: [{"id": "case-1", "passed": False, "score": {"auto_apply": True}, "checks": [{"name": "auto_apply", "passed": False}]}])
+
+    result = calibration._run_calibration_regression(candidate=candidate, config={"_self_improvement_root": str(tmp_path / "self-improvement")})
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "eval_case_failures"
+    assert result["failed_count"] == 1
+
+
+def test_active_pointer_validation_accepts_compiled_program_candidate(tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    rubric = tmp_path / "rubric.json"
+    cases = tmp_path / "cases.jsonl"
+    compiled = tmp_path / "compiled.json"
+    rubric.write_text("{}\n", encoding="utf-8")
+    cases.write_text("{}\n", encoding="utf-8")
+    compiled.write_text("{}\n", encoding="utf-8")
+    candidate = {
+        "type": "evaluator_calibration_candidate",
+        "mode": "compiled_program_eval",
+        "evaluator_id": "compiled-test",
+        "rubric_path": str(rubric),
+        "eval_cases_path": str(cases),
+        "compiled_program_path": str(compiled),
+        "hashes": {
+            "rubric": "sha256:" + calibration._sha256_text(rubric.read_text(encoding="utf-8")),
+            "eval_cases": "sha256:" + calibration._sha256_text(cases.read_text(encoding="utf-8")),
+            "compiled_program": "sha256:" + calibration._sha256_text(compiled.read_text(encoding="utf-8")),
+        },
+        "candidate_hash": "sha256:candidate",
+    }
+
+    active = tmp_path / "active.json"
+    active_hash = calibration._write_active_pointer(
+        pointer_path=active,
+        candidate=candidate,
+        regression={"status": "passed"},
+        active_before_hash=None,
+    )
+
+    pointer = json.loads(active.read_text(encoding="utf-8"))
+    assert active_hash
+    assert pointer["mode"] == "compiled_program_eval"
+    assert pointer["compiled_program_path"] == str(compiled)
+
+
+def test_calibration_active_default_source_builds_concrete_candidate(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    seed_runtime_default_evaluator(cfg)
+    write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
+    write_review_outcome(cfg, {"outcome": "rejected_by_user", "source": "user"}, "rejected.json")
+    seen = {}
+    def fake_regression(*, candidate, config):
+        seen["candidate"] = candidate
+        return {"status": "passed", "case_count": 1, "passed_count": 1, "failed_count": 0}
+
+    monkeypatch.setattr(calibration, "_run_calibration_regression", fake_regression)
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert calibration._is_concrete_evaluator_candidate(seen["candidate"]) is True
+    assert result["evaluator_update"]["status"] == "updated"
+
+
+def test_calibration_active_default_source_ignores_malformed_active_pointer(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    seed_runtime_default_evaluator(cfg)
+    active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
+    active_pointer.write_text(json.dumps({"schema_name": "self_improvement_active_evaluator_pointer"}) + "\n", encoding="utf-8")
+    write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
+    write_review_outcome(cfg, {"outcome": "rejected_by_user", "source": "user"}, "rejected.json")
+    seen = {}
+
+    def fake_regression(*, candidate, config):
+        seen["candidate"] = candidate
+        return {"status": "passed", "case_count": 1, "passed_count": 1, "failed_count": 0}
+
+    monkeypatch.setattr(calibration, "_run_calibration_regression", fake_regression)
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert result["evaluator_update"]["status"] == "updated"
+    assert calibration._is_concrete_evaluator_candidate(seen["candidate"]) is True
+    assert "/evaluator/defaults/" in seen["candidate"]["evaluator_path"]
+
+
+def test_calibration_active_default_source_ignores_pointer_with_invalid_hashes(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    seed_runtime_default_evaluator(cfg)
+    active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
+    pointer = json.loads(active_pointer.read_text(encoding="utf-8"))
+    custom_evaluator = tmp_path / "custom-evaluator.json"
+    custom_evaluator.write_text("{}\n", encoding="utf-8")
+    pointer["evaluator_path"] = str(custom_evaluator)
+    pointer["hashes"] = {"evaluator": "not-a-hash"}
+    active_pointer.write_text(json.dumps(pointer) + "\n", encoding="utf-8")
+    write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
+    write_review_outcome(cfg, {"outcome": "rejected_by_user", "source": "user"}, "rejected.json")
+    seen = {}
+
+    def fake_regression(*, candidate, config):
+        seen["candidate"] = candidate
+        return {"status": "passed", "case_count": 1, "passed_count": 1, "failed_count": 0}
+
+    monkeypatch.setattr(calibration, "_run_calibration_regression", fake_regression)
+
+    result = calibration.run_calibration(config=cfg, execute=True)
+
+    assert result["evaluator_update"]["status"] == "updated"
+    assert seen["candidate"]["evaluator_path"] != str(custom_evaluator)
+    assert "/evaluator/defaults/" in seen["candidate"]["evaluator_path"]
+
+
+def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
+    calibration = importlib.import_module("hermes_self_improvement.calibration")
+    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
     runtime_cases_dir = tmp_path / "self-improvement" / "evaluator" / "runtime-eval-cases"
+    seed_runtime_default_evaluator(cfg)
     write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
     write_review_outcome(cfg, {"outcome": "rejected_by_user", "source": "user"}, "rejected.json")
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "failed", "reason": "regression_failed"})
@@ -518,8 +749,8 @@ def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     assert result["current_status"] == "failed"
     assert result["active_changed"] is False
     assert "regression_failed" in result["reasons"]
-    assert active_pointer.exists() is False
-    assert runtime_cases_dir.exists() is False
+    assert active_pointer.exists() is True
+    assert not any(runtime_cases_dir.glob("**/*.jsonl"))
     assert result["runtime_eval_cases"]["status"] == "empty"
 
 
@@ -764,7 +995,6 @@ def test_calibration_reports_partial_update_when_overlay_set_promoted_but_evalua
     monkeypatch.setattr(calibration, "generate_overlay_candidate_set", lambda *, config, evidence: candidate_set)
     monkeypatch.setattr(calibration, "evaluate_overlay_candidate_set", lambda value: overlay_evaluation())
     monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["improvement_planner_overlay"], "candidate_paths": {"improvement_planner_overlay": str(tmp_path / "planner.json")}})
-    monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "failed", "reason": "regression_runner_not_configured"})
 
     result = calibration.run_calibration(config=cfg, execute=True)
 
@@ -774,9 +1004,9 @@ def test_calibration_reports_partial_update_when_overlay_set_promoted_but_evalua
     assert result["overlay_candidate_set"]["status"] == "promoted"
     assert result["overlay_candidate_set"]["promoted_targets"] == ["improvement_planner_overlay"]
     assert result["prompt_overlays"]["improvement_planner"]["promoted"] is True
-    assert result["evaluator_update"]["status"] == "failed"
-    assert result["evaluator_update"]["reason"] == "regression_runner_not_configured"
-    assert "evaluator_regression_runner_not_configured" in result["reasons"]
+    assert result["evaluator_update"]["status"] == "skipped"
+    assert result["evaluator_update"]["reason"] == "candidate_not_concrete"
+    assert "evaluator_candidate_not_concrete" in result["reasons"]
 
 
 def test_calibration_execute_keeps_non_promoted_overlay_candidate_set(monkeypatch, tmp_path):
@@ -801,9 +1031,10 @@ def test_calibration_execute_keeps_non_promoted_overlay_candidate_set(monkeypatc
 
 def test_calibration_execute_promotes_active_pointer_after_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path)
+    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
     active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
     repo_cases_before = (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8")
+    seed_runtime_default_evaluator(cfg)
     write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
     write_review_outcome(cfg, {"outcome": "rejected_by_user", "source": "user"}, "rejected.json")
     monkeypatch.setattr(calibration, "_run_calibration_regression", lambda *, candidate, config: {"status": "passed", "cases": 3})
@@ -814,6 +1045,16 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
     assert result["active_changed"] is True
     assert result["active_evaluator_path"] == str(active_pointer)
     pointer = json.loads(active_pointer.read_text(encoding="utf-8"))
+    required = {
+        "schema_name", "schema_version", "created_by", "source", "mode",
+        "evaluator_id", "evaluator_path", "rubric_path", "eval_cases_path",
+        "compiled_program_path", "hashes", "safety", "candidate",
+        "candidate_hash", "regression", "active_before_hash",
+    }
+    assert required <= set(pointer)
+    assert pointer["schema_name"] == "self_improvement_active_evaluator_pointer"
+    assert pointer["mode"] == "dspy_program_eval"
+    assert pointer["safety"]["promotion_requires_regression_gate"] is True
     assert pointer["candidate_hash"] == result["candidate"]["candidate_hash"]
     assert pointer["regression"]["status"] == "passed"
     assert result["ledger_path"]
@@ -823,14 +1064,14 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
     assert (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8") == repo_cases_before
     ledger = json.loads(Path(result["ledger_path"]).read_text(encoding="utf-8"))
     assert ledger["operation"] == "calibrate"
-    assert ledger["restore_data"]["active_before_content"] is None
+    assert ledger["restore_data"]["active_before_content"] is not None
 
 
 def test_restore_previous_calibration_restores_active_before_state(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path)
+    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
     active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
-    write_json(active_pointer, {"candidate_hash": "before", "regression": {"status": "passed"}})
+    seed_runtime_default_evaluator(cfg)
     before_content = active_pointer.read_text(encoding="utf-8")
     write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
     write_review_outcome(cfg, {"outcome": "rejected_by_user", "source": "user"}, "rejected.json")

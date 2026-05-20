@@ -198,6 +198,48 @@ def _active_prompt_status(config: dict[str, Any], layout: dict[str, Path]) -> di
     }
 
 
+def _active_evaluator_pointer_ready(pointer: dict[str, Any] | None) -> bool:
+    if not isinstance(pointer, dict):
+        return False
+    required = {
+        "schema_name", "schema_version", "created_by", "source", "mode",
+        "evaluator_id", "evaluator_path", "rubric_path", "eval_cases_path",
+        "compiled_program_path", "hashes", "safety",
+    }
+    if not required <= set(pointer):
+        return False
+    if pointer.get("schema_name") != "self_improvement_active_evaluator_pointer":
+        return False
+    if pointer.get("mode") not in {"dspy_program_eval", "compiled_program_eval"}:
+        return False
+    if pointer.get("mode") == "dspy_program_eval" and not pointer.get("evaluator_path"):
+        return False
+    if pointer.get("mode") == "compiled_program_eval" and not pointer.get("compiled_program_path"):
+        return False
+    if not pointer.get("rubric_path") or not pointer.get("eval_cases_path"):
+        return False
+    hashes = pointer.get("hashes") if isinstance(pointer.get("hashes"), dict) else None
+    if not isinstance(hashes, dict):
+        return False
+    path_keys = {
+        "evaluator": pointer.get("evaluator_path"),
+        "rubric": pointer.get("rubric_path"),
+        "eval_cases": pointer.get("eval_cases_path"),
+        "compiled_program": pointer.get("compiled_program_path"),
+    }
+    required_hashes = ("rubric", "eval_cases", "compiled_program") if pointer.get("mode") == "compiled_program_eval" else ("evaluator", "rubric", "eval_cases")
+    for key in required_hashes:
+        value = hashes.get(key)
+        path_value = path_keys.get(key)
+        if not isinstance(value, str) or not value.startswith("sha256:") or not path_value:
+            return False
+        path = Path(str(path_value)).expanduser()
+        if not path.exists() or value != _sha256_file(path):
+            return False
+    safety = pointer.get("safety") if isinstance(pointer.get("safety"), dict) else {}
+    return safety.get("promotion_requires_regression_gate") is True
+
+
 def check_runtime_setup(config: dict[str, Any]) -> dict[str, Any]:
     layout = runtime_layout(config)
     required_dirs = _required_dirs(layout)
@@ -215,7 +257,7 @@ def check_runtime_setup(config: dict[str, Any]) -> dict[str, Any]:
         for key, path in _source_default_paths().items()
     }
     changed_defaults = [key for key, value in hashes.items() if value is not None and source_hashes.get(key) is not None and value != source_hashes[key]]
-    active_ready = isinstance(active_pointer, dict) and active_pointer.get("schema_name") == "self_improvement_active_evaluator_pointer"
+    active_ready = _active_evaluator_pointer_ready(active_pointer)
     defaults_ready = not any(hashes.get(key) is None for key in DEFAULT_EVALUATOR_FILES) and not changed_defaults
     active_prompts = _active_prompt_status(config, layout)
     prompt_ready = active_prompts.get("status") == "ready"

@@ -85,10 +85,41 @@ def test_setup_is_idempotent_and_preserves_existing_active_evaluator(tmp_path):
 
     result = setup.run_setup(config)
 
-    assert result["initialized"] is True
+    assert result["initialized"] is False
     assert result["created_or_updated"]["active_evaluator"] is False
     assert result["created_or_updated"]["prompt_overlays"] is False
     assert json.loads(active.read_text(encoding="utf-8"))["custom"] is True
+
+
+def test_runtime_setup_rejects_malformed_active_evaluator_pointer(tmp_path):
+    setup = load_setup_module()
+    root = tmp_path / "self-improvement"
+    config = {"_self_improvement_root": str(root)}
+    setup.run_setup(config)
+    active = root / "evaluator" / "active.json"
+    active.write_text(json.dumps({"schema_name": "self_improvement_active_evaluator_pointer"}) + "\n", encoding="utf-8")
+
+    result = setup.check_runtime_setup(config)
+
+    assert result["initialized"] is False
+    assert result["active_evaluator"]["status"] == "invalid"
+    assert "active_evaluator_invalid" in result["reasons"]
+
+
+def test_runtime_setup_rejects_active_evaluator_pointer_with_incomplete_hashes(tmp_path):
+    setup = load_setup_module()
+    root = tmp_path / "self-improvement"
+    config = {"_self_improvement_root": str(root)}
+    setup.run_setup(config)
+    active = root / "evaluator" / "active.json"
+    pointer = json.loads(active.read_text(encoding="utf-8"))
+    pointer["hashes"] = {"evaluator": pointer["hashes"]["evaluator"]}
+    active.write_text(json.dumps(pointer) + "\n", encoding="utf-8")
+
+    result = setup.check_runtime_setup(config)
+
+    assert result["initialized"] is False
+    assert result["active_evaluator"]["status"] == "invalid"
 
 
 def test_setup_reset_removes_stale_files_and_reseeds(tmp_path):

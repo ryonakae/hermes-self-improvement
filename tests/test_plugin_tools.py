@@ -204,7 +204,7 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
                 "improvement_planner": {"candidate": True, "promoted": False, "candidate_hash": "hash-planner", "candidate_path": str(tmp_path / "candidate.json"), "regression": {"status": "passed", "details": large_details}},
                 "skill_agent": {"candidate": False, "promoted": False, "candidate_hash": None, "candidate_path": None, "regression": None},
             },
-            "evaluator_update": {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False},
+            "evaluator_update": {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False},
             "overlay_candidate_set": {"status": "promoted", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["improvement_planner_overlay"], "hard_violations": 0, "candidate_payload": large_details},
         }
 
@@ -224,13 +224,13 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
     assert payload["current_status"] == "dry_run"
     assert payload["evidence_summary"]["total_events"] == 5
     assert payload["regression"] == {"status": "passed"}
-    assert payload["evaluator_update"] == {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False}
+    assert payload["evaluator_update"] == {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False}
     assert payload["full_payload"]["path"] == str(tmp_path / "ledger.json")
     assert "prompt_overlays" not in payload
     assert payload["overlay_candidate_set"] == {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["improvement_planner_overlay"], "hard_violations": 0}
     assert payload["components"] == {
         "prompt_overlay_set": {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "changed_targets": ["improvement_planner_overlay"], "hard_violations": 0},
-        "evaluator": {"status": "failed", "reason": "regression_runner_not_configured", "active_changed": False},
+        "evaluator": {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False},
     }
     assert large_details not in raw
     assert len(raw) < 4000

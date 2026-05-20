@@ -10,6 +10,9 @@ As of 2026-05-10, the long-term roadmap is:
 
 The current active hardening plans are:
 
+- `2026-05-20-evaluator-regression-runner.md`
+  - **Status:** planned / reviewed before implementation.
+  - Replaces the `regression_runner_not_configured` placeholder with a real fail-closed evaluator regression runner for concrete evaluator candidates, while skipping metadata-only evaluator evidence instead of writing malformed active pointers. Prompt-overlay GEPA promotion remains separate; daily report wording can be polished after dogfood if still needed.
 - `2026-05-19-mutation-tool-call-limit-simplification.md`
   - **Status:** implemented.
   - Removed plugin-facing `mutation.max_iterations` before release, made `mutation.max_tool_calls` the single operator-facing native mutation limit, raised its default to 12, and derives internal skill-agent / memory-agent LLM rounds as `max_tool_calls + 2` without reading Hermes core `agent.max_turns`. Validation: focused mutation/config tests (`98 passed`), full `pytest tests -q` (`698 passed, 2 skipped`), `py_compile`, `git diff --check`, and dry-run artifact inspection passed.

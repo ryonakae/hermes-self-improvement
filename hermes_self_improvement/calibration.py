@@ -17,7 +17,7 @@ from .outcome_observer import compact_outcome_prepass_summary, run_outcome_prepa
 from .prompt_candidate_optimizer import generate_overlay_candidate_set
 from .prompt_overlays import promote_overlay_candidate_set
 from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_role_runtime_eval_cases
-from .setup_runtime import check_runtime_setup
+from .setup_runtime import check_runtime_setup, runtime_layout
 PLUGIN_NAME = "hermes-self-improvement"
 PLUGIN_VERSION = "0.1.0"
 UTC = timezone.utc
@@ -289,6 +289,128 @@ def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, An
     return candidate
 
 
+def _is_concrete_evaluator_candidate(candidate: dict[str, Any] | None) -> bool:
+    if not isinstance(candidate, dict):
+        return False
+    mode = str(candidate.get("mode") or "dspy_program_eval")
+    rubric = candidate.get("rubric_path")
+    cases = candidate.get("eval_cases_path")
+    if not rubric or not cases:
+        return False
+    if mode == "compiled_program_eval":
+        return bool(candidate.get("compiled_program_path"))
+    if mode == "dspy_program_eval":
+        return bool(candidate.get("evaluator_path"))
+    return False
+
+
+def _hash_candidate_assets(candidate: dict[str, Any]) -> dict[str, str | None]:
+    assets = {
+        "evaluator": candidate.get("evaluator_path"),
+        "rubric": candidate.get("rubric_path"),
+        "eval_cases": candidate.get("eval_cases_path"),
+        "compiled_program": candidate.get("compiled_program_path"),
+    }
+    hashes: dict[str, str | None] = {}
+    for key, value in assets.items():
+        if not value:
+            hashes[key] = None
+            continue
+        path = Path(str(value)).expanduser()
+        hashes[key] = "sha256:" + _sha256_text(path.read_text(encoding="utf-8")) if path.exists() else None
+    return hashes
+
+
+def _active_pointer_hashes_ready(pointer: dict[str, Any], *, mode: str) -> bool:
+    hashes = pointer.get("hashes") if isinstance(pointer.get("hashes"), dict) else None
+    if not isinstance(hashes, dict):
+        return False
+    path_keys = {
+        "evaluator": pointer.get("evaluator_path"),
+        "rubric": pointer.get("rubric_path"),
+        "eval_cases": pointer.get("eval_cases_path"),
+        "compiled_program": pointer.get("compiled_program_path"),
+    }
+    required = ("rubric", "eval_cases", "compiled_program") if mode == "compiled_program_eval" else ("evaluator", "rubric", "eval_cases")
+    for key in required:
+        value = hashes.get(key)
+        path_value = path_keys.get(key)
+        if not isinstance(value, str) or not value.startswith("sha256:") or not path_value:
+            return False
+        path = Path(str(path_value)).expanduser()
+        if not path.exists() or value != "sha256:" + _sha256_text(path.read_text(encoding="utf-8")):
+            return False
+    return True
+
+
+def _active_pointer_has_concrete_assets(pointer: dict[str, Any] | None) -> bool:
+    if not isinstance(pointer, dict):
+        return False
+    mode = str(pointer.get("mode") or "dspy_program_eval")
+    if not pointer.get("rubric_path") or not pointer.get("eval_cases_path"):
+        return False
+    safety = pointer.get("safety") if isinstance(pointer.get("safety"), dict) else {}
+    if safety.get("promotion_requires_regression_gate") is not True:
+        return False
+    if not _active_pointer_hashes_ready(pointer, mode=mode):
+        return False
+    if mode == "compiled_program_eval":
+        return bool(pointer.get("compiled_program_path"))
+    if mode == "dspy_program_eval":
+        return bool(pointer.get("evaluator_path"))
+    return False
+
+
+def _default_evaluator_source(config: dict[str, Any]) -> dict[str, Any]:
+    layout = runtime_layout(config)
+    return {
+        "source": "runtime_default_assets",
+        "mode": "dspy_program_eval",
+        "evaluator_id": "proposal-evaluator-default-v1",
+        "evaluator_path": str(layout["default_evaluator"]),
+        "rubric_path": str(layout["default_rubric"]),
+        "eval_cases_path": str(layout["default_eval_cases"]),
+        "compiled_program_path": None,
+    }
+
+
+def _candidate_from_active_evaluator(config: dict[str, Any], evidence: dict[str, Any]) -> dict[str, Any] | None:
+    layout = runtime_layout(config)
+    pointer = _load_json_file(layout["active_evaluator"]) if layout["active_evaluator"].exists() else None
+    source = pointer if _active_pointer_has_concrete_assets(pointer) else _default_evaluator_source(config)
+    if not isinstance(source, dict):
+        return None
+    candidate = {
+        "type": "evaluator_calibration_candidate",
+        "mode": source.get("mode") or "dspy_program_eval",
+        "evaluator_id": source.get("evaluator_id") or "proposal-evaluator-default-v1",
+        "evaluator_path": source.get("evaluator_path"),
+        "rubric_path": source.get("rubric_path"),
+        "eval_cases_path": source.get("eval_cases_path"),
+        "compiled_program_path": source.get("compiled_program_path"),
+        "hashes": source.get("hashes") if isinstance(source.get("hashes"), dict) else {},
+        "reason": "active_default",
+        "evidence_hash": _sha256_text(_stable_json(evidence)),
+        "source": "active_default",
+    }
+    if not candidate["hashes"]:
+        try:
+            candidate["hashes"] = _hash_candidate_assets(candidate)
+        except Exception:
+            candidate["hashes"] = {}
+    candidate["candidate_hash"] = _sha256_text(_stable_json(candidate))
+    return candidate
+
+
+def _select_evaluator_candidate(config: dict[str, Any], evidence: dict[str, Any], calibration: dict[str, Any]) -> dict[str, Any] | None:
+    metadata_candidate = _candidate_from_evidence(evidence, calibration)
+    if metadata_candidate is None:
+        return None
+    if calibration.get("evaluator_candidate_source") == "active_default":
+        return _candidate_from_active_evaluator(config, evidence) or metadata_candidate
+    return metadata_candidate
+
+
 def _runtime_eval_cases_dir(config: dict[str, Any]) -> Path:
     return _reports_dir(config) / "evaluator" / "runtime-eval-cases"
 
@@ -332,13 +454,143 @@ def _current_pointer_content(path: Path) -> tuple[str | None, str | None]:
     return content, _sha256_text(content)
 
 
-def _run_calibration_regression(*, candidate: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    """Fail-closed default regression gate.
+def _load_candidate_eval_assets(candidate: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]], list[str]]:
+    required = ["rubric_path", "eval_cases_path"]
+    mode = str(candidate.get("mode") or "dspy_program_eval")
+    if mode == "dspy_program_eval":
+        required.append("evaluator_path")
+    elif mode == "compiled_program_eval":
+        required.append("compiled_program_path")
+    missing = [field for field in required if not candidate.get(field) or not Path(str(candidate.get(field))).expanduser().exists()]
+    if missing:
+        return {}, {}, [], missing
 
-    Real GEPA/DSPy promotion is wired later; tests may monkeypatch this helper to
-    exercise the guarded promotion path without live LLM/network calls.
-    """
-    return {"status": "failed", "reason": "regression_runner_not_configured"}
+    evaluator = _load_json_file(Path(str(candidate.get("evaluator_path"))).expanduser()) if candidate.get("evaluator_path") else {}
+    if candidate.get("evaluator_path") and evaluator is None:
+        return {}, {}, [], ["evaluator_path"]
+    from .gepa_adapter import load_eval_cases, load_rubric
+    rubric = load_rubric(Path(str(candidate["rubric_path"])).expanduser())
+    cases = load_eval_cases(Path(str(candidate["eval_cases_path"])).expanduser())
+    return evaluator or {}, rubric, cases, []
+
+
+def _score_evaluator_cases(*, candidate: dict[str, Any], rubric: dict[str, Any], cases: list[dict[str, Any]], config: dict[str, Any]) -> list[dict[str, Any]]:
+    from .dspy_program import score_with_compiled_dspy_program, score_with_dspy_program
+    from .gepa_adapter import _check_eval_case
+
+    mode = str(candidate.get("mode") or "dspy_program_eval")
+    results: list[dict[str, Any]] = []
+    for case in cases:
+        proposal = case.get("proposal") if isinstance(case.get("proposal"), dict) else {}
+        findings = case.get("findings") if isinstance(case.get("findings"), list) else []
+        if mode == "compiled_program_eval":
+            scoring = score_with_compiled_dspy_program(
+                proposals=[proposal],
+                findings=findings,
+                rubric=rubric,
+                config=config,
+                compiled_program_path=str(candidate.get("compiled_program_path")),
+            )
+        elif mode == "dspy_program_eval":
+            scoring = score_with_dspy_program(proposals=[proposal], findings=findings, rubric=rubric, config=config)
+        else:
+            raise ValueError(f"unsupported_mode:{mode}")
+        scores = scoring.get("scores") if isinstance(scoring, dict) else []
+        score = scores[0] if scores and isinstance(scores[0], dict) else {}
+        expected = case.get("expected") if isinstance(case.get("expected"), dict) else {}
+        checks = _check_eval_case(score=score, expected=expected)
+        passed = all(check["passed"] for check in checks)
+        results.append({"id": case.get("id"), "passed": passed, "score": score, "checks": checks})
+    return results
+
+
+def _write_regression_artifact(*, config: dict[str, Any], candidate: dict[str, Any], results: list[dict[str, Any]], status: str, reason: str | None, error: str | None = None) -> str:
+    ts = datetime.now(UTC)
+    stamp = ts.strftime("%Y%m%dT%H%M%SZ")
+    out_dir = _reports_dir(config) / "evaluator" / "regression" / ts.strftime("%Y-%m-%d")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    seed = _stable_json({"candidate_hash": candidate.get("candidate_hash"), "status": status, "reason": reason, "created_at": stamp})
+    path = out_dir / f"{stamp}-{_sha256_text(seed)[:8]}.json"
+    payload = {
+        "schema_name": "self_improvement_evaluator_regression_result",
+        "schema_version": "1.0",
+        "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
+        "created_at": ts.isoformat(),
+        "candidate": candidate,
+        "status": status,
+        "reason": reason,
+        "case_count": len(results),
+        "passed_count": sum(1 for item in results if item.get("passed") is True),
+        "failed_count": sum(1 for item in results if item.get("passed") is not True),
+        "cases": results,
+    }
+    if error:
+        payload["error"] = error[:500]
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    return str(path)
+
+
+def _run_calibration_regression(*, candidate: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    mode = str(candidate.get("mode") or "dspy_program_eval")
+    if not _is_concrete_evaluator_candidate(candidate):
+        return {"status": "failed", "reason": "candidate_not_concrete", "case_count": 0, "passed_count": 0, "failed_count": 0, "mode": mode}
+    try:
+        _evaluator, rubric, cases, missing = _load_candidate_eval_assets(candidate)
+        if missing:
+            artifact_path = _write_regression_artifact(config=config, candidate=candidate, results=[], status="failed", reason="candidate_asset_missing")
+            return {"status": "failed", "reason": "candidate_asset_missing", "missing_assets": missing, "case_count": 0, "passed_count": 0, "failed_count": 0, "mode": mode, "artifact_path": artifact_path}
+        results = _score_evaluator_cases(candidate=candidate, rubric=rubric, cases=cases, config=config)
+        passed_count = sum(1 for item in results if item.get("passed") is True)
+        failed_count = len(results) - passed_count
+        status = "passed" if failed_count == 0 and bool(results) else "failed"
+        reason = None if status == "passed" else "eval_case_failures"
+        artifact_path = _write_regression_artifact(config=config, candidate=candidate, results=results, status=status, reason=reason)
+        return {"status": status, "reason": reason, "case_count": len(results), "passed_count": passed_count, "failed_count": failed_count, "mode": mode, "artifact_path": artifact_path}
+    except Exception as exc:
+        artifact_path = _write_regression_artifact(config=config, candidate=candidate, results=[], status="failed", reason="runner_exception", error=str(exc))
+        return {"status": "failed", "reason": "runner_exception", "case_count": 0, "passed_count": 0, "failed_count": 0, "mode": mode, "artifact_path": artifact_path}
+
+
+def _validate_active_evaluator_pointer_payload(payload: dict[str, Any]) -> None:
+    required = {
+        "schema_name", "schema_version", "created_by", "updated_at", "source", "mode",
+        "evaluator_id", "evaluator_path", "rubric_path", "eval_cases_path", "compiled_program_path",
+        "hashes", "safety", "candidate", "candidate_hash", "regression", "active_before_hash",
+    }
+    missing = sorted(required - set(payload))
+    if missing:
+        raise ValueError("active_evaluator_pointer_missing:" + ",".join(missing))
+    if payload.get("schema_name") != "self_improvement_active_evaluator_pointer":
+        raise ValueError("active_evaluator_pointer_schema_invalid")
+    if payload.get("mode") not in {"dspy_program_eval", "compiled_program_eval"}:
+        raise ValueError("active_evaluator_pointer_mode_invalid")
+    if not payload.get("rubric_path") or not payload.get("eval_cases_path"):
+        raise ValueError("active_evaluator_pointer_assets_missing")
+    if payload.get("mode") == "dspy_program_eval" and not payload.get("evaluator_path"):
+        raise ValueError("active_evaluator_pointer_evaluator_missing")
+    if payload.get("mode") == "compiled_program_eval" and not payload.get("compiled_program_path"):
+        raise ValueError("active_evaluator_pointer_compiled_program_missing")
+    hashes = payload.get("hashes") if isinstance(payload.get("hashes"), dict) else None
+    if not isinstance(hashes, dict):
+        raise ValueError("active_evaluator_pointer_hashes_invalid")
+    path_keys = {
+        "evaluator": payload.get("evaluator_path"),
+        "rubric": payload.get("rubric_path"),
+        "eval_cases": payload.get("eval_cases_path"),
+        "compiled_program": payload.get("compiled_program_path"),
+    }
+    required_hashes = ("rubric", "eval_cases", "compiled_program") if payload.get("mode") == "compiled_program_eval" else ("evaluator", "rubric", "eval_cases")
+    for key in required_hashes:
+        value = hashes.get(key)
+        path_value = path_keys.get(key)
+        if not isinstance(value, str) or not value.startswith("sha256:") or not path_value:
+            raise ValueError("active_evaluator_pointer_hashes_invalid")
+        path = Path(str(path_value)).expanduser()
+        if not path.exists() or value != "sha256:" + _sha256_text(path.read_text(encoding="utf-8")):
+            raise ValueError("active_evaluator_pointer_hashes_invalid")
+    safety = payload.get("safety") if isinstance(payload.get("safety"), dict) else {}
+    if safety.get("promotion_requires_regression_gate") is not True:
+        raise ValueError("active_evaluator_pointer_safety_invalid")
 
 
 def _write_active_pointer(
@@ -353,11 +605,25 @@ def _write_active_pointer(
         "schema_version": "1.0",
         "created_by": {"plugin": PLUGIN_NAME, "plugin_version": PLUGIN_VERSION},
         "updated_at": datetime.now(UTC).isoformat(),
+        "source": "calibration_regression_passed",
+        "mode": candidate.get("mode") or "dspy_program_eval",
+        "evaluator_id": candidate.get("evaluator_id") or "proposal-evaluator-candidate",
+        "evaluator_path": candidate.get("evaluator_path"),
+        "rubric_path": candidate.get("rubric_path"),
+        "eval_cases_path": candidate.get("eval_cases_path"),
+        "compiled_program_path": candidate.get("compiled_program_path"),
+        "hashes": candidate.get("hashes") if isinstance(candidate.get("hashes"), dict) else _hash_candidate_assets(candidate),
+        "safety": {
+            "advisory_only": True,
+            "auto_apply_grants_permission": False,
+            "promotion_requires_regression_gate": True,
+        },
         "candidate": candidate,
-        "candidate_hash": candidate.get("candidate_hash"),
+        "candidate_hash": candidate.get("candidate_hash") or _sha256_text(_stable_json(candidate)),
         "regression": regression,
         "active_before_hash": active_before_hash,
     }
+    _validate_active_evaluator_pointer_payload(payload)
     pointer_path.parent.mkdir(parents=True, exist_ok=True)
     content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n"
     pointer_path.write_text(content, encoding="utf-8")
@@ -481,7 +747,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False, candidate_
         result["reasons"].append("calibration_disabled")
         return result
 
-    candidate = _candidate_from_evidence(evidence, calibration)
+    candidate = _select_evaluator_candidate(config, evidence, calibration)
     overlay_case_count = len(build_overlay_set_runtime_eval_cases(config=config, limit=1))
     should_build_overlay_set = candidate is not None or _overlay_candidate_signal(evidence, overlay_case_count=overlay_case_count)
     overlay_candidate_set = None
@@ -520,6 +786,17 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False, candidate_
                 pass
 
         evaluator_updated = False
+        if candidate is not None and not _is_concrete_evaluator_candidate(candidate):
+            result["evaluator_update"] = {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False}
+            result["regression"] = {"status": "skipped", "reason": "candidate_not_concrete"}
+            result["runtime_eval_cases"]["status"] = "not_written_no_concrete_evaluator_candidate" if runtime_cases else "empty"
+            result["reasons"].append("evaluator_candidate_not_concrete")
+            if prompt_promoted:
+                result["current_status"] = "partial_update"
+                result["active_changed"] = True
+            else:
+                result["current_status"] = "no_op"
+            return _attach_episode_summary(config, result)
         if candidate is not None:
             regression = _run_calibration_regression(candidate=candidate, config=config)
             result["regression"] = regression
