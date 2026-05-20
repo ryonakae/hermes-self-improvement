@@ -269,6 +269,32 @@ def _write_overlay_candidate_set(config: dict[str, Any], candidate_set: dict[str
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _case_source_key(case: dict[str, Any]) -> str:
+    source_episode_id = str(case.get("source_episode_id") or "").strip()
+    if source_episode_id:
+        return f"episode:{source_episode_id}"
+    source_value = case.get("source")
+    source = source_value if isinstance(source_value, dict) else {}
+    episode_id = str(source.get("episode_id") or "").strip()
+    if episode_id:
+        return f"episode:{episode_id}"
+    for key in ("run_id", "cluster_id", "artifact_path", "path"):
+        value = str(source.get(key) or "").strip()
+        if value:
+            return f"{key}:{value}"
+    return str(case.get("case_hash") or case.get("id") or id(case))
+
+
+def _case_source_episode_id(case: dict[str, Any]) -> str | None:
+    source_episode_id = str(case.get("source_episode_id") or "").strip()
+    if source_episode_id:
+        return source_episode_id
+    source_value = case.get("source")
+    source = source_value if isinstance(source_value, dict) else {}
+    episode_id = str(source.get("episode_id") or "").strip()
+    return episode_id or None
+
+
 def _selected_case_signal(case: dict[str, Any], *, signal_score: int) -> dict[str, Any]:
     input_payload = case.get("input") if isinstance(case.get("input"), dict) else {}
     outcome = input_payload.get("outcome") if isinstance(input_payload.get("outcome"), dict) else {}
@@ -277,6 +303,8 @@ def _selected_case_signal(case: dict[str, Any], *, signal_score: int) -> dict[st
         "id": str(case.get("id") or case.get("case_hash") or ""),
         "target": str(case.get("target") or ""),
         "signal_score": signal_score,
+        "source_key": _case_source_key(case),
+        "source_episode_id": _case_source_episode_id(case),
         "outcome": outcome.get("outcome"),
         "changed": bool(outcome.get("changed")),
         "executed": bool(outcome.get("executed")),
@@ -293,10 +321,11 @@ def _run_overlay_set_optimizer(
 ) -> tuple[str, dict[str, Any]]:
     if optimizer is not None:
         return "gepa", optimizer(evidence=evidence, cases=cases, config=config)
-    gepa_config = config.get("gepa_evaluator") if isinstance(config.get("gepa_evaluator"), dict) else {}
+    gepa_value = config.get("gepa_evaluator")
+    gepa_config = gepa_value if isinstance(gepa_value, dict) else {}
     if not bool(gepa_config.get("enabled", True)) or int(gepa_config.get("max_full_evals") or 0) <= 0 or not cases:
         return "rule_fallback", {}
-    max_cases = int(gepa_config.get("overlay_max_cases") or 3)
+    max_cases = int(gepa_config.get("overlay_max_cases") or 5)
     optimizer_cases: list[dict[str, Any]] = []
     try:
         from .prompt_gepa_adapter import _case_signal_score, optimize_overlay_candidate_set, select_overlay_eval_cases

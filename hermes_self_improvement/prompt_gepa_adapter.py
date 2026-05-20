@@ -100,6 +100,22 @@ def _case_signal_score(case: dict[str, Any]) -> int:
     return score
 
 
+def _case_source_key(case: dict[str, Any]) -> str:
+    source_episode_id = str(case.get("source_episode_id") or "").strip()
+    if source_episode_id:
+        return f"episode:{source_episode_id}"
+    source_value = case.get("source")
+    source = source_value if isinstance(source_value, dict) else {}
+    episode_id = str(source.get("episode_id") or "").strip()
+    if episode_id:
+        return f"episode:{episode_id}"
+    for key in ("run_id", "cluster_id", "artifact_path", "path"):
+        value = str(source.get(key) or "").strip()
+        if value:
+            return f"{key}:{value}"
+    return str(case.get("case_hash") or case.get("id") or id(case))
+
+
 def select_overlay_eval_cases(cases: list[dict[str, Any]], *, max_cases: int) -> list[dict[str, Any]]:
     if max_cases <= 0 or not cases:
         return []
@@ -112,39 +128,50 @@ def select_overlay_eval_cases(cases: list[dict[str, Any]], *, max_cases: int) ->
             groups[target].append((index, case))
         else:
             extras.append((index, case))
+
     def sort_key(item: tuple[int, dict[str, Any]]) -> tuple[int, int]:
         index, case = item
         return (-_case_signal_score(case), index)
+
     for target in groups:
         groups[target].sort(key=sort_key)
     extras.sort(key=sort_key)
+
     selected: list[tuple[int, dict[str, Any]]] = []
     seen_hashes: set[str] = set()
-    while len(selected) < max_cases:
-        added = False
-        for target in OVERLAY_TARGETS:
-            bucket = groups[target]
-            while bucket:
-                item = bucket.pop(0)
-                case_hash = str(item[1].get("case_hash") or item[1].get("id") or id(item[1]))
-                if case_hash in seen_hashes:
-                    continue
-                seen_hashes.add(case_hash)
-                selected.append(item)
-                added = True
-                break
-            if len(selected) >= max_cases:
-                break
-        if not added:
-            break
-    for item in extras:
-        if len(selected) >= max_cases:
-            break
-        case_hash = str(item[1].get("case_hash") or item[1].get("id") or id(item[1]))
+    seen_sources: set[str] = set()
+
+    def add_item(item: tuple[int, dict[str, Any]], *, require_new_source: bool) -> bool:
+        case = item[1]
+        case_hash = str(case.get("case_hash") or case.get("id") or id(case))
         if case_hash in seen_hashes:
-            continue
+            return False
+        source_key = _case_source_key(case)
+        if require_new_source and source_key in seen_sources:
+            return False
         seen_hashes.add(case_hash)
+        seen_sources.add(source_key)
         selected.append(item)
+        return True
+
+    def select_from_bucket(bucket: list[tuple[int, dict[str, Any]]], *, require_new_source: bool) -> bool:
+        for item in bucket:
+            if add_item(item, require_new_source=require_new_source):
+                return True
+        return False
+
+    selectable_groups = [groups[target] for target in OVERLAY_TARGETS] + [extras]
+    for require_new_source in (True, False):
+        while len(selected) < max_cases:
+            added = False
+            for bucket in selectable_groups:
+                if select_from_bucket(bucket, require_new_source=require_new_source):
+                    added = True
+                if len(selected) >= max_cases:
+                    break
+            if not added:
+                break
+
     selected.sort(key=lambda item: item[0])
     return [case for _, case in selected]
 

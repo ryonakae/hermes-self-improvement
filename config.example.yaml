@@ -44,3 +44,9 @@
 #     min_evidence_events: 20
 #     min_disagreements: 5
 #     min_bad_outcomes: 2
+
+# Optional: tune GEPA prompt-overlay optimization cost/coverage.
+# Default is 5. Higher values improve case diversity but can increase
+# calibrate runtime and should stay within cron.script_timeout_seconds.
+# gepa_evaluator:
+#   overlay_max_cases: 5

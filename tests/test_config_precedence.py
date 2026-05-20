@@ -53,6 +53,7 @@ def test_default_mutation_config_exposes_only_max_tool_calls(tmp_path):
     assert config["mutation"]["max_tool_calls"] == 12
     assert "max_iterations" not in config["mutation"]
     assert config["gepa_evaluator"]["max_iterations"] == 0
+    assert config["gepa_evaluator"]["overlay_max_cases"] == 5
 
 
 def test_load_config_records_yaml_sources_and_missing_cli_rejects(tmp_path):

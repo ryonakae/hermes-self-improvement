@@ -226,8 +226,48 @@ def test_default_overlay_candidate_set_uses_gepa_adapter_when_enabled(monkeypatc
         "id": "sha256:case-93",
         "target": "improvement_planner_overlay",
         "signal_score": 0,
+        "source_key": "sha256:case-93",
+        "source_episode_id": None,
         "outcome": None,
         "changed": False,
         "executed": False,
         "decision": None,
     }
+
+
+def test_default_overlay_candidate_set_uses_five_optimizer_cases(monkeypatch, tmp_path):
+    import hermes_self_improvement.prompt_candidate_optimizer as optimizer_module
+
+    calls = []
+    selected_cases = []
+
+    def fake_build_cases(*, config, limit):
+        return [
+            {
+                "target": "improvement_planner_overlay",
+                "case_hash": f"sha256:case-{index}",
+                "source_episode_id": f"episode-{index}",
+                "source": {"kind": "episode", "episode_id": f"episode-{index}"},
+            }
+            for index in range(100)
+        ]
+
+    def fake_select_overlay_eval_cases(cases, *, max_cases):
+        selected_cases.append((len(cases), max_cases))
+        return cases[-max_cases:]
+
+    def fake_optimize_overlay_candidate_set(*, config, evidence, cases):
+        calls.append({"cases": cases})
+        return {"optimizer": "dspy.GEPA", "gepa_result": "selected", "targets": {}}
+
+    monkeypatch.setattr(optimizer_module, "build_overlay_set_runtime_eval_cases", fake_build_cases)
+    monkeypatch.setitem(__import__("sys").modules, "hermes_self_improvement.prompt_gepa_adapter", type("FakeAdapter", (), {"optimize_overlay_candidate_set": staticmethod(fake_optimize_overlay_candidate_set), "select_overlay_eval_cases": staticmethod(fake_select_overlay_eval_cases), "_case_signal_score": staticmethod(lambda case: 0)}))
+
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "gepa_evaluator": {"enabled": True, "max_full_evals": 2}}
+    candidate_set = generate_overlay_candidate_set(config=config, evidence={"total_events": 1})
+
+    assert selected_cases == [(100, 5)]
+    assert len(calls[0]["cases"]) == 5
+    assert candidate_set["optimizer_case_count"] == 5
+    assert candidate_set["selected_case_signals"][0]["source_key"] == "episode:episode-95"
+    assert candidate_set["selected_case_signals"][0]["source_episode_id"] == "episode-95"

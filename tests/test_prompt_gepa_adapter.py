@@ -93,12 +93,26 @@ class FakeDspy:
             return FakePrediction()
 
 
-def overlay_case(target: str, *, case_hash: str | None = None, outcome: str = "unknown", changed: bool = False, executed: bool = False, expected: dict | None = None, decision: str = "mutate_skill") -> dict:
+def overlay_case(
+    target: str,
+    *,
+    case_hash: str | None = None,
+    outcome: str = "unknown",
+    changed: bool = False,
+    executed: bool = False,
+    expected: dict | None = None,
+    decision: str = "mutate_skill",
+    source_episode_id: str | None = None,
+    source_kind: str = "episode",
+) -> dict:
     return {
         "schema_name": "self_improvement_runtime_eval_case",
         "case_family": "overlay_set",
+        "case_type": f"{target}_from_{source_kind}",
         "target": target,
         "role": target.removesuffix("_overlay") if target != "evaluator_overlay" else "evaluator",
+        "source_episode_id": source_episode_id,
+        "source": {"kind": source_kind, "episode_id": source_episode_id},
         "input": {"evidence_ids": ["ev1"], "mutation_task": {"decision": decision}, "outcome": {"outcome": outcome, "changed": changed, "executed": executed}},
         "expected": expected or {"decision": "mutate_skill"},
         "case_hash": case_hash or f"sha256:{target}",
@@ -159,6 +173,28 @@ def test_select_overlay_eval_cases_prefers_executed_cases_over_unexecuted_skips(
         "sha256:planner-executed",
         "sha256:skill_agent-executed",
         "sha256:evaluator-executed",
+    ]
+
+
+def test_select_overlay_eval_cases_prefers_distinct_episodes_with_five_case_budget():
+    cases = [
+        overlay_case("improvement_planner_overlay", case_hash="sha256:e1-planner", source_episode_id="episode-1", changed=True, executed=True, expected={"decision": "archive_skill"}),
+        overlay_case("skill_agent_overlay", case_hash="sha256:e1-skill", source_episode_id="episode-1", changed=True, executed=True, expected={"mutation": "changed"}),
+        overlay_case("memory_agent_overlay", case_hash="sha256:e1-memory", source_episode_id="episode-1", changed=True, executed=True, expected={"mutation": "changed"}),
+        overlay_case("evaluator_overlay", case_hash="sha256:e2-evaluator", source_episode_id="episode-2", outcome="rejected_by_user", expected={"recommendation": "defer"}),
+        overlay_case("skill_agent_overlay", case_hash="sha256:e3-skill", source_episode_id="episode-3", changed=True, executed=True, expected={"mutation": "changed"}),
+        overlay_case("improvement_planner_overlay", case_hash="sha256:e4-planner", source_episode_id="episode-4", outcome="failed", expected={"decision": "skip"}, decision="skip"),
+    ]
+
+    selected = select_overlay_eval_cases(cases, max_cases=5)
+
+    assert len(selected) == 5
+    assert len({case.get("source_episode_id") for case in selected}) >= 4
+    assert [case["case_hash"] for case in selected[:4]] != [
+        "sha256:e1-planner",
+        "sha256:e1-skill",
+        "sha256:e1-memory",
+        "sha256:e2-evaluator",
     ]
 
 
