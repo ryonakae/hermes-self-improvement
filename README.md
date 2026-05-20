@@ -104,9 +104,11 @@ hermes self-improvement improve
 hermes self-improvement report --since-hours 24
 ```
 
-cron job はこの script を `--no-agent` で登録します。stdout がそのまま local output に保存されるため、script 側の出力は短い要約とアーティファクトのパスだけにしてください。
+cron job はこの script を `--no-agent` で登録します。`calibrate` は GEPA / overlay 評価で数分かかることがあるため、Hermes cron の script timeout は 600 秒にしておきます。stdout がそのまま local output に保存されるため、script 側の出力は短い要約とアーティファクトのパスだけにしてください。
 
 ```bash
+hermes config set cron.script_timeout_seconds 600
+
 hermes cron create '0 4 * * *' \
   --name self-improvement-maintenance \
   --deliver local \
