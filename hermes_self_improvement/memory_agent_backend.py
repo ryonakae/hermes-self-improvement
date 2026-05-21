@@ -14,8 +14,9 @@ from .skill_agent_backend import (
     _redact_large,
     _tool_result_message,
 )
+from .role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
-ALLOWED_MEMORY_AGENT_TOOLS = {"memory"}
+ALLOWED_MEMORY_AGENT_TOOLS = ROLE_TOOL_PERMISSIONS["memory_agent"].allowed_tool_names
 ALLOWED_MEMORY_ACTIONS = {"add", "replace", "remove"}
 ALLOWED_MEMORY_TARGETS = {"memory", "user"}
 SUBMIT_MUTATION_RESULT_TOOL = "submit_mutation_result"

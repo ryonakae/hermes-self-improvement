@@ -7,7 +7,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-ALLOWED_SKILL_AGENT_TOOLS = {"skills_list", "skill_view", "skill_manage"}
+from .role_tool_permissions import ROLE_TOOL_PERMISSIONS
+
+ALLOWED_SKILL_AGENT_TOOLS = ROLE_TOOL_PERMISSIONS["skill_agent"].allowed_tool_names
 ALLOWED_SKILL_MANAGE_ACTIONS = {"create", "patch", "edit", "delete", "write_file", "remove_file"}
 SUBMIT_MUTATION_RESULT_TOOL = "submit_mutation_result"
 NON_MUTATING_AGENT_OUTCOMES = {

@@ -15,6 +15,7 @@ from hermes_self_improvement.skill_agent_backend import (
     skill_agent_backend_status,
     validate_backend_success_result,
 )
+from hermes_self_improvement.role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
 
 def _tool_response(name: str, args: dict, *, call_id: str = "call_1"):
@@ -41,6 +42,10 @@ def _content_response(content: str = "done"):
 
 def test_backend_contract_allows_only_skill_tools():
     assert ALLOWED_SKILL_AGENT_TOOLS == {"skills_list", "skill_view", "skill_manage"}
+
+
+def test_skill_agent_backend_allowed_tools_come_from_role_permission_matrix():
+    assert ALLOWED_SKILL_AGENT_TOOLS is ROLE_TOOL_PERMISSIONS["skill_agent"].allowed_tool_names
 
 
 def test_backend_contract_requires_success_schema_fields():

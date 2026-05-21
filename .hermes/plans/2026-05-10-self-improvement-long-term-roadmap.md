@@ -332,7 +332,7 @@ Exit criteria:
 
 ### Current Slice — Constrained role tool surfaces and resolver read-only skill inspection
 
-**Status:** partially implemented; role permission matrix, constrained role runner, resolver/planner read-only skill tool routing, and tool-free role tests are implemented. Remaining complexity-reduction work: simplify existing `skill_agent_backend.py` / `memory_agent_backend.py` bespoke loops toward Hermes-native constrained agents.
+**Status:** partially implemented; role permission matrix, constrained role runner, resolver/planner read-only skill tool routing, tool-free role tests, and editor backend tool-surface constants are implemented. Remaining complexity-reduction work: simplify existing `skill_agent_backend.py` / `memory_agent_backend.py` bespoke execution loops toward Hermes-native constrained agents.
 
 Plan file: `2026-05-21-target-resolver-light-tuning-and-planner-handoff.md`.
 

@@ -21,6 +21,7 @@ from hermes_self_improvement.memory_agent_backend import (
     native_memory_agent_tool_schemas,
     validate_memory_agent_success_result,
 )
+from hermes_self_improvement.role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
 
 def task(*, kind: str = "memory_apply", candidates: list[dict] | None = None) -> dict:
@@ -222,6 +223,10 @@ def test_native_memory_agent_tool_schemas_include_memory_and_submit_only():
     schemas = native_memory_agent_tool_schemas()
     names = {schema["function"]["name"] for schema in schemas}
     assert names == {"memory", "submit_mutation_result"}
+
+
+def test_memory_agent_backend_allowed_tools_come_from_role_permission_matrix():
+    assert ALLOWED_MEMORY_AGENT_TOOLS is ROLE_TOOL_PERMISSIONS["memory_agent"].allowed_tool_names
 
 
 def test_memory_tool_executor_rejects_invalid_args():
