@@ -4,9 +4,9 @@
 
 **Goal:** Build a Hermes plugin that continuously observes Hermes behavior, identifies durable improvement opportunities, safely mutates allowed knowledge assets, evaluates whether those changes helped, and reports the result clearly.
 
-**Architecture:** Keep one existing `improve` flow and one existing `calibrate` flow. Add better evidence, validation, accounting, outcome feedback, and report surfaces inside those flows. Do not add approval queues, extra lanes, broad policy modes, or Hermes core dependencies unless a concrete failure requires them.
+**Architecture:** Keep one existing `improve` flow and one existing `calibrate` flow. Add better evidence, validation, accounting, outcome feedback, and report surfaces inside those flows. LLM role permissions are explicit and minimal: resolver/planner get read-only skill inspection, editor roles get mutation tools, evaluator/GEPA get prepared context and no tools. Do not add approval queues, extra lanes, broad policy modes, bespoke general-purpose tool loops, or Hermes core dependencies unless a concrete failure requires them.
 
-**Tech Stack:** Hermes standalone plugin, observer hooks, `hermes self-improvement`, official skill/memory tools, native skill_agent / memory_agent tool harness, runtime-private prompt overlays, DSPy/GEPA through `calibrate`, pytest.
+**Tech Stack:** Hermes standalone plugin, observer hooks, `hermes self-improvement`, Hermes `AIAgent(enabled_toolsets=...)`, optional `set_thread_tool_whitelist`, official skill/memory tools, native skill_agent / memory_agent tool harness being simplified toward Hermes-native constrained agents, runtime-private prompt overlays, DSPy/GEPA through `calibrate`, pytest.
 
 ---
 
@@ -19,9 +19,9 @@ A complete loop looks like this:
 ```text
 [1] Observe real Hermes sessions, tool calls, outcomes, user corrections, skill/memory usage
   -> [2] Build compact evidence: failures, workflow gaps, inventory drift, memory gaps, duplicates, stale knowledge
-  -> [3] Resolve targets: existing mutable skill, new skill, memory add/replace/remove, prompt/evaluator overlay, skip/defer/block
-  -> [4] Plan changes with LLM judgment under strict deterministic boundaries
-  -> [5] Execute through official tools only: skill_manage, memory tool/provider, runtime-private overlay promotion
+  -> [3] Resolve targets: resolver may inspect existing skills read-only (`skills_list`, `skill_view`) and then classify as existing mutable skill, memory candidate, unresolved/no existing fit, skip/defer/block
+  -> [4] Plan changes with LLM judgment; planner may inspect skills read-only but has no mutation tools
+  -> [5] Execute through editor roles only: skill_agent with official `skills` tools, memory_agent with official `memory` tool/provider, deterministic runtime-private overlay promotion after evaluator gates
   -> [6] Post-validate actual state: read back skill/memory/overlay, verify frontmatter/trace/target identity
   -> [7] Record episodes and credit assignment data
   -> [8] Observe later outcomes: recurrence, user correction, repeated edits, skill usage, reduced failures
@@ -134,12 +134,14 @@ Overall: **about 8.4合目** (code-side; operational dogfood + final readiness r
 ## Roadmap Principles
 
 1. **One flow, broader candidate inputs.** Do not introduce separate “lanes” or approval queues. Feed richer evidence into existing `improve` and `calibrate`.
-2. **LLM decides fuzzy fit; program enforces hard boundaries.** Program code should collect compact evidence and block unsafe operations, not over-classify semantic decisions.
-3. **Official tools only.** Skill mutation through `skill_manage`; memory mutation through official memory/provider tools; prompt changes through runtime-private overlay machinery.
-4. **Trace and post-state beat prose.** Natural-language finalizer claims are not sufficient. Tool trace and read-back state must drive accounting.
-5. **Change != improvement.** A mutation can be executed but unproven. Outcome and credit assignment decide whether it helped.
-6. **Reports should be trustworthy at a glance.** Daily reports must separate actual mutations, preview candidates, skipped duplicates, validation rejects, prompt overlays, and unresolved work.
-7. **Do not forget the final goal.** The target is autonomous Hermes knowledge improvement, not only tool-failure cleanup.
+2. **Role tool surfaces are explicit and minimal.** Resolver/planner may use read-only skill inspection; editor roles alone get mutation tools; evaluator/GEPA receive prepared context and no tools.
+3. **LLM decides fuzzy fit; program enforces hard boundaries.** Program code should collect compact evidence and block unsafe operations, not over-classify semantic decisions.
+4. **Official tools only.** Skill mutation through `skill_manage`; memory mutation through official memory/provider tools; prompt changes through deterministic runtime-private overlay promotion after evaluation gates.
+5. **Prefer Hermes-native tool gating over bespoke loops.** Use `AIAgent(enabled_toolsets=...)` and optional tool-name whitelist before adding custom LLM tool-call loops or validators. Existing plugin-owned tool-call replay/parser/dispatcher loops are technical debt unless they provide a proven post-validation or accounting guarantee that Hermes' native surface cannot provide.
+6. **Trace and post-state beat prose.** Natural-language finalizer claims are not sufficient. Tool trace and read-back state must drive accounting.
+7. **Change != improvement.** A mutation can be executed but unproven. Outcome and credit assignment decide whether it helped.
+8. **Reports should be trustworthy at a glance.** Daily reports must separate actual mutations, preview candidates, skipped duplicates, validation rejects, prompt overlays, and unresolved work.
+9. **Do not forget the final goal.** The target is autonomous Hermes knowledge improvement, not only tool-failure cleanup.
 
 ---
 
@@ -157,7 +159,7 @@ Detailed milestone plans are split by file so execution can proceed without bloa
 
 Active hardening slice:
 
-- [Reference coverage and apply calibration](2026-05-14-reference-coverage-and-apply-calibration.md) — Milestone 2/4/6 follow-up for reference/root skill coverage, duplicate no-op rationale coherence, and less-timid create-skill behavior for genuinely uncovered recurring workflows.
+- [Constrained LLM role tooling and resolver handoff](2026-05-21-target-resolver-light-tuning-and-planner-handoff.md) — defines and tests the minimal tool permission matrix: `target_resolver` and `improvement_planner` get read-only `skills_list` / `skill_view`; `skill_agent` gets skill mutation tools; `memory_agent` gets the memory mutation tool; evaluator / memory_extractor / GEPA stay tool-free with host-prepared context. It also keeps resolver broad-entry/planner-owned-exit for `no_existing_skill_fit` and makes existing bespoke editor loops an explicit simplification target, not a pattern to extend.
 
 ## Milestones
 
@@ -327,6 +329,14 @@ Exit criteria:
 ---
 
 ## Active Slice Queue
+
+### Current Slice — Constrained role tool surfaces and resolver read-only skill inspection
+
+**Status:** partially implemented; role permission matrix, constrained role runner, resolver/planner read-only skill tool routing, and tool-free role tests are implemented. Remaining complexity-reduction work: simplify existing `skill_agent_backend.py` / `memory_agent_backend.py` bespoke loops toward Hermes-native constrained agents.
+
+Plan file: `2026-05-21-target-resolver-light-tuning-and-planner-handoff.md`.
+
+Goal: make role permissions explicit and simple: resolver/planner can inspect skills read-only (`skills_list`, `skill_view`), editor roles alone can mutate (`skill_agent` via `skills`, `memory_agent` via `memory`), and evaluator/GEPA receive prepared context with no tools. This slice also treats existing bespoke skill/memory editor loops as technical debt: refactor them toward Hermes-native constrained agents, keep post-validation/accounting, and delete duplicated plugin-owned replay/parser/dispatcher machinery where the native surface covers it.
 
 ### Slice A — Skill mutation post-validation readback
 

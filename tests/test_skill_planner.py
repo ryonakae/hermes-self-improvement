@@ -261,6 +261,28 @@ def test_run_improvement_planner_fails_closed_on_invalid_planner_output():
     assert result["summary"]["mutate_skill_count"] == 0
 
 
+def test_llm_planner_uses_read_only_skill_agent(monkeypatch):
+    calls = {}
+
+    def fake_run(*, role, system_message, user_message, config, **kwargs):
+        calls["role"] = role
+        calls["system_message"] = system_message
+        calls["user_message"] = user_message
+        return {"final_response": '{"decisions": []}'}
+
+    monkeypatch.setattr(planner, "run_constrained_role_agent", fake_run)
+
+    result = run_improvement_planner(
+        build_improvement_planner_digest(pack()),
+        config={"model": {"improvement_planner": {"provider": "auto"}}},
+    )
+
+    assert calls["role"] == "improvement_planner"
+    assert "skills_list" in calls["system_message"]
+    assert "self_improvement_skill_planner_digest" in calls["user_message"]
+    assert result["planner_source"] == "llm"
+
+
 def test_llm_planner_uses_active_prompt_overlay(monkeypatch, tmp_path):
     cfg = {"_self_improvement_root": str(tmp_path / "self-improvement"), "model": {"improvement_planner": {"provider": "auto"}}}
     candidate_path = write_prompt_candidate(
@@ -275,26 +297,15 @@ def test_llm_planner_uses_active_prompt_overlay(monkeypatch, tmp_path):
     promote_prompt_candidate(cfg, role="improvement_planner", candidate_path=candidate_path, regression={"status": "passed"})
     seen = {}
 
-    def fake_call_llm(**kwargs):
-        seen["messages"] = kwargs["messages"]
-        return {"choices": [{"message": {"content": '{"decisions": []}'}}]}
+    def fake_run_constrained(*, role, system_message, user_message, config, **kwargs):
+        seen["system_message"] = system_message
+        return {"final_response": '{"decisions": []}'}
 
-    monkeypatch.setattr(planner, "_ensure_hermes_agent_on_path", lambda: None)
-    import types
-    import sys
-
-    aux = types.ModuleType("agent.auxiliary_client")
-    aux.call_llm = fake_call_llm
-    aux.extract_content_or_reasoning = lambda response: response["choices"][0]["message"]["content"]
-    pkg = types.ModuleType("agent")
-    sys.modules["agent"] = pkg
-    sys.modules["agent.auxiliary_client"] = aux
+    monkeypatch.setattr(planner, "run_constrained_role_agent", fake_run_constrained)
 
     result = run_improvement_planner(build_improvement_planner_digest(pack()), config=cfg)
 
-    system_content = seen["messages"][0]["content"]
-    # prompt_cache.apply_caching converts system content into a list of text blocks.
-    system_text = "".join(block.get("text", "") for block in system_content) if isinstance(system_content, list) else system_content
+    system_text = seen["system_message"]
     assert "Runtime planner overlay guidance." in system_text
     assert result["prompt_source"]["improvement_planner"]["overlay_active"] is True
     assert result["prompt_source"]["improvement_planner"]["role"] == "improvement_planner"
@@ -313,27 +324,12 @@ def test_llm_planner_accepts_archive_decision_from_fake_model(monkeypatch):
     pack_data["views"]["skill"].append("ev_archive")
     cfg = {"model": {"improvement_planner": {"provider": "auto", "model": "fake-planner"}}}
 
-    def fake_call_llm(**kwargs):
+    def fake_run_constrained(*, role, system_message, user_message, config, **kwargs):
         return {
-            "choices": [
-                {
-                    "message": {
-                        "content": '{"decisions":[{"skill":"unused-skill","decision":"archive_skill","evidence_ids":["ev_archive"],"archive_reason":"obsolete_marker"}]}'
-                    }
-                }
-            ]
+            "final_response": '{"decisions":[{"skill":"unused-skill","decision":"archive_skill","evidence_ids":["ev_archive"],"archive_reason":"obsolete_marker"}]}'
         }
 
-    monkeypatch.setattr(planner, "_ensure_hermes_agent_on_path", lambda: None)
-    import types
-    import sys
-
-    aux = types.ModuleType("agent.auxiliary_client")
-    aux.call_llm = fake_call_llm
-    aux.extract_content_or_reasoning = lambda response: response["choices"][0]["message"]["content"]
-    pkg = types.ModuleType("agent")
-    sys.modules["agent"] = pkg
-    sys.modules["agent.auxiliary_client"] = aux
+    monkeypatch.setattr(planner, "run_constrained_role_agent", fake_run_constrained)
 
     result = run_improvement_planner(build_improvement_planner_digest(pack_data), config=cfg)
     decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]

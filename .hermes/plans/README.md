@@ -10,6 +10,9 @@ As of 2026-05-10, the long-term roadmap is:
 
 The current active hardening plans are:
 
+- `2026-05-21-target-resolver-light-tuning-and-planner-handoff.md`
+  - **Status:** partially implemented; role permission matrix, constrained role runner, and resolver/planner read-only skill-tool routing are done. Remaining: simplify existing bespoke skill/memory editor loops.
+  - Defines the role permission matrix: `target_resolver` and `improvement_planner` may use only read-only skill inspection (`skills_list`, `skill_view`); `skill_agent` alone gets the `skills` mutation surface; `memory_agent` alone gets the `memory` mutation surface; evaluator / memory_extractor / GEPA remain tool-free with host-prepared context. The plan also keeps resolver broad-entry/planner-owned-exit for `unresolved / no_existing_skill_fit`, and explicitly includes a complexity-reduction refactor that treats existing bespoke skill/memory editor loops as technical debt to be replaced with Hermes-native constrained agents where possible.
 - `2026-05-20-overlay-case-selection-diversity.md`
   - **Status:** implemented.
   - Raised prompt-overlay GEPA optimizer cases from 3 to 5 and made the tiny selected set diverse across source episodes / case types / targets before spending multiple slots on the same episode. This uses the existing runtime eval case flow, does not delete old cases, and does not change GEPA promotion gates. Validation: focused tests (`32 passed`), full `pytest tests -q` (`746 passed, 2 skipped`), `py_compile`, `status`, `git diff --check`, and timed dry-run (`332.44s`, `optimizer_case_count: 5`, 5 distinct source keys / 4 targets) passed.

@@ -5,7 +5,8 @@ from typing import Any
 
 from .observer import _redact_text
 from .evidence import resolve_coverage_alias
-from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
+from .llm_utils import _coerce_int, _extract_json_object
+from .constrained_agent import run_constrained_role_agent
 
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
 ALLOWED_DECISIONS = {"apply", "defer", "skip", "block"}
@@ -296,6 +297,8 @@ TARGET_RESOLVER_SYSTEM = (
     "'skill_targets_other_names' carry only mutable skill names for everything else. "
     "You may still attach to a name from skill_targets_other_names if the skill name itself clearly fits a candidate; otherwise prefer skill_targets. "
     "Reference skill coverage may be provided separately; use it only as coverage context, never as an attach target. "
+    "You may use only read-only skill inspection tools (`skills_list`, `skill_view`) to check existing skill coverage. "
+    "Do not call mutation tools. "
     "Do not decide skill creation, editing, archive, or execution actions; the planner owns mutation decisions."
 )
 
@@ -316,26 +319,23 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
     resolver_config = model_config.get("target_resolver") if isinstance(model_config.get("target_resolver"), dict) else {}
     provider = resolver_config.get("provider") or "auto"
     model = resolver_config.get("model") or None
-    timeout = _coerce_int(resolver_config.get("timeout"), default=60)
     max_tokens = _coerce_int(resolver_config.get("max_tokens"), default=1800)
-    messages = build_target_resolver_messages(digest)
-    _ensure_hermes_agent_on_path()
-    from agent.auxiliary_client import call_llm, extract_content_or_reasoning
+    user_message = json.dumps(digest, ensure_ascii=False, sort_keys=True)
     from .llm_telemetry import record_llm_call
-    from .prompt_cache import apply_caching
 
-    messages, cache_extras = apply_caching(messages, site="target_resolver")
-    response = call_llm(
-        task="self_improvement",
-        provider=provider,
-        model=model,
-        messages=messages,
-        temperature=None,
-        max_tokens=max_tokens,
-        timeout=timeout,
-        extra_body=cache_extras,
+    result = run_constrained_role_agent(
+        role="target_resolver",
+        system_message=TARGET_RESOLVER_SYSTEM,
+        user_message=user_message,
+        config=config,
     )
-    response_text = extract_content_or_reasoning(response)
+    response_text = str(result.get("final_response") or "")
+    if not response_text.strip():
+        return {"resolutions": []}
+    messages = [
+        {"role": "system", "content": TARGET_RESOLVER_SYSTEM},
+        {"role": "user", "content": user_message},
+    ]
     record_llm_call(
         site="target_resolver",
         messages=messages,

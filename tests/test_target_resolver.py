@@ -6,7 +6,38 @@ from hermes_self_improvement.target_resolver import (
     build_target_resolver_messages,
     build_target_resolver_prompt,
     normalize_target_resolver_payload,
+    run_target_resolver,
 )
+
+
+def test_target_resolver_uses_read_only_skill_agent(monkeypatch):
+    calls = {}
+
+    def fake_run(*, role, system_message, user_message, config, **kwargs):
+        calls["role"] = role
+        calls["system_message"] = system_message
+        calls["user_message"] = user_message
+        return {"final_response": '{"resolutions": []}'}
+
+    monkeypatch.setattr("hermes_self_improvement.target_resolver.run_constrained_role_agent", fake_run)
+
+    result = run_target_resolver({"skill_targets": []}, config={"model": {"target_resolver": {"provider": "auto"}}})
+
+    assert calls["role"] == "target_resolver"
+    assert "skills_list" in calls["system_message"]
+    assert "skill_targets" in calls["user_message"]
+    assert result["resolutions"] == []
+
+
+def test_target_resolver_empty_constrained_agent_response_fails_closed(monkeypatch):
+    monkeypatch.setattr(
+        "hermes_self_improvement.target_resolver.run_constrained_role_agent",
+        lambda **kwargs: {"final_response": ""},
+    )
+
+    result = run_target_resolver({"skill_targets": []}, config={"model": {"target_resolver": {"provider": "auto"}}})
+
+    assert result["resolutions"] == []
 
 
 def test_normalize_target_resolver_payload_keeps_known_mutable_targets():

@@ -7,7 +7,8 @@ from typing import Any
 from .autonomous_loop import normalize_autonomous_decision
 from .evidence import compute_coverage_fit_for_name, filter_llm_skill_candidates, resolve_coverage_alias, _canonical_skill_name_for_duplicate
 from .observer import _redact_text
-from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path, _extract_json_object
+from .llm_utils import _coerce_int, _extract_json_object
+from .constrained_agent import run_constrained_role_agent
 from .target_hints import extract_target_hints
 from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_planner_messages
@@ -768,34 +769,45 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     return _planner_result(decisions, digest=digest, status="completed", prompt_source=prompt_source)
 
 
+def _message_content_to_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                parts.append(str(item.get("text") or item.get("content") or ""))
+            else:
+                parts.append(str(item))
+        return "".join(parts)
+    return str(content or "")
+
+
 def _call_improvement_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
     planner_config = model_config.get("improvement_planner") if isinstance(model_config.get("improvement_planner"), dict) else {}
     provider = planner_config.get("provider") or "auto"
     model = planner_config.get("model") or None
-    timeout = _coerce_int(planner_config.get("timeout"), default=60)
     max_tokens = _coerce_int(planner_config.get("max_tokens"), default=2200)
     overlay = load_active_prompt_overlay(config, role="improvement_planner", base_hash=base_prompt_hash("improvement_planner"))
     rendered_prompt = render_planner_messages(digest=digest, overlay=overlay)
     messages = rendered_prompt["messages"]
-    _ensure_hermes_agent_on_path()
-    from agent.auxiliary_client import call_llm, extract_content_or_reasoning
     from .llm_telemetry import record_llm_call
-    from .prompt_cache import apply_caching
 
-    overlay_hash = overlay.get("candidate_hash") if isinstance(overlay, dict) else None
-    messages, cache_extras = apply_caching(messages, site="improvement_planner", overlay_hash=overlay_hash)
-    response = call_llm(
-        task="self_improvement",
-        provider=provider,
-        model=model,
-        messages=messages,
-        temperature=None,
-        max_tokens=max_tokens,
-        timeout=timeout,
-        extra_body=cache_extras,
+    system_message = _message_content_to_text(messages[0].get("content")) if messages else ""
+    user_messages = [
+        _message_content_to_text(message.get("content"))
+        for message in messages[1:]
+        if isinstance(message, dict)
+    ]
+    user_message = "\n\n".join(text for text in user_messages if text)
+    result = run_constrained_role_agent(
+        role="improvement_planner",
+        system_message=system_message,
+        user_message=user_message,
+        config=config,
     )
-    response_text = extract_content_or_reasoning(response)
+    response_text = str(result.get("final_response") or "")
     record_llm_call(
         site="improvement_planner",
         messages=messages,
