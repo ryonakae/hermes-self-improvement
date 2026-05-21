@@ -420,7 +420,8 @@ Do not build a new general agent framework inside the plugin.
 - Shared native tool-call parsing, provider-compatible tool-result messages, result normalization, and output redaction have been extracted into `native_tool_harness.py`, so `memory_agent_backend.py` no longer imports helper machinery from `skill_agent_backend.py`.
 - `native_tool_harness.py` can now recover a compact mutation/tool trace from Hermes `AIAgent.run_conversation(...)["messages"]`, including both native `role="tool"` results and provider-compatible user-role tool-result context. `constrained_agent.py` attaches this trace to normalized role-agent results when messages are available.
 - `NativeSkillAgentBackend` now has a thin constrained-agent adapter path: when a constrained runner is supplied, it sends the existing skill-agent task context through `run_constrained_role_agent(role="skill_agent")`, parses the final JSON response, injects recovered `tool_trace` as `used_tools`, and reuses the existing target validation / post-validation / accounting logic.
-- Remaining work is the larger default execution-loop replacement: make the constrained-agent path the normal `skill_agent` backend path once trace completeness and finalizer accounting are proven, then repeat the same adapter pattern for `memory_agent`.
+- `NativeMemoryAgentBackend` now has the same thin constrained-agent adapter shape: when a constrained runner is supplied, it sends the existing memory-agent task context through `run_constrained_role_agent(role="memory_agent")`, parses the final JSON response, injects recovered memory `tool_trace` as `used_tools`, and reuses the existing memory result validation/accounting contract.
+- Remaining work is the larger default execution-loop replacement: make the constrained-agent paths the normal `skill_agent` / `memory_agent` backend paths once trace completeness and finalizer accounting are proven in real runner traffic.
 
 **Step 3: Verify**
 

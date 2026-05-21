@@ -254,6 +254,40 @@ def test_memory_tool_executor_marks_unavailable_when_fn_missing():
     assert result["error"] == "memory_tool_unavailable"
 
 
+def test_native_memory_backend_accepts_constrained_agent_result_through_existing_validation():
+    def fake_runner(*, role, user_message, system_message, config, max_iterations):
+        assert role == "memory_agent"
+        assert "Current memory entries" in user_message
+        assert "constrained Hermes memory agent" in system_message
+        assert max_iterations == 14
+        return {
+            "final_response": json.dumps({
+                "success": True,
+                "outcome": "applied_after_capacity_recovery",
+                "changed_memories": ["Hermes runtime root is ~/.hermes."],
+                "removed_memories": [],
+                "verification_notes": ["memory tool trace recovered"],
+                "rollback_hints": [],
+            }),
+            "tool_trace": [
+                {"tool": "memory", "action": "add", "target": "memory", "success": True},
+            ],
+        }
+
+    backend = NativeMemoryAgentBackend(
+        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
+        constrained_agent_runner=fake_runner,
+    )
+
+    result = MemoryAgentRunner(backend=backend).run(task(), config={})
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["reported_outcome"] == "applied_after_capacity_recovery"
+    assert result["used_tools"] == [{"tool": "memory", "action": "add", "target": "memory", "success": True}]
+    assert result["tool_trace"] == result["used_tools"]
+
+
 def test_native_backend_runs_agent_loop_with_add_and_submit():
     calls: list[dict] = []
 

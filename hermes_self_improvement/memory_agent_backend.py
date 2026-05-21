@@ -291,6 +291,7 @@ def _with_last_safe_step(error: dict[str, Any], actual_used: list[dict[str, Any]
 class NativeMemoryAgentBackend:
     tool_executor: MemoryToolExecutor
     llm_call: Callable[..., Any] | None = None
+    constrained_agent_runner: Callable[..., dict[str, Any]] | None = None
     limits: MemoryAgentBackendLimits = field(default_factory=MemoryAgentBackendLimits)
 
     def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None, extra_body: dict[str, Any] | None = None) -> Any:
@@ -303,6 +304,38 @@ class NativeMemoryAgentBackend:
                 max_tokens=_coerce_int(_model_memory_agent_config(config).get("max_tokens"), 1000),
             )
         return _call_hermes_auxiliary_native(messages, tools=tools, config=config, task_name="self_improvement_memory_agent", extra_body=extra_body)
+
+    def _run_constrained_agent(self, *, user_context: str, system_message: str, config: dict[str, Any] | None) -> dict[str, Any]:
+        runner = self.constrained_agent_runner
+        if runner is None:
+            from .constrained_agent import run_constrained_role_agent as runner
+        result = runner(
+            role="memory_agent",
+            user_message=user_context,
+            system_message=system_message,
+            config=config or {},
+            max_iterations=self.limits.max_tool_calls + 2,
+        )
+        if not isinstance(result, dict):
+            return {"success": False, "error": "memory_agent_constrained_result_invalid"}
+        final_response = str(result.get("final_response") or "").strip()
+        if not final_response:
+            return {"success": False, "error": "memory_agent_constrained_final_response_missing"}
+        try:
+            parsed = json.loads(final_response)
+        except json.JSONDecodeError:
+            return {"success": False, "error": "memory_agent_constrained_final_response_not_json"}
+        if not isinstance(parsed, dict):
+            return {"success": False, "error": "memory_agent_constrained_final_response_not_object"}
+        final = dict(parsed)
+        raw_tool_trace = result.get("tool_trace")
+        tool_trace = raw_tool_trace if isinstance(raw_tool_trace, list) else []
+        final["used_tools"] = list(tool_trace)
+        final["tool_trace"] = list(tool_trace)
+        mutation_intents = [entry for entry in tool_trace if isinstance(entry, dict) and entry.get("tool") == "memory"]
+        if mutation_intents:
+            final["mutation_intents"] = list(mutation_intents)
+        return validate_memory_agent_success_result(final)
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
         limit_check = self.limits.check()
@@ -327,18 +360,21 @@ class NativeMemoryAgentBackend:
             "Candidates handed off by the planner:\n" + json.dumps(candidates, ensure_ascii=False),
             "Markdown brief:\n" + (markdown_brief or "n/a"),
         ])
+        system_message = (
+            "You are a constrained Hermes memory agent. Use only the provided memory tool. "
+            "Read Markdown briefs as judgment context, not as a machine protocol. "
+            "For each candidate, decide whether to add, replace, remove, or skip; route procedural reusable guidance back to skill via submit_mutation_result(decision=\"convert_to_skill_proposal\"). "
+            "Use exact old_text from current_entries for replace/remove. Use add only for genuinely new facts. "
+            "If a memory add fails with memory_capacity_exceeded, remove a stale entry then retry add. "
+            "If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and finish with the appropriate non-mutating outcome. "
+            "Finish every run by calling submit_mutation_result."
+        )
+        if self.constrained_agent_runner is not None:
+            return self._run_constrained_agent(user_context=user_context, system_message=system_message, config=config)
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
-                "content": (
-                    "You are a constrained Hermes memory agent. Use only the provided memory tool. "
-                    "Read Markdown briefs as judgment context, not as a machine protocol. "
-                    "For each candidate, decide whether to add, replace, remove, or skip; route procedural reusable guidance back to skill via submit_mutation_result(decision=\"convert_to_skill_proposal\"). "
-                    "Use exact old_text from current_entries for replace/remove. Use add only for genuinely new facts. "
-                    "If a memory add fails with memory_capacity_exceeded, remove a stale entry then retry add. "
-                    "If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and finish with the appropriate non-mutating outcome. "
-                    "Finish every run by calling submit_mutation_result."
-                ),
+                "content": system_message,
             },
             {"role": "user", "content": user_context},
         ]
