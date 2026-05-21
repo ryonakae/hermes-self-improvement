@@ -422,7 +422,8 @@ Do not build a new general agent framework inside the plugin.
 - `NativeSkillAgentBackend` now has a thin constrained-agent adapter path: when a constrained runner is supplied, it sends the existing skill-agent task context through `run_constrained_role_agent(role="skill_agent")`, parses the final JSON response, injects recovered `tool_trace` as `used_tools`, and reuses the existing target validation / post-validation / accounting logic.
 - `NativeMemoryAgentBackend` now has the same thin constrained-agent adapter shape: when a constrained runner is supplied, it sends the existing memory-agent task context through `run_constrained_role_agent(role="memory_agent")`, parses the final JSON response, injects recovered memory `tool_trace` as `used_tools`, and reuses the existing memory result validation/accounting contract.
 - `build_skill_agent_backend()` and `build_memory_agent_backend()` now default to the constrained Hermes agent paths. The old bespoke native loops remain available only for direct/injected backend tests or explicit construction while the default route uses Hermes `AIAgent(enabled_toolsets=...)` plus role whitelisting.
-- Remaining work is loop deletion/cleanup: remove or retire the old plugin-owned tool-call replay loops once enough real-run evidence confirms constrained trace completeness and final JSON accounting across mutation-bearing runs.
+- The legacy plugin-owned native loops no longer have a live auxiliary-LLM fallback: they require an injected `llm_call` and fail closed otherwise. This prevents accidental production drift back to bespoke tool-call replay while keeping deterministic injected tests for legacy behavior.
+- Remaining work is physical cleanup: delete or split out the old injected-test-only loop code once mutation-bearing real-run evidence confirms constrained trace completeness and final JSON accounting.
 
 **Step 3: Verify**
 

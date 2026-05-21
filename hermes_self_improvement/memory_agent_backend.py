@@ -295,15 +295,15 @@ class NativeMemoryAgentBackend:
     limits: MemoryAgentBackendLimits = field(default_factory=MemoryAgentBackendLimits)
 
     def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None, extra_body: dict[str, Any] | None = None) -> Any:
-        if self.llm_call is not None:
-            return self.llm_call(
-                messages,
-                tools=tools,
-                config=config,
-                timeout=self.limits.timeout_seconds,
-                max_tokens=_coerce_int(_model_memory_agent_config(config).get("max_tokens"), 1000),
-            )
-        return _call_hermes_auxiliary_native(messages, tools=tools, config=config, task_name="self_improvement_memory_agent", extra_body=extra_body)
+        if self.llm_call is None:
+            raise RuntimeError("memory_agent_legacy_loop_requires_injected_llm_call")
+        return self.llm_call(
+            messages,
+            tools=tools,
+            config=config,
+            timeout=self.limits.timeout_seconds,
+            max_tokens=_coerce_int(_model_memory_agent_config(config).get("max_tokens"), 1000),
+        )
 
     def _run_constrained_agent(self, *, user_context: str, system_message: str, config: dict[str, Any] | None) -> dict[str, Any]:
         runner = self.constrained_agent_runner
@@ -401,6 +401,8 @@ class NativeMemoryAgentBackend:
             try:
                 response = self._llm(messages, tools=tools, config=config, extra_body=cache_extras)
             except RuntimeError as exc:
+                if str(exc) == "memory_agent_legacy_loop_requires_injected_llm_call":
+                    return {"success": False, "error": str(exc)}
                 record_llm_call(
                     site="memory_agent",
                     messages=messages,

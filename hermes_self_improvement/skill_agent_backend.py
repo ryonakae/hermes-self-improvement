@@ -558,15 +558,15 @@ class NativeSkillAgentBackend:
     limits: SkillAgentBackendLimits = field(default_factory=SkillAgentBackendLimits)
 
     def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None, extra_body: dict[str, Any] | None = None) -> Any:
-        if self.llm_call is not None:
-            return self.llm_call(
-                messages,
-                tools=tools,
-                config=config,
-                timeout=self.limits.timeout_seconds,
-                max_tokens=_coerce_int(_model_skill_agent_config(config).get("max_tokens"), 1000),
-            )
-        return _call_hermes_auxiliary_native(messages, tools=tools, config=config, task_name="self_improvement_skill_agent", extra_body=extra_body)
+        if self.llm_call is None:
+            raise RuntimeError("skill_agent_legacy_loop_requires_injected_llm_call")
+        return self.llm_call(
+            messages,
+            tools=tools,
+            config=config,
+            timeout=self.limits.timeout_seconds,
+            max_tokens=_coerce_int(_model_skill_agent_config(config).get("max_tokens"), 1000),
+        )
 
     def _validate_final_result(self, final: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
         allowed_targets = _task_allowed_targets(task)
@@ -687,6 +687,8 @@ class NativeSkillAgentBackend:
             try:
                 response = self._llm(messages, tools=tools, config=config, extra_body=cache_extras)
             except RuntimeError as exc:
+                if str(exc) == "skill_agent_legacy_loop_requires_injected_llm_call":
+                    return {"success": False, "error": str(exc)}
                 record_llm_call(
                     site="skill_agent",
                     messages=messages,
