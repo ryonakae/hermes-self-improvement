@@ -369,8 +369,17 @@ class NativeMemoryAgentBackend:
             "If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and finish with the appropriate non-mutating outcome. "
             "Finish every run by calling submit_mutation_result."
         )
+        constrained_system_message = (
+            "You are a constrained Hermes memory agent. Use only the provided memory tool. "
+            "Read Markdown briefs as judgment context, not as a machine protocol. "
+            "For each candidate, decide whether to add, replace, remove, or skip; route procedural reusable guidance back to skill by setting decision=\"convert_to_skill_proposal\" in the final JSON. "
+            "Use exact old_text from current_entries for replace/remove. Use add only for genuinely new facts. "
+            "If a memory add fails with memory_capacity_exceeded, remove a stale entry then retry add. "
+            "If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and finish with the appropriate non-mutating outcome. "
+            "Final response must be a JSON object with success, outcome, changed_memories, removed_memories, verification_notes, and rollback_hints."
+        )
         if self.constrained_agent_runner is not None:
-            return self._run_constrained_agent(user_context=user_context, system_message=system_message, config=config)
+            return self._run_constrained_agent(user_context=user_context, system_message=constrained_system_message, config=config)
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
@@ -498,7 +507,12 @@ def build_memory_agent_backend(config: dict[str, Any] | None = None) -> MemoryAg
     if not enabled:
         return UnavailableMemoryAgentBackend("memory_agent_backend_disabled")
     executor = resolve_memory_tool_executor(config)
-    return NativeMemoryAgentBackend(tool_executor=executor, limits=MemoryAgentBackendLimits.from_config(config))
+    from .constrained_agent import run_constrained_role_agent
+    return NativeMemoryAgentBackend(
+        tool_executor=executor,
+        constrained_agent_runner=run_constrained_role_agent,
+        limits=MemoryAgentBackendLimits.from_config(config),
+    )
 
 
 def memory_agent_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:

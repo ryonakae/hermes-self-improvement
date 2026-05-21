@@ -254,11 +254,22 @@ def test_memory_tool_executor_marks_unavailable_when_fn_missing():
     assert result["error"] == "memory_tool_unavailable"
 
 
+def test_build_memory_agent_backend_defaults_to_constrained_runner():
+    backend = build_memory_agent_backend({
+        "_memory_tool_executor": MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True}))
+    })
+
+    assert isinstance(backend, NativeMemoryAgentBackend)
+    assert backend.constrained_agent_runner is not None
+
+
 def test_native_memory_backend_accepts_constrained_agent_result_through_existing_validation():
     def fake_runner(*, role, user_message, system_message, config, max_iterations):
         assert role == "memory_agent"
         assert "Current memory entries" in user_message
         assert "constrained Hermes memory agent" in system_message
+        assert "submit_mutation_result" not in system_message
+        assert "Final response must be a JSON object" in system_message
         assert max_iterations == 14
         return {
             "final_response": json.dumps({

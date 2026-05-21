@@ -655,8 +655,17 @@ class NativeSkillAgentBackend:
             "For existing-skill edits, read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
             "If the target is materially different from the premise, already covered, stale, or uncertain, do not mutate. Finish every run by calling submit_mutation_result."
         )
+        constrained_system_message = (
+            "You are a constrained Hermes skill agent. Use only the provided skill tools. "
+            "Read Markdown briefs as judgment context, not as a machine protocol. "
+            "For skill_create tasks, the target skill is expected to be missing: do not stop just because skill_view cannot read it; "
+            "if the evidence supports creation, call skill_manage(action=\"create\") with complete SKILL.md content. "
+            "For existing-skill edits, read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
+            "If the target is materially different from the premise, already covered, stale, or uncertain, do not mutate. "
+            "Final response must be a JSON object with success, outcome, changed_skills, created_skills, deleted_skills, verification_notes, and rollback_hints."
+        )
         if self.constrained_agent_runner is not None:
-            return self._run_constrained_agent(user_context=user_context, system_message=system_message, task=task, config=config)
+            return self._run_constrained_agent(user_context=user_context, system_message=constrained_system_message, task=task, config=config)
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
@@ -791,7 +800,12 @@ def build_skill_agent_backend(config: dict[str, Any] | None = None) -> SkillAgen
     if backend_name != "native_skill_tool":
         return UnavailableSkillAgentBackend("skill_agent_backend_unknown")
     executor = resolve_skill_tool_executor(config)
-    return NativeSkillAgentBackend(tool_executor=executor, limits=SkillAgentBackendLimits.from_config(config))
+    from .constrained_agent import run_constrained_role_agent
+    return NativeSkillAgentBackend(
+        tool_executor=executor,
+        constrained_agent_runner=run_constrained_role_agent,
+        limits=SkillAgentBackendLimits.from_config(config),
+    )
 
 
 def skill_agent_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:

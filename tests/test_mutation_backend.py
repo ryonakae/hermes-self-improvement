@@ -827,10 +827,25 @@ def test_native_backend_requires_submit_result_tool_call():
     assert backend.run("prompt", {}, {})["error"] == "submit_result_missing"
 
 
+def test_build_skill_agent_backend_defaults_to_constrained_runner():
+    backend = build_skill_agent_backend({
+        "_skill_tool_executor": SkillToolExecutor(
+            skills_list_fn=lambda **_: {"success": True},
+            skill_view_fn=lambda **_: {"success": True},
+            skill_manage_fn=lambda **_: {"success": True},
+        )
+    })
+
+    assert isinstance(backend, NativeSkillAgentBackend)
+    assert backend.constrained_agent_runner is not None
+
+
 def test_native_backend_can_validate_constrained_agent_result_with_tool_trace():
     def fake_constrained_agent(**kwargs):
         assert kwargs["role"] == "skill_agent"
         assert "Task manifest summary" in kwargs["user_message"]
+        assert "submit_mutation_result" not in kwargs["system_message"]
+        assert "Final response must be a JSON object" in kwargs["system_message"]
         return {
             "final_response": json.dumps({
                 "success": True,
