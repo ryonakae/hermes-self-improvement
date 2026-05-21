@@ -254,21 +254,15 @@ def test_memory_tool_executor_marks_unavailable_when_fn_missing():
     assert result["error"] == "memory_tool_unavailable"
 
 
-def test_legacy_memory_loop_requires_injected_llm_call(monkeypatch):
+def test_memory_backend_has_no_auxiliary_llm_fallback():
+    import inspect
     import hermes_self_improvement.memory_agent_backend as backend_module
 
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("legacy loop must not call auxiliary LLM fallback")
+    source = inspect.getsource(backend_module)
 
-    monkeypatch.setattr(backend_module, "_call_hermes_auxiliary_native", fail_if_called)
-    backend = NativeMemoryAgentBackend(
-        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
-    )
-
-    result = MemoryAgentRunner(backend=backend).run(task(), config={})
-
-    assert result["success"] is False
-    assert result["error"] == "memory_agent_legacy_loop_requires_injected_llm_call"
+    assert not hasattr(backend_module, "_call_hermes_auxiliary_native")
+    assert "agent.auxiliary_client" not in source
+    assert "call_llm(" not in source
 
 
 def test_build_memory_agent_backend_defaults_to_constrained_runner():

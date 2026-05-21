@@ -827,21 +827,15 @@ def test_native_backend_requires_submit_result_tool_call():
     assert backend.run("prompt", {}, {})["error"] == "submit_result_missing"
 
 
-def test_legacy_skill_loop_requires_injected_llm_call(monkeypatch):
+def test_skill_backend_has_no_auxiliary_llm_fallback():
+    import inspect
     import hermes_self_improvement.skill_agent_backend as backend_module
 
-    def fail_if_called(*args, **kwargs):
-        raise AssertionError("legacy loop must not call auxiliary LLM fallback")
+    source = inspect.getsource(backend_module)
 
-    monkeypatch.setattr(backend_module, "_call_hermes_auxiliary_native", fail_if_called)
-    backend = NativeSkillAgentBackend(
-        tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
-    )
-
-    result = backend.run("prompt", {}, {})
-
-    assert result["success"] is False
-    assert result["error"] == "skill_agent_legacy_loop_requires_injected_llm_call"
+    assert not hasattr(backend_module, "_call_hermes_auxiliary_native")
+    assert "agent.auxiliary_client" not in source
+    assert "call_llm(" not in source
 
 
 def test_build_skill_agent_backend_defaults_to_constrained_runner():

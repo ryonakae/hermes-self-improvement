@@ -510,45 +510,6 @@ def native_skill_agent_tool_schemas() -> list[dict[str, Any]]:
     ]
 
 
-def _call_hermes_auxiliary_native(
-    messages: list[dict[str, Any]],
-    *,
-    tools: list[dict[str, Any]],
-    config: dict[str, Any] | None,
-    task_name: str,
-    extra_body: dict[str, Any] | None = None,
-) -> Any:
-    try:
-        try:
-            from .dspy_program import _ensure_hermes_agent_on_path as ensure_path
-        except Exception:  # pragma: no cover
-            from dspy_program import _ensure_hermes_agent_on_path as ensure_path
-        ensure_path()
-        from agent.auxiliary_client import call_llm  # type: ignore
-    except Exception as exc:
-        raise RuntimeError(f"skill_agent_unavailable:{exc}") from exc
-    cfg = _model_skill_agent_config(config)
-    merged_extra: dict[str, Any] = {}
-    cfg_extra = cfg.get("extra_body") if isinstance(cfg.get("extra_body"), dict) else None
-    if cfg_extra:
-        merged_extra.update(cfg_extra)
-    if extra_body:
-        merged_extra.update(extra_body)
-    return call_llm(
-        task=task_name,
-        provider=cfg.get("provider") or "auto",
-        model=cfg.get("model") or None,
-        base_url=cfg.get("base_url") or None,
-        api_key=cfg.get("api_key") or None,
-        messages=messages,
-        temperature=None,
-        max_tokens=_coerce_int(cfg.get("max_tokens"), 1000),
-        tools=tools,
-        timeout=_coerce_int(cfg.get("timeout"), 45),
-        extra_body=merged_extra or None,
-    )
-
-
 
 @dataclass
 class NativeSkillAgentBackend:
