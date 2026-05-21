@@ -554,6 +554,7 @@ def _call_hermes_auxiliary_native(
 class NativeSkillAgentBackend:
     tool_executor: SkillToolExecutor
     llm_call: Callable[..., Any] | None = None
+    constrained_agent_runner: Callable[..., dict[str, Any]] | None = None
     limits: SkillAgentBackendLimits = field(default_factory=SkillAgentBackendLimits)
 
     def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None, extra_body: dict[str, Any] | None = None) -> Any:
@@ -566,6 +567,65 @@ class NativeSkillAgentBackend:
                 max_tokens=_coerce_int(_model_skill_agent_config(config).get("max_tokens"), 1000),
             )
         return _call_hermes_auxiliary_native(messages, tools=tools, config=config, task_name="self_improvement_skill_agent", extra_body=extra_body)
+
+    def _validate_final_result(self, final: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
+        allowed_targets = _task_allowed_targets(task)
+        if allowed_targets:
+            final["_allowed_targets"] = sorted(allowed_targets)
+        targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
+        task_kind = str(task.get("task_kind") or "")
+        expected_target = str(targets.get("new_skill") or targets.get("source_skill") or targets.get("primary_skill") or "")
+        final["_task_kind"] = task_kind
+        final["_expected_target"] = expected_target
+        if task.get("maintenance_action"):
+            final["_maintenance_action"] = str(task.get("maintenance_action") or "")
+        merge_target = str(targets.get("target_skill") or task.get("target_skill") or "")
+        if merge_target:
+            final["_merge_target_skill"] = merge_target
+        validated = validate_backend_success_result(final)
+        post_validation_target = merge_target if str(task.get("maintenance_action") or "").strip().lower() == "merge" and merge_target else expected_target
+        if _needs_skill_post_validation(validated, task_kind=task_kind, expected_target=post_validation_target):
+            post_validation = _post_validate_skill_target(self.tool_executor, target=post_validation_target, task_kind=task_kind, used_tools=validated.get("mutation_intents") or validated.get("used_tools") or [])
+            validated["post_validation"] = post_validation
+            if post_validation.get("status") != "passed":
+                return {
+                    "success": False,
+                    "error": "skill_agent_post_validation_failed",
+                    "post_validation": post_validation,
+                    "raw_result": _redact_large(validated),
+                }
+        return validated
+
+    def _run_constrained_agent(self, *, user_context: str, system_message: str, task: dict[str, Any], config: dict[str, Any] | None) -> dict[str, Any]:
+        runner = self.constrained_agent_runner
+        if runner is None:
+            from .constrained_agent import run_constrained_role_agent as runner
+        result = runner(
+            role="skill_agent",
+            user_message=user_context,
+            system_message=system_message,
+            config=config or {},
+            max_iterations=self.limits.max_tool_calls + 2,
+        )
+        if not isinstance(result, dict):
+            return {"success": False, "error": "skill_agent_constrained_result_invalid"}
+        final_response = str(result.get("final_response") or "").strip()
+        if not final_response:
+            return {"success": False, "error": "skill_agent_constrained_final_response_missing"}
+        try:
+            parsed = json.loads(final_response)
+        except json.JSONDecodeError:
+            return {"success": False, "error": "skill_agent_constrained_final_response_not_json"}
+        if not isinstance(parsed, dict):
+            return {"success": False, "error": "skill_agent_constrained_final_response_not_object"}
+        final = dict(parsed)
+        tool_trace = result.get("tool_trace") if isinstance(result.get("tool_trace"), list) else []
+        final["used_tools"] = list(tool_trace)
+        final["tool_trace"] = list(tool_trace)
+        mutation_intents = [entry for entry in tool_trace if isinstance(entry, dict) and entry.get("tool") == "skill_manage"]
+        if mutation_intents:
+            final["mutation_intents"] = list(mutation_intents)
+        return self._validate_final_result(final, task)
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
         limit_check = self.limits.check()
@@ -587,17 +647,20 @@ class NativeSkillAgentBackend:
             "Task manifest summary:\n" + json.dumps(task_manifest, ensure_ascii=False, sort_keys=True),
             "Markdown brief:\n" + (markdown_brief or "n/a"),
         ])
+        system_message = (
+            "You are a constrained Hermes skill agent. Use only the provided skill tools. "
+            "Read Markdown briefs as judgment context, not as a machine protocol. "
+            "For skill_create tasks, the target skill is expected to be missing: do not stop just because skill_view cannot read it; "
+            "if the evidence supports creation, call skill_manage(action=\"create\") with complete SKILL.md content, then call submit_mutation_result with outcome=\"applied\" and created_skills containing the exact new skill name. "
+            "For existing-skill edits, read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
+            "If the target is materially different from the premise, already covered, stale, or uncertain, do not mutate. Finish every run by calling submit_mutation_result."
+        )
+        if self.constrained_agent_runner is not None:
+            return self._run_constrained_agent(user_context=user_context, system_message=system_message, task=task, config=config)
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
-                "content": (
-                    "You are a constrained Hermes skill agent. Use only the provided skill tools. "
-                    "Read Markdown briefs as judgment context, not as a machine protocol. "
-                    "For skill_create tasks, the target skill is expected to be missing: do not stop just because skill_view cannot read it; "
-                    "if the evidence supports creation, call skill_manage(action=\"create\") with complete SKILL.md content, then call submit_mutation_result with outcome=\"applied\" and created_skills containing the exact new skill name. "
-                    "For existing-skill edits, read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
-                    "If the target is materially different from the premise, already covered, stale, or uncertain, do not mutate. Finish every run by calling submit_mutation_result."
-                ),
+                "content": system_message,
             },
             {"role": "user", "content": user_context},
         ]
@@ -672,32 +735,7 @@ class NativeSkillAgentBackend:
                     final["tool_trace"] = list(actual_used)
                     if mutation_intents:
                         final["mutation_intents"] = list(mutation_intents)
-                    allowed_targets = _task_allowed_targets(task)
-                    if allowed_targets:
-                        final["_allowed_targets"] = sorted(allowed_targets)
-                    targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
-                    task_kind = str(task.get("task_kind") or "")
-                    expected_target = str(targets.get("new_skill") or targets.get("source_skill") or targets.get("primary_skill") or "")
-                    final["_task_kind"] = task_kind
-                    final["_expected_target"] = expected_target
-                    if task.get("maintenance_action"):
-                        final["_maintenance_action"] = str(task.get("maintenance_action") or "")
-                    merge_target = str(targets.get("target_skill") or task.get("target_skill") or "")
-                    if merge_target:
-                        final["_merge_target_skill"] = merge_target
-                    validated = validate_backend_success_result(final)
-                    post_validation_target = merge_target if str(task.get("maintenance_action") or "").strip().lower() == "merge" and merge_target else expected_target
-                    if _needs_skill_post_validation(validated, task_kind=task_kind, expected_target=post_validation_target):
-                        post_validation = _post_validate_skill_target(self.tool_executor, target=post_validation_target, task_kind=task_kind, used_tools=validated.get("mutation_intents") or validated.get("used_tools") or [])
-                        validated["post_validation"] = post_validation
-                        if post_validation.get("status") != "passed":
-                            return {
-                                "success": False,
-                                "error": "skill_agent_post_validation_failed",
-                                "post_validation": post_validation,
-                                "raw_result": _redact_large(validated),
-                            }
-                    return validated
+                    return self._validate_final_result(final, task)
                 if tool not in ALLOWED_SKILL_AGENT_TOOLS:
                     return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_SKILL_AGENT_TOOLS)}
                 args_error = _validate_tool_call_args(tool, args)

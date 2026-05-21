@@ -827,6 +827,51 @@ def test_native_backend_requires_submit_result_tool_call():
     assert backend.run("prompt", {}, {})["error"] == "submit_result_missing"
 
 
+def test_native_backend_can_validate_constrained_agent_result_with_tool_trace():
+    def fake_constrained_agent(**kwargs):
+        assert kwargs["role"] == "skill_agent"
+        assert "Task manifest summary" in kwargs["user_message"]
+        return {
+            "final_response": json.dumps({
+                "success": True,
+                "outcome": "changed demo skill",
+                "changed_skills": ["demo-skill"],
+                "created_skills": [],
+                "deleted_skills": [],
+                "verification_notes": ["patched demo-skill and read it back"],
+                "rollback_hints": ["revert demo-skill patch"],
+            }),
+            "tool_trace": [
+                {"tool": "skill_view", "name": "demo-skill", "success": True},
+                {"tool": "skill_manage", "action": "patch", "name": "demo-skill", "success": True},
+            ],
+        }
+
+    backend = NativeSkillAgentBackend(
+        tool_executor=SkillToolExecutor(
+            skills_list_fn=lambda **_: {"success": True},
+            skill_view_fn=lambda **_: {"success": True, "content": "---\nname: demo-skill\n---\nnew guidance"},
+            skill_manage_fn=lambda **_: {"success": True},
+        ),
+        constrained_agent_runner=fake_constrained_agent,
+    )
+
+    result = backend.run(
+        "prompt",
+        {"task_kind": "skill_improve", "targets": {"primary_skill": "demo-skill"}},
+        {"model": {"skill_agent": {}}},
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["reported_outcome"] == "changed demo skill"
+    assert result["used_tools"] == [
+        {"tool": "skill_view", "name": "demo-skill", "success": True},
+        {"tool": "skill_manage", "action": "patch", "name": "demo-skill", "success": True},
+    ]
+    assert result["post_validation"]["status"] == "passed"
+
+
 def test_native_backend_reports_tool_call_unsupported_for_non_tool_response():
     backend = NativeSkillAgentBackend(
         tool_executor=SkillToolExecutor(skills_list_fn=lambda **_: {}, skill_view_fn=lambda **_: {}, skill_manage_fn=lambda **_: {}),
