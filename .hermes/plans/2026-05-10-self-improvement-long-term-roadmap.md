@@ -159,7 +159,7 @@ Detailed milestone plans are split by file so execution can proceed without bloa
 
 Active hardening slice:
 
-- [Constrained LLM role tooling and resolver handoff](2026-05-21-target-resolver-light-tuning-and-planner-handoff.md) — defines and tests the minimal tool permission matrix: `target_resolver` and `improvement_planner` get read-only `skills_list` / `skill_view`; `skill_agent` gets skill mutation tools; `memory_agent` gets the memory mutation tool; evaluator / memory_extractor / GEPA stay tool-free with host-prepared context. It also keeps resolver broad-entry/planner-owned-exit for `no_existing_skill_fit` and makes existing bespoke editor loops an explicit simplification target, not a pattern to extend.
+- [Constrained LLM role tooling and resolver handoff](2026-05-21-target-resolver-light-tuning-and-planner-handoff.md) — defines and tests the minimal tool permission matrix: `target_resolver` and `improvement_planner` get read-only `skills_list` / `skill_view`; `skill_agent` gets skill mutation tools; `memory_agent` gets the memory mutation tool; evaluator / memory_extractor / GEPA stay tool-free with host-prepared context. It also keeps resolver broad-entry/planner-owned-exit for `no_existing_skill_fit` and makes existing bespoke editor loops an explicit simplification target, not a pattern to extend. Current progress: shared tool permissions and native tool-harness helper extraction are done; remaining work is replacing more of the editor execution loops with Hermes-native constrained-agent execution where post-validation/accounting can still be preserved.
 
 ## Milestones
 

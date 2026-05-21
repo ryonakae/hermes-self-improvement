@@ -229,6 +229,16 @@ def test_memory_agent_backend_allowed_tools_come_from_role_permission_matrix():
     assert ALLOWED_MEMORY_AGENT_TOOLS is ROLE_TOOL_PERMISSIONS["memory_agent"].allowed_tool_names
 
 
+def test_memory_backend_does_not_import_native_loop_helpers_from_skill_backend():
+    import inspect
+    import hermes_self_improvement.memory_agent_backend as backend
+
+    source = inspect.getsource(backend)
+
+    assert "from .skill_agent_backend import" not in source
+    assert "from .native_tool_harness import" in source
+
+
 def test_memory_tool_executor_rejects_invalid_args():
     executor = MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True}))
     result = executor.call({"action": "add", "target": "memory"})

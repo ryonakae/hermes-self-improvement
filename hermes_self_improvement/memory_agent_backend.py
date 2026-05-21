@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-from .skill_agent_backend import (
+from .native_tool_harness import (
     _coerce_int,
     _extract_native_tool_calls,
     _parse_tool_args,

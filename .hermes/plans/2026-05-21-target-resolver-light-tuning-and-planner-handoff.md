@@ -414,6 +414,12 @@ Then do `memory_agent_backend.py` similarly with `enabled_toolsets=["memory"]`:
 
 Do not build a new general agent framework inside the plugin.
 
+**Progress so far:**
+
+- Role tool-surface constants now come from `ROLE_TOOL_PERMISSIONS` for both editor backends.
+- Shared native tool-call parsing, provider-compatible tool-result messages, result normalization, and output redaction have been extracted into `native_tool_harness.py`, so `memory_agent_backend.py` no longer imports helper machinery from `skill_agent_backend.py`.
+- Remaining work is the larger execution-loop replacement: use Hermes-native constrained-agent execution where it can still preserve same-run tool trace, post-validation, and mutation accounting.
+
 **Step 3: Verify**
 
 ```bash
