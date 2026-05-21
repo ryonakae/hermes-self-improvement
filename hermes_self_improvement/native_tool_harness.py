@@ -94,6 +94,101 @@ def tool_result_message(call: dict[str, Any], result: dict[str, Any]) -> dict[st
     }
 
 
+def extract_agent_message_tool_trace(
+    messages: Any,
+    *,
+    allowed_tool_names: set[str] | frozenset[str] | None = None,
+) -> list[dict[str, Any]]:
+    if not isinstance(messages, list):
+        return []
+    tool_results = _tool_results_by_call_id(messages)
+    trace: list[dict[str, Any]] = []
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        calls = message.get("tool_calls") or []
+        if not isinstance(calls, list):
+            continue
+        for index, raw_call in enumerate(calls):
+            call = _tool_call_from_message(raw_call, index=index)
+            tool = str(call.get("name") or "")
+            args = call.get("args") if isinstance(call.get("args"), dict) else {}
+            if allowed_tool_names is not None and tool not in allowed_tool_names:
+                trace.append({"tool": tool, "success": False, "error": "disallowed_tool_in_agent_trace"})
+                continue
+            result = tool_results.get(str(call.get("id") or ""), {})
+            entry = _trace_entry_from_tool_call(tool=tool, args=args, result=result)
+            trace.append(entry)
+    return trace
+
+
+def _tool_call_from_message(raw_call: Any, *, index: int) -> dict[str, Any]:
+    function = get_attr_or_key(raw_call, "function")
+    name = get_attr_or_key(function, "name") if function is not None else get_attr_or_key(raw_call, "name")
+    raw_args = get_attr_or_key(function, "arguments") if function is not None else get_attr_or_key(raw_call, "arguments")
+    return {
+        "id": str(get_attr_or_key(raw_call, "id") or f"call_{index}"),
+        "name": str(name or ""),
+        "args": parse_tool_args(raw_args),
+    }
+
+
+def _tool_results_by_call_id(messages: list[Any]) -> dict[str, dict[str, Any]]:
+    results: dict[str, dict[str, Any]] = {}
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        role = message.get("role")
+        if role == "tool":
+            call_id = str(message.get("tool_call_id") or "")
+            if call_id:
+                results[call_id] = _parse_tool_result_content(message.get("content"))
+        elif role == "user":
+            parsed = _parse_user_role_tool_result(str(message.get("content") or ""))
+            if parsed:
+                call_id, result = parsed
+                results[call_id] = result
+    return results
+
+
+def _parse_user_role_tool_result(content: str) -> tuple[str, dict[str, Any]] | None:
+    prefix = "Tool result for "
+    if not content.startswith(prefix):
+        return None
+    header, sep, body = content.partition("\n")
+    if not sep:
+        return None
+    marker_start = header.rfind("(")
+    marker_end = header.rfind(")")
+    if marker_start < 0 or marker_end <= marker_start:
+        return None
+    call_id = header[marker_start + 1:marker_end].strip()
+    if not call_id:
+        return None
+    return call_id, _parse_tool_result_content(body)
+
+
+def _parse_tool_result_content(content: Any) -> dict[str, Any]:
+    if isinstance(content, dict):
+        return dict(content)
+    if not isinstance(content, str):
+        return {"success": False, "raw": repr(content)}
+    try:
+        parsed = json.loads(content)
+    except Exception:
+        return {"success": False, "raw": content}
+    return parsed if isinstance(parsed, dict) else {"success": False, "raw": parsed}
+
+
+def _trace_entry_from_tool_call(*, tool: str, args: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    entry: dict[str, Any] = {"tool": tool, "success": bool(result.get("success")) if result else False}
+    for key in ("action", "name", "target"):
+        value = args.get(key)
+        if value:
+            entry[key] = value
+    return entry
+
+
 # Backward-compatible private aliases for existing backend code.
 _redact_large = redact_large
 _normalize_tool_result = normalize_tool_result

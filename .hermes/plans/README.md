@@ -11,7 +11,7 @@ As of 2026-05-10, the long-term roadmap is:
 The current active hardening plans are:
 
 - `2026-05-21-target-resolver-light-tuning-and-planner-handoff.md`
-  - **Status:** partially implemented; role permission matrix, constrained role runner, resolver/planner read-only skill-tool routing, editor backend tool-surface constant unification, and shared native tool-harness helper extraction are done. Remaining: continue simplifying existing bespoke skill/memory editor execution loops toward Hermes-native constrained agents.
+  - **Status:** partially implemented; role permission matrix, constrained role runner, resolver/planner read-only skill-tool routing, editor backend tool-surface constant unification, shared native tool-harness helper extraction, and AIAgent message trace recovery are done. Remaining: continue simplifying existing bespoke skill/memory editor execution loops toward Hermes-native constrained agents.
   - Defines the role permission matrix: `target_resolver` and `improvement_planner` may use only read-only skill inspection (`skills_list`, `skill_view`); `skill_agent` alone gets the `skills` mutation surface; `memory_agent` alone gets the `memory` mutation surface; evaluator / memory_extractor / GEPA remain tool-free with host-prepared context. The plan also keeps resolver broad-entry/planner-owned-exit for `unresolved / no_existing_skill_fit`, and explicitly includes a complexity-reduction refactor that treats existing bespoke skill/memory editor loops as technical debt to be replaced with Hermes-native constrained agents where possible.
 - `2026-05-20-overlay-case-selection-diversity.md`
   - **Status:** implemented.

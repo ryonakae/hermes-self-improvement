@@ -79,6 +79,44 @@ def test_constrained_agent_recovers_final_response_from_messages(monkeypatch):
     assert result["final_response"] == '{"resolutions": []}'
 
 
+def test_constrained_agent_adds_tool_trace_from_agent_messages(monkeypatch):
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            pass
+
+        def run_conversation(self, **kwargs):
+            return {
+                "final_response": '{"success": true}',
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_view",
+                                "function": {"name": "skill_view", "arguments": '{"name":"demo-skill"}'},
+                            }
+                        ],
+                    },
+                    {"role": "tool", "tool_call_id": "call_view", "name": "skill_view", "content": '{"success": true}'},
+                    {"role": "assistant", "content": '{"success": true}'},
+                ],
+            }
+
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.AIAgent", FakeAgent)
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.set_thread_tool_whitelist", lambda allowed, deny_msg_fmt=None: None)
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.clear_thread_tool_whitelist", lambda: None)
+
+    result = run_constrained_role_agent(
+        role="skill_agent",
+        user_message="{}",
+        system_message="skill agent",
+        config={"model": {"skill_agent": {}}},
+    )
+
+    assert result["tool_trace"] == [{"tool": "skill_view", "success": True, "name": "demo-skill"}]
+
+
 def test_constrained_agent_suppresses_internal_agent_stdout(monkeypatch, capsys):
     class FakeAgent:
         def __init__(self, **kwargs):

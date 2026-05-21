@@ -418,6 +418,7 @@ Do not build a new general agent framework inside the plugin.
 
 - Role tool-surface constants now come from `ROLE_TOOL_PERMISSIONS` for both editor backends.
 - Shared native tool-call parsing, provider-compatible tool-result messages, result normalization, and output redaction have been extracted into `native_tool_harness.py`, so `memory_agent_backend.py` no longer imports helper machinery from `skill_agent_backend.py`.
+- `native_tool_harness.py` can now recover a compact mutation/tool trace from Hermes `AIAgent.run_conversation(...)["messages"]`, including both native `role="tool"` results and provider-compatible user-role tool-result context. `constrained_agent.py` attaches this trace to normalized role-agent results when messages are available.
 - Remaining work is the larger execution-loop replacement: use Hermes-native constrained-agent execution where it can still preserve same-run tool trace, post-validation, and mutation accounting.
 
 **Step 3: Verify**

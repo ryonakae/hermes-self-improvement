@@ -5,6 +5,7 @@ import contextlib
 import io
 
 from .llm_utils import _coerce_int, _ensure_hermes_agent_on_path
+from .native_tool_harness import extract_agent_message_tool_trace
 from .role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
 AIAgent = None
@@ -56,13 +57,20 @@ def _latest_assistant_content(messages: Any) -> str:
     return ""
 
 
-def _normalize_agent_result(result: Any) -> dict[str, Any]:
+def _normalize_agent_result(result: Any, *, allowed_tool_names: set[str] | frozenset[str] | None = None) -> dict[str, Any]:
     if isinstance(result, dict):
         normalized = dict(result)
         if not normalized.get("final_response"):
             recovered = _latest_assistant_content(normalized.get("messages"))
             if recovered:
                 normalized["final_response"] = recovered
+        if "tool_trace" not in normalized:
+            trace = extract_agent_message_tool_trace(
+                normalized.get("messages"),
+                allowed_tool_names=allowed_tool_names,
+            )
+            if trace:
+                normalized["tool_trace"] = trace
         return normalized
     return {"final_response": str(result)}
 
@@ -109,4 +117,4 @@ def run_constrained_role_agent(
     finally:
         clear_thread_tool_whitelist()
 
-    return _normalize_agent_result(result)
+    return _normalize_agent_result(result, allowed_tool_names=spec.allowed_tool_names)
