@@ -525,6 +525,8 @@ $PY -m pytest tests/test_duplicate_skill_lifecycle_regression.py -q
 
 ## Task 10: Full validation and operational rollout
 
+**Status:** implemented / operationally rolled out. Current validation confirms the lifecycle implementation is safe for the scheduled 04:00 cron path: focused duplicate/archive/reference-rewrite tests pass, full suite passes, dry-run produces no duplicate create decisions for existing local skills, and the self-improvement cron is enabled with the latest run status OK.
+
 **Objective:** Confirm the plan is implemented safely and ready for the 04:00 cron run.
 
 **Commands:**
@@ -572,25 +574,30 @@ Commit only after tests and dry-run pass.
 
 ## Implementation progress
 
-### 2026-05-19 first slice
+### 2026-05-22 completion validation
 
-Implemented Tasks 1-4 foundation:
+Implemented and validated Tasks 5-10:
 
-- Updated active policy/docs wording from the old `Hermes-created` boundary to `$HERMES_HOME/skills/` local unprotected skills.
-- Added path-aware local skill inventory in `curator_telemetry.py` that scans the active local skills directory, merges usage metadata, marks editable local skills as `local_unprotected`, and protects pinned / archived / bundled / hub / external read-only / ambiguous names.
-- Updated evidence filtering so `local_unprotected` / `local_skill_inventory` candidates are LLM-visible mutation targets.
-- Fed editable local skills into target-resolution and planner flows; `sandbox-permission-workflow`-class skills are now editable targets, not reference-only coverage.
-- Added a deterministic duplicate-create guard: a proposed `create_skill` that overlaps an existing local unprotected skill is normalized to a no-op skip with `create_skill_duplicates_existing_local_skill`, unless the planner supplies a concrete `existing_skill_gap`.
+- Merge/absorb semantics are wired through planner task manifests, skill-agent prompts, backend validation, and post-validation.
+- Active reference rewrite planning and deterministic rewrite execution are implemented for cron/config/script/local skill Markdown surfaces.
+- Archive execution after merge/reference rewrites is wired through the official archive path, with unresolved references causing defer rather than unsafe archive.
+- Lifecycle reporting distinguishes archived skills and rewritten references from create/patch counts.
+- Duplicate regression coverage prevents `hermes-*` duplicate creation when a canonical editable local skill exists.
+- Operational validation confirms current dry-run has no create decisions, no archive candidates requiring action, and no file changes from dry-run.
 
-Validation so far:
+Validation:
 
 ```bash
 PY=${PYTHON:-.venv/bin/python}
-$PY -m pytest tests/test_skill_inventory.py tests/test_curator_telemetry.py tests/test_target_resolver.py tests/test_skill_planner.py -q
-# 57 passed
+$PY -m pytest tests/test_duplicate_skill_lifecycle_regression.py tests/test_skill_reference_rewriter.py tests/test_runner_steps.py tests/test_cli_surface.py -q
+# 101 passed
+$PY -m pytest tests -q
+# 750 passed, 2 skipped
+hermes self-improvement improve --dry-run --json > /tmp/self-improvement-local-skill-lifecycle-dry-run.json
+# run_id run-20260522T100700Z, target_changed false, create decisions [], archive_skill_count 0
 ```
 
-Remaining tasks: Task 5 merge/absorb semantics, Task 6 active reference rewrite planning, Task 7 archive execution after rewrites, Task 8 lifecycle reporting, Task 9 dogfood against the duplicate case, Task 10 full validation/rollout.
+Remaining work: none in this plan. Future lifecycle issues should be handled as new focused hardening plans, not as unfinished Task 10 work.
 
 
 ## Review checklist for this plan

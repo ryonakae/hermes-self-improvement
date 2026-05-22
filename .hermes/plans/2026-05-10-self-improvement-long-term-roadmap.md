@@ -332,13 +332,13 @@ Exit criteria:
 
 ## Active Slice Queue
 
-### Current Slice — Constrained role tool surfaces and resolver read-only skill inspection
+### Current Slice — Operational dogfood and final readiness
 
-**Status:** partially implemented; role permission matrix, constrained role runner, resolver/planner read-only skill tool routing, tool-free role tests, and editor backend tool-surface constants are implemented. Remaining complexity-reduction work: simplify existing `skill_agent_backend.py` / `memory_agent_backend.py` bespoke execution loops toward Hermes-native constrained agents.
+**Status:** active / next. Recent hardening slices are implemented: constrained role tooling, pre-release role simplification, LLM model routing, and local skill lifecycle expansion have all passed focused/full validation. Remaining work is operational proof from scheduled maintenance windows and a final readiness report, not unfinished Task 10 implementation.
 
-Plan file: `2026-05-21-target-resolver-light-tuning-and-planner-handoff.md`.
+Plan files: `2026-05-22-llm-model-routing-spec-and-memory-extractor.md`, `2026-05-22-pre-release-role-simplification.md`, and `2026-05-19_101746-local-skill-lifecycle-expansion.md`.
 
-Goal: make role permissions explicit and simple: resolver/planner can inspect skills read-only (`skills_list`, `skill_view`), editor roles alone can mutate (`skill_agent` via `skills`, `memory_agent` via `memory`), and evaluator/GEPA receive prepared context with no tools. This slice also treats existing bespoke skill/memory editor loops as technical debt: refactor them toward Hermes-native constrained agents, keep post-validation/accounting, and delete duplicated plugin-owned replay/parser/dispatcher machinery where the native surface covers it.
+Goal: observe the next scheduled `self-improvement-autonomous-maintenance` runs, verify actual mutation/no-op/overlay accounting remains understandable, and only add focused hardening fixes if dogfood reveals a concrete failure. Do not restart old completed constrained-agent or local-lifecycle implementation work from stale plan text.
 
 ### Slice A — Skill mutation post-validation readback
 
