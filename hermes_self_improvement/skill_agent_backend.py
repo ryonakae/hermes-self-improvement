@@ -490,6 +490,12 @@ def native_skill_agent_tool_schemas() -> list[dict[str, Any]]:
             },
             ["action", "name"],
         ),
+    ]
+
+
+def legacy_skill_agent_tool_schemas() -> list[dict[str, Any]]:
+    return [
+        *native_skill_agent_tool_schemas(),
         _skill_tool_schema(
             SUBMIT_MUTATION_RESULT_TOOL,
             "Finish the mutation run with the structured result. This tool does not mutate anything.",
@@ -594,7 +600,7 @@ class NativeSkillAgentBackend:
             return {"success": False, "error": "skill_agent_limits_invalid", "reasons": limit_check.get("reasons") or []}
         if not self.tool_executor.available():
             return {"success": False, "error": "skill_agent_unavailable", "reasons": [self.tool_executor.unavailable_reason or "skill_tool_registry_unavailable"]}
-        tools = native_skill_agent_tool_schemas()
+        tools = legacy_skill_agent_tool_schemas()
         task_manifest = {
             "task_kind": task.get("task_kind"),
             "targets": task.get("targets"),

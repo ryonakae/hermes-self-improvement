@@ -206,6 +206,12 @@ def native_memory_agent_tool_schemas() -> list[dict[str, Any]]:
             },
             ["action", "target"],
         ),
+    ]
+
+
+def legacy_memory_agent_tool_schemas() -> list[dict[str, Any]]:
+    return [
+        *native_memory_agent_tool_schemas(),
         _memory_tool_schema(
             SUBMIT_MUTATION_RESULT_TOOL,
             "Finish the memory mutation run with the structured result. This tool does not mutate anything.",
@@ -304,7 +310,7 @@ class NativeMemoryAgentBackend:
             return {"success": False, "error": "memory_agent_limits_invalid", "reasons": limit_check.get("reasons") or []}
         if not self.tool_executor.available():
             return {"success": False, "error": "memory_agent_unavailable", "reasons": [self.tool_executor.unavailable_reason or "memory_tool_registry_unavailable"]}
-        tools = native_memory_agent_tool_schemas()
+        tools = legacy_memory_agent_tool_schemas()
         task_manifest = {
             "task_kind": task.get("task_kind"),
             "target": task.get("target"),

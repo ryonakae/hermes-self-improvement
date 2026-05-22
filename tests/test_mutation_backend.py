@@ -44,6 +44,15 @@ def test_backend_contract_allows_only_skill_tools():
     assert ALLOWED_SKILL_AGENT_TOOLS == {"skills_list", "skill_view", "skill_manage"}
 
 
+def test_production_skill_tool_schemas_do_not_expose_submit_result_tool():
+    from hermes_self_improvement.skill_agent_backend import native_skill_agent_tool_schemas
+
+    names = {schema["function"]["name"] for schema in native_skill_agent_tool_schemas()}
+
+    assert names == {"skills_list", "skill_view", "skill_manage"}
+    assert "submit_mutation_result" not in names
+
+
 def test_skill_agent_backend_allowed_tools_come_from_role_permission_matrix():
     assert ALLOWED_SKILL_AGENT_TOOLS is ROLE_TOOL_PERMISSIONS["skill_agent"].allowed_tool_names
 

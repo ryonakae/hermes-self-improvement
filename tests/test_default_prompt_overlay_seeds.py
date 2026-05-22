@@ -21,8 +21,8 @@ def config(tmp_path: Path) -> dict:
 def test_default_prompt_overlay_seeds_are_markdown_and_within_limits():
     required_terms = {
         "improvement_planner": ["apply", "defer", "USER", "MEMORY", "Skill", "create_skill"],
-        "skill_agent": ["skill_view", "skill_manage", "submit_mutation_result", "minimal"],
-        "memory_agent": ["memory", "current_entries", "submit_mutation_result", "convert_to_skill_proposal"],
+        "skill_agent": ["skill_view", "skill_manage", "final JSON", "minimal"],
+        "memory_agent": ["memory", "current_entries", "final JSON", "convert_to_skill_proposal"],
         "evaluator": ["evaluate", "memory", "overlay", "defer"],
     }
     for role in DEFAULT_PROMPT_SEED_ROLES:

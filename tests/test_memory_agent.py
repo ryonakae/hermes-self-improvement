@@ -219,10 +219,11 @@ def test_runner_rejects_disallowed_tool_reported_by_backend():
     assert result["error"] == "disallowed_tool_reported"
 
 
-def test_native_memory_agent_tool_schemas_include_memory_and_submit_only():
+def test_native_memory_agent_tool_schemas_include_memory_only():
     schemas = native_memory_agent_tool_schemas()
     names = {schema["function"]["name"] for schema in schemas}
-    assert names == {"memory", "submit_mutation_result"}
+    assert names == {"memory"}
+    assert "submit_mutation_result" not in names
 
 
 def test_memory_agent_backend_allowed_tools_come_from_role_permission_matrix():

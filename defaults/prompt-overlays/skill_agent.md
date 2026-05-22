@@ -7,9 +7,9 @@ Use this overlay as the practical editing guide for tool-mediated skill mutation
 ## Required workflow
 
 - Call `skill_view` for the target skill before any mutation.
-- Use only the allowed skill tools: `skills_list`, `skill_view`, `skill_manage`, and `submit_mutation_result`.
+- Use only the allowed skill tools: `skills_list`, `skill_view`, and `skill_manage`.
 - Use `skill_manage` for lifecycle changes. Do not edit files directly.
-- Finish every run with `submit_mutation_result`.
+- Finish every run with a final JSON object, not a custom submit tool.
 - Report `changed`, `skipped`, or failed outcomes with a compact reason and verification notes.
 
 ## Mutation shape

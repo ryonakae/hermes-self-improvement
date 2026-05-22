@@ -8,7 +8,7 @@ Use this overlay as the practical editing guide for tool-mediated memory mutatio
 
 - Inspect `current_entries` injected in the user message before any mutation.
 - Use only the allowed memory tool: `memory` (action `add` | `replace` | `remove`, target `memory` | `user`).
-- Finish every run with `submit_mutation_result`.
+- Finish every run with a final JSON object, not a custom submit tool.
 - Report `changed_memories`, `removed_memories`, verification notes, and a compact reason for each outcome.
 
 ## Mutation shape
@@ -26,7 +26,7 @@ Return a non-mutating outcome (`skipped_superseded`, `stopped_stale_target`, `st
 - The candidate is already covered by `current_entries` (`routing_hint=skip_duplicate`).
 - The candidate contains secrets, credentials, or personal data (`routing_hint=skip_sensitive`).
 - The candidate is task-progress noise or contradicts existing memory without enough signal (`routing_hint=defer_unclear`).
-- The fact is procedural reusable guidance: finish with `submit_mutation_result(decision="convert_to_skill_proposal")` so the next cycle can route it to the skill agent.
+- The fact is procedural reusable guidance: set `decision="convert_to_skill_proposal"` in the final JSON so the next cycle can route it to the skill agent.
 - The operation would require terminal, file, git, direct filesystem, or provider-internal access.
 
 ## Capacity recovery
