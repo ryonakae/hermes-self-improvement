@@ -1170,6 +1170,9 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
             f"- prompt overlays: {active_prompts.get('status') or 'unknown'} ({_format_count_map(active_prompts.get('sources') if isinstance(active_prompts.get('sources'), dict) else {})})",
             f"- default assets: {defaults.get('status') or 'unknown'}",
         ])
+        reasons = setup.get("reasons") if isinstance(setup.get("reasons"), list) else []
+        if reasons:
+            lines.append("- reasons: " + ", ".join(str(reason) for reason in reasons))
         if not setup.get("initialized"):
             lines.append("- next: hermes self-improvement setup")
     lines.extend([

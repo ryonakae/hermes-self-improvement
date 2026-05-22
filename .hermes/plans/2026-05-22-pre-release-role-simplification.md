@@ -35,7 +35,13 @@ Task 2 is also implemented for active surfaces:
 - Rewrote remaining active tests so they no longer carry the literal removed tool name.
 - Validation: `git grep -n "submit_mutation_result" -- hermes_self_improvement defaults skills tests` returns no active hits.
 
-Remaining debt is now Task 3+: keep setup/status UX simple and add `target_resolver` overlay-target work.
+Task 3 is implemented:
+
+- Human-readable `status` now prints runtime setup reasons such as `active_prompt_overlays_invalid` before the `hermes self-improvement setup` next step.
+- Added a CLI guard confirming there is still no `repair` subcommand; `setup` remains the single init/repair surface.
+- Validation: `tests/test_cli_surface.py` passed (`44 passed`), full suite passed (`745 passed, 2 skipped`), `setup --check --json` reported initialized, and `improve --dry-run --json` passed with `run-20260522T065035Z`.
+
+Remaining debt is now Task 4: add `target_resolver` as a thin runtime-private overlay target while keeping resolver mutation-free.
 
 ---
 

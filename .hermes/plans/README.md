@@ -11,9 +11,9 @@ As of 2026-05-10, the long-term roadmap is:
 The current active hardening plans are:
 
 - `2026-05-22-pre-release-role-simplification.md`
-  - **Status:** in progress; Tasks 1-2 implemented.
-  - Because the plugin is still pre-release, this plan removes old compatibility instead of preserving it. Completed: injected editor loops and synthetic finalizer support were deleted from skill/memory backend source; backend tests were moved to constrained-runner / helper coverage; active source/tests/docs guard now keeps the removed synthetic finalizer name out of `hermes_self_improvement`, prompt overlays, operations docs, and tests.
-  - Validation: full suite passed (`743 passed, 2 skipped`) plus dry-run `run-20260522T064635Z`. Remaining: keep `setup` as the single repair/init surface with clearer status wording, and add `target_resolver` as a thin runtime-private overlay target without giving it mutation authority.
+  - **Status:** in progress; Tasks 1-3 implemented.
+  - Because the plugin is still pre-release, this plan removes old compatibility instead of preserving it. Completed: injected editor loops and synthetic finalizer support were deleted from skill/memory backend source; backend tests were moved to constrained-runner / helper coverage; active source/tests/docs guard now keeps the removed synthetic finalizer name out of `hermes_self_improvement`, prompt overlays, operations docs, and tests; status now prints runtime setup reasons and keeps `setup` as the single init/repair surface with no `repair` subcommand.
+  - Validation: full suite passed (`745 passed, 2 skipped`) plus dry-run `run-20260522T065035Z`; `setup --check --json` reported initialized. Remaining: add `target_resolver` as a thin runtime-private overlay target without giving it mutation authority.
 
 - `2026-05-21-target-resolver-light-tuning-and-planner-handoff.md`
   - **Status:** implemented through constrained default editor paths; superseded for remaining cleanup by `2026-05-22-pre-release-role-simplification.md`.

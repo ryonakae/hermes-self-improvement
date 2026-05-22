@@ -79,6 +79,38 @@ def test_status_and_setup_accept_json_flags_as_full_status_output():
     assert setup.as_json is True
 
 
+def test_self_improvement_has_no_repair_subcommand():
+    parser = build_parser()
+
+    try:
+        parser.parse_args(["repair"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:  # pragma: no cover
+        raise AssertionError("repair should not be a self-improvement command")
+
+
+def test_status_mentions_setup_when_prompt_overlays_invalid():
+    cli = load_cli_module()
+    text = cli._render_status_summary({
+        "enabled": True,
+        "config_path": None,
+        "event_path": "events.jsonl",
+        "event_count_sample": 0,
+        "runtime_setup": {
+            "initialized": False,
+            "reasons": ["active_prompt_overlays_invalid"],
+            "active_evaluator": {"status": "ok"},
+            "active_prompt_overlays": {"status": "missing", "sources": {}, "roles": {"skill_agent": {"status": "missing"}}},
+            "default_assets": {"status": "ok"},
+        },
+    })
+
+    assert "active_prompt_overlays_invalid" in text
+    assert "- prompt overlays: missing" in text
+    assert "- next: hermes self-improvement setup" in text
+
+
 def test_setup_reset_confirmation_requires_tty_or_yes(monkeypatch, tmp_path):
     cli = load_cli_module()
 
