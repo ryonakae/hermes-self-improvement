@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from hermes_self_improvement.role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
 
@@ -23,3 +25,24 @@ def test_tool_free_roles_have_no_enabled_toolsets():
         assert spec.tool_free is True
         assert spec.enabled_toolsets == ()
         assert spec.allowed_tool_names == frozenset()
+
+
+def test_removed_submit_tool_name_is_not_in_active_plugin_surfaces():
+    root = Path(__file__).resolve().parents[1]
+    active_paths = [
+        root / "hermes_self_improvement",
+        root / "defaults" / "prompt-overlays",
+        root / "skills" / "operations",
+        root / "tests",
+    ]
+    hits = []
+    for base in active_paths:
+        for path in base.rglob("*"):
+            if not path.is_file() or path.suffix not in {".py", ".md", ".yaml", ".yml"}:
+                continue
+            if path == Path(__file__):
+                continue
+            text = path.read_text(encoding="utf-8")
+            if ("submit_" + "mutation_result") in text:
+                hits.append(str(path.relative_to(root)))
+    assert hits == []

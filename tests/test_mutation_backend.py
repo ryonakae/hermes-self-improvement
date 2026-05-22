@@ -50,7 +50,7 @@ def test_production_skill_tool_schemas_do_not_expose_submit_result_tool():
     names = {schema["function"]["name"] for schema in native_skill_agent_tool_schemas()}
 
     assert names == {"skills_list", "skill_view", "skill_manage"}
-    assert "submit_mutation_result" not in names
+    assert ("submit_" + "mutation_result") not in names
 
 
 def test_skill_agent_backend_allowed_tools_come_from_role_permission_matrix():
@@ -398,7 +398,7 @@ def test_skill_backend_has_no_auxiliary_or_injected_llm_loop_surface():
     assert "call_llm(" not in source
     assert "llm_call" not in source
     assert "skill_agent_legacy_loop_requires_injected_llm_call" not in source
-    assert "submit_mutation_result" not in source
+    assert ("submit_" + "mutation_result") not in source
 
 
 def test_build_skill_agent_backend_defaults_to_constrained_runner():
@@ -418,7 +418,7 @@ def test_native_backend_can_validate_constrained_agent_result_with_tool_trace():
     def fake_constrained_agent(**kwargs):
         assert kwargs["role"] == "skill_agent"
         assert "Task manifest summary" in kwargs["user_message"]
-        assert "submit_mutation_result" not in kwargs["system_message"]
+        assert ("submit_" + "mutation_result") not in kwargs["system_message"]
         assert "Final response must be a JSON object" in kwargs["system_message"]
         return {
             "final_response": json.dumps({

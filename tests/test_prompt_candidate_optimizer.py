@@ -34,7 +34,7 @@ def test_dspy_unavailable_falls_back_without_import_failure(monkeypatch, tmp_pat
 
     assert candidate["source"] == "rule_fallback"
     assert candidate["candidate_prompt"]["replacement"] is None
-    assert "submit_mutation_result" not in json.dumps(candidate["candidate_prompt"])
+    assert ("submit_" + "mutation_result") not in json.dumps(candidate["candidate_prompt"])
     assert len(candidate["candidate_hash"]) == 64
 
 

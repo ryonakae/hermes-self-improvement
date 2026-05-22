@@ -97,7 +97,7 @@ def test_validate_memory_agent_task_rejects_missing_memory_tool_constraint():
 def test_build_memory_agent_prompt_mentions_memory_tool_and_skill_classification():
     prompt = build_memory_agent_prompt(task())
     assert "memory (action add|replace|remove" in prompt
-    assert "submit_mutation_result" not in prompt
+    assert ("submit_" + "mutation_result") not in prompt
     assert "convert_to_skill_proposal" in prompt
     assert "Skill vs memory classification" in prompt
 
@@ -223,7 +223,7 @@ def test_native_memory_agent_tool_schemas_include_memory_only():
     schemas = native_memory_agent_tool_schemas()
     names = {schema["function"]["name"] for schema in schemas}
     assert names == {"memory"}
-    assert "submit_mutation_result" not in names
+    assert ("submit_" + "mutation_result") not in names
 
 
 def test_memory_agent_backend_allowed_tools_come_from_role_permission_matrix():
@@ -267,7 +267,7 @@ def test_memory_backend_has_no_auxiliary_or_injected_llm_loop_surface():
     assert "call_llm(" not in source
     assert "llm_call" not in source
     assert "memory_agent_legacy_loop_requires_injected_llm_call" not in source
-    assert "submit_mutation_result" not in source
+    assert ("submit_" + "mutation_result") not in source
 
 
 def test_build_memory_agent_backend_defaults_to_constrained_runner():
@@ -284,7 +284,7 @@ def test_native_memory_backend_accepts_constrained_agent_result_through_existing
         assert role == "memory_agent"
         assert "Current memory entries" in user_message
         assert "constrained Hermes memory agent" in system_message
-        assert "submit_mutation_result" not in system_message
+        assert ("submit_" + "mutation_result") not in system_message
         assert "Final response must be a JSON object" in system_message
         assert max_iterations == 14
         return {

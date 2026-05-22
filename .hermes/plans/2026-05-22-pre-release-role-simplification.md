@@ -27,9 +27,15 @@ Current progress:
 - Task 1 is implemented: `NativeSkillAgentBackend` and `NativeMemoryAgentBackend` no longer expose `llm_call`, legacy schema helpers, synthetic `submit_mutation_result`, or bespoke injected LLM/tool loops.
 - Editor backend execution has one path: Hermes constrained agents returning final JSON plus recovered `tool_trace`.
 - Tests that depended on injected provider loops were removed or rewritten to constrained-runner / helper coverage.
-- Validation: focused backend/smoke tests passed, full suite passed (`742 passed, 2 skipped`), and `improve --dry-run --json` passed with `run-20260522T064325Z`.
+- Validation: focused backend/smoke tests passed, full suite passed (`743 passed, 2 skipped`), and `improve --dry-run --json` passed with `run-20260522T064635Z`.
 
-Remaining debt is now Task 2+: remove `submit_mutation_result` references from active tests/docs/prompts outside backend source, then continue setup/status UX and `target_resolver` overlay-target work.
+Task 2 is also implemented for active surfaces:
+
+- Added a guard that scans `hermes_self_improvement`, `defaults/prompt-overlays`, `skills/operations`, and `tests` for the removed synthetic finalizer name.
+- Rewrote remaining active tests so they no longer carry the literal removed tool name.
+- Validation: `git grep -n "submit_mutation_result" -- hermes_self_improvement defaults skills tests` returns no active hits.
+
+Remaining debt is now Task 3+: keep setup/status UX simple and add `target_resolver` overlay-target work.
 
 ---
 

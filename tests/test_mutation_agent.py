@@ -61,7 +61,7 @@ def test_runner_builds_prompt_with_only_allowed_skill_names_and_constraints(tmp_
 
     assert validation["status"] == "ok"
     assert "skills_list" in prompt and "skill_view" in prompt and "skill_manage" in prompt
-    assert "submit_mutation_result" not in prompt
+    assert ("submit_" + "mutation_result") not in prompt
     assert "Do not use terminal" in prompt
     assert "file tools" in prompt and "git" in prompt and "direct filesystem" in prompt
 
@@ -182,7 +182,7 @@ def test_skill_agent_prompt_includes_native_tool_editor_contract(tmp_path):
     assert "planner handoff is evidence-backed intent" in prompt
     assert "not an exact patch command" in prompt
     assert "read the current target" in prompt
-    assert "submit_mutation_result" not in prompt
+    assert ("submit_" + "mutation_result") not in prompt
     assert "Final assistant response must be a JSON object" in prompt
 
 

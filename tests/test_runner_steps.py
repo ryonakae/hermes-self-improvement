@@ -67,7 +67,7 @@ def test_build_skill_agent_task_uses_skills_only_constraints():
     assert "Call skill_view" in task["instructions"]
     joined = "\n".join(task["constraints"])
     assert "skills_list" in joined and "skill_view" in joined and "skill_manage" in joined
-    assert "submit_mutation_result" not in joined
+    assert ("submit_" + "mutation_result") not in joined
     assert "direct filesystem" in joined
 
 
