@@ -11,8 +11,8 @@ As of 2026-05-10, the long-term roadmap is:
 The current active hardening plans are:
 
 - `2026-05-22-llm-model-routing-spec-and-memory-extractor.md`
-  - **Status:** planned.
-  - Formalizes the LLM role/model routing contract so future work does not confuse Hermes constrained-agent roles with tool-free DSPy/GEPA or memory-extractor calls. Planned scope: add `model.memory_extractor` as a first-class default role, keep `memory_extractor` tool-free, strengthen tests proving DSPy/GEPA use `model.evaluator`, and update README / operations docs / architecture reference with a role table.
+  - **Status:** implemented.
+  - Formalizes the LLM role/model routing contract so future work does not confuse Hermes constrained-agent roles with tool-free DSPy/GEPA or memory-extractor calls. Completed: `model.memory_extractor` is a first-class default role; `memory_extractor` remains tool-free and now forwards role-specific provider/model/base_url/api_key/extra_body routing; DSPy/GEPA evaluator routing is regression-tested as `model.evaluator`; README / operations docs / architecture reference contain the role table; LLM telemetry now records non-breaking `requested_provider` / `requested_model` fields alongside legacy provider/model fields.
 
 - `2026-05-22-pre-release-role-simplification.md`
   - **Status:** implemented.

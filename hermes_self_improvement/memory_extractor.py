@@ -370,13 +370,24 @@ def build_memory_extractor_messages(digest: dict[str, Any]) -> list[dict[str, An
     ]
 
 
+def _memory_extractor_model_config(config: dict[str, Any]) -> dict[str, Any]:
+    raw_model = config.get("model")
+    model_config = raw_model if isinstance(raw_model, dict) else {}
+    raw_value = model_config.get("memory_extractor")
+    value = raw_value if isinstance(raw_value, dict) else {}
+    return value or {}
+
+
 def _call_memory_extractor_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    extractor_config = model_config.get("memory_extractor") if isinstance(model_config.get("memory_extractor"), dict) else {}
+    extractor_config = _memory_extractor_model_config(config)
     provider = extractor_config.get("provider") or "auto"
     model = extractor_config.get("model") or None
     timeout = _coerce_int(extractor_config.get("timeout"), default=60)
     max_tokens = _coerce_int(extractor_config.get("max_tokens"), default=1800)
+    base_url = extractor_config.get("base_url") or None
+    api_key = extractor_config.get("api_key") or None
+    raw_extra = extractor_config.get("extra_body")
+    configured_extra: dict[str, Any] = raw_extra if isinstance(raw_extra, dict) else {}
     messages = build_memory_extractor_messages(digest)
     _ensure_hermes_agent_on_path()
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
@@ -384,15 +395,19 @@ def _call_memory_extractor_llm(*, digest: dict[str, Any], config: dict[str, Any]
     from .prompt_cache import apply_caching
 
     messages, cache_extras = apply_caching(messages, site="memory_extractor")
+    extra_body = dict(configured_extra)
+    extra_body.update(cache_extras)
     response = call_llm(
         task="self_improvement",
         provider=provider,
         model=model,
+        base_url=base_url,
+        api_key=api_key,
         messages=messages,
         temperature=None,
         max_tokens=max_tokens,
         timeout=timeout,
-        extra_body=cache_extras,
+        extra_body=extra_body or None,
     )
     response_text = extract_content_or_reasoning(response)
     record_llm_call(

@@ -8,6 +8,8 @@
 
 **Tech Stack:** Hermes standalone plugin, `config.py`, `memory_extractor.py`, `dspy_program.py`, `prompt_gepa_adapter.py`, `llm_telemetry.py`, bundled operations docs, pytest.
 
+**Status:** Implemented on 2026-05-22. `memory_extractor` is now a first-class model role; DSPy/GEPA evaluator routing is regression-tested; docs include the constrained-agent vs tool-free role contract; telemetry keeps legacy `provider/model` fields and adds non-breaking `requested_provider/requested_model` fields.
+
 ---
 
 ## Current state

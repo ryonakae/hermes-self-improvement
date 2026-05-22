@@ -88,6 +88,15 @@ def _default_config() -> dict[str, Any]:
                 "max_tokens": 1000,
                 "extra_body": {},
             },
+            "memory_extractor": {
+                "provider": "auto",
+                "model": "",
+                "base_url": "",
+                "api_key": "",
+                "timeout": 60,
+                "max_tokens": 1800,
+                "extra_body": {},
+            },
             "evaluator": {
                 "provider": "auto",
                 "model": "",

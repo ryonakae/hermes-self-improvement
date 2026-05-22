@@ -215,7 +215,14 @@ def test_old_model_role_keys_are_dropped(tmp_path):
 
     config = mod.load_config(repo_config)
 
-    assert list(config["model"].keys()) == ["improvement_planner", "target_resolver", "skill_agent", "memory_agent", "evaluator"]
+    assert list(config["model"].keys()) == [
+        "improvement_planner",
+        "target_resolver",
+        "skill_agent",
+        "memory_agent",
+        "memory_extractor",
+        "evaluator",
+    ]
     retired = "ju" + "dge"
     assert {"llm", "mutation", "gepa", retired, "old_planner", "planner", "editor"}.isdisjoint(config["model"])
     assert config["model"]["improvement_planner"]["provider"] == "codex"
@@ -263,8 +270,24 @@ def test_code_defaults_are_used_when_repo_yaml_is_absent(tmp_path):
 
     assert config["retention_days"] == 30
     assert config["gepa_evaluator"]["enabled"] is True
-    assert list(config["model"].keys()) == ["improvement_planner", "target_resolver", "skill_agent", "memory_agent", "evaluator"]
+    assert list(config["model"].keys()) == [
+        "improvement_planner",
+        "target_resolver",
+        "skill_agent",
+        "memory_agent",
+        "memory_extractor",
+        "evaluator",
+    ]
     assert config["model"]["target_resolver"] == {
+        "provider": "auto",
+        "model": "",
+        "base_url": "",
+        "api_key": "",
+        "timeout": 60,
+        "max_tokens": 1800,
+        "extra_body": {},
+    }
+    assert config["model"]["memory_extractor"] == {
         "provider": "auto",
         "model": "",
         "base_url": "",
@@ -287,6 +310,8 @@ def test_config_example_yaml_is_parseable(tmp_path):
     assert config["model"]["improvement_planner"]["provider"] == "auto"
     assert config["model"]["target_resolver"]["provider"] == "auto"
     assert config["model"]["target_resolver"]["timeout"] == 60
+    assert config["model"]["memory_extractor"]["provider"] == "auto"
+    assert config["model"]["memory_extractor"]["timeout"] == 60
     assert config["model"]["evaluator"]["timeout"] == 120
     assert config["model"]["skill_agent"]["timeout"] == 45
     assert config["model"]["skill_agent"]["max_tokens"] == 1000

@@ -142,15 +142,16 @@ $EDITOR config.local.yaml
 
 API key や provider secret は commit しないでください。
 
-モデルは 5 つの role に振り分けます。
+モデルは 6 つの role に振り分けます。`provider: auto` かつ空の `model` は、プラグインが concrete model を pin せず Hermes の通常 auto/main routing に任せる指定です。
 
-| key | 用途 |
-|---|---|
-| `model.improvement_planner` | 改善案の採点とスキル計画 |
-| `model.target_resolver` | unmatched evidence の skill / memory target 解決 |
-| `model.skill_agent` | スキル変更エージェント |
-| `model.memory_agent` | メモリ変更エージェント (memory tool 経由の add / replace / remove) |
-| `model.evaluator` | DSPy / GEPA による evaluator / プロンプト / rubric 調整 |
+| key | 用途 | LLM tool access |
+|---|---|---|
+| `model.target_resolver` | unmatched evidence の skill / memory target 解決 | Hermes constrained agent。`skills_list` / `skill_view` の read-only skill inspection のみ |
+| `model.improvement_planner` | 改善案の判断と skill / memory task manifest 作成 | Hermes constrained agent。`skills_list` / `skill_view` の read-only skill inspection のみ |
+| `model.skill_agent` | スキル変更エージェント | Hermes constrained agent。公式 skill tools に限定 |
+| `model.memory_agent` | メモリ変更エージェント (memory tool 経由の add / replace / remove) | Hermes constrained agent。公式 memory tool に限定 |
+| `model.memory_extractor` | conversation window から memory gap candidate を抽出 | tool-free。host-prepared context を受け取り、memory mutation はしない |
+| `model.evaluator` | DSPy/GEPA による evaluator / プロンプト / rubric 調整 | tool-free。DSPy/GEPA の Hermes auxiliary LM bridge が使う |
 
 calibration の evidence しきい値 (window 日数、最少イベント数など) も YAML から調整できます。
 具体的なキーは `config.example.yaml` を参照してください。

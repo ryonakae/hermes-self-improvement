@@ -122,6 +122,8 @@ def record_llm_call(
             "task": str(task) if task is not None else None,
             "provider": str(provider) if provider is not None else None,
             "model": str(model) if model is not None else None,
+            "requested_provider": str(provider) if provider is not None else None,
+            "requested_model": str(model) if model is not None else None,
             "max_tokens": max_tokens if isinstance(max_tokens, int) else None,
             "prompt_messages_count": prompt["messages_count"],
             "prompt_chars_total": prompt["chars_total"],

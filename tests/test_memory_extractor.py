@@ -1,3 +1,8 @@
+import sys
+import types
+
+import hermes_self_improvement.llm_telemetry as llm_telemetry
+import hermes_self_improvement.memory_extractor as memory_extractor_module
 from hermes_self_improvement.runner_steps import run_memory_improvement_step
 from hermes_self_improvement.memory_extractor import (
     MEMORY_EXTRACTOR_SYSTEM,
@@ -270,3 +275,50 @@ def test_memory_gap_extractor_returns_empty_candidates_on_llm_parse_failure():
 
     assert out["candidates"] == []
     assert out["extractor_error"] == "bad llm json"
+
+
+def test_memory_extractor_llm_uses_memory_extractor_model_config(monkeypatch):
+    calls = []
+    telemetry = []
+
+    def fake_call_llm(**kwargs):
+        calls.append(kwargs)
+        return {"content": '{"candidates": []}'}
+
+    fake_auxiliary = types.SimpleNamespace(
+        call_llm=fake_call_llm,
+        extract_content_or_reasoning=lambda response: response["content"],
+    )
+    monkeypatch.setitem(sys.modules, "agent.auxiliary_client", fake_auxiliary)
+    monkeypatch.setattr(memory_extractor_module, "_ensure_hermes_agent_on_path", lambda: None)
+    monkeypatch.setattr(llm_telemetry, "record_llm_call", lambda **kwargs: telemetry.append(kwargs))
+
+    out = run_memory_extractor(
+        {"windows": []},
+        config={
+            "model": {
+                "memory_extractor": {
+                    "provider": "openrouter",
+                    "model": "anthropic/claude-sonnet-4",
+                    "base_url": "https://openrouter.ai/api/v1",
+                    "api_key": "secret-token",
+                    "timeout": 77,
+                    "max_tokens": 456,
+                    "extra_body": {"reasoning": {"enabled": False}},
+                }
+            }
+        },
+    )
+
+    assert out == {"candidates": []}
+    assert calls[0]["task"] == "self_improvement"
+    assert calls[0]["provider"] == "openrouter"
+    assert calls[0]["model"] == "anthropic/claude-sonnet-4"
+    assert calls[0]["base_url"] == "https://openrouter.ai/api/v1"
+    assert calls[0]["api_key"] == "secret-token"
+    assert calls[0]["timeout"] == 77
+    assert calls[0]["max_tokens"] == 456
+    assert calls[0]["extra_body"]["reasoning"] == {"enabled": False}
+    assert telemetry[0]["site"] == "memory_extractor"
+    assert telemetry[0]["provider"] == "openrouter"
+    assert telemetry[0]["model"] == "anthropic/claude-sonnet-4"

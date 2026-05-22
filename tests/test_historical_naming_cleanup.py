@@ -74,3 +74,22 @@ def test_active_surfaces_do_not_describe_retired_names_as_current_behavior():
             if term in text and not _allowed(path, term):
                 hits.append(f"{path.relative_to(ROOT)}: contains {term!r}: {reason}")
     assert not hits, "\n".join(hits)
+
+
+def test_operations_docs_define_current_llm_model_routing_contract():
+    docs = "\n".join(
+        (ROOT / path).read_text(encoding="utf-8")
+        for path in [
+            "README.md",
+            "skills/operations/SKILL.md",
+            "skills/operations/references/architecture.md",
+            "config.example.yaml",
+        ]
+    )
+
+    assert "model.memory_extractor" in docs
+    assert "model.evaluator" in docs
+    assert "DSPy/GEPA" in docs
+    assert "memory_extractor" in docs
+    assert "tool-free" in docs or "no tools" in docs
+    assert "constrained" in docs

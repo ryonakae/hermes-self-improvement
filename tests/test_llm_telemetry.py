@@ -87,6 +87,8 @@ def test_record_llm_call_writes_event(tmp_path):
     assert ev["site"] == "target_resolver"
     assert ev["model"] == "m1"
     assert ev["provider"] == "anthropic"
+    assert ev["requested_model"] == "m1"
+    assert ev["requested_provider"] == "anthropic"
     assert ev["task"] == "self_improvement"
     assert ev["max_tokens"] == 1800
     assert ev["prompt_messages_count"] == 2

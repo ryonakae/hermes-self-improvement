@@ -51,7 +51,18 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 
 `hermes_self_improvement/scoring.py` now provides only deterministic heuristic proposal scoring for report ordering and diagnostic signals. It does not make mutation decisions and does not call an LLM. The historical LLM-driven proposal scorer was retired after `improvement_planner` became the decision owner.
 
-LLM judgment happens in current named sites such as `target_resolver`, `memory_extractor`, `improvement_planner`, `skill_agent`, and `memory_agent`. Those calls route through Hermes auxiliary LLM support with the plugin task name `self_improvement`.
+LLM judgment is split by role and permission boundary, not by one generic auxiliary path:
+
+| Role/site | Model config key | Tool access | Execution shape |
+|---|---|---|---|
+| `target_resolver` | `model.target_resolver` | `skills_list`, `skill_view` only | Hermes constrained agent |
+| `improvement_planner` | `model.improvement_planner` | `skills_list`, `skill_view` only | Hermes constrained agent |
+| `skill_agent` | `model.skill_agent` | official skill tools | Hermes constrained agent |
+| `memory_agent` | `model.memory_agent` | official memory tool/provider | Hermes constrained agent |
+| `memory_extractor` | `model.memory_extractor` | tool-free | Hermes auxiliary LLM call with host-prepared conversation/memory context |
+| DSPy evaluator scoring / GEPA prompt optimization | `model.evaluator` | tool-free | DSPy/GEPA through the Hermes auxiliary LM bridge |
+
+`provider: auto` with an empty `model` means the plugin does not pin a concrete model and lets Hermes use its normal auto/main routing. `memory_extractor` only proposes normalized memory-gap candidates; it does not mutate memory. Memory changes remain owned by `memory_agent` through the official memory tool.
 
 GEPA / DSPy are not live proposal scorers. They belong to `calibrate`, where they improve runtime-private evaluator, prompt, and rubric artifacts for later planner and agent runs. Scoring remains advisory and never grants mutation permission.
 

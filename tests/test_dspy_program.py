@@ -105,6 +105,37 @@ def test_score_with_dspy_program_returns_plugin_scorer_payload_and_forces_auto_a
     assert payload["scores"][0]["auto_apply"] is False
 
 
+def test_score_with_dspy_program_uses_model_evaluator_config(monkeypatch):
+    mod = load_program_module()
+    captured = []
+    original = mod.build_dspy_program
+
+    def capture_build_dspy_program(*, lm_config=None, dspy_module=None):
+        captured.append(lm_config)
+        return original(lm_config=lm_config, dspy_module=dspy_module)
+
+    monkeypatch.setattr(mod, "build_dspy_program", capture_build_dspy_program)
+
+    mod.score_with_dspy_program(
+        proposals=[{"id": "proposal-1", "risk": "low", "confidence": "high"}],
+        findings=[],
+        rubric={"version": "proposal-eval-v0.1"},
+        config={
+            "model": {
+                "evaluator": {
+                    "provider": "openrouter",
+                    "model": "gpt-evaluator",
+                    "timeout": 88,
+                    "max_tokens": 654,
+                }
+            }
+        },
+        dspy_module=FakeDspy,
+    )
+
+    assert captured == [{"provider": "openrouter", "model": "gpt-evaluator", "timeout": 88, "max_tokens": 654}]
+
+
 
 
 def test_hermes_auxiliary_lm_bridge_routes_through_agent_auxiliary_client(monkeypatch):
