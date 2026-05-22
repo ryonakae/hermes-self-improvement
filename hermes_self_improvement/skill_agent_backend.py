@@ -9,16 +9,13 @@ from typing import Any, Callable, Protocol
 
 from .native_tool_harness import (
     _coerce_int,
-    _extract_native_tool_calls,
     _normalize_tool_result,
     _redact_large,
-    _tool_result_message,
 )
 from .role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
 ALLOWED_SKILL_AGENT_TOOLS = ROLE_TOOL_PERMISSIONS["skill_agent"].allowed_tool_names
 ALLOWED_SKILL_MANAGE_ACTIONS = {"create", "patch", "edit", "delete", "write_file", "remove_file"}
-SUBMIT_MUTATION_RESULT_TOOL = "submit_mutation_result"
 NON_MUTATING_AGENT_OUTCOMES = {
     "skipped_superseded",
     "stopped_stale_target",
@@ -335,26 +332,6 @@ def _with_last_safe_step(error: dict[str, Any], actual_used: list[dict[str, Any]
     return error
 
 
-def _validate_tool_call_args(tool: str, args: dict[str, Any]) -> dict[str, Any] | None:
-    if tool == "skill_view":
-        if not isinstance(args.get("name"), str) or not args.get("name", "").strip():
-            return {"success": False, "error": "skill_view_name_missing", "tool": tool}
-    if tool == "skill_manage":
-        action = str(args.get("action") or "").strip()
-        if not action:
-            return {"success": False, "error": "skill_manage_action_missing", "tool": tool}
-        if action not in ALLOWED_SKILL_MANAGE_ACTIONS:
-            return {"success": False, "error": "skill_manage_action_not_allowed", "tool": tool, "action": action}
-        if not isinstance(args.get("name"), str) or not args.get("name", "").strip():
-            return {"success": False, "error": "skill_manage_name_missing", "tool": tool}
-    if tool == "skills_list":
-        for key in ("path", "skill_path", "root", "file_path"):
-            if key in args:
-                return {"success": False, "error": "skills_list_path_arg_unsupported", "tool": tool, "arg": key}
-    return None
-
-
-
 @dataclass
 class SkillToolExecutor:
     skills_list_fn: Callable[..., Any] | None = None
@@ -443,12 +420,6 @@ def resolve_skill_tool_executor(config: dict[str, Any] | None = None) -> SkillTo
         return SkillToolExecutor(source="unavailable", unavailable_reason=f"skill_tool_registry_unavailable:{exc}")
 
 
-def _model_skill_agent_config(config: dict[str, Any] | None) -> dict[str, Any]:
-    model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
-    skill_agent_cfg = model.get("skill_agent") if isinstance(model.get("skill_agent"), dict) else {}
-    return skill_agent_cfg
-
-
 def _skill_tool_schema(name: str, description: str, properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
     return {
         "type": "function",
@@ -493,47 +464,12 @@ def native_skill_agent_tool_schemas() -> list[dict[str, Any]]:
     ]
 
 
-def legacy_skill_agent_tool_schemas() -> list[dict[str, Any]]:
-    return [
-        *native_skill_agent_tool_schemas(),
-        _skill_tool_schema(
-            SUBMIT_MUTATION_RESULT_TOOL,
-            "Finish the mutation run with the structured result. This tool does not mutate anything.",
-            {
-                "success": {"type": "boolean"},
-                "outcome": {"type": "string"},
-                "reason": {"type": "string"},
-                "changed_skills": {"type": "array", "items": {"type": "string"}},
-                "created_skills": {"type": "array", "items": {"type": "string"}},
-                "deleted_skills": {"type": "array", "items": {"type": "string"}},
-                "merged_from": {"type": "array", "items": {"type": "string"}},
-                "archive_candidates": {"type": "array", "items": {"type": "string"}},
-                "verification_notes": {"type": "array", "items": {"type": "string"}},
-                "rollback_hints": {"type": "array", "items": {"type": "string"}},
-            },
-            ["success", "changed_skills", "created_skills", "deleted_skills", "verification_notes", "rollback_hints"],
-        ),
-    ]
-
-
 
 @dataclass
 class NativeSkillAgentBackend:
     tool_executor: SkillToolExecutor
-    llm_call: Callable[..., Any] | None = None
     constrained_agent_runner: Callable[..., dict[str, Any]] | None = None
     limits: SkillAgentBackendLimits = field(default_factory=SkillAgentBackendLimits)
-
-    def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None, extra_body: dict[str, Any] | None = None) -> Any:
-        if self.llm_call is None:
-            raise RuntimeError("skill_agent_legacy_loop_requires_injected_llm_call")
-        return self.llm_call(
-            messages,
-            tools=tools,
-            config=config,
-            timeout=self.limits.timeout_seconds,
-            max_tokens=_coerce_int(_model_skill_agent_config(config).get("max_tokens"), 1000),
-        )
 
     def _validate_final_result(self, final: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
         allowed_targets = _task_allowed_targets(task)
@@ -617,130 +553,12 @@ class NativeSkillAgentBackend:
             "You are a constrained Hermes skill agent. Use only the provided skill tools. "
             "Read Markdown briefs as judgment context, not as a machine protocol. "
             "For skill_create tasks, the target skill is expected to be missing: do not stop just because skill_view cannot read it; "
-            "if the evidence supports creation, call skill_manage(action=\"create\") with complete SKILL.md content, then call submit_mutation_result with outcome=\"applied\" and created_skills containing the exact new skill name. "
-            "For existing-skill edits, read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
-            "If the target is materially different from the premise, already covered, stale, or uncertain, do not mutate. Finish every run by calling submit_mutation_result."
-        )
-        constrained_system_message = (
-            "You are a constrained Hermes skill agent. Use only the provided skill tools. "
-            "Read Markdown briefs as judgment context, not as a machine protocol. "
-            "For skill_create tasks, the target skill is expected to be missing: do not stop just because skill_view cannot read it; "
             "if the evidence supports creation, call skill_manage(action=\"create\") with complete SKILL.md content. "
             "For existing-skill edits, read the current target skill before mutating it. Treat the planner handoff as evidence-backed intent, not an exact patch command. "
             "If the target is materially different from the premise, already covered, stale, or uncertain, do not mutate. "
             "Final response must be a JSON object with success, outcome, changed_skills, created_skills, deleted_skills, verification_notes, and rollback_hints."
         )
-        if self.constrained_agent_runner is not None:
-            return self._run_constrained_agent(user_context=user_context, system_message=constrained_system_message, task=task, config=config)
-        tools = legacy_skill_agent_tool_schemas()
-        messages: list[dict[str, Any]] = [
-            {
-                "role": "system",
-                "content": system_message,
-            },
-            {"role": "user", "content": user_context},
-        ]
-        actual_used: list[dict[str, Any]] = []
-        mutation_intents: list[dict[str, Any]] = []
-        tool_calls = 0
-        from .llm_telemetry import record_llm_call
-        from .prompt_cache import apply_caching
-
-        skill_agent_cfg = _model_skill_agent_config(config)
-        cached_initial, cache_extras = apply_caching(messages, site="skill_agent")
-        messages = cached_initial
-        max_llm_rounds = self.limits.max_tool_calls + 2
-        for _iteration in range(max_llm_rounds):
-            try:
-                response = self._llm(messages, tools=tools, config=config, extra_body=cache_extras)
-            except RuntimeError as exc:
-                if str(exc) == "skill_agent_legacy_loop_requires_injected_llm_call":
-                    return {"success": False, "error": str(exc)}
-                record_llm_call(
-                    site="skill_agent",
-                    messages=messages,
-                    response_text=None,
-                    config=config,
-                    model=skill_agent_cfg.get("model"),
-                    provider=skill_agent_cfg.get("provider"),
-                    task="self_improvement_skill_agent",
-                    max_tokens=_coerce_int(skill_agent_cfg.get("max_tokens"), 1000),
-                    tools=tools,
-                    iteration=_iteration,
-                    error=f"skill_agent_unavailable:{exc}",
-                )
-                return {"success": False, "error": "skill_agent_unavailable", "reasons": [str(exc)]}
-            except Exception as exc:
-                record_llm_call(
-                    site="skill_agent",
-                    messages=messages,
-                    response_text=None,
-                    config=config,
-                    model=skill_agent_cfg.get("model"),
-                    provider=skill_agent_cfg.get("provider"),
-                    task="self_improvement_skill_agent",
-                    max_tokens=_coerce_int(skill_agent_cfg.get("max_tokens"), 1000),
-                    tools=tools,
-                    iteration=_iteration,
-                    error=f"skill_agent_llm_failed:{exc}",
-                )
-                return {"success": False, "error": "skill_agent_llm_failed", "reasons": [str(exc)]}
-            record_llm_call(
-                site="skill_agent",
-                messages=messages,
-                response_text=response,
-                config=config,
-                model=skill_agent_cfg.get("model"),
-                provider=skill_agent_cfg.get("provider"),
-                task="self_improvement_skill_agent",
-                max_tokens=_coerce_int(skill_agent_cfg.get("max_tokens"), 1000),
-                tools=tools,
-                iteration=_iteration,
-            )
-            calls = _extract_native_tool_calls(response)
-            if calls is None:
-                return {"success": False, "error": "native_tool_call_unsupported"}
-            if not calls:
-                return _with_last_safe_step({"success": False, "error": "submit_result_missing"}, actual_used)
-            for call in calls:
-                tool = call.get("name") or ""
-                args = call.get("args")
-                if not isinstance(args, dict):
-                    return _with_last_safe_step({"success": False, "error": "tool_args_not_object", "tool": tool}, actual_used)
-                if tool == SUBMIT_MUTATION_RESULT_TOOL:
-                    final = dict(args)
-                    final["used_tools"] = list(actual_used)
-                    final["tool_trace"] = list(actual_used)
-                    if mutation_intents:
-                        final["mutation_intents"] = list(mutation_intents)
-                    return self._validate_final_result(final, task)
-                if tool not in ALLOWED_SKILL_AGENT_TOOLS:
-                    return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_SKILL_AGENT_TOOLS)}
-                args_error = _validate_tool_call_args(tool, args)
-                if args_error:
-                    return _with_last_safe_step(args_error, actual_used)
-                tool_calls += 1
-                if tool_calls > self.limits.max_tool_calls:
-                    return _with_last_safe_step({"success": False, "error": "skill_agent_limits_exceeded", "reasons": ["max_tool_calls_exceeded"]}, actual_used)
-                result = self.tool_executor.call(tool, args)
-                trace_entry = {
-                    "tool": tool,
-                    "success": bool(result.get("success")) if isinstance(result, dict) else False,
-                }
-                if tool == "skill_manage" and args.get("action"):
-                    trace_entry["action"] = args.get("action")
-                    intent_entry = dict(trace_entry)
-                    for text_key in ("old_string", "new_string", "content"):
-                        if isinstance(args.get(text_key), str) and args.get(text_key):
-                            intent_entry[text_key] = str(args.get(text_key))[:2000]
-                    if args.get("name"):
-                        intent_entry["name"] = args.get("name")
-                    mutation_intents.append(intent_entry)
-                if args.get("name"):
-                    trace_entry["name"] = args.get("name")
-                actual_used.append(trace_entry)
-                messages.append(_tool_result_message(call, result))
-        return _with_last_safe_step({"success": False, "error": "skill_agent_limits_exceeded", "reasons": ["max_llm_rounds_exceeded"]}, actual_used)
+        return self._run_constrained_agent(user_context=user_context, system_message=system_message, task=task, config=config)
 
 
 @dataclass

@@ -255,15 +255,19 @@ def test_memory_tool_executor_marks_unavailable_when_fn_missing():
     assert result["error"] == "memory_tool_unavailable"
 
 
-def test_memory_backend_has_no_auxiliary_llm_fallback():
+def test_memory_backend_has_no_auxiliary_or_injected_llm_loop_surface():
     import inspect
     import hermes_self_improvement.memory_agent_backend as backend_module
 
     source = inspect.getsource(backend_module)
 
     assert not hasattr(backend_module, "_call_hermes_auxiliary_native")
+    assert not hasattr(backend_module, "legacy_memory_agent_tool_schemas")
     assert "agent.auxiliary_client" not in source
     assert "call_llm(" not in source
+    assert "llm_call" not in source
+    assert "memory_agent_legacy_loop_requires_injected_llm_call" not in source
+    assert "submit_mutation_result" not in source
 
 
 def test_build_memory_agent_backend_defaults_to_constrained_runner():
@@ -275,14 +279,7 @@ def test_build_memory_agent_backend_defaults_to_constrained_runner():
     assert backend.constrained_agent_runner is not None
 
 
-def test_native_memory_backend_accepts_constrained_agent_result_through_existing_validation(monkeypatch):
-    import hermes_self_improvement.memory_agent_backend as backend_module
-
-    def forbidden_legacy_schema():
-        raise AssertionError("constrained path must not build legacy submit_mutation_result schema")
-
-    monkeypatch.setattr(backend_module, "legacy_memory_agent_tool_schemas", forbidden_legacy_schema)
-
+def test_native_memory_backend_accepts_constrained_agent_result_through_existing_validation():
     def fake_runner(*, role, user_message, system_message, config, max_iterations):
         assert role == "memory_agent"
         assert "Current memory entries" in user_message
@@ -318,175 +315,6 @@ def test_native_memory_backend_accepts_constrained_agent_result_through_existing
     assert result["tool_trace"] == result["used_tools"]
 
 
-def test_native_backend_runs_agent_loop_with_add_and_submit():
-    calls: list[dict] = []
-
-    def fake_memory(**args):
-        calls.append(args)
-        return json.dumps({"success": True})
-
-    submit_payload = success_result()
-
-    fake_responses = iter([
-        _tool_call_message("memory", {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."}, call_id="call_1"),
-        _tool_call_message("submit_mutation_result", submit_payload, call_id="call_2"),
-    ])
-
-    def fake_llm(messages, *, tools, config, timeout, max_tokens):
-        return next(fake_responses)
-
-    backend = NativeMemoryAgentBackend(
-        tool_executor=MemoryToolExecutor(memory_tool_fn=fake_memory),
-        llm_call=fake_llm,
-    )
-
-    result = MemoryAgentRunner(backend=backend).run(task(), config={})
-
-    assert result["success"] is True
-    assert result["outcome"] == "applied"
-    assert calls == [{"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."}]
-    assert any(entry["action"] == "add" for entry in result["used_tools"])
-
-
-def test_native_backend_rejects_invalid_memory_args_before_executor():
-    fake_responses = iter([
-        _tool_call_message("memory", {"action": "add", "target": "memory"}, call_id="call_1"),  # content 欠落
-    ])
-
-    def fake_llm(messages, *, tools, config, timeout, max_tokens):
-        return next(fake_responses)
-
-    backend = NativeMemoryAgentBackend(
-        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
-        llm_call=fake_llm,
-    )
-
-    result = MemoryAgentRunner(backend=backend).run(task(), config={})
-    assert result["success"] is False
-    assert result["error"] == "memory_add_content_missing"
-
-
-def test_native_backend_recovers_from_capacity_with_remove_then_retry():
-    state: dict[str, int] = {"add_calls": 0}
-
-    def fake_memory(**args):
-        if args["action"] == "add":
-            state["add_calls"] += 1
-            if state["add_calls"] == 1:
-                return json.dumps({
-                    "success": False,
-                    "error": "memory_capacity_exceeded",
-                    "current_entries": ["old stale entry"],
-                })
-        return json.dumps({"success": True})
-
-    submit_payload = {
-        "success": True,
-        "outcome": "applied",
-        "used_tools": [
-            {"tool": "memory", "action": "add", "target": "memory", "success": False},
-            {"tool": "memory", "action": "remove", "target": "memory", "success": True},
-            {"tool": "memory", "action": "add", "target": "memory", "success": True},
-        ],
-        "changed_memories": ["m1"],
-        "removed_memories": ["old stale entry"],
-        "verification_notes": ["recovered from capacity exceeded"],
-        "rollback_hints": [],
-    }
-
-    fake_responses = iter([
-        _tool_call_message("memory", {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."}, call_id="call_1"),
-        _tool_call_message("memory", {"action": "remove", "target": "memory", "old_text": "old stale entry"}, call_id="call_2"),
-        _tool_call_message("memory", {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."}, call_id="call_3"),
-        _tool_call_message("submit_mutation_result", submit_payload, call_id="call_4"),
-    ])
-
-    def fake_llm(messages, *, tools, config, timeout, max_tokens):
-        return next(fake_responses)
-
-    backend = NativeMemoryAgentBackend(
-        tool_executor=MemoryToolExecutor(memory_tool_fn=fake_memory),
-        llm_call=fake_llm,
-    )
-
-    result = MemoryAgentRunner(backend=backend).run(task(), config={})
-    assert result["success"] is True
-    assert state["add_calls"] == 2
-    assert result["removed_memories"] == ["old stale entry"]
-
-
-def test_native_backend_rejects_disallowed_tool_request():
-    fake_responses = iter([
-        _tool_call_message("skill_manage", {"action": "patch", "name": "demo"}, call_id="call_1"),
-    ])
-
-    def fake_llm(messages, *, tools, config, timeout, max_tokens):
-        return next(fake_responses)
-
-    backend = NativeMemoryAgentBackend(
-        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
-        llm_call=fake_llm,
-    )
-
-    result = MemoryAgentRunner(backend=backend).run(task(), config={})
-    assert result["success"] is False
-    assert result["error"] == "disallowed_tool_requested"
-
-
-def test_native_backend_stops_on_max_tool_calls_limit():
-    fake_responses = iter([
-        _tool_call_message("memory", {"action": "add", "target": "memory", "content": "a"}, call_id="call_1"),
-    ])
-
-    def fake_llm(messages, *, tools, config, timeout, max_tokens):
-        return next(fake_responses)
-
-    backend = NativeMemoryAgentBackend(
-        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
-        llm_call=fake_llm,
-        limits=MemoryAgentBackendLimits(max_tool_calls=0, timeout_seconds=10),
-    )
-
-    result = MemoryAgentRunner(backend=backend).run(task(), config={})
-    assert result["success"] is False
-    # limits.check は max_tool_calls<1 を invalid とするのでまず limits_invalid で fail-closed
-    assert result["error"] in {"memory_agent_limits_invalid", "memory_agent_limits_exceeded"}
-
-
-def test_native_memory_backend_stops_when_max_tool_calls_are_exhausted():
-    backend = NativeMemoryAgentBackend(
-        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
-        llm_call=lambda messages, **kwargs: _tool_call_message("memory", {"action": "add", "target": "memory", "content": "a"}),
-        limits=MemoryAgentBackendLimits(max_tool_calls=1, timeout_seconds=10),
-    )
-
-    result = MemoryAgentRunner(backend=backend).run(task(), config={})
-
-    assert result["success"] is False
-    assert result["error"] == "memory_agent_limits_exceeded"
-    assert result["reasons"] == ["max_tool_calls_exceeded"]
-    assert result["last_tool"] == "memory"
-
-
-def test_native_memory_backend_allows_submit_after_max_tool_calls():
-    responses = iter([
-        _tool_call_message("memory", {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."}, call_id="call_1"),
-        _tool_call_message("submit_mutation_result", success_result(changed=["Hermes runtime root is ~/.hermes."]), call_id="call_2"),
-    ])
-
-    backend = NativeMemoryAgentBackend(
-        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
-        llm_call=lambda messages, **kwargs: next(responses),
-        limits=MemoryAgentBackendLimits(max_tool_calls=1, timeout_seconds=10),
-    )
-
-    result = MemoryAgentRunner(backend=backend).run(task(), config={})
-
-    assert result["success"] is True
-    assert result["changed_memories"] == ["Hermes runtime root is ~/.hermes."]
-    assert result["used_tools"] == [{"tool": "memory", "action": "add", "target": "memory", "success": True}]
-
-
 def test_build_memory_agent_backend_uses_injected_backend():
     injected = NativeMemoryAgentBackend(tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **_: "{}"))
     backend = build_memory_agent_backend({"_memory_agent_backend": injected})
@@ -509,6 +337,5 @@ def test_native_memory_agent_tool_schemas_define_required_action_and_target():
 
 def test_allowed_memory_agent_tools_matches_schema():
     schema_names = {schema["function"]["name"] for schema in native_memory_agent_tool_schemas()}
-    # ALLOWED_MEMORY_AGENT_TOOLS は実 mutation tool のみを列挙 (submit_mutation_result は終了 sentinel)
     assert ALLOWED_MEMORY_AGENT_TOOLS == {"memory"}
     assert ALLOWED_MEMORY_AGENT_TOOLS.issubset(schema_names)

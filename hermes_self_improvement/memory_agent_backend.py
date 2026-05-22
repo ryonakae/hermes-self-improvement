@@ -9,17 +9,13 @@ from typing import Any, Callable, Protocol
 
 from .native_tool_harness import (
     _coerce_int,
-    _extract_native_tool_calls,
-    _parse_tool_args,
     _redact_large,
-    _tool_result_message,
 )
 from .role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
 ALLOWED_MEMORY_AGENT_TOOLS = ROLE_TOOL_PERMISSIONS["memory_agent"].allowed_tool_names
 ALLOWED_MEMORY_ACTIONS = {"add", "replace", "remove"}
 ALLOWED_MEMORY_TARGETS = {"memory", "user"}
-SUBMIT_MUTATION_RESULT_TOOL = "submit_mutation_result"
 NON_MUTATING_AGENT_OUTCOMES = {
     "skipped_superseded",
     "stopped_stale_target",
@@ -70,27 +66,6 @@ class MemoryAgentBackendLimits:
 class MemoryAgentBackend(Protocol):
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any] | str:
         ...
-
-
-def _validate_memory_tool_args(args: dict[str, Any]) -> dict[str, Any] | None:
-    action = str(args.get("action") or "").strip()
-    if not action:
-        return {"success": False, "error": "memory_action_missing", "tool": "memory"}
-    if action not in ALLOWED_MEMORY_ACTIONS:
-        return {"success": False, "error": "memory_action_not_allowed", "tool": "memory", "action": action}
-    target = str(args.get("target") or "memory").strip()
-    if target not in ALLOWED_MEMORY_TARGETS:
-        return {"success": False, "error": "memory_target_not_allowed", "tool": "memory", "target": target}
-    if action == "add" and not str(args.get("content") or "").strip():
-        return {"success": False, "error": "memory_add_content_missing", "tool": "memory"}
-    if action == "replace":
-        if not str(args.get("old_text") or "").strip():
-            return {"success": False, "error": "memory_replace_old_text_missing", "tool": "memory"}
-        if not str(args.get("content") or "").strip():
-            return {"success": False, "error": "memory_replace_content_missing", "tool": "memory"}
-    if action == "remove" and not str(args.get("old_text") or "").strip():
-        return {"success": False, "error": "memory_remove_old_text_missing", "tool": "memory"}
-    return None
 
 
 @dataclass
@@ -172,11 +147,6 @@ def resolve_memory_tool_executor(config: dict[str, Any] | None = None) -> Memory
         return MemoryToolExecutor(source="unavailable", unavailable_reason=f"memory_tool_registry_unavailable:{exc}")
 
 
-def _model_memory_agent_config(config: dict[str, Any] | None) -> dict[str, Any]:
-    model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
-    return model.get("memory_agent") if isinstance(model.get("memory_agent"), dict) else {}
-
-
 def _memory_tool_schema(name: str, description: str, properties: dict[str, Any], required: list[str] | None = None) -> dict[str, Any]:
     return {
         "type": "function",
@@ -209,26 +179,6 @@ def native_memory_agent_tool_schemas() -> list[dict[str, Any]]:
     ]
 
 
-def legacy_memory_agent_tool_schemas() -> list[dict[str, Any]]:
-    return [
-        *native_memory_agent_tool_schemas(),
-        _memory_tool_schema(
-            SUBMIT_MUTATION_RESULT_TOOL,
-            "Finish the memory mutation run with the structured result. This tool does not mutate anything.",
-            {
-                "success": {"type": "boolean"},
-                "outcome": {"type": "string"},
-                "reason": {"type": "string"},
-                "changed_memories": {"type": "array", "items": {"type": "string"}},
-                "removed_memories": {"type": "array", "items": {"type": "string"}},
-                "verification_notes": {"type": "array", "items": {"type": "string"}},
-                "rollback_hints": {"type": "array", "items": {"type": "string"}},
-                "decision": {"type": "string"},
-            },
-            ["success", "changed_memories", "removed_memories", "verification_notes", "rollback_hints"],
-        ),
-    ]
-
 
 def validate_memory_agent_success_result(result: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(result.get("success"), bool):
@@ -244,33 +194,12 @@ def validate_memory_agent_success_result(result: dict[str, Any]) -> dict[str, An
     return result
 
 
-def _with_last_safe_step(error: dict[str, Any], actual_used: list[dict[str, Any]]) -> dict[str, Any]:
-    error.setdefault("used_tools", list(actual_used))
-    if actual_used:
-        last = actual_used[-1]
-        error.setdefault("last_tool", last.get("tool"))
-        if last.get("action"):
-            error.setdefault("last_tool_action", last.get("action"))
-    return error
-
 
 @dataclass
 class NativeMemoryAgentBackend:
     tool_executor: MemoryToolExecutor
-    llm_call: Callable[..., Any] | None = None
     constrained_agent_runner: Callable[..., dict[str, Any]] | None = None
     limits: MemoryAgentBackendLimits = field(default_factory=MemoryAgentBackendLimits)
-
-    def _llm(self, messages: list[dict[str, Any]], *, tools: list[dict[str, Any]], config: dict[str, Any] | None, extra_body: dict[str, Any] | None = None) -> Any:
-        if self.llm_call is None:
-            raise RuntimeError("memory_agent_legacy_loop_requires_injected_llm_call")
-        return self.llm_call(
-            messages,
-            tools=tools,
-            config=config,
-            timeout=self.limits.timeout_seconds,
-            max_tokens=_coerce_int(_model_memory_agent_config(config).get("max_tokens"), 1000),
-        )
 
     def _run_constrained_agent(self, *, user_context: str, system_message: str, config: dict[str, Any] | None) -> dict[str, Any]:
         runner = self.constrained_agent_runner
@@ -329,128 +258,13 @@ class NativeMemoryAgentBackend:
         system_message = (
             "You are a constrained Hermes memory agent. Use only the provided memory tool. "
             "Read Markdown briefs as judgment context, not as a machine protocol. "
-            "For each candidate, decide whether to add, replace, remove, or skip; route procedural reusable guidance back to skill via submit_mutation_result(decision=\"convert_to_skill_proposal\"). "
-            "Use exact old_text from current_entries for replace/remove. Use add only for genuinely new facts. "
-            "If a memory add fails with memory_capacity_exceeded, remove a stale entry then retry add. "
-            "If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and finish with the appropriate non-mutating outcome. "
-            "Finish every run by calling submit_mutation_result."
-        )
-        constrained_system_message = (
-            "You are a constrained Hermes memory agent. Use only the provided memory tool. "
-            "Read Markdown briefs as judgment context, not as a machine protocol. "
             "For each candidate, decide whether to add, replace, remove, or skip; route procedural reusable guidance back to skill by setting decision=\"convert_to_skill_proposal\" in the final JSON. "
             "Use exact old_text from current_entries for replace/remove. Use add only for genuinely new facts. "
             "If a memory add fails with memory_capacity_exceeded, remove a stale entry then retry add. "
             "If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and finish with the appropriate non-mutating outcome. "
             "Final response must be a JSON object with success, outcome, changed_memories, removed_memories, verification_notes, and rollback_hints."
         )
-        if self.constrained_agent_runner is not None:
-            return self._run_constrained_agent(user_context=user_context, system_message=constrained_system_message, config=config)
-        tools = legacy_memory_agent_tool_schemas()
-        messages: list[dict[str, Any]] = [
-            {
-                "role": "system",
-                "content": system_message,
-            },
-            {"role": "user", "content": user_context},
-        ]
-        actual_used: list[dict[str, Any]] = []
-        mutation_intents: list[dict[str, Any]] = []
-        tool_calls = 0
-        from .llm_telemetry import record_llm_call
-        from .prompt_cache import apply_caching
-
-        memory_agent_cfg = _model_memory_agent_config(config)
-        cached_initial, cache_extras = apply_caching(messages, site="memory_agent")
-        messages = cached_initial
-        max_llm_rounds = self.limits.max_tool_calls + 2
-        for _iteration in range(max_llm_rounds):
-            try:
-                response = self._llm(messages, tools=tools, config=config, extra_body=cache_extras)
-            except RuntimeError as exc:
-                if str(exc) == "memory_agent_legacy_loop_requires_injected_llm_call":
-                    return {"success": False, "error": str(exc)}
-                record_llm_call(
-                    site="memory_agent",
-                    messages=messages,
-                    response_text=None,
-                    config=config,
-                    model=memory_agent_cfg.get("model"),
-                    provider=memory_agent_cfg.get("provider"),
-                    task="self_improvement_memory_agent",
-                    max_tokens=_coerce_int(memory_agent_cfg.get("max_tokens"), 1000),
-                    tools=tools,
-                    iteration=_iteration,
-                    error=f"memory_agent_unavailable:{exc}",
-                )
-                return {"success": False, "error": "memory_agent_unavailable", "reasons": [str(exc)]}
-            except Exception as exc:
-                record_llm_call(
-                    site="memory_agent",
-                    messages=messages,
-                    response_text=None,
-                    config=config,
-                    model=memory_agent_cfg.get("model"),
-                    provider=memory_agent_cfg.get("provider"),
-                    task="self_improvement_memory_agent",
-                    max_tokens=_coerce_int(memory_agent_cfg.get("max_tokens"), 1000),
-                    tools=tools,
-                    iteration=_iteration,
-                    error=f"memory_agent_llm_failed:{exc}",
-                )
-                return {"success": False, "error": "memory_agent_llm_failed", "reasons": [str(exc)]}
-            record_llm_call(
-                site="memory_agent",
-                messages=messages,
-                response_text=response,
-                config=config,
-                model=memory_agent_cfg.get("model"),
-                provider=memory_agent_cfg.get("provider"),
-                task="self_improvement_memory_agent",
-                max_tokens=_coerce_int(memory_agent_cfg.get("max_tokens"), 1000),
-                tools=tools,
-                iteration=_iteration,
-            )
-            calls = _extract_native_tool_calls(response)
-            if calls is None:
-                return {"success": False, "error": "native_tool_call_unsupported"}
-            if not calls:
-                return _with_last_safe_step({"success": False, "error": "submit_result_missing"}, actual_used)
-            for call in calls:
-                tool = call.get("name") or ""
-                args = call.get("args")
-                if not isinstance(args, dict):
-                    return _with_last_safe_step({"success": False, "error": "tool_args_not_object", "tool": tool}, actual_used)
-                if tool == SUBMIT_MUTATION_RESULT_TOOL:
-                    final = dict(args)
-                    final["used_tools"] = list(actual_used)
-                    final["tool_trace"] = list(actual_used)
-                    if mutation_intents:
-                        final["mutation_intents"] = list(mutation_intents)
-                    return validate_memory_agent_success_result(final)
-                if tool not in ALLOWED_MEMORY_AGENT_TOOLS:
-                    return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_MEMORY_AGENT_TOOLS)}
-                args_error = _validate_memory_tool_args(args)
-                if args_error:
-                    return _with_last_safe_step(args_error, actual_used)
-                tool_calls += 1
-                if tool_calls > self.limits.max_tool_calls:
-                    return _with_last_safe_step({"success": False, "error": "memory_agent_limits_exceeded", "reasons": ["max_tool_calls_exceeded"]}, actual_used)
-                result = self.tool_executor.call(args)
-                trace_entry = {
-                    "tool": tool,
-                    "action": str(args.get("action") or ""),
-                    "target": str(args.get("target") or ""),
-                    "success": bool(result.get("success")) if isinstance(result, dict) else False,
-                }
-                intent_entry = dict(trace_entry)
-                for text_key in ("old_text", "content"):
-                    if isinstance(args.get(text_key), str) and args.get(text_key):
-                        intent_entry[text_key] = str(args.get(text_key))[:2000]
-                mutation_intents.append(intent_entry)
-                actual_used.append(trace_entry)
-                messages.append(_tool_result_message(call, result))
-        return _with_last_safe_step({"success": False, "error": "memory_agent_limits_exceeded", "reasons": ["max_llm_rounds_exceeded"]}, actual_used)
+        return self._run_constrained_agent(user_context=user_context, system_message=system_message, config=config)
 
 
 @dataclass

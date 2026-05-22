@@ -11,8 +11,9 @@ As of 2026-05-10, the long-term roadmap is:
 The current active hardening plans are:
 
 - `2026-05-22-pre-release-role-simplification.md`
-  - **Status:** planned / next. Because the plugin is still pre-release, this plan removes old compatibility instead of preserving it: delete injected editor loops, remove synthetic `submit_mutation_result` remnants from active source/tests/docs, keep `setup` as the single repair/init surface with clearer status wording, and add `target_resolver` as a thin runtime-private overlay target without giving it mutation authority.
-  - Keeps the simple role model: resolver/planner get read-only skill inspection only; skill_agent and memory_agent are the only mutation roles; evaluator / memory_extractor / GEPA stay tool-free with host-prepared context.
+  - **Status:** in progress; Task 1 implemented.
+  - Because the plugin is still pre-release, this plan removes old compatibility instead of preserving it. Completed: injected editor loops and synthetic finalizer support were deleted from skill/memory backend source; backend tests were moved to constrained-runner / helper coverage; full verification passed (`742 passed, 2 skipped`) plus dry-run `run-20260522T064325Z`.
+  - Remaining: remove `submit_mutation_result` remnants from active tests/docs/prompts, keep `setup` as the single repair/init surface with clearer status wording, and add `target_resolver` as a thin runtime-private overlay target without giving it mutation authority.
 
 - `2026-05-21-target-resolver-light-tuning-and-planner-handoff.md`
   - **Status:** implemented through constrained default editor paths; superseded for remaining cleanup by `2026-05-22-pre-release-role-simplification.md`.

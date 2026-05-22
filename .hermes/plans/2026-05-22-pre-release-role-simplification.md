@@ -22,14 +22,14 @@ As of commit `557ab29`, the active/default path is already constrained:
 - `memory_agent`: `memory` toolset, whitelist `memory`.
 - `memory_extractor`, `evaluator`, `prompt_optimizer` / GEPA: no LLM-executed tools; host code prepares context/artifacts.
 
-Remaining debt exists only because earlier work kept test-only compatibility:
+Current progress:
 
-- `NativeSkillAgentBackend.llm_call` and `NativeMemoryAgentBackend.llm_call` still expose an injected bespoke loop.
-- `legacy_skill_agent_tool_schemas()` and `legacy_memory_agent_tool_schemas()` still define synthetic `submit_mutation_result`.
-- Old loop prompt strings still mention `submit_mutation_result`.
-- Several tests still exercise the old loop rather than the constrained-agent trace path.
+- Task 1 is implemented: `NativeSkillAgentBackend` and `NativeMemoryAgentBackend` no longer expose `llm_call`, legacy schema helpers, synthetic `submit_mutation_result`, or bespoke injected LLM/tool loops.
+- Editor backend execution has one path: Hermes constrained agents returning final JSON plus recovered `tool_trace`.
+- Tests that depended on injected provider loops were removed or rewritten to constrained-runner / helper coverage.
+- Validation: focused backend/smoke tests passed, full suite passed (`742 passed, 2 skipped`), and `improve --dry-run --json` passed with `run-20260522T064325Z`.
 
-Because this plugin is unreleased, **do not preserve that compatibility**. Delete it.
+Remaining debt is now Task 2+: remove `submit_mutation_result` references from active tests/docs/prompts outside backend source, then continue setup/status UX and `target_resolver` overlay-target work.
 
 ---
 

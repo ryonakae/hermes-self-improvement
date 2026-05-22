@@ -6,8 +6,6 @@ import os
 from pathlib import Path
 
 import pytest
-from types import SimpleNamespace
-
 from hermes_self_improvement.skill_agent_backend import NativeSkillAgentBackend, SkillToolExecutor, skill_agent_backend_status
 
 
@@ -22,22 +20,6 @@ def _write_temp_skill(root: Path, name: str, content: str) -> Path:
     path.write_text(content, encoding="utf-8")
     return path
 
-
-def _native_tool_response(name: str, args: dict, call_id: str):
-    return SimpleNamespace(
-        choices=[
-            SimpleNamespace(
-                message=SimpleNamespace(
-                    tool_calls=[
-                        SimpleNamespace(
-                            id=call_id,
-                            function=SimpleNamespace(name=name, arguments=json.dumps(args)),
-                        )
-                    ]
-                )
-            )
-        ]
-    )
 
 
 def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools(tmp_path):
@@ -66,22 +48,31 @@ def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools
         path.write_text(content.replace(old_string, new_string, 1), encoding="utf-8")
         return json.dumps({"success": True})
 
-    responses = iter([
-        _native_tool_response("skill_view", {"name": "demo-skill"}, "call_view"),
-        _native_tool_response("skill_manage", {"action": "patch", "name": "demo-skill", "old_string": "Old guidance.", "new_string": "Improved guidance."}, "call_patch"),
-        _native_tool_response("submit_mutation_result", {
-            "success": True,
-            "outcome": "applied",
-            "changed_skills": ["demo-skill"],
-            "created_skills": [],
-            "deleted_skills": [],
-            "verification_notes": ["Updated disposable demo skill."],
-            "rollback_hints": ["Restore original SKILL.md content."],
-        }, "call_final"),
-    ])
+    executor = SkillToolExecutor(skills_list_fn=fake_list, skill_view_fn=fake_view, skill_manage_fn=fake_manage)
+
+    def fake_constrained_agent(**kwargs):
+        assert kwargs["role"] == "skill_agent"
+        view_result = executor.call("skill_view", {"name": "demo-skill"})
+        patch_result = executor.call("skill_manage", {"action": "patch", "name": "demo-skill", "old_string": "Old guidance.", "new_string": "Improved guidance."})
+        return {
+            "final_response": json.dumps({
+                "success": True,
+                "outcome": "applied",
+                "changed_skills": ["demo-skill"],
+                "created_skills": [],
+                "deleted_skills": [],
+                "verification_notes": ["Updated disposable demo skill."],
+                "rollback_hints": ["Restore original SKILL.md content."],
+            }),
+            "tool_trace": [
+                {"tool": "skill_view", "success": bool(view_result.get("success")), "name": "demo-skill"},
+                {"tool": "skill_manage", "success": bool(patch_result.get("success")), "action": "patch", "name": "demo-skill"},
+            ],
+        }
+
     backend = NativeSkillAgentBackend(
-        tool_executor=SkillToolExecutor(skills_list_fn=fake_list, skill_view_fn=fake_view, skill_manage_fn=fake_manage),
-        llm_call=lambda messages, **kwargs: next(responses),
+        tool_executor=executor,
+        constrained_agent_runner=fake_constrained_agent,
     )
     result = backend.run("Improve demo-skill", {"type": "skill_agent_task", "targets": {"primary_skill": "demo-skill"}}, {})
 
