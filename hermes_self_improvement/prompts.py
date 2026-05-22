@@ -14,6 +14,13 @@ Skills are procedural “how” knowledge: multi-step workflows, tool-specific i
 
 If it belongs on a sticky note, prefer memory. If it belongs in a reference document or repeatable recipe, prefer skill."""
 
+TARGET_RESOLVER_SYSTEM_PROMPT = (
+    "You are resolving Hermes self-improvement observation targets. Return JSON only. "
+    "Your job is attachment only: attach an existing listed mutable skill, route durable facts to memory, keep useful gaps unresolved, or skip noise. "
+    "Do not decide skill creation, editing, archive, merge, deletion, or execution actions; the planner owns mutation decisions. "
+    "You may use only read-only skill inspection tools (`skills_list`, `skill_view`) to check existing skill coverage."
+)
+
 PLANNER_SYSTEM_PROMPT = (
     "You are the Hermes self-improvement planner. Read Markdown evidence as context, not as a machine protocol. "
     "You may use only read-only skill inspection tools (`skills_list`, `skill_view`) to check existing skill coverage; do not call mutation tools. "
@@ -188,6 +195,14 @@ def skill_memory_classification_context() -> dict[str, str]:
 
 
 def base_prompt_spec(role: str) -> dict[str, Any]:
+    if role == "target_resolver":
+        return {
+            "schema_name": "self_improvement_base_prompt_spec",
+            "schema_version": PROMPT_SCHEMA_VERSION,
+            "role": "target_resolver",
+            "system_prompt": TARGET_RESOLVER_SYSTEM_PROMPT,
+            "classification_guidance": SKILL_MEMORY_CLASSIFICATION_BLOCK,
+        }
     if role == "improvement_planner":
         return {
             "schema_name": "self_improvement_base_prompt_spec",

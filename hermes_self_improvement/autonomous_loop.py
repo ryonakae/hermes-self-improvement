@@ -19,6 +19,7 @@ TARGET_KINDS = {
     "skill",
     "memory",
     "evaluator",
+    "target_resolver_prompt",
     "improvement_planner_prompt",
     "skill_agent_prompt",
     "memory_agent_prompt",
@@ -49,8 +50,9 @@ MUTATION_CAPABLE_ACTIONS = {
     "memory_replace",
     "prompt_overlay_promote",
 }
-PROMPT_SOURCE_HASH_FIELDS = ("improvement_planner_prompt_hash", "skill_agent_prompt_hash", "memory_agent_prompt_hash", "evaluator_hash")
+PROMPT_SOURCE_HASH_FIELDS = ("target_resolver_prompt_hash", "improvement_planner_prompt_hash", "skill_agent_prompt_hash", "memory_agent_prompt_hash", "evaluator_hash")
 BASELINE_HASH_FIELDS = (
+    "target_resolver_prompt_hash",
     "improvement_planner_prompt_hash",
     "skill_agent_prompt_hash",
     "memory_agent_prompt_hash",

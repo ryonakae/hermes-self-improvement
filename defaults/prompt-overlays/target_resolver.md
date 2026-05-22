@@ -1,0 +1,1 @@
+Keep resolver broad, evidence-preserving, and attachment-oriented. Prefer unresolved with no_existing_skill_fit when no current skill clearly fits. Do not choose mutation operations; planner owns create_skill, mutate_skill, mutate_memory, skip, and defer. Use read-only skill inspection only to improve coverage judgment.

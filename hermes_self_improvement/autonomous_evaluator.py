@@ -10,7 +10,7 @@ from .observer import _sha256_text, _stable_json
 DEFAULT_THRESHOLD = 0.1
 DEFAULT_MIN_CONFIDENCE = 0.6
 DEFAULT_MAX_PROMPT_CHARS = 6000
-OVERLAY_TARGETS = ("improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
+OVERLAY_TARGETS = ("target_resolver_overlay", "improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
 GEPA_PROMOTE_RESULTS = {"selected", "improved"}
 GEPA_KEEP_RESULTS = {"no_improvement", "tie", "insufficient_data"}
 GEPA_REJECT_RESULTS = {"invalid", "worse", "failed"}

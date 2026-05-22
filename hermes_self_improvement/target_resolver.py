@@ -7,6 +7,8 @@ from .observer import _redact_text
 from .evidence import resolve_coverage_alias
 from .llm_utils import _coerce_int, _extract_json_object
 from .constrained_agent import run_constrained_role_agent
+from .prompt_overlays import load_active_prompt_overlay
+from .prompts import _overlay_addendum, base_prompt_hash
 
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
 ALLOWED_DECISIONS = {"apply", "defer", "skip", "block"}
@@ -303,13 +305,25 @@ TARGET_RESOLVER_SYSTEM = (
 )
 
 
-def build_target_resolver_prompt(digest: dict[str, Any]) -> str:
-    return TARGET_RESOLVER_SYSTEM + "\n\n" + json.dumps(digest, ensure_ascii=False, sort_keys=True)
+def _target_resolver_system_with_overlay(config: dict[str, Any] | None = None) -> tuple[str, dict[str, Any] | None]:
+    overlay = None
+    if config is not None:
+        overlay = load_active_prompt_overlay(config, role="target_resolver", base_hash=base_prompt_hash("target_resolver"))
+    addendum = _overlay_addendum(overlay)
+    if addendum:
+        return f"{TARGET_RESOLVER_SYSTEM}\n\nRuntime-private operating guidance:\n{addendum}", overlay
+    return TARGET_RESOLVER_SYSTEM, overlay
 
 
-def build_target_resolver_messages(digest: dict[str, Any]) -> list[dict[str, Any]]:
+def build_target_resolver_prompt(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> str:
+    system_message, _overlay = _target_resolver_system_with_overlay(config)
+    return system_message + "\n\n" + json.dumps(digest, ensure_ascii=False, sort_keys=True)
+
+
+def build_target_resolver_messages(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    system_message, _overlay = _target_resolver_system_with_overlay(config)
     return [
-        {"role": "system", "content": TARGET_RESOLVER_SYSTEM},
+        {"role": "system", "content": system_message},
         {"role": "user", "content": json.dumps(digest, ensure_ascii=False, sort_keys=True)},
     ]
 
@@ -323,9 +337,10 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
     user_message = json.dumps(digest, ensure_ascii=False, sort_keys=True)
     from .llm_telemetry import record_llm_call
 
+    system_message, _overlay = _target_resolver_system_with_overlay(config)
     result = run_constrained_role_agent(
         role="target_resolver",
-        system_message=TARGET_RESOLVER_SYSTEM,
+        system_message=system_message,
         user_message=user_message,
         config=config,
     )
@@ -333,7 +348,7 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
     if not response_text.strip():
         return {"resolutions": []}
     messages = [
-        {"role": "system", "content": TARGET_RESOLVER_SYSTEM},
+        {"role": "system", "content": system_message},
         {"role": "user", "content": user_message},
     ]
     record_llm_call(

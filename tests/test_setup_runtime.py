@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+from hermes_self_improvement.prompt_overlays import DEFAULT_PROMPT_SEED_ROLES
+
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -70,8 +72,9 @@ def test_setup_creates_evaluator_runtime_layout_and_seed_files(tmp_path):
     assert pointer["compiled_program_path"] is None
     assert "/evaluator/defaults/" in pointer["evaluator_path"]
     active_prompts = json.loads((root / "evaluator/active-prompts.json").read_text(encoding="utf-8"))
-    assert set(active_prompts["roles"]) == {"improvement_planner", "skill_agent", "memory_agent", "evaluator"}
+    assert set(active_prompts["roles"]) == set(DEFAULT_PROMPT_SEED_ROLES)
     assert result["active_prompt_overlays"]["status"] == "ready"
+    assert set(result["active_prompt_overlays"]["roles"]) == set(DEFAULT_PROMPT_SEED_ROLES)
 
 
 def test_setup_is_idempotent_and_preserves_existing_active_evaluator(tmp_path):

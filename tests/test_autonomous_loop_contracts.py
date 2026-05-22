@@ -32,10 +32,11 @@ def test_episode_schema_requires_id_and_source_hashes_for_mutating_actions():
         validate_episode(payload)
 
     payload["episode_id"] = "episode-1"
-    with pytest.raises(ValueError, match="improvement_planner_prompt_hash_missing"):
+    with pytest.raises(ValueError, match="target_resolver_prompt_hash_missing"):
         validate_episode(payload)
 
     payload.update({
+        "target_resolver_prompt_hash": "sha256:resolver",
         "improvement_planner_prompt_hash": "sha256:planner",
         "skill_agent_prompt_hash": "sha256:skill_agent",
         "memory_agent_prompt_hash": "sha256:memory-agent",
@@ -109,6 +110,7 @@ def test_autonomous_evaluator_result_requires_baseline_for_promotion():
         validate_autonomous_evaluator_result(payload)
 
     payload["baseline"] = {
+        "target_resolver_prompt_hash": "sha256:resolver",
         "improvement_planner_prompt_hash": "sha256:planner",
         "skill_agent_prompt_hash": "sha256:skill_agent",
         "memory_agent_prompt_hash": "sha256:memory-agent",
@@ -135,6 +137,7 @@ def test_compact_summaries_exclude_large_prompt_fields():
         "episode_kind": "executed_mutation",
         "target_kind": "skill",
         "target_id": "demo-skill",
+        "target_resolver_prompt_hash": "sha256:resolver",
         "improvement_planner_prompt_hash": "sha256:planner",
         "skill_agent_prompt_hash": "sha256:skill_agent",
         "memory_agent_prompt_hash": "sha256:memory-agent",
@@ -167,6 +170,7 @@ def test_compact_summaries_exclude_large_prompt_fields():
         "confidence": 0.4,
         "violations": [],
         "baseline": {
+            "target_resolver_prompt_hash": "sha256:resolver",
             "improvement_planner_prompt_hash": "sha256:planner",
             "skill_agent_prompt_hash": "sha256:skill_agent",
             "memory_agent_prompt_hash": "sha256:memory-agent",

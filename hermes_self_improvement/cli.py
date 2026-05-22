@@ -42,6 +42,7 @@ from .runner_steps import (
 )
 from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
 from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
+from .prompt_overlays import DEFAULT_PROMPT_SEED_ROLES
 from .recovery_engine import memory_rollback_status
 from .scoring import score_proposals_impl
 from .setup_runtime import check_runtime_setup, run_setup, runtime_layout
@@ -839,7 +840,7 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     prompt_overlays = result.get("prompt_overlays") if isinstance(result.get("prompt_overlays"), dict) else {}
     if prompt_overlays:
         lines.append("Prompt overlays:")
-        for role in ("improvement_planner", "skill_agent", "memory_agent", "evaluator"):
+        for role in DEFAULT_PROMPT_SEED_ROLES:
             item = prompt_overlays.get(role) if isinstance(prompt_overlays.get(role), dict) else None
             if not item:
                 continue

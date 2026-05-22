@@ -169,7 +169,7 @@ def test_fake_optimizer_can_produce_overlay_candidate_set(tmp_path):
     assert candidate_set["gepa_result"] == "selected"
     assert candidate_set["baseline_score"] == 0.41
     assert candidate_set["candidate_score"] == 0.72
-    assert set(candidate_set["targets"]) == {"improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay"}
+    assert set(candidate_set["targets"]) == {"target_resolver_overlay", "improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay"}
     assert {target["candidate_set_id"] for target in candidate_set["targets"].values()} == {candidate_set["candidate_set_id"]}
     assert candidate_set["targets"]["improvement_planner_overlay"]["change_status"] == "changed"
     assert candidate_set["targets"]["skill_agent_overlay"]["change_status"] == "changed"

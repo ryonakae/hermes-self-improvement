@@ -159,6 +159,14 @@ def overlay_candidate_set(tmp_path: Path, *, gepa_result: str = "selected", plan
         "candidate_set_id": "overlay-set-001",
         "gepa_result": gepa_result,
         "targets": {
+            "target_resolver_overlay": {
+                "target": "target_resolver_overlay",
+                "role": "target_resolver",
+                "candidate_set_id": "overlay-set-001",
+                "change_status": "unchanged",
+                "base_prompt_hash": "sha256:target-resolver-base",
+                "candidate_prompt": {"system_addendum": None, "user_addendum": None, "replacement": None},
+            },
             "improvement_planner_overlay": {
                 "target": "improvement_planner_overlay",
                 "role": "improvement_planner",

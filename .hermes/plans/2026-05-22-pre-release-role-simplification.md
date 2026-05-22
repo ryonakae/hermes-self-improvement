@@ -41,7 +41,14 @@ Task 3 is implemented:
 - Added a CLI guard confirming there is still no `repair` subcommand; `setup` remains the single init/repair surface.
 - Validation: `tests/test_cli_surface.py` passed (`44 passed`), full suite passed (`745 passed, 2 skipped`), `setup --check --json` reported initialized, and `improve --dry-run --json` passed with `run-20260522T065035Z`.
 
-Remaining debt is now Task 4: add `target_resolver` as a thin runtime-private overlay target while keeping resolver mutation-free.
+Task 4 is implemented:
+
+- `target_resolver` is now a runtime-private prompt overlay role with a repo default seed and active runtime materialization.
+- Overlay candidate sets now include `target_resolver_overlay` alongside planner/editor/evaluator overlays.
+- Resolver execution loads the active overlay as guidance only; tool permission remains read-only (`skills_list` / `skill_view`) and mutation authority stays with editor roles.
+- Validation: focused overlay/setup/calibration/resolver tests passed (`105 passed`), focused episode/autonomous-loop tests passed (`13 passed`), full suite passed (`747 passed, 2 skipped`), `setup` / `status` report five ready overlay roles including `target_resolver`, `calibrate --dry-run --json` produced a five-target overlay candidate set, and `improve --dry-run --json` passed with `run-20260522T080710Z`.
+
+All four pre-release simplification tasks are now implemented.
 
 ---
 

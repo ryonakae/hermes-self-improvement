@@ -9,6 +9,7 @@ from hermes_self_improvement.episodes import (
     record_calibration_episodes,
     record_run_episodes,
 )
+from hermes_self_improvement.prompts import base_prompt_hash
 
 
 def sample_run_result(tmp_path):
@@ -130,6 +131,7 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
         "active_changed": False,
         "overlay_candidate_set": {"overlay_generation_id": "overlay-set-preview", "candidate_set_id": "overlay-set-preview"},
         "prompt_overlays": {
+            "target_resolver": {"candidate": True, "promoted": False, "candidate_hash": "sha256:resolver-candidate", "candidate_set_id": "overlay-set-preview"},
             "improvement_planner": {"candidate": True, "promoted": False, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-preview"},
             "skill_agent": {"candidate": False, "promoted": False},
             "evaluator": {"candidate": True, "promoted": False, "candidate_hash": "sha256:evaluator-overlay-candidate", "candidate_set_id": "overlay-set-preview"},
@@ -141,10 +143,12 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
     episodes = calibration_episodes_from_result(result, created_at="2026-05-03T00:00:00+00:00")
     summary = record_calibration_episodes(config=config, calibration_result=result)
 
-    assert len(episodes) == 3
-    assert summary["count"] == 3
+    assert len(episodes) == 4
+    assert summary["count"] == 4
     loaded = load_recent_episodes(config=config, limit=10)
     by_target_kind = {item["target_kind"]: item for item in loaded}
+    assert by_target_kind["target_resolver_prompt"]["episode_kind"] == "prompt_candidate"
+    assert by_target_kind["target_resolver_prompt"]["target_resolver_prompt_hash"] == base_prompt_hash("target_resolver")
     assert by_target_kind["improvement_planner_prompt"]["episode_kind"] == "prompt_candidate"
     assert by_target_kind["improvement_planner_prompt"]["action"] == "no_op"
     assert by_target_kind["improvement_planner_prompt"]["overlay_generation_id"] == "overlay-set-preview"
@@ -156,6 +160,7 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
     promoted["active_evaluator_hash"] = "sha256:active-evaluator"
     promoted["overlay_candidate_set"] = {"overlay_generation_id": "overlay-set-001", "candidate_set_id": "overlay-set-001"}
     promoted["prompt_overlays"] = {
+        "target_resolver": {"candidate": True, "promoted": True, "candidate_hash": "sha256:resolver-candidate", "candidate_set_id": "overlay-set-001"},
         "improvement_planner": {"candidate": True, "promoted": True, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-001"},
         "skill_agent": {"candidate": True, "promoted": True, "candidate_hash": "sha256:skill_agent-candidate", "candidate_set_id": "overlay-set-001"},
         "evaluator": {"candidate": True, "promoted": True, "candidate_hash": "sha256:evaluator-overlay-candidate", "candidate_set_id": "overlay-set-001"},
@@ -163,6 +168,7 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
     promoted_episodes = calibration_episodes_from_result(promoted, created_at="2026-05-03T00:00:00+00:00")
     by_promoted_kind = {item["target_kind"]: item for item in promoted_episodes}
     planner_episode = by_promoted_kind["improvement_planner_prompt"]
+    assert by_promoted_kind["target_resolver_prompt"]["action"] == "prompt_overlay_promote"
     assert planner_episode["episode_kind"] == "prompt_promotion"
     assert planner_episode["action"] == "prompt_overlay_promote"
     assert planner_episode["executed"] is True

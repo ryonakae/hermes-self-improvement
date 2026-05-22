@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .observer import _event_path, _self_improvement_root, _sha256_text
-from .prompt_overlays import active_prompts_path, load_active_prompt_overlay, materialize_default_prompt_overlays
+from .prompt_overlays import DEFAULT_PROMPT_SEED_ROLES, active_prompts_path, load_active_prompt_overlay, materialize_default_prompt_overlays
 from .prompts import base_prompt_hash
 
 PLUGIN_NAME = "hermes-self-improvement"
@@ -176,7 +176,7 @@ def _active_prompt_status(config: dict[str, Any], layout: dict[str, Path]) -> di
     roles: dict[str, Any] = {}
     ready = True
     sources: dict[str, int] = {}
-    for role in ("improvement_planner", "skill_agent", "memory_agent", "evaluator"):
+    for role in DEFAULT_PROMPT_SEED_ROLES:
         overlay = load_active_prompt_overlay(config, role=role, base_hash=base_prompt_hash(role))
         if overlay is None:
             roles[role] = {"status": "missing"}

@@ -27,8 +27,9 @@ SAFETY_BOUNDARY_TERMS = (
 OptimizerFn = Callable[..., dict[str, Any]]
 OverlaySetOptimizerFn = Callable[..., dict[str, Any]]
 
-OVERLAY_TARGETS = ("improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
+OVERLAY_TARGETS = ("target_resolver_overlay", "improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
 OVERLAY_TARGET_ROLES = {
+    "target_resolver_overlay": "target_resolver",
     "improvement_planner_overlay": "improvement_planner",
     "skill_agent_overlay": "skill_agent",
     "memory_agent_overlay": "memory_agent",

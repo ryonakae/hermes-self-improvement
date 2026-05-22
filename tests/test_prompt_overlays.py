@@ -3,17 +3,30 @@ from __future__ import annotations
 from pathlib import Path
 
 from hermes_self_improvement.prompt_overlays import (
+    ALLOWED_PROMPT_ROLES,
+    DEFAULT_PROMPT_SEED_ROLES,
     active_prompts_path,
+    default_prompt_seed_path,
     load_active_prompt_overlay,
     promote_overlay_candidate_set,
     promote_prompt_candidate,
     write_prompt_candidate,
 )
 from hermes_self_improvement.prompts import base_prompt_hash
+from hermes_self_improvement.role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
 
 def config(tmp_path: Path) -> dict:
     return {"_self_improvement_root": str(tmp_path / "self-improvement")}
+
+
+def test_target_resolver_is_prompt_overlay_role_but_not_mutation_role():
+    assert "target_resolver" in ALLOWED_PROMPT_ROLES
+    assert "target_resolver" in DEFAULT_PROMPT_SEED_ROLES
+    assert default_prompt_seed_path("target_resolver").is_file()
+    assert len(base_prompt_hash("target_resolver")) == 64
+    assert ROLE_TOOL_PERMISSIONS["target_resolver"].allowed_tool_names == frozenset({"skills_list", "skill_view"})
+    assert "skill_manage" not in ROLE_TOOL_PERMISSIONS["target_resolver"].allowed_tool_names
 
 
 def test_prompt_overlay_candidate_can_be_promoted_and_loaded(tmp_path):

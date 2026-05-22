@@ -20,6 +20,7 @@ def config(tmp_path: Path) -> dict:
 
 def test_default_prompt_overlay_seeds_are_markdown_and_within_limits():
     required_terms = {
+        "target_resolver": ["resolver", "unresolved", "skill", "read-only"],
         "improvement_planner": ["apply", "defer", "USER", "MEMORY", "Skill", "create_skill"],
         "skill_agent": ["skill_view", "skill_manage", "final JSON", "minimal"],
         "memory_agent": ["memory", "current_entries", "final JSON", "convert_to_skill_proposal"],
@@ -41,7 +42,7 @@ def test_materialize_default_prompt_overlays_creates_active_runtime_seed(tmp_pat
     result = materialize_default_prompt_overlays(cfg)
 
     assert result["status"] == "materialized"
-    assert set(result["roles"].keys()) == {"improvement_planner", "skill_agent", "memory_agent", "evaluator"}
+    assert set(result["roles"].keys()) == set(DEFAULT_PROMPT_SEED_ROLES)
     for role in DEFAULT_PROMPT_SEED_ROLES:
         overlay = load_active_prompt_overlay(cfg, role=role, base_hash=base_prompt_hash(role))
         assert overlay is not None

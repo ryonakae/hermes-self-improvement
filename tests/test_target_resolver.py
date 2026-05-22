@@ -1,5 +1,7 @@
 from hermes_self_improvement.evidence import make_knowledge_coverage_candidate
 from hermes_self_improvement.improvement_planner import build_improvement_planner_digest
+from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
+from hermes_self_improvement.prompts import base_prompt_hash
 from hermes_self_improvement.target_resolver import (
     TARGET_RESOLVER_SYSTEM,
     build_target_resolution_digest,
@@ -8,6 +10,35 @@ from hermes_self_improvement.target_resolver import (
     normalize_target_resolver_payload,
     run_target_resolver,
 )
+
+
+def test_target_resolver_includes_runtime_overlay_guidance(monkeypatch, tmp_path):
+    cfg = {"_self_improvement_root": str(tmp_path / "self-improvement"), "model": {"target_resolver": {"provider": "auto"}}}
+    candidate_path = write_prompt_candidate(
+        cfg,
+        role="target_resolver",
+        candidate={
+            "role": "target_resolver",
+            "base_prompt_hash": base_prompt_hash("target_resolver"),
+            "candidate_prompt": {"system_addendum": "Prefer no_existing_skill_fit when no current skill clearly fits."},
+        },
+    )
+    promote_prompt_candidate(cfg, role="target_resolver", candidate_path=candidate_path, regression={"status": "passed"})
+    calls = {}
+
+    def fake_run(*, role, system_message, user_message, config, **kwargs):
+        calls["role"] = role
+        calls["system_message"] = system_message
+        return {"final_response": '{"resolutions": []}'}
+
+    monkeypatch.setattr("hermes_self_improvement.target_resolver.run_constrained_role_agent", fake_run)
+
+    result = run_target_resolver({"skill_targets": []}, config=cfg)
+
+    assert result["resolutions"] == []
+    assert calls["role"] == "target_resolver"
+    assert "Runtime-private operating guidance" in calls["system_message"]
+    assert "no_existing_skill_fit" in calls["system_message"]
 
 
 def test_target_resolver_uses_read_only_skill_agent(monkeypatch):

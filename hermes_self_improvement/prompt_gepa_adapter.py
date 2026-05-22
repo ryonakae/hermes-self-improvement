@@ -17,7 +17,7 @@ from .prompts import base_prompt_hash
 from .markdown_artifacts import render_calibration_context_markdown
 
 UTC = timezone.utc
-OVERLAY_TARGETS = ("improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
+OVERLAY_TARGETS = ("target_resolver_overlay", "improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
 
 
 def dspy_available() -> bool:
@@ -181,6 +181,7 @@ def _examples_from_cases(cases: list[dict[str, Any]], *, evidence: dict[str, Any
     evidence_json = _json_dumps(evidence)
     cases_json = _json_dumps(cases)
     current_overlays_json = _json_dumps({
+        "target_resolver_overlay": {"base_prompt_hash": base_prompt_hash("target_resolver")},
         "improvement_planner_overlay": {"base_prompt_hash": base_prompt_hash("improvement_planner")},
         "skill_agent_overlay": {"base_prompt_hash": base_prompt_hash("skill_agent")},
         "memory_agent_overlay": {"base_prompt_hash": base_prompt_hash("memory_agent")},
@@ -226,7 +227,7 @@ def _build_overlay_program(dspy: Any, *, lm: Any | None = None) -> Any:
         candidate_set_json = dspy.OutputField(
             desc=(
                 "JSON object with gepa_result, baseline_score, candidate_score, and targets for "
-                "improvement_planner_overlay, skill_agent_overlay, memory_agent_overlay, evaluator_overlay. Each target has change_status changed|unchanged, "
+                "target_resolver_overlay, improvement_planner_overlay, skill_agent_overlay, memory_agent_overlay, evaluator_overlay. Each target has change_status changed|unchanged, "
                 "candidate_prompt with overlay addenda only and replacement null, rationale, expected_effect, risk_notes."
             )
         )
@@ -330,7 +331,8 @@ def optimize_overlay_candidate_set(
         evidence_json = _json_dumps(evidence)
         cases_json = _json_dumps(cases)
         current_overlays_json = _json_dumps({
-            "improvement_planner_overlay": {"base_prompt_hash": base_prompt_hash("improvement_planner")},
+            "target_resolver_overlay": {"base_prompt_hash": base_prompt_hash("target_resolver")},
+        "improvement_planner_overlay": {"base_prompt_hash": base_prompt_hash("improvement_planner")},
             "skill_agent_overlay": {"base_prompt_hash": base_prompt_hash("skill_agent")},
             "memory_agent_overlay": {"base_prompt_hash": base_prompt_hash("memory_agent")},
             "evaluator_overlay": {"base_prompt_hash": base_prompt_hash("evaluator")},

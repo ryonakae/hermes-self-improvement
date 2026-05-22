@@ -865,6 +865,15 @@ def overlay_candidate_set_payload(calibration, tmp_path: Path, *, candidate_set_
         "candidate_set_path": str(tmp_path / "candidate-set.json"),
         "gepa_result": "selected",
         "targets": {
+            "target_resolver_overlay": {
+                "target": "target_resolver_overlay",
+                "role": "target_resolver",
+                "candidate_set_id": candidate_set_id,
+                "change_status": "unchanged",
+                "base_prompt_hash": base_prompt_hash("target_resolver"),
+                "candidate_prompt": {"system_addendum": None, "replacement": None},
+                "candidate_hash": "sha256:target-resolver-candidate",
+            },
             "improvement_planner_overlay": {
                 "target": "improvement_planner_overlay",
                 "role": "improvement_planner",
