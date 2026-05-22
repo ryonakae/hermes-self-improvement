@@ -426,6 +426,8 @@ Do not build a new general agent framework inside the plugin.
 - The unused `_call_hermes_auxiliary_native` fallback functions and their `agent.auxiliary_client.call_llm` imports were removed from both editor backends. Tests now assert the editor backends do not carry this auxiliary fallback surface.
 - Production-facing editor tool schema helpers now expose only real Hermes tools (`skills_list` / `skill_view` / `skill_manage` for skill agent, `memory` for memory agent). The synthetic `submit_mutation_result` schema is isolated behind legacy injected-loop schema helpers, so default constrained agents use final JSON instead of a custom submit tool.
 - Default prompt-overlay seeds for `skill_agent` and `memory_agent` now describe the final-JSON contract and no longer instruct agents to call `submit_mutation_result`.
+- Active skill/memory agent task prompts and runner constraints now also use the final-JSON contract and no longer mention `submit_mutation_result`; the synthetic submit tool remains only in legacy injected-loop tests.
+- Constrained editor paths now avoid constructing legacy submit-tool schemas before dispatch, so the default path no longer touches legacy schema helpers at all.
 - Remaining work is physical cleanup of the injected-test-only loop bodies once mutation-bearing real-run evidence confirms constrained trace completeness and final JSON accounting.
 
 **Step 3: Verify**

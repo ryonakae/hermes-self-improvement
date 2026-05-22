@@ -24,7 +24,7 @@ from .skill_reference_rewriter import apply_skill_reference_rewrite_plan, build_
 
 MEMORY_AGENT_SKIP_HINTS = {"skip_duplicate", "skip_sensitive", "defer_unclear"}
 MEMORY_AGENT_CONSTRAINTS = (
-    "Use only memory tool and submit_mutation_result.",
+    "Use only memory tool.",
     "Do not use terminal/file/git/direct filesystem tools.",
 )
 MEMORY_AGENT_DISPATCH_KINDS = {"memory_gap_candidate", "memory_inventory_candidate", "memory_placement_candidate", "environment_fact_signal"}
@@ -913,7 +913,7 @@ def build_skill_agent_task(
         "llm_brief_markdown": llm_brief,
         "prompt_source": {"skill_agent": rendered["prompt_source"]},
         "constraints": [
-            "Use only skills_list, skill_view, skill_manage, submit_mutation_result.",
+            "Use only skills_list, skill_view, skill_manage.",
             "Do not use terminal/file/git/direct filesystem tools.",
             "Operate only on mutable local skills resolved by the plugin.",
             "Do not mutate plugin-bundled, hub-installed, external-dir, built-in, or Hermes core files.",
@@ -971,7 +971,7 @@ def build_skill_create_agent_task(
         "instructions": "Create a new Hermes skill only if the evidence describes a reusable procedural workflow. Use skill_manage(action=\"create\") with complete YAML frontmatter and compact durable guidance.\n\nMarkdown brief:\n" + llm_brief,
         "llm_brief_markdown": llm_brief,
         "constraints": [
-            "Use only skills_list, skill_view, skill_manage, submit_mutation_result.",
+            "Use only skills_list, skill_view, skill_manage.",
             "Do not use terminal/file/git/direct filesystem tools.",
             "Create only a new Hermes-managed skill through skill_manage(action=\"create\").",
             "Do not mutate plugin-bundled, hub-installed, external-dir, built-in, or Hermes core files.",

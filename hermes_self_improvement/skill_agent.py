@@ -173,16 +173,16 @@ Planner handoff:
 {json.dumps(semantic_fields, ensure_ascii=False, indent=2, sort_keys=True)}
 
 Hard constraints:
-- Use only these Hermes skill tools: skills_list, skill_view, skill_manage, submit_mutation_result.
+- Use only these Hermes skill tools: skills_list, skill_view, skill_manage.
 - Do not use terminal, file tools, git, browser, web, delegation, cron, direct filesystem access, direct database/provider internals, or plugin README/AGENTS/config mutation.
 - Operate only on the declared mutable-local skill targets.
 - The planner handoff is evidence-backed intent, not an exact patch command.
 - Before applying any mutation, read the current target through the allowed skill tools and compare it with the observed problem, desired outcome, suggested focus, and non-goals.
-- If the current target is materially different from the premise, already fixed, stale, contradictory, or uncertain, do not call skill_manage. Finish with submit_mutation_result using a non-mutating outcome instead.
+- If the current target is materially different from the premise, already fixed, stale, contradictory, or uncertain, do not call skill_manage. Return a final JSON object with a non-mutating outcome instead.
 - Allowed non-mutating outcomes: skipped_superseded, stopped_stale_target, stopped_conflict, stopped_uncertain_needs_review.
 - Never invent a broader improvement, edit unrelated sections, or modify unrelated skills to make the plan fit.
-- Stop and finish with success=false if the task asks you to operate outside scope.
-- Finish every run by calling submit_mutation_result; do not encode the final result in assistant text.
+- Stop and return success=false if the task asks you to operate outside scope.
+- Final assistant response must be a JSON object with success, outcome, changed_skills, created_skills, deleted_skills, verification_notes, and rollback_hints.
 """ + "\n".join(f"- {item}" for item in constraints)
 
 

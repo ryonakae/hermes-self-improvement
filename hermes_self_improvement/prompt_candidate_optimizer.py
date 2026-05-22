@@ -110,8 +110,8 @@ def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
         return (
             "Runtime eval cases indicate memory edits should stay narrow and verifiable. "
             "Use exact old_text from current_entries for replace/remove, prefer add only for genuinely new durable facts, "
-            "skip duplicates, route procedural reusable knowledge back to skill via "
-            "submit_mutation_result(decision=\"convert_to_skill_proposal\"), and on memory_capacity_exceeded remove a stale entry before retrying add."
+            "skip duplicates, route procedural reusable knowledge back to skill by setting decision=\"convert_to_skill_proposal\" in the final JSON, "
+            "and on memory_capacity_exceeded remove a stale entry before retrying add."
         )
     return (
         "Runtime eval cases indicate skill_agent edits should remain narrow. "

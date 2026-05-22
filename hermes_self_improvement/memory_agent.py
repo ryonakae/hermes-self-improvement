@@ -106,17 +106,17 @@ Planner handoff:
 {json.dumps(semantic_fields, ensure_ascii=False, indent=2, sort_keys=True)}
 
 Hard constraints:
-- Use only these Hermes memory tools: memory (action add|replace|remove on target memory|user), submit_mutation_result.
+- Use only these Hermes memory tools: memory (action add|replace|remove on target memory|user).
 - Do not use terminal, file tools, git, browser, web, delegation, cron, direct filesystem access, direct database/provider internals, or plugin README/AGENTS/config mutation.
 - Operate only on the declared memory or user stores.
 - The planner handoff is evidence-backed intent, not an exact patch command.
 - Use exact old_text from current_entries for replace/remove. Use add only for genuinely new facts.
-- If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and finish with a non-mutating outcome.
+- If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and return a non-mutating outcome.
 - If memory_capacity_exceeded is returned, remove a stale entry then retry add.
-- For procedural reusable knowledge, do not store as memory; finish with decision=\"convert_to_skill_proposal\" so the next cycle can route it to the skill agent.
+- For procedural reusable knowledge, do not store as memory; return decision=\"convert_to_skill_proposal\" so the next cycle can route it to the skill agent.
 - Allowed non-mutating outcomes: skipped_superseded, stopped_stale_target, stopped_conflict, stopped_uncertain_needs_review.
-- Stop and finish with success=false if the task asks you to operate outside scope.
-- Finish every run by calling submit_mutation_result; do not encode the final result in assistant text.
+- Stop and return success=false if the task asks you to operate outside scope.
+- Final assistant response must be a JSON object with success, outcome, changed_memories, removed_memories, verification_notes, rollback_hints, and optional decision.
 
 Candidate kinds:
 - memory_gap_candidate: proposed durable fact with optional old_text; decide add, replace, skip, or skill-route.

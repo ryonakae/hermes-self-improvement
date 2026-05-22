@@ -31,7 +31,7 @@ def task(*, kind: str = "memory_apply", candidates: list[dict] | None = None) ->
         "candidates": candidates or [{"candidate_id": "m1", "target": "memory", "candidate_fact": "Hermes runtime root is ~/.hermes."}],
         "current_entries": [],
         "constraints": [
-            "Use only memory tool and submit_mutation_result.",
+            "Use only memory tool.",
             "Do not use terminal/file/git/direct filesystem tools.",
         ],
     }
@@ -97,7 +97,7 @@ def test_validate_memory_agent_task_rejects_missing_memory_tool_constraint():
 def test_build_memory_agent_prompt_mentions_memory_tool_and_skill_classification():
     prompt = build_memory_agent_prompt(task())
     assert "memory (action add|replace|remove" in prompt
-    assert "submit_mutation_result" in prompt
+    assert "submit_mutation_result" not in prompt
     assert "convert_to_skill_proposal" in prompt
     assert "Skill vs memory classification" in prompt
 
@@ -275,7 +275,14 @@ def test_build_memory_agent_backend_defaults_to_constrained_runner():
     assert backend.constrained_agent_runner is not None
 
 
-def test_native_memory_backend_accepts_constrained_agent_result_through_existing_validation():
+def test_native_memory_backend_accepts_constrained_agent_result_through_existing_validation(monkeypatch):
+    import hermes_self_improvement.memory_agent_backend as backend_module
+
+    def forbidden_legacy_schema():
+        raise AssertionError("constrained path must not build legacy submit_mutation_result schema")
+
+    monkeypatch.setattr(backend_module, "legacy_memory_agent_tool_schemas", forbidden_legacy_schema)
+
     def fake_runner(*, role, user_message, system_message, config, max_iterations):
         assert role == "memory_agent"
         assert "Current memory entries" in user_message

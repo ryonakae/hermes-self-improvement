@@ -600,7 +600,6 @@ class NativeSkillAgentBackend:
             return {"success": False, "error": "skill_agent_limits_invalid", "reasons": limit_check.get("reasons") or []}
         if not self.tool_executor.available():
             return {"success": False, "error": "skill_agent_unavailable", "reasons": [self.tool_executor.unavailable_reason or "skill_tool_registry_unavailable"]}
-        tools = legacy_skill_agent_tool_schemas()
         task_manifest = {
             "task_kind": task.get("task_kind"),
             "targets": task.get("targets"),
@@ -633,6 +632,7 @@ class NativeSkillAgentBackend:
         )
         if self.constrained_agent_runner is not None:
             return self._run_constrained_agent(user_context=user_context, system_message=constrained_system_message, task=task, config=config)
+        tools = legacy_skill_agent_tool_schemas()
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",

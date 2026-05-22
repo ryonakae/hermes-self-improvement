@@ -860,7 +860,14 @@ def test_build_skill_agent_backend_defaults_to_constrained_runner():
     assert backend.constrained_agent_runner is not None
 
 
-def test_native_backend_can_validate_constrained_agent_result_with_tool_trace():
+def test_native_backend_can_validate_constrained_agent_result_with_tool_trace(monkeypatch):
+    import hermes_self_improvement.skill_agent_backend as backend_module
+
+    def forbidden_legacy_schema():
+        raise AssertionError("constrained path must not build legacy submit_mutation_result schema")
+
+    monkeypatch.setattr(backend_module, "legacy_skill_agent_tool_schemas", forbidden_legacy_schema)
+
     def fake_constrained_agent(**kwargs):
         assert kwargs["role"] == "skill_agent"
         assert "Task manifest summary" in kwargs["user_message"]

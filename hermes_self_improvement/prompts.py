@@ -46,7 +46,6 @@ EDITOR_ALLOWED_TOOLS_AND_STOPS = [
     "- skills_list",
     "- skill_view",
     "- skill_manage",
-    "- submit_mutation_result",
     "",
     "Hard stops:",
     "- Call skill_view for the target skill before proposing any mutation.",
@@ -56,7 +55,7 @@ EDITOR_ALLOWED_TOOLS_AND_STOPS = [
     "- Do not rename, delete, archive, merge, or create skills unless the planner explicitly selected that action; this task is for small local edits only.",
     "",
     "Expected output:",
-    "- Finish every run by calling submit_mutation_result with changed/skipped status, reason, skill name, used tool calls, and a short verification checklist.",
+    "- Final assistant response must be a JSON object with success, outcome, changed_skills, created_skills, deleted_skills, verification_notes, and rollback_hints.",
 ]
 
 MEMORY_AGENT_BASE_SECTIONS = [
@@ -72,7 +71,6 @@ MEMORY_AGENT_ALLOWED_TOOLS_AND_STOPS = [
     "",
     "Allowed tools:",
     "- memory (action add | replace | remove, target memory | user)",
-    "- submit_mutation_result",
     "",
     "Hard stops:",
     "- Inspect current_entries before any replace/remove and use the exact old_text substring.",
@@ -82,7 +80,7 @@ MEMORY_AGENT_ALLOWED_TOOLS_AND_STOPS = [
     "- Do not touch built-in memory files or provider DBs directly; the executor wraps the official memory tool.",
     "",
     "Expected output:",
-    "- Finish every run by calling submit_mutation_result with success/outcome, changed_memories, removed_memories, used_tools, verification_notes, rollback_hints, and an optional decision (e.g. convert_to_skill_proposal).",
+    "- Final assistant response must be a JSON object with success, outcome, changed_memories, removed_memories, verification_notes, rollback_hints, and an optional decision (e.g. convert_to_skill_proposal).",
 ]
 
 
