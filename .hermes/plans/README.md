@@ -10,9 +10,13 @@ As of 2026-05-10, the long-term roadmap is:
 
 The current active hardening plans are:
 
+- `2026-05-22-pre-release-role-simplification.md`
+  - **Status:** planned / next. Because the plugin is still pre-release, this plan removes old compatibility instead of preserving it: delete injected editor loops, remove synthetic `submit_mutation_result` remnants from active source/tests/docs, keep `setup` as the single repair/init surface with clearer status wording, and add `target_resolver` as a thin runtime-private overlay target without giving it mutation authority.
+  - Keeps the simple role model: resolver/planner get read-only skill inspection only; skill_agent and memory_agent are the only mutation roles; evaluator / memory_extractor / GEPA stay tool-free with host-prepared context.
+
 - `2026-05-21-target-resolver-light-tuning-and-planner-handoff.md`
-  - **Status:** partially implemented; role permission matrix, constrained role runner, resolver/planner read-only skill-tool routing, editor backend tool-surface constant unification, shared native tool-harness helper extraction, AIAgent message trace recovery, thin constrained adapters for both skill-agent and memory-agent backends, default backend routing to constrained editor paths, fail-closed retirement of the legacy auxiliary-LLM fallback, removal of editor-backend auxiliary fallback functions/imports, isolation of synthetic `submit_mutation_result` schemas behind legacy injected-loop helpers, final-JSON default prompt-overlay seeds, active skill/memory agent final-JSON prompts/constraints, and constrained-path avoidance of legacy schema construction are done. Remaining: physically delete/split out the old injected-test-only bespoke editor loop bodies after mutation-bearing real-run trace/accounting proof.
-  - Defines the role permission matrix: `target_resolver` and `improvement_planner` may use only read-only skill inspection (`skills_list`, `skill_view`); `skill_agent` alone gets the `skills` mutation surface; `memory_agent` alone gets the `memory` mutation surface; evaluator / memory_extractor / GEPA remain tool-free with host-prepared context. The plan also keeps resolver broad-entry/planner-owned-exit for `unresolved / no_existing_skill_fit`, and explicitly includes a complexity-reduction refactor that treats existing bespoke skill/memory editor loops as technical debt to be replaced with Hermes-native constrained agents where possible.
+  - **Status:** implemented through constrained default editor paths; superseded for remaining cleanup by `2026-05-22-pre-release-role-simplification.md`.
+  - Defines the role permission matrix and documents the completed migration to Hermes-native constrained agents for active/default tool-using roles.
 
 - `2026-05-20-overlay-case-selection-diversity.md`
   - **Status:** implemented.
