@@ -10,6 +10,10 @@ As of 2026-05-10, the long-term roadmap is:
 
 The current active hardening plans are:
 
+- `2026-05-22-llm-model-routing-spec-and-memory-extractor.md`
+  - **Status:** planned.
+  - Formalizes the LLM role/model routing contract so future work does not confuse Hermes constrained-agent roles with tool-free DSPy/GEPA or memory-extractor calls. Planned scope: add `model.memory_extractor` as a first-class default role, keep `memory_extractor` tool-free, strengthen tests proving DSPy/GEPA use `model.evaluator`, and update README / operations docs / architecture reference with a role table.
+
 - `2026-05-22-pre-release-role-simplification.md`
   - **Status:** implemented.
   - Because the plugin is still pre-release, this plan removes old compatibility instead of preserving it. Completed: injected editor loops and synthetic finalizer support were deleted from skill/memory backend source; backend tests were moved to constrained-runner / helper coverage; active source/tests/docs guard now keeps the removed synthetic finalizer name out of `hermes_self_improvement`, prompt overlays, operations docs, and tests; status now prints runtime setup reasons and keeps `setup` as the single init/repair surface with no `repair` subcommand; `target_resolver` is now a thin runtime-private overlay target while remaining mutation-free with read-only skill inspection only.
