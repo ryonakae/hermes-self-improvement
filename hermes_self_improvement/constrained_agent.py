@@ -45,6 +45,65 @@ def _role_model_config(config: dict[str, Any], role: str) -> dict[str, Any]:
     return raw_role_config if isinstance(raw_role_config, dict) else {}
 
 
+def _clean_str(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _load_main_model_config() -> dict[str, Any]:
+    _ensure_hermes_agent_on_path()
+    from hermes_cli.config import load_config as load_hermes_config
+
+    cfg = load_hermes_config()
+    raw = cfg.get("model") if isinstance(cfg, dict) else {}
+    if isinstance(raw, dict):
+        model_cfg = dict(raw)
+        if not model_cfg.get("default") and model_cfg.get("model"):
+            model_cfg["default"] = model_cfg.get("model")
+        return model_cfg
+    if isinstance(raw, str) and raw.strip():
+        return {"default": raw.strip()}
+    return {}
+
+
+def _resolve_runtime_provider(**kwargs: Any) -> dict[str, Any]:
+    _ensure_hermes_agent_on_path()
+    from hermes_cli.runtime_provider import resolve_runtime_provider
+
+    return resolve_runtime_provider(**kwargs)
+
+
+def _role_agent_routing(role_config: dict[str, Any]) -> dict[str, Any]:
+    main_model_config = _load_main_model_config()
+    raw_provider = _clean_str(role_config.get("provider"))
+    raw_model = _clean_str(role_config.get("model"))
+    main_provider = _clean_str(main_model_config.get("provider"))
+    main_model = _clean_str(main_model_config.get("default"))
+
+    provider = raw_provider if raw_provider and raw_provider != "auto" else (main_provider or "auto")
+    model = raw_model or main_model
+    explicit_base_url = _clean_str(role_config.get("base_url")) or None
+    explicit_api_key = _clean_str(role_config.get("api_key")) or None
+
+    runtime: dict[str, Any] = {}
+    try:
+        runtime = _resolve_runtime_provider(
+            requested=provider,
+            explicit_api_key=explicit_api_key,
+            explicit_base_url=explicit_base_url,
+            target_model=model or None,
+        )
+    except Exception:
+        runtime = {}
+
+    return {
+        "provider": _clean_str(runtime.get("provider")) or provider,
+        "model": model or _clean_str(runtime.get("model")),
+        "base_url": explicit_base_url or runtime.get("base_url") or None,
+        "api_key": explicit_api_key or runtime.get("api_key") or None,
+        "api_mode": runtime.get("api_mode") or role_config.get("api_mode") or None,
+    }
+
+
 def _latest_assistant_content(messages: Any) -> str:
     if not isinstance(messages, list):
         return ""
@@ -88,15 +147,15 @@ def run_constrained_role_agent(
         raise ValueError(f"{role} is a tool-free role; use the structured LLM path instead")
 
     role_config = _role_model_config(config, role)
-    provider = role_config.get("provider") or "auto"
-    model = role_config.get("model") or ""
+    routing = _role_agent_routing(role_config)
     max_tokens = _coerce_int(role_config.get("max_tokens"), default=2200)
     agent_cls = _agent_class()
     agent = agent_cls(
-        provider=provider,
-        model=model,
-        base_url=role_config.get("base_url"),
-        api_key=role_config.get("api_key"),
+        provider=routing["provider"],
+        model=routing["model"],
+        api_mode=routing["api_mode"],
+        base_url=routing["base_url"],
+        api_key=routing["api_key"],
         max_tokens=max_tokens,
         max_iterations=max_iterations,
         enabled_toolsets=list(spec.enabled_toolsets),

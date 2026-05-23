@@ -28,11 +28,11 @@ def test_constrained_agent_uses_role_toolsets_and_whitelist(monkeypatch):
         role="target_resolver",
         user_message="{}",
         system_message="resolver",
-        config={"model": {"target_resolver": {"provider": "auto", "model": "fake", "max_tokens": 123}}},
+        config={"model": {"target_resolver": {"provider": "openrouter", "model": "fake", "max_tokens": 123}}},
     )
 
     assert calls["agent_kwargs"]["enabled_toolsets"] == ["skills"]
-    assert calls["agent_kwargs"]["provider"] == "auto"
+    assert calls["agent_kwargs"]["provider"] == "openrouter"
     assert calls["agent_kwargs"]["model"] == "fake"
     assert calls["agent_kwargs"]["max_tokens"] == 123
     assert calls["allowed"] == {"skills_list", "skill_view"}
@@ -40,6 +40,86 @@ def test_constrained_agent_uses_role_toolsets_and_whitelist(monkeypatch):
     assert calls["run_kwargs"]["user_message"] == "{}"
     assert calls["run_kwargs"]["system_message"] == "resolver"
     assert result["final_response"] == '{"ok": true}'
+
+
+def test_constrained_agent_uses_hermes_main_model_when_role_model_is_unset(monkeypatch):
+    calls = {}
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            calls["agent_kwargs"] = kwargs
+
+        def run_conversation(self, **kwargs):
+            return {"final_response": '{"ok": true}'}
+
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.AIAgent", FakeAgent)
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.set_thread_tool_whitelist", lambda allowed, deny_msg_fmt=None: None)
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.clear_thread_tool_whitelist", lambda: None)
+    monkeypatch.setattr(
+        "hermes_self_improvement.constrained_agent._load_main_model_config",
+        lambda: {"provider": "openai-codex", "default": "gpt-5.5"},
+    )
+    monkeypatch.setattr(
+        "hermes_self_improvement.constrained_agent._resolve_runtime_provider",
+        lambda **kwargs: {
+            "provider": "openai-codex",
+            "api_mode": "codex_responses",
+            "base_url": "https://chatgpt.com/backend-api/codex/responses",
+            "api_key": "token",
+        },
+    )
+
+    run_constrained_role_agent(
+        role="skill_agent",
+        user_message="{}",
+        system_message="skill agent",
+        config={"model": {"skill_agent": {"provider": "auto", "model": "", "max_tokens": 321}}},
+    )
+
+    assert calls["agent_kwargs"]["provider"] == "openai-codex"
+    assert calls["agent_kwargs"]["model"] == "gpt-5.5"
+    assert calls["agent_kwargs"]["api_mode"] == "codex_responses"
+    assert calls["agent_kwargs"]["base_url"] == "https://chatgpt.com/backend-api/codex/responses"
+    assert calls["agent_kwargs"]["api_key"] == "token"
+    assert calls["agent_kwargs"]["max_tokens"] == 321
+
+
+def test_constrained_agent_prefers_explicit_role_model_config(monkeypatch):
+    calls = {}
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            calls["agent_kwargs"] = kwargs
+
+        def run_conversation(self, **kwargs):
+            return {"final_response": '{"ok": true}'}
+
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.AIAgent", FakeAgent)
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.set_thread_tool_whitelist", lambda allowed, deny_msg_fmt=None: None)
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.clear_thread_tool_whitelist", lambda: None)
+    monkeypatch.setattr(
+        "hermes_self_improvement.constrained_agent._load_main_model_config",
+        lambda: {"provider": "openai-codex", "default": "gpt-5.5"},
+    )
+
+    def fake_resolve(**kwargs):
+        calls["resolve_kwargs"] = kwargs
+        return {"provider": "anthropic", "api_mode": "anthropic_messages", "base_url": "https://api.anthropic.com", "api_key": "role-key"}
+
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent._resolve_runtime_provider", fake_resolve)
+
+    run_constrained_role_agent(
+        role="target_resolver",
+        user_message="{}",
+        system_message="resolver",
+        config={"model": {"target_resolver": {"provider": "anthropic", "model": "claude-sonnet-4", "api_key": "role-key"}}},
+    )
+
+    assert calls["resolve_kwargs"]["requested"] == "anthropic"
+    assert calls["resolve_kwargs"]["target_model"] == "claude-sonnet-4"
+    assert calls["resolve_kwargs"]["explicit_api_key"] == "role-key"
+    assert calls["agent_kwargs"]["provider"] == "anthropic"
+    assert calls["agent_kwargs"]["model"] == "claude-sonnet-4"
 
 
 def test_constrained_agent_rejects_tool_free_roles():
