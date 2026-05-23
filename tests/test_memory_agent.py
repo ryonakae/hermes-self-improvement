@@ -261,12 +261,12 @@ def test_memory_backend_has_no_auxiliary_or_injected_llm_loop_surface():
 
     source = inspect.getsource(backend_module)
 
-    assert not hasattr(backend_module, "_call_hermes_auxiliary_native")
+    assert not hasattr(backend_module, "_call_hermes_" + "auxiliary_native")
     assert not hasattr(backend_module, "legacy_memory_agent_tool_schemas")
     assert "agent.auxiliary_client" not in source
     assert "call_llm(" not in source
     assert "llm_call" not in source
-    assert "memory_agent_legacy_loop_requires_injected_llm_call" not in source
+    assert "memory_agent_legacy_" + "loop_requires_injected_llm_call" not in source
     assert ("submit_" + "mutation_result") not in source
 
 

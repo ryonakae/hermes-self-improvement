@@ -609,14 +609,6 @@ def _normalize_decision(
         return None
     decision = str(raw.get("decision") or "skip").strip()
     raw_maintenance_action = str(raw.get("maintenance_action") or "").strip().lower()
-    # Legacy LLM outputs from the pre-`maintenance_action` schema are accepted
-    # only as inputs and normalized into the current canonical decision shape.
-    if decision == "patch_skill":
-        decision = "mutate_skill"
-        raw_maintenance_action = raw_maintenance_action or "patch"
-    elif decision == "merge_skills":
-        decision = "mutate_skill"
-        raw_maintenance_action = raw_maintenance_action or "merge"
     normalized_decision = normalize_autonomous_decision({"decision": decision})
     decision = str(normalized_decision.get("decision") or "skip")
     maintenance_action = ""

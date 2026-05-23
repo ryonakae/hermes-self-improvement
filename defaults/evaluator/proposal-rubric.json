@@ -12,7 +12,7 @@
   "hard_constraints": {
     "auto_apply": false,
     "never_reconstruct_secrets": true,
-    "never_directly_patch_skills_or_memory": true,
+    "never_directly_mutate_skills_or_memory": true,
     "defer_semantic_skill_changes": true,
     "defer_memory_reclassification_or_deletion": true
   },

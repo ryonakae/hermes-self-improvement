@@ -233,7 +233,7 @@ def test_planner_prompt_exposes_knowledge_maintenance_candidates():
     assert "create_skill" in user_content
 
 
-def test_planner_normalizes_patch_and_merge_maintenance_decisions():
+def test_planner_accepts_canonical_maintenance_decisions():
     evidence_pack = {
         "summary": {"event_count": 2, "evidence_count": 2, "ignored_count": 0},
         "views": {"skill": ["ev_patch", "ev_merge"]},
@@ -250,8 +250,8 @@ def test_planner_normalizes_patch_and_merge_maintenance_decisions():
 
     def planner(*, digest, config):
         return {"decisions": [
-            {"skill": "local-patch-workflow", "decision": "patch_skill", "evidence_ids": ["ev_patch"], "risk": "low", "skill_agent_instructions": "Add reusable patch guidance."},
-            {"skill": "old-patch-workflow", "decision": "merge_skills", "target_skill": "local-patch-workflow", "evidence_ids": ["ev_merge"], "risk": "medium", "skill_agent_instructions": "Merge useful guidance into local-patch-workflow."},
+            {"skill": "local-patch-workflow", "decision": "mutate_skill", "maintenance_action": "patch", "evidence_ids": ["ev_patch"], "risk": "low", "skill_agent_instructions": "Add reusable patch guidance."},
+            {"skill": "old-patch-workflow", "decision": "mutate_skill", "maintenance_action": "merge", "target_skill": "local-patch-workflow", "evidence_ids": ["ev_merge"], "risk": "medium", "skill_agent_instructions": "Merge useful guidance into local-patch-workflow."},
         ]}
 
     result = run_improvement_planner(digest, config={"_improvement_planner_func": planner})
@@ -312,7 +312,8 @@ def test_skill_step_dry_run_maps_merge_skill_to_skill_agent_preview():
     def planner(*, digest, config):
         return {"decisions": [{
             "skill": "old-patch-workflow",
-            "decision": "merge_skills",
+            "decision": "mutate_skill",
+            "maintenance_action": "merge",
             "target_skill": "local-patch-workflow",
             "evidence_ids": ["ev_merge"],
             "skill_agent_instructions": "Merge durable guidance into local-patch-workflow; do not archive yet.",

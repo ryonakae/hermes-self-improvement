@@ -388,7 +388,7 @@ def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
 
     text = cli._render_calibration_summary({
         "current_status": "partial_update",
-        "reasons": ["evaluator_candidate_not_concrete"],
+        "reasons": ["evaluator_asset_candidate_not_concrete"],
         "active_changed": True,
         "evidence_summary": {"total_events": 20, "disagreements": 5, "bad_outcomes": 0},
         "regression": {"status": "skipped", "reason": "candidate_not_concrete"},
@@ -399,7 +399,7 @@ def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
     })
 
     assert "Calibration: partial_update" in text
-    assert "Reason: evaluator_candidate_not_concrete" in text
+    assert "Reason: evaluator_asset_candidate_not_concrete" in text
     assert "Evaluator:" in text
     assert "- status: skipped, reason candidate_not_concrete" in text
     assert "Prompt overlays:" in text
@@ -556,18 +556,18 @@ def test_calibration_execute_skips_evaluator_update_for_metadata_only_candidate(
     assert active_pointer.exists() is False
 
 
-def test_evaluator_candidate_concreteness_requires_assets(tmp_path):
+def test_evaluator_asset_candidate_concreteness_requires_assets(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
 
-    assert calibration._is_concrete_evaluator_candidate({"type": "evaluator_calibration_candidate"}) is False
-    assert calibration._is_concrete_evaluator_candidate({
+    assert calibration._is_concrete_evaluator_asset_candidate({"type": "evaluator_calibration_candidate"}) is False
+    assert calibration._is_concrete_evaluator_asset_candidate({
         "type": "evaluator_calibration_candidate",
         "mode": "dspy_program_eval",
         "evaluator_path": str(tmp_path / "proposal-evaluator.json"),
         "rubric_path": str(tmp_path / "proposal-rubric.json"),
         "eval_cases_path": str(tmp_path / "proposal-cases.jsonl"),
     }) is True
-    assert calibration._is_concrete_evaluator_candidate({
+    assert calibration._is_concrete_evaluator_asset_candidate({
         "type": "evaluator_calibration_candidate",
         "mode": "compiled_program_eval",
         "compiled_program_path": str(tmp_path / "compiled.json"),
@@ -666,7 +666,7 @@ def test_active_pointer_validation_accepts_compiled_program_candidate(tmp_path):
 
 def test_calibration_active_default_source_builds_concrete_candidate(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    cfg = base_config(tmp_path, evaluator_asset_candidate_source="active_default")
     seed_runtime_default_evaluator(cfg)
     write_review_outcome(cfg, {"outcome": "failed", "source": "runner"}, "failed.json")
     write_review_outcome(cfg, {"outcome": "rejected_by_user", "source": "user"}, "rejected.json")
@@ -679,13 +679,13 @@ def test_calibration_active_default_source_builds_concrete_candidate(monkeypatch
 
     result = calibration.run_calibration(config=cfg, execute=True)
 
-    assert calibration._is_concrete_evaluator_candidate(seen["candidate"]) is True
+    assert calibration._is_concrete_evaluator_asset_candidate(seen["candidate"]) is True
     assert result["evaluator_update"]["status"] == "updated"
 
 
 def test_calibration_active_default_source_ignores_malformed_active_pointer(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    cfg = base_config(tmp_path, evaluator_asset_candidate_source="active_default")
     seed_runtime_default_evaluator(cfg)
     active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
     active_pointer.write_text(json.dumps({"schema_name": "self_improvement_active_evaluator_pointer"}) + "\n", encoding="utf-8")
@@ -702,13 +702,13 @@ def test_calibration_active_default_source_ignores_malformed_active_pointer(monk
     result = calibration.run_calibration(config=cfg, execute=True)
 
     assert result["evaluator_update"]["status"] == "updated"
-    assert calibration._is_concrete_evaluator_candidate(seen["candidate"]) is True
+    assert calibration._is_concrete_evaluator_asset_candidate(seen["candidate"]) is True
     assert "/evaluator/defaults/" in seen["candidate"]["evaluator_path"]
 
 
 def test_calibration_active_default_source_ignores_pointer_with_invalid_hashes(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    cfg = base_config(tmp_path, evaluator_asset_candidate_source="active_default")
     seed_runtime_default_evaluator(cfg)
     active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
     pointer = json.loads(active_pointer.read_text(encoding="utf-8"))
@@ -736,7 +736,7 @@ def test_calibration_active_default_source_ignores_pointer_with_invalid_hashes(m
 
 def test_calibration_execute_requires_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    cfg = base_config(tmp_path, evaluator_asset_candidate_source="active_default")
     active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
     runtime_cases_dir = tmp_path / "self-improvement" / "evaluator" / "runtime-eval-cases"
     seed_runtime_default_evaluator(cfg)
@@ -1015,7 +1015,7 @@ def test_calibration_reports_partial_update_when_overlay_set_promoted_but_evalua
     assert result["prompt_overlays"]["improvement_planner"]["promoted"] is True
     assert result["evaluator_update"]["status"] == "skipped"
     assert result["evaluator_update"]["reason"] == "candidate_not_concrete"
-    assert "evaluator_candidate_not_concrete" in result["reasons"]
+    assert "evaluator_asset_candidate_not_concrete" in result["reasons"]
 
 
 def test_calibration_execute_keeps_non_promoted_overlay_candidate_set(monkeypatch, tmp_path):
@@ -1040,7 +1040,7 @@ def test_calibration_execute_keeps_non_promoted_overlay_candidate_set(monkeypatc
 
 def test_calibration_execute_promotes_active_pointer_after_regression_pass(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    cfg = base_config(tmp_path, evaluator_asset_candidate_source="active_default")
     active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
     repo_cases_before = (PLUGIN_DIR / "evals" / "proposal" / "cases.jsonl").read_text(encoding="utf-8")
     seed_runtime_default_evaluator(cfg)
@@ -1078,7 +1078,7 @@ def test_calibration_execute_promotes_active_pointer_after_regression_pass(monke
 
 def test_restore_previous_calibration_restores_active_before_state(monkeypatch, tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
-    cfg = base_config(tmp_path, evaluator_candidate_source="active_default")
+    cfg = base_config(tmp_path, evaluator_asset_candidate_source="active_default")
     active_pointer = tmp_path / "self-improvement" / "evaluator" / "active.json"
     seed_runtime_default_evaluator(cfg)
     before_content = active_pointer.read_text(encoding="utf-8")

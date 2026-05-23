@@ -289,7 +289,7 @@ def _candidate_from_evidence(evidence: dict[str, Any], calibration: dict[str, An
     return candidate
 
 
-def _is_concrete_evaluator_candidate(candidate: dict[str, Any] | None) -> bool:
+def _is_concrete_evaluator_asset_candidate(candidate: dict[str, Any] | None) -> bool:
     if not isinstance(candidate, dict):
         return False
     mode = str(candidate.get("mode") or "dspy_program_eval")
@@ -402,11 +402,11 @@ def _candidate_from_active_evaluator(config: dict[str, Any], evidence: dict[str,
     return candidate
 
 
-def _select_evaluator_candidate(config: dict[str, Any], evidence: dict[str, Any], calibration: dict[str, Any]) -> dict[str, Any] | None:
+def _select_evaluator_asset_candidate(config: dict[str, Any], evidence: dict[str, Any], calibration: dict[str, Any]) -> dict[str, Any] | None:
     metadata_candidate = _candidate_from_evidence(evidence, calibration)
     if metadata_candidate is None:
         return None
-    if calibration.get("evaluator_candidate_source") == "active_default":
+    if calibration.get("evaluator_asset_candidate_source") == "active_default":
         return _candidate_from_active_evaluator(config, evidence) or metadata_candidate
     return metadata_candidate
 
@@ -532,7 +532,7 @@ def _write_regression_artifact(*, config: dict[str, Any], candidate: dict[str, A
 
 def _run_calibration_regression(*, candidate: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     mode = str(candidate.get("mode") or "dspy_program_eval")
-    if not _is_concrete_evaluator_candidate(candidate):
+    if not _is_concrete_evaluator_asset_candidate(candidate):
         return {"status": "failed", "reason": "candidate_not_concrete", "case_count": 0, "passed_count": 0, "failed_count": 0, "mode": mode}
     try:
         _evaluator, rubric, cases, missing = _load_candidate_eval_assets(candidate)
@@ -747,7 +747,7 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False, candidate_
         result["reasons"].append("calibration_disabled")
         return result
 
-    candidate = _select_evaluator_candidate(config, evidence, calibration)
+    candidate = _select_evaluator_asset_candidate(config, evidence, calibration)
     overlay_case_count = len(build_overlay_set_runtime_eval_cases(config=config, limit=1))
     should_build_overlay_set = candidate is not None or _overlay_candidate_signal(evidence, overlay_case_count=overlay_case_count)
     overlay_candidate_set = None
@@ -786,11 +786,11 @@ def run_calibration(*, config: dict[str, Any], execute: bool = False, candidate_
                 pass
 
         evaluator_updated = False
-        if candidate is not None and not _is_concrete_evaluator_candidate(candidate):
+        if candidate is not None and not _is_concrete_evaluator_asset_candidate(candidate):
             result["evaluator_update"] = {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False}
             result["regression"] = {"status": "skipped", "reason": "candidate_not_concrete"}
-            result["runtime_eval_cases"]["status"] = "not_written_no_concrete_evaluator_candidate" if runtime_cases else "empty"
-            result["reasons"].append("evaluator_candidate_not_concrete")
+            result["runtime_eval_cases"]["status"] = "not_written_no_concrete_evaluator_asset_candidate" if runtime_cases else "empty"
+            result["reasons"].append("evaluator_asset_candidate_not_concrete")
             if prompt_promoted:
                 result["current_status"] = "partial_update"
                 result["active_changed"] = True

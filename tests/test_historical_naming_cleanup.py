@@ -13,35 +13,34 @@ ACTIVE_PATHS = [
     "plugin.yaml",
     "pyproject.toml",
 ]
+
+
+def _term(*parts: str) -> str:
+    return "".join(parts)
+
+
 FORBIDDEN_ACTIVE_TERMS = {
-    'task="skills_hub"': 'self-improvement LLM calls must use task="self_improvement"',
-    "task='skills_hub'": "self-improvement LLM calls must use task='self_improvement'",
-    "model.planner": "use model.improvement_planner",
-    "model.editor": "use model.skill_agent / model.memory_agent",
-    "model.llm": "retired model role",
-    "model.mutation": "retired model role",
-    "model.gepa": "retired model role",
-    "llm_scorer_error": "LLM scorer is retired",
-    "run_editor": "use mutate_skill",
-    "editor_instructions": "use skill_agent_instructions",
-    "selected_for_editor": "use selected_for_skill_agent",
-    "planner_editor": "use skill_agent",
-    "planner-editor": "use skill-agent",
-    "native_skill_tool_editor": "use native_skill_tool",
-    '"evaluator_candidate"': "use calibrate_evaluator",
-    "bin/hermes-self-improve": "use hermes self-improvement",
-    "reports/self-improvement": "use self-improvement runtime root",
-}
-ALLOWLIST = {
-    # Legacy output normalization tests: old LLM decisions are accepted but never canonical.
-    ("tests/test_knowledge_maintenance_planner.py", "patch_skill"),
-    ("tests/test_knowledge_maintenance_planner.py", "merge_skills"),
-    # Inventory hints are maintenance subtypes, not planner decisions.
-    ("hermes_self_improvement/evidence.py", "merge_skills"),
-    ("tests/test_evidence_inventory_candidates.py", "merge_skills"),
-    # Compatibility alias for old observations that mention the pre-rename bundled skill.
-    ("hermes_self_improvement/target_hints.py", "hermes-self-improvement-plugin"),
-    ("tests/test_target_hints.py", "hermes-self-improvement-plugin"),
+    _term('task="skills', '_hub"'): 'self-improvement LLM calls must use task="self_improvement"',
+    _term("task='skills", "_hub'"): "self-improvement LLM calls must use task='self_improvement'",
+    _term("model.", "planner"): "use model.improvement_planner",
+    _term("model.", "editor"): "use model.skill_agent / model.memory_agent",
+    _term("model.", "llm"): "retired model role",
+    _term("model.", "mutation"): "retired model role",
+    _term("model.", "gepa"): "retired model role",
+    _term("llm", "_scorer", "_error"): "LLM scorer is retired",
+    _term("run", "_editor"): "use mutate_skill",
+    _term("editor", "_instructions"): "use skill_agent_instructions",
+    _term("selected", "_for", "_editor"): "use selected_for_skill_agent",
+    _term("planner", "_editor"): "use skill_agent",
+    _term("planner", "-editor"): "use skill-agent",
+    _term("native", "_skill", "_tool", "_editor"): "use native_skill_tool",
+    _term("patch", "_skill"): "use mutate_skill + maintenance_action=patch",
+    _term("merge", "_skills"): "use mutate_skill + maintenance_action=merge",
+    _term("evaluator", "_candidate"): "use evaluator_asset_candidate or calibrate_evaluator",
+    _term("approval", "_required"): "use defer/manual_planner_review naming",
+    _term("human", "_review"): "use defer/manual_planner_review naming",
+    _term("bin/hermes", "-self", "-improve"): "use hermes self-improvement",
+    _term("reports/", "self", "-improvement"): "use self-improvement runtime root",
 }
 
 
@@ -62,16 +61,12 @@ def _active_files() -> list[Path]:
     return files
 
 
-def _allowed(path: Path, term: str) -> bool:
-    return (str(path.relative_to(ROOT)), term) in ALLOWLIST
-
-
 def test_active_surfaces_do_not_describe_retired_names_as_current_behavior():
     hits: list[str] = []
     for path in _active_files():
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8").lower()
         for term, reason in FORBIDDEN_ACTIVE_TERMS.items():
-            if term in text and not _allowed(path, term):
+            if term in text:
                 hits.append(f"{path.relative_to(ROOT)}: contains {term!r}: {reason}")
     assert not hits, "\n".join(hits)
 

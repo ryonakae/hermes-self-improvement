@@ -287,7 +287,7 @@ def propose_from_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]
     return _merge_duplicate_proposals(proposals)
 
 
-_APPROVAL_REQUIRED_SKILL_LIFECYCLE_ACTIONS = {"skill_create", "skill_delete", "skill_rename", "skill_merge"}
+_DEFERRED_SKILL_LIFECYCLE_ACTIONS = {"skill_create", "skill_delete", "skill_rename", "skill_merge"}
 _PLANNER_DECIDED_SKILL_LIFECYCLE_ACTIONS = {"skill_archive"}
 
 
@@ -317,7 +317,7 @@ def _proposal_for_explicit_candidate(finding: dict[str, Any]) -> dict[str, Any] 
         }
     if kind == "skill_lifecycle_candidate":
         action = str(finding.get("action") or finding.get("change_type") or "")
-        if action not in _APPROVAL_REQUIRED_SKILL_LIFECYCLE_ACTIONS and action not in _PLANNER_DECIDED_SKILL_LIFECYCLE_ACTIONS:
+        if action not in _DEFERRED_SKILL_LIFECYCLE_ACTIONS and action not in _PLANNER_DECIDED_SKILL_LIFECYCLE_ACTIONS:
             return None
         target_path = finding.get("target_path") or finding.get("path") or finding.get("file_path") or finding.get("skill_path")
         if not target_path:

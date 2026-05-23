@@ -47,7 +47,7 @@ def test_setup_creates_evaluator_runtime_layout_and_seed_files(tmp_path):
         "evaluator",
         "evaluator/defaults",
         "evaluator/programs",
-        "evaluator/candidates",
+        "evaluator/asset-candidates",
         "evaluator/runtime-eval-cases",
         "evaluator/prompt-candidates",
         "evaluator/prompt-candidate-sets",
@@ -92,6 +92,46 @@ def test_setup_is_idempotent_and_preserves_existing_active_evaluator(tmp_path):
     assert result["created_or_updated"]["active_evaluator"] is False
     assert result["created_or_updated"]["prompt_overlays"] is False
     assert json.loads(active.read_text(encoding="utf-8"))["custom"] is True
+
+
+def test_setup_refreshes_stale_default_assets_without_reset(tmp_path):
+    setup = load_setup_module()
+    root = tmp_path / "self-improvement"
+    config = {"_self_improvement_root": str(root)}
+    setup.run_setup(config)
+    rubric = root / "evaluator/defaults/proposal-rubric.json"
+    rubric.write_text('{"version":"stale"}\n', encoding="utf-8")
+
+    before = setup.check_runtime_setup(config)
+    result = setup.run_setup(config)
+
+    assert "default_assets_changed" in before["reasons"]
+    assert result["initialized"] is True
+    assert result["created_or_updated"]["default_assets"] == ["rubric"]
+    assert setup.check_runtime_setup(config)["initialized"] is True
+
+
+def test_setup_refreshes_default_active_pointer_hashes_without_reset(tmp_path):
+    setup = load_setup_module()
+    root = tmp_path / "self-improvement"
+    config = {"_self_improvement_root": str(root)}
+    setup.run_setup(config)
+    rubric = root / "evaluator/defaults/proposal-rubric.json"
+    active = root / "evaluator/active.json"
+    rubric.write_text('{"version":"stale"}\n', encoding="utf-8")
+    pointer = json.loads(active.read_text(encoding="utf-8"))
+    pointer["hashes"]["rubric"] = "sha256:stale"
+    active.write_text(json.dumps(pointer, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    before = setup.check_runtime_setup(config)
+    result = setup.run_setup(config)
+    repaired = setup.check_runtime_setup(config)
+
+    assert "active_evaluator_invalid" in before["reasons"]
+    assert result["initialized"] is True
+    assert result["created_or_updated"]["active_evaluator"] is True
+    assert repaired["active_evaluator"]["status"] == "ready"
+    assert repaired["initialized"] is True
 
 
 def test_runtime_setup_rejects_malformed_active_evaluator_pointer(tmp_path):

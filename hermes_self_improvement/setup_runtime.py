@@ -58,7 +58,7 @@ def runtime_layout(config: dict[str, Any]) -> dict[str, Path]:
         "default_rubric": defaults / DEFAULT_EVALUATOR_FILES["rubric"],
         "default_eval_cases": defaults / DEFAULT_EVALUATOR_FILES["eval_cases"],
         "evaluator_programs": evaluator / "programs",
-        "evaluator_candidates": evaluator / "candidates",
+        "evaluator_asset_candidates": evaluator / "asset-candidates",
         "runtime_eval_cases": evaluator / "runtime-eval-cases",
         "skill_agent_runtime_eval_cases": evaluator / "runtime-eval-cases" / "skill-agent",
         "active_prompt_overlays": active_prompts_path(config),
@@ -81,7 +81,7 @@ def _required_dirs(layout: dict[str, Path]) -> list[Path]:
         layout["evaluator"],
         layout["evaluator_defaults"],
         layout["evaluator_programs"],
-        layout["evaluator_candidates"],
+        layout["evaluator_asset_candidates"],
         layout["runtime_eval_cases"],
         layout["prompt_candidates"],
         layout["prompt_candidate_sets"],
@@ -106,7 +106,8 @@ def _copy_default_assets(layout: dict[str, Path], *, overwrite: bool) -> list[st
         target = targets[key]
         if not source.exists():
             raise FileNotFoundError(f"default_evaluator_asset_missing:{source}")
-        if overwrite or not target.exists():
+        target_stale = target.exists() and _sha256_file(target) != _sha256_file(source)
+        if overwrite or not target.exists() or target_stale:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
             copied.append(key)
@@ -334,6 +335,22 @@ def run_setup(config: dict[str, Any], *, check: bool = False, reset: bool = Fals
         layout["active_evaluator"].parent.mkdir(parents=True, exist_ok=True)
         layout["active_evaluator"].write_text(_json_dumps(_build_active_pointer(layout)), encoding="utf-8")
         active_written = True
+    else:
+        active_pointer = _read_json_object(layout["active_evaluator"])
+        default_paths = {
+            "evaluator_path": str(layout["default_evaluator"]),
+            "rubric_path": str(layout["default_rubric"]),
+            "eval_cases_path": str(layout["default_eval_cases"]),
+        }
+        if (
+            isinstance(active_pointer, dict)
+            and all(str(active_pointer.get(key) or "") == value for key, value in default_paths.items())
+            and not _active_evaluator_pointer_ready(active_pointer)
+        ):
+            active_pointer["hashes"] = _default_hashes(layout)
+            active_pointer["updated_at"] = _now()
+            layout["active_evaluator"].write_text(_json_dumps(active_pointer), encoding="utf-8")
+            active_written = True
 
     prompt_overlay_result = materialize_default_prompt_overlays(config, force=bool(reset))
     install = _write_install_metadata(layout, reset=reset, copied_defaults=copied_defaults)

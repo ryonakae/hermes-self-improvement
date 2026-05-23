@@ -50,7 +50,7 @@ def test_skill_inventory_candidate_classifies_editable_and_reference_skills():
     assert inventory["editable_targets"] == ["alpha-workflow", "alpha-legacy"]
     assert inventory["reference_matches"] == ["alpha-builtin"]
     assert inventory["evidence_count"] == 4
-    assert "merge_skills" in inventory["recommended_actions"]
+    assert "merge" in inventory["recommended_actions"]
 
 
 def test_skill_inventory_candidate_recommends_archive_for_stale_singleton():

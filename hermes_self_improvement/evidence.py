@@ -362,7 +362,7 @@ def _skill_inventory_recommended_actions(group_kind: str, editable: list[str], r
         actions.append("no_mutation_target")
         return actions
     if kind in {"similar_skills", "near_duplicate_skills", "duplicate_skills"}:
-        actions.append("merge_skills")
+        actions.append("merge")
         if len(editable) >= 2:
             actions.append("mutate_skill")
     elif kind in {"stale_singleton", "stale_skill"}:
