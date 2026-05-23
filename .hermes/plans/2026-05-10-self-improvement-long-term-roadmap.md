@@ -38,7 +38,7 @@ The key product promise is not “make many changes.” It is:
 
 ## Current Position — 2026-05-10
 
-Overall: **about 8.4合目** (code-side; operational dogfood + final readiness report still pending).
+Overall: **about 8.6合目** (code-side; operational dogfood + final readiness report still pending).
 
 ### Strong areas
 
@@ -65,6 +65,18 @@ Overall: **about 8.4合目** (code-side; operational dogfood + final readiness r
   - Memory vs skill boundaries are explicit.
 
 ### Recently improved
+
+- Fixed constrained-agent routing for `provider: auto` / empty role model.
+  - Commit: `89e72c6 fix(self-improvement): resolve constrained agent auto model routing`
+  - Tool-using roles now resolve through Hermes main model routing before constructing `AIAgent`, avoiding provider errors such as `No models provided` being misreported as missing final responses.
+
+- Fixed dry-run/action accounting and coverage affordance consistency.
+  - Commit: `d38cca5 fix(self-improvement): clarify dry-run mutation previews`
+  - `mutate_skill_preview` now counts as actionable `apply`, and planner digest reconciles `no_existing_editable_skill_fit` when `coverage_fit` finds exact or partial existing coverage.
+
+- Dogfooded the corrected dry-run artifact as a real mutation.
+  - Artifact: `run-20260523T092544Z`
+  - Result: `safe-patch-usage` was patched through the official skill mutation path; summary reported `skill_changes: 1`, `action_summary.apply: 1`, and `block: 0`.
 
 - Fixed native editor tool-call history so provider no longer rejects with `No tool output found for function call`.
   - Commit: `9b4b1c6 fix(self-improvement): preserve native editor tool context`
@@ -167,7 +179,7 @@ Active hardening slice:
 
 ### Milestone 1 — Reliable mutation accounting and post-validation
 
-**Status:** active / next.
+**Status:** implemented / operationally validated.
 
 Goal: every skill/memory/overlay mutation should be recorded according to what actually happened, not what the LLM claimed.
 
@@ -179,8 +191,7 @@ Done:
 
 Remaining:
 
-- Validation errors include enough compact diagnostics — implemented for skill readback failure, intended skill patch/edit mismatch, and built-in memory no-state-change failures.
-- Report accepted/recovered/skipped/blocked distinctions clearly.
+- No known code-side blocker in this milestone. Continue observing scheduled runs for new validation/accounting failures.
 
 Implemented in current slice:
 
@@ -202,7 +213,7 @@ Exit criteria:
 
 ### Milestone 2 — Meaningful duplicate / existing coverage handling
 
-**Status:** partially implemented / expand.
+**Status:** implemented / operationally hardening.
 
 Goal: if a proposed new skill is already covered by an existing skill, record that as a useful no-op, not a generic rejection.
 
@@ -227,7 +238,7 @@ Implemented in current slice:
 
 ### Milestone 3 — Skill quality evaluator
 
-**Status:** planned.
+**Status:** implemented / operationally tuning.
 
 Goal: created/updated skills are reviewed for quality and evidence fit.
 
@@ -249,7 +260,7 @@ Exit criteria:
 
 ### Milestone 4 — Knowledge inventory beyond tool failures
 
-**Status:** partially implemented / expand.
+**Status:** implemented / operationally tuning.
 
 Goal: self-improvement should not be dominated by terminal/patch errors.
 
@@ -270,7 +281,7 @@ Exit criteria:
 
 ### Milestone 5 — Outcome and credit assignment
 
-**Status:** partially implemented / expand.
+**Status:** implemented / operationally observing.
 
 Goal: determine whether self-improvement changes actually helped.
 
@@ -292,7 +303,7 @@ Exit criteria:
 
 ### Milestone 6 — Reporting that prevents confusion
 
-**Status:** partially implemented / expand.
+**Status:** implemented / operationally observing.
 
 Goal: Ryo can read daily/CLI reports and know what happened without digging through JSON.
 
@@ -334,11 +345,11 @@ Exit criteria:
 
 ### Current Slice — Operational dogfood and final readiness
 
-**Status:** active / next. Recent hardening slices are implemented: constrained role tooling, pre-release role simplification, LLM model routing, and local skill lifecycle expansion have all passed focused/full validation. Remaining work is operational proof from scheduled maintenance windows and a final readiness report, not unfinished Task 10 implementation.
+**Status:** active / next. Recent hardening slices are implemented: constrained role tooling, pre-release role simplification, LLM model routing, local skill lifecycle expansion, constrained-agent auto-model routing, dry-run/action accounting, and coverage-affordance reconciliation have all passed focused/full validation. A mutating replay from `run-20260523T075149Z` produced `run-20260523T092544Z` and patched `safe-patch-usage` successfully. Remaining work is operational proof from scheduled maintenance windows and a final readiness report, not unfinished Task 10 implementation.
 
 Plan files: `2026-05-22-llm-model-routing-spec-and-memory-extractor.md`, `2026-05-22-pre-release-role-simplification.md`, and `2026-05-19_101746-local-skill-lifecycle-expansion.md`.
 
-Goal: observe the next scheduled `self-improvement-autonomous-maintenance` runs, verify actual mutation/no-op/overlay accounting remains understandable, and only add focused hardening fixes if dogfood reveals a concrete failure. Do not restart old completed constrained-agent or local-lifecycle implementation work from stale plan text.
+Goal: observe the next scheduled `self-improvement-autonomous-maintenance` runs, verify the fixed constrained-agent routing and action summary stay healthy in unattended cron output, verify actual mutation/no-op/overlay accounting remains understandable, and only add focused hardening fixes if dogfood reveals a concrete failure. Do not restart old completed constrained-agent or local-lifecycle implementation work from stale plan text.
 
 ### Slice A — Skill mutation post-validation readback
 

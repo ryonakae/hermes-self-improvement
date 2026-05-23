@@ -5,10 +5,14 @@
 As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`
-  - **Status:** active long-term source of truth.
-  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 7合目. The active milestone is deeper skill quality and knowledge inventory maintenance.
+  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, with operational dogfood and final readiness as the remaining source of truth.
+  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 8.6合目. The active work is scheduled-run dogfood, compact final readiness reporting, and small hardening fixes found by real runs.
 
 The current active hardening plans are:
+
+- Runtime dogfood fixes completed on 2026-05-23
+  - **Status:** implemented / awaiting next scheduled cron observation.
+  - Completed two concrete dogfood fixes after `run-20260523T075149Z`: constrained-agent `provider: auto` / empty model routing now resolves through Hermes main model routing before constructing `AIAgent`, and dry-run/action summaries now count `mutate_skill_preview` as actionable `apply` instead of swallowing it into `skip`. The planner digest also reconciles stale `maintenance_affordance.no_existing_editable_skill_fit` when `coverage_fit` finds exact/partial existing coverage. Validation: full suite `753 passed, 2 skipped`; mutating replay from the dry-run produced `run-20260523T092544Z` with `skill_changes: [safe-patch-usage]`.
 
 - `2026-05-22-llm-model-routing-spec-and-memory-extractor.md`
   - **Status:** implemented.
