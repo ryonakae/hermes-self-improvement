@@ -169,6 +169,18 @@ def _summary_counts(decisions: list[dict[str, Any]], candidate_count: int) -> di
     }
 
 
+def _coverage_adjusted_maintenance_affordance(affordance: dict[str, Any], coverage_fit: dict[str, Any]) -> dict[str, Any]:
+    adjusted = dict(affordance)
+    fit_kind = str(coverage_fit.get("kind") or "")
+    if fit_kind in {"exact_duplicate", "partial_overlap"}:
+        adjusted["no_existing_editable_skill_fit"] = False
+        adjusted["not_existing_skill_because"] = "existing editable skill coverage found"
+    elif fit_kind == "reference_only":
+        adjusted["no_existing_editable_skill_fit"] = True
+        adjusted["not_existing_skill_because"] = "only non-mutable reference skill coverage found"
+    return adjusted
+
+
 def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
     skill_ids = [str(item) for item in views.get("skill", [])]
@@ -393,7 +405,7 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
             "kind": item.get("kind"),
             "theme": item.get("theme") or coverage.get("gap_kind"),
             "count": item.get("count") or coverage.get("evidence_count"),
-            "maintenance_affordance": affordance,
+            "maintenance_affordance": _coverage_adjusted_maintenance_affordance(affordance, coverage_fit),
             "unresolved_reason": hint.get("unresolved_reason") or "no_existing_skill_fit",
             "coverage_fit": coverage_fit,
         })

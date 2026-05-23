@@ -1200,7 +1200,7 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
 def _semantic_action_from_runner_decision(decision: dict[str, Any], *, kind: str) -> str:
     raw = str(decision.get("decision") or "").strip()
     reason = str(decision.get("reason") or "").strip()
-    if raw in {"accepted", "create_skill_preview", "archive_skill_preview"}:
+    if raw in {"accepted", "mutate_skill_preview", "create_skill_preview", "archive_skill_preview"}:
         return "apply"
     if raw in {"defer", "deferred"} or reason.startswith("target_uncertain"):
         return "defer"

@@ -173,3 +173,17 @@ def test_run_replay_improve_keeps_non_mutation_ready_decisions_as_skips(tmp_path
     assert result["step_decisions"]["memory"]["decisions"][0]["decision"] == "skip"
     assert result["action_summary"]["skip"] == 2
     assert result["action_summary"]["block"] == 0
+
+
+def test_cli_action_summary_counts_mutate_skill_preview_as_apply():
+    import hermes_self_improvement.cli as cli
+
+    summary = cli._action_summary_from_result({}, {
+        "skill": {"decisions": [
+            {"decision": "mutate_skill_preview", "skill": "safe-patch-usage"},
+            {"decision": "skip", "skill": "timeout-workflow"},
+        ]},
+        "memory": {"decisions": []},
+    })
+
+    assert summary == {"apply": 1, "defer": 0, "skip": 1, "block": 0}

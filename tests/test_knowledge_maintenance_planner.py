@@ -78,6 +78,9 @@ def test_planner_digest_attaches_coverage_fit_to_maintenance_candidates():
     assert coverage_fit["kind"] == "partial_overlap"
     assert "local-patch-workflow" in coverage_fit["fit_skills"]
     assert coverage_fit["evidence_count"] == 4
+    affordance = maintenance_candidate["maintenance_affordance"]
+    assert affordance["no_existing_editable_skill_fit"] is False
+    assert affordance["not_existing_skill_because"] == "existing editable skill coverage found"
 
 
 def test_planner_digest_propagates_quality_signals_to_editable_skills():
