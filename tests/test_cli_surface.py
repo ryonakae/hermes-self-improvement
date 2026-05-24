@@ -294,6 +294,20 @@ def test_load_builtin_memory_entries_splits_compact_memory_files(tmp_path):
         },
     ]
 
+def test_load_builtin_memory_entries_preserves_multiline_old_text(tmp_path):
+    cli = load_cli_module()
+    memory_path = tmp_path / "MEMORY.md"
+    memory_path.write_text("First line.\nSecond line.\n§\nOther entry.\n", encoding="utf-8")
+
+    entries = cli._load_builtin_memory_entries({"memory": memory_path})
+
+    assert entries[0] == {
+        "target": "memory",
+        "text": "First line. Second line.",
+        "old_text": "First line.\nSecond line.",
+        "summary": "First line. Second line.",
+    }
+
 
 
 def test_run_improve_reconciles_memory_gap_adds_against_existing_memories(monkeypatch, tmp_path):
@@ -489,6 +503,27 @@ def test_improve_summary_reports_memory_agent_current_entry_visibility():
 
     assert "Memory improvements:" in text
     assert "- current entries visible to memory_agent: memory 14, user 6, omitted 8 (preview visibility)" in text
+
+
+def test_improve_summary_reports_memory_to_skill_migrations():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {"skill_changes": 0, "memory_changes": 0},
+        "step_decisions": {
+            "summary": {"total": 0},
+            "skill": {"planner": {"summary": {}}, "decisions": []},
+            "memory": {"decisions": []},
+            "memory_to_skill": {"decisions": [
+                {"decision": "memory_to_skill_preview", "skill_route": "operations", "reason": "dry_run_would_update_skill_then_remove_memory"},
+                {"decision": "defer", "skill_route": "", "reason": "memory_to_skill_missing_skill_route"},
+            ]},
+        },
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "- memory-to-skill migrations: applied 0, preview 1, deferred 1" in text
+    assert "- Would apply: 1, Deferred: 1, Skipped: 0, Blocked: 0" in text
 
 
 def test_improve_summary_reads_nested_skill_target_resolution_digest():

@@ -72,7 +72,7 @@ def _related_lookup_counts(memory_step: dict[str, Any]) -> dict[str, int]:
 def _semantic_action_from_decision(decision: dict[str, Any], *, kind: str) -> str:
     raw = str(decision.get("decision") or "")
     reason = str(decision.get("reason") or "")
-    if raw in {"mutate_skill_preview", "archive_skill_preview"}:
+    if raw in {"mutate_skill_preview", "archive_skill_preview", "memory_to_skill_preview"}:
         return "apply"
     if raw == "accepted":
         return "apply"
@@ -91,7 +91,7 @@ def _semantic_action_from_decision(decision: dict[str, Any], *, kind: str) -> st
 
 def _action_summary_from_steps(step_decisions: dict[str, Any]) -> dict[str, int]:
     counts = {"apply": 0, "defer": 0, "skip": 0, "block": 0}
-    for kind in ("skill", "memory"):
+    for kind in ("skill", "memory", "memory_to_skill"):
         step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
         for decision in step.get("decisions") or []:
             if not isinstance(decision, dict):
@@ -239,6 +239,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
             },
             "skill_lifecycle": skill_lifecycle,
             "memory": _compact_step("memory", step_decisions.get("memory")),
+            "memory_to_skill": _compact_step("memory_to_skill", step_decisions.get("memory_to_skill")),
             "evaluator": _compact_step("evaluator", step_decisions.get("evaluator")),
         },
         "next_actions": result.get("next_actions") if isinstance(result.get("next_actions"), list) else [],

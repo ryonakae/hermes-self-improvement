@@ -218,6 +218,45 @@ def test_run_memory_improvement_step_reports_agent_result_in_decisions():
     assert "result" in agent_block
 
 
+def test_run_memory_improvement_step_turns_memory_agent_skill_route_result_into_bridge_decision():
+    old_text = "Run `pytest tests -q` after editing."
+
+    class FakeBackend:
+        def run(self, prompt, task, config=None):
+            return {
+                "success": True,
+                "outcome": "skipped_superseded",
+                "decision": "convert_to_skill_proposal",
+                "skill_route": "operations",
+                "old_text": old_text,
+                "used_tools": [],
+                "changed_memories": [],
+                "removed_memories": [],
+                "verification_notes": ["route to skill"],
+                "rollback_hints": [],
+            }
+
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_placement_candidate(old_text=old_text)]),
+        config={"_memory_agent_backend": FakeBackend(), "_memory_current_entries": [{"target": "memory", "old_text": old_text}]},
+        mutate=True,
+    )
+
+    decision = result["decisions"][0]
+    assert decision["reason"] == "memory_convert_to_skill_update"
+    assert decision["skill_route"] == "operations"
+    assert decision["old_text"] == old_text
+    assert decision["operation"] == {
+        "operation": "memory_convert_to_skill_update",
+        "target": "skill",
+        "source_target": "memory",
+        "old_text": old_text,
+        "skill_route": "operations",
+        "content": old_text,
+        "reason": "memory_agent_convert_to_skill_proposal",
+    }
+
+
 def test_run_memory_improvement_step_previews_inventory_candidates_for_memory_agent():
     result = run_memory_improvement_step(
         evidence_pack=_pack([_inventory_candidate()]),

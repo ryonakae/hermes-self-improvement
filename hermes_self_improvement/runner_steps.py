@@ -655,13 +655,20 @@ def _normalize_inventory_operation(raw: dict[str, Any]) -> tuple[dict[str, Any] 
         }, None
     if op_name in {"convert_to_skill_update", "memory_convert_to_skill_update"}:
         content = str(raw.get("content") or raw.get("summary") or "").strip()
-        if _looks_sensitive_memory_text(content):
+        old_text = str(raw.get("old_text") or raw.get("current_claim") or "").strip()
+        source_target = str(raw.get("source_target") or raw.get("current_store") or raw.get("source") or "").strip()
+        if source_target not in {"memory", "user"}:
+            source_target = "memory"
+        if _looks_sensitive_memory_text(content) or _looks_sensitive_memory_text(old_text):
             return None, "memory_sensitive_text"
         normalized = {
             "operation": "memory_convert_to_skill_update",
             "target": "skill",
+            "source_target": source_target,
             "reason": _redact_text(str(raw.get("reason") or "procedural knowledge belongs in skill"), max_chars=240),
         }
+        if old_text:
+            normalized["old_text"] = old_text
         if raw.get("skill_route"):
             normalized["skill_route"] = _redact_text(str(raw.get("skill_route")), max_chars=120)
         if content:
@@ -1367,12 +1374,205 @@ def _memory_non_mutating_operation_decision(evidence_id: str, operation: dict[st
             "changed": False,
             "operation": operation,
         }
-        if operation.get("skill_route"):
-            decision["skill_route"] = operation.get("skill_route")
-        if operation.get("content"):
-            decision["content"] = operation.get("content")
+        for key in ("skill_route", "content", "old_text", "source_target"):
+            if operation.get(key):
+                decision[key] = operation.get(key)
         return decision
     return None
+
+
+def _memory_to_skill_candidates(memory_step: dict[str, Any], *, replay_preview_only: bool = False) -> list[dict[str, Any]]:
+    decisions = memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else []
+    candidates: list[dict[str, Any]] = []
+    for decision in decisions:
+        if not isinstance(decision, dict):
+            continue
+        is_preview = decision.get("decision") == "memory_to_skill_preview"
+        if replay_preview_only and not is_preview:
+            continue
+        if not is_preview and decision.get("suggested_route") != "skill" and decision.get("reason") != "memory_convert_to_skill_update":
+            continue
+        operation = decision.get("operation") if isinstance(decision.get("operation"), dict) else {}
+        if not is_preview and operation.get("operation") != "memory_convert_to_skill_update" and decision.get("reason") != "memory_convert_to_skill_update":
+            continue
+        candidates.append(decision)
+    return candidates
+
+
+def _memory_to_skill_value(decision: dict[str, Any], operation: dict[str, Any], key: str) -> str:
+    return str(operation.get(key) or decision.get(key) or "").strip()
+
+
+def _build_memory_to_skill_task(decision: dict[str, Any], *, config: dict[str, Any] | None = None) -> tuple[dict[str, Any] | None, dict[str, Any], str | None]:
+    operation = decision.get("operation") if isinstance(decision.get("operation"), dict) else {}
+    evidence_id = str(decision.get("evidence_id") or "")
+    skill_route = _memory_to_skill_value(decision, operation, "skill_route")
+    old_text = _memory_to_skill_value(decision, operation, "old_text")
+    content = _memory_to_skill_value(decision, operation, "content") or old_text
+    source_target = _memory_to_skill_value(decision, operation, "source_target") or _memory_to_skill_value(decision, operation, "source") or "memory"
+    if source_target not in {"memory", "user"}:
+        source_target = "memory"
+    base = {
+        "evidence_id": evidence_id,
+        "source_target": source_target,
+        "old_text": old_text,
+        "skill_route": skill_route,
+        "content": content,
+    }
+    if not skill_route:
+        return None, base, "memory_to_skill_missing_skill_route"
+    if not old_text:
+        return None, base, "memory_to_skill_old_text_missing"
+    stored_task = decision.get("task") if isinstance(decision.get("task"), dict) else None
+    if decision.get("decision") == "memory_to_skill_preview" and stored_task:
+        return stored_task, base, None
+    task = {
+        "type": "skill_agent_task",
+        "task_kind": "skill_improve",
+        "targets": {"primary_skill": skill_route},
+        "observed_problem": "Procedural reusable guidance is currently stored in built-in memory.",
+        "desired_outcome": "Move the reusable procedure into the target skill without broad rewrites.",
+        "suggested_focus": [content] if content else [],
+        "non_goals": [
+            "Do not remove or rewrite memory directly from the skill agent.",
+            "Do not edit unrelated skills.",
+            "Do not broaden the procedure beyond the memory entry evidence.",
+        ],
+        "evidence_ids": [evidence_id] if evidence_id else [],
+        "instructions": "Patch the target skill with the procedural guidance if it is not already covered. Return a non-mutating outcome if already covered or stale. Memory removal is handled only by the caller after validated skill success.",
+        "constraints": [
+            "Use only skills_list, skill_view, skill_manage.",
+            "Do not use terminal/file/git/direct filesystem tools.",
+            "Operate only on mutable local skills resolved by the plugin.",
+        ],
+        "expected_outcome": {"memory_removal_after_skill_success": True, "target_exists": True},
+        "verification_contract": {"checklist_required": True, "llm_verifier_required": False},
+    }
+    return task, base, None
+
+
+def _skill_result_has_validated_change(result: dict[str, Any], skill_route: str) -> bool:
+    if not result.get("success"):
+        return False
+    if str(result.get("outcome") or "") != "applied":
+        return False
+    changed = {str(name) for name in (result.get("changed_skills") or [])}
+    return skill_route in changed
+
+
+def _memory_to_skill_old_text_is_current(config: dict[str, Any], *, target: str, old_text: str) -> bool:
+    entries = config.get("_memory_current_entries") if isinstance(config.get("_memory_current_entries"), list) else []
+    if not entries:
+        return False
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("target") or "memory") == target and str(entry.get("old_text") or entry.get("text") or "") == old_text:
+            return True
+    return False
+
+
+def _memory_current_target_for_old_text(config: dict[str, Any] | None, old_text: str) -> str:
+    cfg = config or {}
+    entries = cfg.get("_memory_current_entries") if isinstance(cfg.get("_memory_current_entries"), list) else []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("old_text") or entry.get("text") or "") == old_text:
+            target = str(entry.get("target") or "memory")
+            if target in {"memory", "user"}:
+                return target
+    return "memory"
+
+
+def _memory_agent_skill_route_decision(*, result: dict[str, Any], memory_evidence: list[dict[str, Any]], config: dict[str, Any] | None) -> dict[str, Any] | None:
+    if result.get("decision") not in {"convert_to_skill_proposal", "memory_convert_to_skill_update"}:
+        return None
+    old_text = str(result.get("old_text") or "").strip()
+    skill_route = str(result.get("skill_route") or "").strip()
+    if not old_text or not skill_route:
+        return None
+    evidence_ids = [str(item.get("id") or "") for item in memory_evidence if isinstance(item, dict) and item.get("id")]
+    evidence_id = str(result.get("evidence_id") or result.get("candidate_id") or (evidence_ids[0] if len(evidence_ids) == 1 else "memory_agent_skill_route"))
+    content = str(result.get("content") or result.get("summary") or old_text).strip()
+    source_target = _memory_current_target_for_old_text(config, old_text)
+    operation = {
+        "operation": "memory_convert_to_skill_update",
+        "target": "skill",
+        "source_target": source_target,
+        "old_text": old_text,
+        "skill_route": skill_route,
+        "content": content,
+        "reason": "memory_agent_convert_to_skill_proposal",
+    }
+    return {
+        "evidence_id": evidence_id,
+        "decision": "skip",
+        "reason": "memory_convert_to_skill_update",
+        "suggested_route": "skill",
+        "changed": False,
+        "operation": operation,
+        "skill_route": skill_route,
+        "old_text": old_text,
+        "source_target": source_target,
+        "content": content,
+    }
+
+
+def apply_memory_to_skill_migrations(*, memory_step: dict[str, Any], config: dict[str, Any] | None = None, mutate: bool = False, replay_preview_only: bool = False) -> dict[str, Any]:
+    cfg = config or {}
+    candidates = _memory_to_skill_candidates(memory_step, replay_preview_only=replay_preview_only)
+    if not candidates:
+        return {"status": "no_candidates", "changed": 0, "changed_skills": [], "removed_memories": [], "decisions": []}
+    decisions: list[dict[str, Any]] = []
+    changed_skills: list[str] = []
+    removed_memories: list[str] = []
+    backend = cfg.get("_skill_agent_backend") if cfg.get("_skill_agent_backend") is not None else build_skill_agent_backend(cfg)
+    external_provider = _external_memory_provider(cfg)
+    for decision in candidates:
+        task, base, reject_reason = _build_memory_to_skill_task(decision, config=cfg)
+        common = {
+            "evidence_id": base.get("evidence_id"),
+            "source_target": base.get("source_target"),
+            "old_text": base.get("old_text"),
+            "skill_route": base.get("skill_route"),
+            "content": base.get("content"),
+        }
+        if reject_reason or task is None:
+            decisions.append({**common, "decision": "defer", "reason": reject_reason or "memory_to_skill_task_invalid", "changed": False})
+            continue
+        if not mutate:
+            decisions.append({**common, "decision": "memory_to_skill_preview", "reason": "dry_run_would_update_skill_then_remove_memory", "changed": False, "task": task})
+            continue
+        if not _memory_to_skill_old_text_is_current(cfg, target=str(base.get("source_target") or "memory"), old_text=str(base.get("old_text") or "")):
+            decisions.append({**common, "decision": "rejected", "reason": "memory_to_skill_old_text_not_current", "changed": False, "task": task})
+            continue
+        skill_result = run_skill_agent_task(task, config=cfg, backend=backend)
+        if not _skill_result_has_validated_change(skill_result, str(base.get("skill_route") or "")):
+            decisions.append({**common, "decision": "rejected", "reason": "memory_to_skill_skill_failed", "changed": False, "task": task, "skill_result": skill_result})
+            continue
+        skill_name = str(base.get("skill_route") or "")
+        if skill_name:
+            changed_skills.append(skill_name)
+        remove_operation = {"operation": "memory_delete", "target": str(base.get("source_target") or "memory"), "old_text": str(base.get("old_text") or "")}
+        context = build_memory_mutation_context(provider=external_provider, operation=remove_operation)
+        if not context.get("execution_enabled"):
+            decisions.append({**common, "decision": "rejected", "reason": (context.get("reasons") or ["memory_to_skill_memory_remove_not_executable"])[0], "changed": False, "task": task, "skill_result": skill_result, "memory_remove_context": context})
+            continue
+        remove_result = _execute_memory_context(context, cfg, operation=remove_operation, external_provider=external_provider)
+        if not remove_result.get("success"):
+            decisions.append({**common, "decision": "rejected", "reason": remove_result.get("error") or "memory_to_skill_memory_remove_failed", "changed": False, "task": task, "skill_result": skill_result, "memory_remove_result": remove_result})
+            continue
+        evidence_id = str(base.get("evidence_id") or "memory_to_skill")
+        removed_memories.append(evidence_id)
+        decisions.append({**common, "decision": "accepted", "reason": "memory_to_skill_completed", "changed": True, "task": task, "skill_result": skill_result, "memory_remove_result": remove_result})
+    return {
+        "status": "completed" if mutate else "preview",
+        "changed": len(removed_memories),
+        "changed_skills": sorted(set(changed_skills)),
+        "removed_memories": removed_memories,
+        "decisions": decisions,
+    }
 
 
 def run_memory_improvement_step(
@@ -1624,6 +1824,10 @@ def run_memory_improvement_step(
     )
     if memory_agent_block.get("status") == "completed":
         changed += int(memory_agent_block.get("changed") or 0)
+        memory_agent_result = memory_agent_block.get("result") if isinstance(memory_agent_block.get("result"), dict) else {}
+        skill_route_decision = _memory_agent_skill_route_decision(result=memory_agent_result, memory_evidence=memory_evidence, config=config)
+        if skill_route_decision is not None:
+            decisions.append(skill_route_decision)
 
     return {
         "status": "completed" if decisions else "no_memory_evidence",

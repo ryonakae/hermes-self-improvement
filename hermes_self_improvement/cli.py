@@ -37,6 +37,7 @@ from .runner_steps import (
     _execute_memory_context,
     _execute_memory_move_operation,
     _external_memory_provider,
+    apply_memory_to_skill_migrations,
     run_memory_improvement_step,
     run_skill_improvement_step,
 )
@@ -79,7 +80,7 @@ def _load_builtin_memory_entries(memory_paths: dict[str, Path], *, limit: int = 
                 continue
             entry_text = " ".join(lines)
             if entry_text:
-                entries.append({"target": target, "text": entry_text, "old_text": entry_text, "summary": entry_text})
+                entries.append({"target": target, "text": entry_text, "old_text": chunk, "summary": entry_text})
             if len(entries) >= limit:
                 return entries
     return entries
@@ -967,11 +968,16 @@ def run_improve(
     if memory_config.get("_memory_agent_backend") is None:
         memory_config["_memory_agent_backend"] = build_memory_agent_backend(config)
     memory_step = run_memory_improvement_step(evidence_pack=evidence_pack, config=memory_config, mutate=mutate)
+    memory_to_skill_config = dict(memory_config)
+    memory_to_skill_step = apply_memory_to_skill_migrations(memory_step=memory_step, config=memory_to_skill_config, mutate=mutate)
+    combined_skill_changes = sorted(set([*(skill_step.get("changed_skills") or []), *(memory_to_skill_step.get("changed_skills") or [])]))
+    combined_memory_changes = [*(memory_step.get("changed_memories") or []), *(memory_to_skill_step.get("removed_memories") or [])]
     step_decisions_payload = {
         "summary": decisions_summary,
         "proposals_considered": proposals,
         "skill": skill_step,
         "memory": memory_step,
+        "memory_to_skill": memory_to_skill_step,
         "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
     }
     action_summary = _action_summary_from_result({}, step_decisions_payload)
@@ -1011,11 +1017,11 @@ def run_improve(
             "blocked_count": int(action_summary.get("block") or 0),
         },
         "prompt_sources": skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {},
-        "skill_changes": skill_step.get("changed_skills") or [],
-        "memory_changes": memory_step.get("changed_memories") or [],
+        "skill_changes": combined_skill_changes,
+        "memory_changes": combined_memory_changes,
         "summary": {
-            "skill_changes": int(skill_step.get("changed") or 0),
-            "memory_changes": int(memory_step.get("changed") or 0),
+            "skill_changes": len(combined_skill_changes),
+            "memory_changes": len(combined_memory_changes),
             "scorer_evaluator_changed": bool(calibration.get("active_changed")),
             "dry_run": bool(dry_run),
         },
@@ -1093,10 +1099,21 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
             changed_memory_ids.append(str(decision.get("evidence_id") or "memory"))
         memory_decisions.append({**decision, "decision": "accepted" if changed else "rejected", "reason": result.get("error") or "memory_replay_completed", "changed": changed, "result": result})
 
+    memory_to_skill_source = steps.get("memory_to_skill") if isinstance(steps.get("memory_to_skill"), dict) else {}
+    replay_memory_config = dict(config)
+    replay_memory_config["_memory_current_entries"] = _load_builtin_memory_entries(_builtin_memory_paths(config))
+    replay_memory_config.setdefault("_hermes_home", str(get_hermes_home()))
+    memory_to_skill_step = apply_memory_to_skill_migrations(memory_step=memory_to_skill_source, config=replay_memory_config, mutate=True, replay_preview_only=True)
+    bridge_changed_skills = [str(name) for name in (memory_to_skill_step.get("changed_skills") or [])]
+    bridge_removed_memories = [str(item) for item in (memory_to_skill_step.get("removed_memories") or [])]
+
+    combined_changed_skills = sorted(set([*changed_skills, *bridge_changed_skills]))
+    combined_memory_ids = [*changed_memory_ids, *bridge_removed_memories]
     step_decisions_payload = {
         **steps,
         "skill": {**skill_source, "changed": len(set(changed_skills)), "changed_skills": sorted(set(changed_skills)), "decisions": skill_decisions},
         "memory": {**memory_source, "changed": len(changed_memory_ids), "changed_memories": changed_memory_ids, "decisions": memory_decisions},
+        "memory_to_skill": memory_to_skill_step,
     }
     action_summary = _action_summary_from_result({}, step_decisions_payload)
     run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
@@ -1109,12 +1126,12 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
         "source_dry_run_hash": _sha256_text(source_text),
         "step_decisions": step_decisions_payload,
         "action_summary": action_summary,
-        "skill_changes": sorted(set(changed_skills)),
-        "memory_changes": changed_memory_ids,
+        "skill_changes": combined_changed_skills,
+        "memory_changes": combined_memory_ids,
         "summary": {
             **(source.get("summary") if isinstance(source.get("summary"), dict) else {}),
-            "skill_changes": len(set(changed_skills)),
-            "memory_changes": len(changed_memory_ids),
+            "skill_changes": len(combined_changed_skills),
+            "memory_changes": len(combined_memory_ids),
             "dry_run": False,
         },
         "next_actions": [],
@@ -1202,7 +1219,7 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
 def _semantic_action_from_runner_decision(decision: dict[str, Any], *, kind: str) -> str:
     raw = str(decision.get("decision") or "").strip()
     reason = str(decision.get("reason") or "").strip()
-    if raw in {"accepted", "mutate_skill_preview", "create_skill_preview", "archive_skill_preview"}:
+    if raw in {"accepted", "mutate_skill_preview", "create_skill_preview", "archive_skill_preview", "memory_to_skill_preview"}:
         return "apply"
     if raw in {"defer", "deferred"} or reason.startswith("target_uncertain"):
         return "defer"
@@ -1226,7 +1243,7 @@ def _action_summary_from_result(result: dict[str, Any], step_decisions: dict[str
     counts = {"apply": int(provided.get("apply") or 0), "defer": int(provided.get("defer") or 0), "skip": int(provided.get("skip") or 0), "block": int(provided.get("block") or 0)}
     if any(counts.values()):
         return counts
-    for kind in ("skill", "memory"):
+    for kind in ("skill", "memory", "memory_to_skill"):
         step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
         for item in step.get("decisions") or []:
             if not isinstance(item, dict):
@@ -1249,6 +1266,10 @@ def _describe_decision_item(item: dict[str, Any], *, kind: str) -> str:
         if len(detail_text) > 80 or detail_text.count(" ") > 5:
             detail_text = str(item.get("decision") or "planned")
         return f"{target}: {detail_text}"
+    if kind == "memory_to_skill":
+        target = item.get("skill_route") or "skill"
+        detail = item.get("reason") or item.get("decision") or "memory_to_skill"
+        return f"memory_to_skill: {target}: {detail}"
     operation = item.get("operation") if isinstance(item.get("operation"), dict) else {}
     target = operation.get("target") or item.get("evidence_id") or "memory"
     op = operation.get("operation") or item.get("reason") or item.get("decision") or "memory"
@@ -1257,7 +1278,7 @@ def _describe_decision_item(item: dict[str, Any], *, kind: str) -> str:
 
 def _action_bucket_lines(step_decisions: dict[str, Any], *, limit: int = 3) -> list[str]:
     buckets: dict[str, list[str]] = {"apply": [], "defer": [], "skip": [], "block": []}
-    for kind in ("skill", "memory"):
+    for kind in ("skill", "memory", "memory_to_skill"):
         step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
         for item in step.get("decisions") or []:
             if not isinstance(item, dict):
@@ -1819,6 +1840,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     skill_decisions = skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "mutate_skill"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
+    memory_to_skill_step = step_decisions.get("memory_to_skill") if isinstance(step_decisions.get("memory_to_skill"), dict) else {}
+    memory_to_skill_decisions = [item for item in (memory_to_skill_step.get("decisions") or []) if isinstance(item, dict)]
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     planner_prompt = prompt_sources.get("improvement_planner") if isinstance(prompt_sources.get("improvement_planner"), dict) else {}
@@ -1897,6 +1920,10 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     raw_memory_agent = memory_step.get("memory_agent") if isinstance(memory_step, dict) else None
     memory_agent_block = raw_memory_agent if isinstance(raw_memory_agent, dict) else {}
     memory_current_entries_line = _memory_agent_current_entry_visibility_line(memory_agent_block)
+    memory_to_skill_applied = sum(1 for item in memory_to_skill_decisions if item.get("decision") == "accepted")
+    memory_to_skill_preview = sum(1 for item in memory_to_skill_decisions if item.get("decision") == "memory_to_skill_preview")
+    memory_to_skill_deferred = sum(1 for item in memory_to_skill_decisions if item.get("decision") in {"defer", "rejected"})
+    memory_to_skill_line = f"- memory-to-skill migrations: applied {memory_to_skill_applied}, preview {memory_to_skill_preview}, deferred {memory_to_skill_deferred}" if memory_to_skill_decisions else ""
     for decision in memory_step.get("decisions") or []:
         if isinstance(decision, dict):
             lookup = decision.get("related_memory_lookup") if isinstance(decision.get("related_memory_lookup"), dict) else {}
@@ -2002,6 +2029,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         "Memory improvements:",
         f"- changed {int(summary.get('memory_changes') or 0)} memories",
         *([memory_current_entries_line] if memory_current_entries_line else []),
+        *([memory_to_skill_line] if memory_to_skill_line else []),
         f"- related lookups: completed {lookup_counts['completed']}, unavailable {lookup_counts['unavailable']}, failed {lookup_counts['failed']}, skipped {lookup_counts['skipped']}",
         "Episodes:",
         f"- recorded {int(episodes.get('count') or 0)} episodes at {episodes.get('path') or 'n/a'}",
