@@ -48,6 +48,17 @@ def _compact_current_entries_for_memory_agent(entries: list[Any]) -> tuple[list[
     return compact, max(0, len(entries) - len(compact))
 
 
+def _current_entry_counts_by_target(entries: list[Any]) -> dict[str, int]:
+    counts = {"memory": 0, "user": 0}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        target = str(entry.get("target") or "").strip()
+        if target in counts:
+            counts[target] += 1
+    return {target: count for target, count in counts.items() if count}
+
+
 def _compact_inventory_entries(entries: list[Any]) -> list[dict[str, Any]]:
     compact: list[dict[str, Any]] = []
     for entry in entries[:4]:
@@ -201,17 +212,21 @@ def _dispatch_memory_agent(
         return {"status": "no_candidates"}
     candidate_counts = _memory_agent_candidate_counts(candidates)
     omitted_counts: dict[str, int] = {}
+    raw_current_entries = cfg.get("_memory_current_entries")
+    current_entries, current_entries_omitted = _compact_current_entries_for_memory_agent(
+        raw_current_entries if isinstance(raw_current_entries, list) else []
+    )
     if not mutate:
         return {
             "status": "preview",
             "candidate_count": len(candidates),
             "candidate_counts_by_kind": candidate_counts,
             "omitted_candidate_counts_by_kind": omitted_counts,
+            "current_entries_visible_count": len(current_entries),
+            "current_entries_omitted_count": current_entries_omitted,
+            "current_entries_count_by_target": _current_entry_counts_by_target(current_entries),
             "candidates": candidates,
         }
-    current_entries, current_entries_omitted = _compact_current_entries_for_memory_agent(
-        cfg.get("_memory_current_entries") if isinstance(cfg.get("_memory_current_entries"), list) else []
-    )
     task = {
         "type": "memory_agent_task",
         "task_kind": "memory_apply",

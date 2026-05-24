@@ -144,6 +144,43 @@ def test_run_memory_improvement_step_skips_memory_agent_dispatch_in_dry_run():
     assert result.get("memory_agent", {}).get("status") in {"preview", None}
 
 
+def test_memory_agent_preview_reports_current_entry_visibility_without_dispatch():
+    received_tasks: list[dict] = []
+
+    class FakeBackend:
+        def run(self, prompt, task, config=None):
+            received_tasks.append(task)
+            return _success_payload()
+
+    current_entries = [
+        {
+            "target": "memory",
+            "text": "Hermes runtime root is ~/.hermes.",
+            "old_text": "Hermes runtime root is ~/.hermes.",
+            "summary": "Hermes runtime root is ~/.hermes.",
+        },
+        {
+            "target": "user",
+            "text": "Ryo prefers concise reports.",
+            "old_text": "Ryo prefers concise reports.",
+            "summary": "Ryo prefers concise reports.",
+        },
+    ]
+
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_conversation_candidate()]),
+        config={"_memory_agent_backend": FakeBackend(), "_memory_current_entries": current_entries},
+        mutate=False,
+    )
+
+    assert received_tasks == []
+    agent_block = result["memory_agent"]
+    assert agent_block["status"] == "preview"
+    assert agent_block["current_entries_visible_count"] == 2
+    assert agent_block["current_entries_count_by_target"] == {"memory": 1, "user": 1}
+    assert agent_block["current_entries_omitted_count"] == 0
+
+
 def test_run_memory_improvement_step_does_not_invoke_memory_agent_for_skip_routing_hint():
     received_tasks: list[dict] = []
 

@@ -79,7 +79,7 @@ def _load_builtin_memory_entries(memory_paths: dict[str, Path], *, limit: int = 
                 continue
             entry_text = " ".join(lines)
             if entry_text:
-                entries.append({"target": target, "text": entry_text})
+                entries.append({"target": target, "text": entry_text, "old_text": entry_text, "summary": entry_text})
             if len(entries) >= limit:
                 return entries
     return entries
@@ -962,6 +962,8 @@ def run_improve(
     decisions_summary = _summarize_runner_decisions(proposals)
     skill_step = run_skill_improvement_step(evidence_pack=evidence_pack, config=config, mutate=mutate)
     memory_config = dict(config) if isinstance(config, dict) else {}
+    memory_config["_memory_current_entries"] = existing_memories
+    memory_config.setdefault("_hermes_home", str(get_hermes_home()))
     if memory_config.get("_memory_agent_backend") is None:
         memory_config["_memory_agent_backend"] = build_memory_agent_backend(config)
     memory_step = run_memory_improvement_step(evidence_pack=evidence_pack, config=memory_config, mutate=mutate)

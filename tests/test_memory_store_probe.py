@@ -7,9 +7,10 @@ from hermes_self_improvement.memory_store_probe import probe_builtin_memory_stor
 
 def test_memory_store_probe_finds_configured_builtin_memory_files(tmp_path):
     hermes_home = tmp_path / "hermes-home"
-    hermes_home.mkdir()
-    memory_file = hermes_home / "MEMORY.md"
-    user_file = hermes_home / "USER.md"
+    memories_dir = hermes_home / "memories"
+    memories_dir.mkdir(parents=True)
+    memory_file = memories_dir / "MEMORY.md"
+    user_file = memories_dir / "USER.md"
     memory_file.write_text("memory facts\n", encoding="utf-8")
     user_file.write_text("user facts\n", encoding="utf-8")
 
@@ -18,6 +19,21 @@ def test_memory_store_probe_finds_configured_builtin_memory_files(tmp_path):
     assert result["status"] == "validated"
     assert result["provider"] == "built-in"
     assert result["direct_restore_allowed"] is False
+    assert result["store_files"] == [str(memory_file.resolve()), str(user_file.resolve())]
+
+
+def test_memory_store_probe_does_not_require_root_level_memory_files(tmp_path):
+    hermes_home = tmp_path / "hermes-home"
+    memories_dir = hermes_home / "memories"
+    memories_dir.mkdir(parents=True)
+    memory_file = memories_dir / "MEMORY.md"
+    user_file = memories_dir / "USER.md"
+    memory_file.write_text("memory facts\n", encoding="utf-8")
+    user_file.write_text("user facts\n", encoding="utf-8")
+
+    result = probe_builtin_memory_store({"_hermes_home": str(hermes_home)})
+
+    assert result["status"] == "validated"
     assert result["store_files"] == [str(memory_file.resolve()), str(user_file.resolve())]
 
 

@@ -274,9 +274,24 @@ def test_load_builtin_memory_entries_splits_compact_memory_files(tmp_path):
     entries = cli._load_builtin_memory_entries({"memory": memory_path, "user": user_path})
 
     assert entries == [
-        {"target": "memory", "text": "Hermes runtime root is ~/.hermes."},
-        {"target": "memory", "text": "Temporary task progress should not be saved."},
-        {"target": "user", "text": "User prefers short progress updates."},
+        {
+            "target": "memory",
+            "text": "Hermes runtime root is ~/.hermes.",
+            "old_text": "Hermes runtime root is ~/.hermes.",
+            "summary": "Hermes runtime root is ~/.hermes.",
+        },
+        {
+            "target": "memory",
+            "text": "Temporary task progress should not be saved.",
+            "old_text": "Temporary task progress should not be saved.",
+            "summary": "Temporary task progress should not be saved.",
+        },
+        {
+            "target": "user",
+            "text": "User prefers short progress updates.",
+            "old_text": "User prefers short progress updates.",
+            "summary": "User prefers short progress updates.",
+        },
     ]
 
 

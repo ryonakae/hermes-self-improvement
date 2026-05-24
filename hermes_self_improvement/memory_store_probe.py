@@ -39,7 +39,7 @@ def _configured_store_files(config: dict[str, Any] | None, hermes_home: Path) ->
     if raw_files:
         values = raw_files if isinstance(raw_files, list) else [raw_files]
         return [Path(str(value)).expanduser() for value in values]
-    candidates = [hermes_home / "MEMORY.md", hermes_home / "USER.md"]
+    candidates = [hermes_home / "memories" / "MEMORY.md", hermes_home / "memories" / "USER.md"]
     return [path for path in candidates if path.exists()]
 
 

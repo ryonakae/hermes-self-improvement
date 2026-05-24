@@ -242,7 +242,14 @@ def execute_memory_tool_operation(tool_args: dict[str, Any], *, memory_fn: Calla
         return {"success": False, "error": f"memory_{action}_args_missing:content", "direct_fallback_used": False}
     if action in {"replace", "remove"} and not args.get("old_text"):
         return {"success": False, "error": f"memory_{action}_args_missing:old_text", "direct_fallback_used": False}
-    cfg = config if isinstance(config, dict) else None
+    cfg_input = config if isinstance(config, dict) else {}
+    memory_cfg = cfg_input.get("memory") if isinstance(cfg_input.get("memory"), dict) else {}
+    has_explicit_store = (
+        "_hermes_home" in cfg_input
+        or "_builtin_memory_store_files" in cfg_input
+        or bool(memory_cfg.get("store_files"))
+    )
+    cfg = cfg_input if has_explicit_store else None
     before_state = capture_builtin_memory_state(cfg) if cfg is not None else None
     fn = memory_fn or _load_memory_tool()
     try:
