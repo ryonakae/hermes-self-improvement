@@ -11,8 +11,8 @@ As of 2026-05-10, the long-term roadmap is:
 The current active hardening plans are:
 
 - `2026-05-24-built-in-memory-current-entries-and-placement-hygiene.md`
-  - **Status:** implemented through current-entry handoff / path-probe fix; bounded memory mutation dogfood still pending.
-  - Fixes the 2026-05-24 memory-side dogfood finding: built-in `USER.md` / `MEMORY.md` files exist under `$HERMES_HOME/memories/`, but the memory-agent artifact reported empty current entries. Implemented: loaded current entries are now passed into `run_memory_improvement_step()` with exact `old_text`, store probes use `$HERMES_HOME/memories/...`, dry-run preview reports current-entry visibility, and post-validation only hashes explicitly configured stores. Validation: full suite `759 passed, 2 skipped`; dry-run `run-20260524T064847Z` showed `current_entries_visible_count: 20` (`memory: 14`, `user: 6`, omitted 8) with memory-agent preview candidates still present.
+  - **Status:** implemented through current-entry handoff / path-probe fix / report visibility; bounded memory mutation dogfood still pending until a single low-risk operation appears.
+  - Fixes the 2026-05-24 memory-side dogfood finding: built-in `USER.md` / `MEMORY.md` files exist under `$HERMES_HOME/memories/`, but the memory-agent artifact reported empty current entries. Implemented: loaded current entries are now passed into `run_memory_improvement_step()` with exact `old_text`, store probes use `$HERMES_HOME/memories/...`, dry-run preview reports current-entry visibility, human summaries show the current-entry handoff line, and post-validation only hashes explicitly configured stores. Validation: full suite `759 passed, 2 skipped`; dry-run `run-20260524T064847Z` showed `current_entries_visible_count: 20` (`memory: 14`, `user: 6`, omitted 8) with memory-agent preview candidates still present and no single safe mutation selected.
 
 - Runtime dogfood fixes completed on 2026-05-23
   - **Status:** implemented / awaiting next scheduled cron observation.

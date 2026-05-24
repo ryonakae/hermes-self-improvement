@@ -1673,6 +1673,26 @@ def _memory_placement_summary_lines(decisions: list[dict[str, Any]]) -> list[str
     return lines
 
 
+def _memory_agent_current_entry_visibility_line(memory_agent: dict[str, Any]) -> str:
+    if not isinstance(memory_agent, dict):
+        return ""
+    visible = memory_agent.get("current_entries_visible_count")
+    if visible is None:
+        return ""
+    raw_counts = memory_agent.get("current_entries_count_by_target")
+    counts = raw_counts if isinstance(raw_counts, dict) else {}
+    parts: list[str] = []
+    for target in ("memory", "user"):
+        if target in counts:
+            parts.append(f"{target} {int(counts.get(target) or 0)}")
+    if not parts:
+        parts.append(str(int(visible or 0)))
+    omitted = int(memory_agent.get("current_entries_omitted_count") or 0)
+    parts.append(f"omitted {omitted}")
+    mode = "preview visibility" if memory_agent.get("status") == "preview" else "mutating backend task"
+    return f"- current entries visible to memory_agent: {', '.join(parts)} ({mode})"
+
+
 _UNRESOLVED_REASON_GROUPS = (
     ("insufficient evidence", (
         "insufficient_attached_evidence",
@@ -1874,6 +1894,9 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         reason = str(result_payload.get("outcome") or result_payload.get("error") or item.get("reason") or "unknown")
         skill_agent_stop_counts[reason] = skill_agent_stop_counts.get(reason, 0) + 1
     lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
+    raw_memory_agent = memory_step.get("memory_agent") if isinstance(memory_step, dict) else None
+    memory_agent_block = raw_memory_agent if isinstance(raw_memory_agent, dict) else {}
+    memory_current_entries_line = _memory_agent_current_entry_visibility_line(memory_agent_block)
     for decision in memory_step.get("decisions") or []:
         if isinstance(decision, dict):
             lookup = decision.get("related_memory_lookup") if isinstance(decision.get("related_memory_lookup"), dict) else {}
@@ -1978,6 +2001,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- archive candidates {archive_skill_count}, would archive {would_archive}, archived {archived}, references rewritten {rewritten_references}, deferred references {deferred_references}, blocked {blocked_archive}",
         "Memory improvements:",
         f"- changed {int(summary.get('memory_changes') or 0)} memories",
+        *([memory_current_entries_line] if memory_current_entries_line else []),
         f"- related lookups: completed {lookup_counts['completed']}, unavailable {lookup_counts['unavailable']}, failed {lookup_counts['failed']}, skipped {lookup_counts['skipped']}",
         "Episodes:",
         f"- recorded {int(episodes.get('count') or 0)} episodes at {episodes.get('path') or 'n/a'}",

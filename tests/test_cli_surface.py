@@ -466,6 +466,31 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "ledger" not in text.lower()
 
 
+def test_improve_summary_reports_memory_agent_current_entry_visibility():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {"skill_changes": 0, "memory_changes": 0},
+        "step_decisions": {
+            "summary": {"total": 0},
+            "skill": {"planner": {"summary": {}}, "decisions": []},
+            "memory": {
+                "decisions": [],
+                "memory_agent": {
+                    "status": "preview",
+                    "current_entries_visible_count": 20,
+                    "current_entries_count_by_target": {"memory": 14, "user": 6},
+                    "current_entries_omitted_count": 8,
+                },
+            },
+        },
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Memory improvements:" in text
+    assert "- current entries visible to memory_agent: memory 14, user 6, omitted 8 (preview visibility)" in text
+
+
 def test_improve_summary_reads_nested_skill_target_resolution_digest():
     cli = load_cli_module()
     text = cli._render_improve_summary({

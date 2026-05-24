@@ -24,7 +24,7 @@ Implemented on 2026-05-24 through Tasks 1, 2, 3, and 3.5:
 - `cli._load_builtin_memory_entries()` now emits `text`, exact `old_text`, and `summary` for each built-in memory entry.
 - `cli.run_improve()` passes those entries into `run_memory_improvement_step()` as `_memory_current_entries` and sets explicit `_hermes_home` for post-validation.
 - `memory_store_probe` fallback now uses `$HERMES_HOME/memories/MEMORY.md` and `$HERMES_HOME/memories/USER.md`.
-- dry-run memory-agent preview now reports current-entry visibility counts without dispatching the backend.
+- dry-run memory-agent preview now reports current-entry visibility counts without dispatching the backend, and human summaries render the same visibility line under `Memory improvements:`.
 - mutation post-validation now hashes only explicitly configured built-in stores, preventing unit-test fake memory tools from validating against the operator’s real runtime by accident.
 
 Validation:
@@ -36,8 +36,8 @@ Validation:
 
 Remaining follow-up:
 
-- Bounded mutating memory dogfood is intentionally not run from this implementation session; run it only after a dry-run presents a single low-risk tool-mediated memory operation.
-- Report rendering can still be improved to show current-entry visibility in the human text report, but the JSON artifact now contains the proof data.
+- Bounded mutating memory dogfood is intentionally not run from this implementation session; the latest dry-run had broad preview candidates and no single low-risk tool-mediated memory operation.
+- Report rendering now shows current-entry visibility in the human text report, while the JSON artifact remains the proof source.
 
 ---
 
