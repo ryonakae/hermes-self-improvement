@@ -10,6 +10,14 @@ As of 2026-05-10, the long-term roadmap is:
 
 The current active hardening plans are:
 
+- `2026-05-24-memory-hygiene-simplification-and-doc-alignment.md`
+  - **Status:** implemented / reviewed / validated.
+  - Follow-up to the USER/MEMORY current-entry and memory-to-skill work. Aligns prompt/docs with official USER/MEMORY/Skill boundaries, removes stale remove-before-add overlay guidance, stops over-filtering placement candidates before `memory_agent`, surfaces memory-agent mutations in decisions/summaries/episodes, and splits the built-in memory read-path refactor into a separate proof plan. Validation: focused suite `131 passed`; full suite `779 passed, 2 skipped`; `git diff --check` ok; `hermes self-improvement status` ok; `improve --dry-run --json` produced `run-20260524T162647Z`; Codex blocker review PASS.
+
+- `2026-05-24-built-in-memory-read-path-proof.md`
+  - **Status:** planned / deferred proof.
+  - Read-only proof for replacing the custom built-in memory `§` parser with an official `MemoryStore`/current-entry source after the hygiene simplification lands. No mutation behavior changes are included in the simplification slice.
+
 - `2026-05-24-memory-to-skill-safe-migration.md`
   - **Status:** implemented / reviewed / validated.
   - Adds the missing bridge for official memory hygiene: procedural reusable guidance detected in built-in memory becomes a skill patch candidate, and the source `USER.md` / `MEMORY.md` entry is removed only after the skill mutation succeeds and the current exact `old_text` still matches. Independent review requested tighter artifact schema, deterministic replay, validated skill success before memory removal, broader RED tests, memory-agent proposal handoff, and partial skill-change reporting; those changes are implemented. Validation: `python -m pytest -q` => `776 passed, 2 skipped`; `git diff --check` ok; `hermes self-improvement status` ok; final Codex blocker review: no blockers found.

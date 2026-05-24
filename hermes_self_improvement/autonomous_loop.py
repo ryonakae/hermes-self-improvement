@@ -39,6 +39,8 @@ ACTIONS = {
     "skill_create",
     "memory_add",
     "memory_replace",
+    "memory_remove",
+    "memory_agent",
     "prompt_overlay_promote",
     "no_op",
 }
@@ -48,6 +50,8 @@ MUTATION_CAPABLE_ACTIONS = {
     "skill_patch",
     "memory_add",
     "memory_replace",
+    "memory_remove",
+    "memory_agent",
     "prompt_overlay_promote",
 }
 PROMPT_SOURCE_HASH_FIELDS = ("target_resolver_prompt_hash", "improvement_planner_prompt_hash", "skill_agent_prompt_hash", "memory_agent_prompt_hash", "evaluator_hash")

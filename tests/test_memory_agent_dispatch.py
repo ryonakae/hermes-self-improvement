@@ -203,7 +203,7 @@ def test_run_memory_improvement_step_does_not_invoke_memory_agent_for_skip_routi
 def test_run_memory_improvement_step_reports_agent_result_in_decisions():
     class FakeBackend:
         def run(self, prompt, task, config=None):
-            return _success_payload(changed=["m1", "m2"])
+            return _success_payload(changed=["m1", "m2"], removed=["m2", "m3"])
 
     candidates = [_conversation_candidate("m1"), _conversation_candidate("m2")]
     result = run_memory_improvement_step(
@@ -214,8 +214,15 @@ def test_run_memory_improvement_step_reports_agent_result_in_decisions():
 
     agent_block = result["memory_agent"]
     assert agent_block["status"] == "completed"
-    assert agent_block["changed"] >= 1
-    assert "result" in agent_block
+    assert agent_block["changed"] == 3
+    assert agent_block["result"]["changed_memories"] == ["m1", "m2"]
+    assert result["changed"] == 3
+    assert result["changed_memories"] == ["m1", "m2", "m3"]
+    agent_decisions = [decision for decision in result["decisions"] if decision.get("result_source") == "memory_agent"]
+    assert [decision["evidence_id"] for decision in agent_decisions] == ["m1", "m2", "m3"]
+    assert all(decision["decision"] == "accepted" and decision["changed"] for decision in agent_decisions)
+    assert agent_decisions[0]["operation"] == {"operation": "memory_agent", "target": "memory"}
+    assert agent_decisions[-1]["operation"] == {"operation": "memory_agent_remove", "target": "memory"}
 
 
 def test_run_memory_improvement_step_turns_memory_agent_skill_route_result_into_bridge_decision():
@@ -337,22 +344,34 @@ def test_run_memory_improvement_step_previews_suspicious_placement_candidates_fo
     assert handed["suggested_route"] == "placement_review"
 
 
-def test_run_memory_improvement_step_keeps_plain_placement_candidate_out_of_memory_agent():
+def test_run_memory_improvement_step_previews_plain_user_preference_placement_candidates_for_memory_agent():
     result = run_memory_improvement_step(
-        evidence_pack=_pack([_placement_candidate(old_text="Ryo prefers concise reports.", current_store="user")]),
+        evidence_pack=_pack([_placement_candidate(old_text="Ryo prefers concise reports.", current_store="memory")]),
         config={"_memory_agent_backend": object()},
         mutate=False,
     )
 
-    assert result["memory_agent"]["status"] == "no_candidates"
-    assert result["decisions"] == [{
-        "evidence_id": "memory_place_1",
-        "decision": "skip",
-        "reason": "keep_current_user",
-        "suggested_route": "none",
-        "changed": False,
-        "operation": {"operation": "memory_keep", "target": "user", "reason": "planner omitted existing placement candidate; keep current store"},
-    }]
+    agent_block = result["memory_agent"]
+    assert agent_block["status"] == "preview"
+    assert agent_block["candidate_counts_by_kind"] == {"memory_placement_candidate": 1}
+    handed = agent_block["candidates"][0]
+    assert handed["current_store"] == "memory"
+    assert handed["placement_text"] == "Ryo prefers concise reports."
+
+
+def test_run_memory_improvement_step_previews_plain_environment_fact_placement_candidates_for_memory_agent():
+    result = run_memory_improvement_step(
+        evidence_pack=_pack([_placement_candidate(old_text="Hermes runtime root is ~/.hermes.", current_store="user")]),
+        config={"_memory_agent_backend": object()},
+        mutate=False,
+    )
+
+    agent_block = result["memory_agent"]
+    assert agent_block["status"] == "preview"
+    assert agent_block["candidate_counts_by_kind"] == {"memory_placement_candidate": 1}
+    handed = agent_block["candidates"][0]
+    assert handed["current_store"] == "user"
+    assert handed["placement_text"] == "Hermes runtime root is ~/.hermes."
 
 
 def test_memory_agent_preview_hands_off_all_prefiltered_candidates_without_per_kind_cap():

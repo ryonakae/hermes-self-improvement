@@ -78,3 +78,13 @@ def test_materialize_default_prompt_overlays_refreshes_stale_base_hash(tmp_path)
     overlay = load_active_prompt_overlay(cfg, role="improvement_planner", base_hash=base_prompt_hash("improvement_planner"))
     assert overlay is not None
     assert overlay["source"] == "default_seed"
+
+
+def test_memory_agent_overlay_uses_add_before_remove_for_store_moves():
+    text = (DEFAULT_PROMPT_SEED_DIR / "memory_agent.md").read_text(encoding="utf-8")
+
+    assert "remove` then `add" not in text
+    assert "add the compact entry to the destination first" in text
+    assert "remove the source" in text
+    assert "destination add succeeds" in text
+    assert "convert_to_skill_proposal" in text

@@ -292,6 +292,10 @@ def _memory_action(operation: dict[str, Any], *, executed: bool) -> str:
         return "memory_add"
     if op in {"replace", "memory_replace"}:
         return "memory_replace"
+    if op in {"remove", "memory_remove", "memory_agent_remove"}:
+        return "memory_remove"
+    if op == "memory_agent":
+        return "memory_agent"
     return "no_op"
 
 

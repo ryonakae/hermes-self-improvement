@@ -136,26 +136,16 @@ def _environment_fact_agent_candidate_from_evidence(item: dict[str, Any]) -> dic
     }
 
 
-def _placement_text_needs_memory_agent(text: str) -> bool:
-    lowered = str(text or "").lower()
-    if "```" in text or "`" in text:
-        return True
-    if re.search(r"(^|\s)(run|execute|pytest|curl|hermes|git|python|npm|pnpm|docker)\b", lowered):
-        return True
-    if re.search(r"(~?/|/[A-Za-z0-9_.-]|\b[A-Z][A-Z0-9_]{2,}\b|\.(sock|json|ya?ml|md|py)\b)", text):
-        return True
-    return False
-
-
 def _memory_placement_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
     inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
     text = str(inventory.get("old_text") or inventory.get("summary") or "").strip()
-    if not text or not _placement_text_needs_memory_agent(text):
+    current_store = str(inventory.get("current_store") or "").strip()
+    if not text or current_store not in {"memory", "user"}:
         return None
     return {
         "candidate_id": item.get("id"),
         "candidate_kind": "memory_placement_candidate",
-        "current_store": str(inventory.get("current_store") or ""),
+        "current_store": current_store,
         "placement_text": _redact_text(text, max_chars=360),
         "allowed_recommendations": [str(value) for value in (inventory.get("allowed_recommendations") if isinstance(inventory.get("allowed_recommendations"), list) else [])[:6]],
         "suggested_route": "placement_review",
@@ -244,9 +234,48 @@ def _dispatch_memory_agent(
         "candidate_counts_by_kind": candidate_counts,
         "omitted_candidate_counts_by_kind": omitted_counts,
         "current_entries_omitted_count": current_entries_omitted,
-        "changed": len(result.get("changed_memories") or []) if result.get("success") else 0,
+        "changed": len(_unique_nonempty_strings(list(result.get("changed_memories") or []) + list(result.get("removed_memories") or []))) if result.get("success") else 0,
         "result": result,
     }
+
+
+def _unique_nonempty_strings(values: list[Any]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        unique.append(text)
+    return unique
+
+
+def _memory_agent_result_decisions(memory_agent_result: dict[str, Any]) -> list[dict[str, Any]]:
+    decisions: list[dict[str, Any]] = []
+    for memory_id in _unique_nonempty_strings(list(memory_agent_result.get("changed_memories") or [])):
+        decisions.append({
+            "evidence_id": memory_id,
+            "decision": "accepted",
+            "reason": "memory_agent_applied",
+            "changed": True,
+            "operation": {"operation": "memory_agent", "target": "memory"},
+            "result_source": "memory_agent",
+        })
+    existing = {decision["evidence_id"] for decision in decisions}
+    for memory_id in _unique_nonempty_strings(list(memory_agent_result.get("removed_memories") or [])):
+        if memory_id in existing:
+            continue
+        decisions.append({
+            "evidence_id": memory_id,
+            "decision": "accepted",
+            "reason": "memory_agent_removed",
+            "changed": True,
+            "operation": {"operation": "memory_agent_remove", "target": "memory"},
+            "result_source": "memory_agent",
+        })
+    return decisions
+
 
 
 MEMORY_SECRET_MARKERS = ("api_key", "apikey", "token", "password", "secret", "credential", "private_key")
@@ -1823,18 +1852,27 @@ def run_memory_improvement_step(
         mutate=mutate,
     )
     if memory_agent_block.get("status") == "completed":
-        changed += int(memory_agent_block.get("changed") or 0)
         memory_agent_result = memory_agent_block.get("result") if isinstance(memory_agent_block.get("result"), dict) else {}
+        decisions.extend(_memory_agent_result_decisions(memory_agent_result))
         skill_route_decision = _memory_agent_skill_route_decision(result=memory_agent_result, memory_evidence=memory_evidence, config=config)
         if skill_route_decision is not None:
             decisions.append(skill_route_decision)
+    elif memory_agent_block.get("status") in {"skipped_no_backend", "no_candidates"}:
+        for item in memory_evidence:
+            evidence_id = str(item.get("id") or "")
+            if any(decision.get("evidence_id") == evidence_id for decision in decisions):
+                continue
+            if item.get("kind") in {"memory_inventory_candidate", "memory_placement_candidate"}:
+                decisions.append({"evidence_id": evidence_id, **_memory_non_operation_route(item)})
+
+    changed_memory_ids = _unique_nonempty_strings([decision.get("evidence_id") for decision in decisions if decision.get("changed")])
 
     return {
         "status": "completed" if decisions else "no_memory_evidence",
         "external_provider": external_provider,
         "provider": external_provider or "built-in",
-        "changed": changed,
-        "changed_memories": [str(decision.get("evidence_id")) for decision in decisions if decision.get("changed")],
+        "changed": len(changed_memory_ids),
+        "changed_memories": changed_memory_ids,
         "decisions": decisions,
         "memory_agent": memory_agent_block,
     }

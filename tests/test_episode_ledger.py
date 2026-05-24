@@ -277,3 +277,38 @@ def test_record_run_episodes_preserves_archive_skill_decision(tmp_path):
     assert episode["lifecycle_after"] == "archived"
     assert episode["executed"] is True
     assert episode["changed"] is True
+
+
+def test_record_run_episodes_treats_memory_agent_decision_as_executed_memory_change(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = sample_run_result(tmp_path)
+    result["dry_run"] = False
+    result["execute"] = True
+    result["step_decisions"]["memory"] = {
+        "decisions": [
+            {
+                "evidence_id": "mem-agent-1",
+                "decision": "accepted",
+                "reason": "memory_agent_applied",
+                "changed": True,
+                "operation": {"operation": "memory_agent", "target": "memory"},
+                "result_source": "memory_agent",
+            },
+            {
+                "evidence_id": "mem-agent-removed",
+                "decision": "accepted",
+                "reason": "memory_agent_removed",
+                "changed": True,
+                "operation": {"operation": "memory_agent_remove", "target": "memory"},
+                "result_source": "memory_agent",
+            },
+        ]
+    }
+
+    record_run_episodes(config=config, run_result=result)
+
+    by_target = {item["target_id"]: item for item in load_recent_episodes(config=config, limit=10)}
+    assert by_target["memory:mem-agent-1"]["episode_kind"] == "executed_mutation"
+    assert by_target["memory:mem-agent-1"]["action"] == "memory_agent"
+    assert by_target["memory:mem-agent-1"]["changed"] is True
+    assert by_target["memory:mem-agent-removed"]["action"] == "memory_remove"

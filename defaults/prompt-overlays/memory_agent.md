@@ -17,7 +17,7 @@ Use this overlay as the practical editing guide for tool-mediated memory mutatio
 - For `replace`, use the exact `old_text` substring from `current_entries`. Keep the new content compact and factual.
 - For `remove`, target stale or duplicate entries with their exact `old_text`. Do not remove user preferences unless they are clearly obsolete.
 - Do not broaden the planner-handed scope or merge unrelated facts.
-- To move an entry between `memory` and `user`, run `remove` then `add` with the new target.
+- To move an entry between `memory` and `user`, add the compact entry to the destination first, then remove the source with exact `old_text` only after the destination add succeeds. If the destination add fails, keep the source unchanged.
 
 ## When to skip
 
@@ -34,8 +34,9 @@ Return a non-mutating outcome (`skipped_superseded`, `stopped_stale_target`, `st
 When `memory` returns `memory_capacity_exceeded`:
 
 - Inspect `current_entries` for the stalest or most duplicative entry.
-- Issue `memory(action="remove", target=<store>, old_text=<exact>)` first.
-- Retry the original `add` once after the removal succeeds. If it still fails, stop with `stopped_conflict` and record the capacity context in `verification_notes`.
+- For placement moves, free capacity only in the destination store; never remove the source entry to make room.
+- Issue `memory(action="remove", target=<destination store>, old_text=<exact stale entry>)` only for stale or duplicate destination entries.
+- Retry the original destination `add` once after the destination cleanup succeeds. If it still fails, keep the source unchanged and stop with `stopped_conflict`.
 
 ## Output contract
 

@@ -5,9 +5,19 @@ from hermes_self_improvement.prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK, s
 
 
 def test_shared_skill_memory_classification_block_is_single_source():
-    assert "Memory is factual" in SKILL_MEMORY_CLASSIFICATION_BLOCK
-    assert "Skills are procedural" in SKILL_MEMORY_CLASSIFICATION_BLOCK
-    assert "sticky note" in SKILL_MEMORY_CLASSIFICATION_BLOCK
+    text = SKILL_MEMORY_CLASSIFICATION_BLOCK
+
+    assert "USER" in text
+    assert "preferences" in text
+    assert "communication" in text
+    assert "MEMORY" in text
+    assert "environment facts" in text
+    assert "project conventions" in text
+    assert "Skills" in text
+    assert "procedural" in text
+    assert "workflows" in text
+    assert "Memory is factual" not in text
+    assert "user preferences, environment facts" not in text
     assert skill_memory_classification_context()["classification_guidance"] == SKILL_MEMORY_CLASSIFICATION_BLOCK
 
 

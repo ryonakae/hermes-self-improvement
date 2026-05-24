@@ -8,11 +8,13 @@ from .markdown_artifacts import render_candidate_markdown, render_evidence_markd
 
 PROMPT_SCHEMA_VERSION = "1.0"
 
-SKILL_MEMORY_CLASSIFICATION_BLOCK = """Memory is factual “what” knowledge: compact key facts, user preferences, environment facts, project locations, stable corrections, sticky-note-sized facts injected every session.
+SKILL_MEMORY_CLASSIFICATION_BLOCK = """USER is user-profile knowledge: preferences, communication style, expectations, stable personal details, and recurring working habits.
 
-Skills are procedural “how” knowledge: multi-step workflows, tool-specific instructions, reusable recipes, pitfalls, verification steps, and reference-document-sized guidance loaded on demand.
+MEMORY is the agent's operational notes: environment facts, project conventions, paths, tool/runtime quirks, and stable lessons learned that should be injected every session.
 
-If it belongs on a sticky note, prefer memory. If it belongs in a reference document or repeatable recipe, prefer skill."""
+Skills are procedural how-to knowledge: multi-step workflows, tool-specific instructions, reusable recipes, pitfalls, verification steps, and reference-document-sized guidance loaded on demand.
+
+If it is about the person, prefer USER. If it is about the environment or operating facts, prefer MEMORY. If it is a repeatable procedure, prefer Skill."""
 
 TARGET_RESOLVER_SYSTEM_PROMPT = (
     "You are resolving Hermes self-improvement observation targets. Return JSON only. "
