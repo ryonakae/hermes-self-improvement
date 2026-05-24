@@ -94,6 +94,29 @@ def test_validate_memory_agent_task_rejects_missing_memory_tool_constraint():
     assert "constraint_missing_memory_tool" in result["reasons"]
 
 
+def test_native_memory_agent_prompt_preserves_move_before_source_remove_order():
+    seen = {}
+
+    def fake_run_constrained(*, role, system_message, user_message, config, **kwargs):
+        seen["role"] = role
+        seen["system_message"] = system_message
+        return {"final_response": json.dumps(success_result())}
+
+    backend = NativeMemoryAgentBackend(
+        tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **kwargs: {"success": True}, source="test"),
+        constrained_agent_runner=fake_run_constrained,
+        limits=MemoryAgentBackendLimits(max_tool_calls=3, timeout_seconds=10),
+    )
+
+    result = backend.run("prompt", task(), config={})
+
+    assert result["success"] is True
+    assert seen["role"] == "memory_agent"
+    assert "make room in the destination" in seen["system_message"]
+    assert "only remove the source after the destination add succeeds" in seen["system_message"]
+    assert "same target" in seen["system_message"]
+
+
 def test_build_memory_agent_prompt_mentions_memory_tool_and_skill_classification():
     prompt = build_memory_agent_prompt(task())
     assert "memory (action add|replace|remove" in prompt

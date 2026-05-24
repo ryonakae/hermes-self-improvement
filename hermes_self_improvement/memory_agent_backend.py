@@ -260,7 +260,8 @@ class NativeMemoryAgentBackend:
             "Read Markdown briefs as judgment context, not as a machine protocol. "
             "For each candidate, decide whether to add, replace, remove, or skip; route procedural reusable guidance back to skill by setting decision=\"convert_to_skill_proposal\" in the final JSON. "
             "Use exact old_text from current_entries for replace/remove. Use add only for genuinely new facts. "
-            "If a memory add fails with memory_capacity_exceeded, remove a stale entry then retry add. "
+            "For USER.md <-> MEMORY.md placement moves, first make room in the destination if needed, then add to the destination, and only remove the source after the destination add succeeds. "
+            "If a memory add fails with memory_capacity_exceeded, remove or replace a stale entry in the same target then retry add; do not remove the source entry as a capacity workaround before the destination add succeeds. "
             "If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and finish with the appropriate non-mutating outcome. "
             "Final response must be a JSON object with success, outcome, changed_memories, removed_memories, verification_notes, and rollback_hints."
         )

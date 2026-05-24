@@ -412,6 +412,41 @@ def test_memory_inventory_move_dry_run_does_not_mutate():
     assert result["decisions"][0]["reason"] == "dry_run_would_execute_memory_tool"
 
 
+def test_memory_inventory_move_compacts_destination_before_removing_source():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        if args == {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."} and len(calls) == 1:
+            return {"success": False, "error": "memory_capacity_exceeded", "current_entries": [{"target": "memory", "old_text": "obsolete MEMORY entry"}]}
+        return {"success": True, "changed": True}
+
+    config = {
+        "_memory_inventory_planner_fn": lambda evidence, config=None: [{
+            "evidence_id": "mem-inv-1",
+            "operation": "move_user_to_memory",
+            "old_text": "Hermes runtime root is ~/.hermes.",
+            "content": "Hermes runtime root is ~/.hermes.",
+            "reason": "environment fact belongs in MEMORY",
+        }],
+        "_memory_capacity_planner_fn": lambda **kwargs: [
+            {"action": "remove", "target": kwargs["target"], "old_text": "obsolete MEMORY entry"}
+        ],
+        "_memory_tool_fn": fake_memory,
+    }
+
+    result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config=config, mutate=True)
+
+    assert result["changed"] == 1
+    assert calls == [
+        {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."},
+        {"action": "remove", "target": "memory", "old_text": "obsolete MEMORY entry"},
+        {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."},
+        {"action": "remove", "target": "user", "old_text": "Hermes runtime root is ~/.hermes."},
+    ]
+    assert result["decisions"][0]["result"]["add_result"]["capacity_recovery"]["compaction_changed"] == 1
+
+
 def test_memory_capacity_recovery_records_placement_options_and_uses_fallback_after_compaction():
     calls = []
 
