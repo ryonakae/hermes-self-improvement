@@ -283,7 +283,7 @@ def build_target_resolution_digest(
     }
 
 
-TARGET_RESOLVER_SYSTEM = (
+PLANNER_TARGET_SYSTEM = (
     "You are resolving Hermes self-improvement observation targets. Return JSON only: "
     "{\"resolutions\":[{\"candidate_id\":str,"
     "\"resolution_kind\":\"attach_existing_skill|mutate_memory|unresolved|skip_noise\","
@@ -311,8 +311,8 @@ def _planner_targets_system_with_overlay(config: dict[str, Any] | None = None) -
         overlay = load_active_prompt_overlay(config, role="planner", base_hash=base_prompt_hash("planner"))
     addendum = _overlay_addendum(overlay)
     if addendum:
-        return f"{TARGET_RESOLVER_SYSTEM}\n\nRuntime-private operating guidance:\n{addendum}", overlay
-    return TARGET_RESOLVER_SYSTEM, overlay
+        return f"{PLANNER_TARGET_SYSTEM}\n\nRuntime-private operating guidance:\n{addendum}", overlay
+    return PLANNER_TARGET_SYSTEM, overlay
 
 
 def build_planner_targets_prompt(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> str:

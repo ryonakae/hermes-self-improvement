@@ -37,6 +37,11 @@ FORBIDDEN_ACTIVE_TERMS = {
     _term("human", "_review"): "use defer/manual_planner_review naming",
     _term("bin/hermes", "-self", "-improve"): "use hermes self-improvement",
     _term("reports/", "self", "-improvement"): "use self-improvement runtime root",
+    _term("improvement", "_planner"): "use planner naming",
+    _term("skill", "_agent"): "use editor naming",
+    _term("memory", "_agent"): "use editor naming",
+    _term("target", "_resolver"): "use planner naming",
+    _term("memory", "_extractor"): "use planner naming",
 }
 
 

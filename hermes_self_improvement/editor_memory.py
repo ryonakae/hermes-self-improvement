@@ -5,52 +5,52 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .editor_backend_memory import (
-    ALLOWED_MEMORY_AGENT_TOOLS,
-    MemoryAgentBackend,
-    normalize_memory_agent_outcome,
+    ALLOWED_MEMORY_EDITOR_TOOLS,
+    MemoryEditorBackend,
+    normalize_memory_editor_outcome,
 )
 from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
 
-MEMORY_AGENT_TASK_TYPES = {"memory_apply", "memory_curate"}
+MEMORY_EDITOR_TASK_TYPES = {"memory_apply", "memory_curate"}
 
-Backend = Callable[[str, dict[str, Any], dict[str, Any] | None], dict[str, Any] | str] | MemoryAgentBackend
+Backend = Callable[[str, dict[str, Any], dict[str, Any] | None], dict[str, Any] | str] | MemoryEditorBackend
 
 
-class MemoryAgentError(ValueError):
+class MemoryEditorError(ValueError):
     """Raised when a semantic memory-agent task is invalid or unsafe."""
 
 
 @dataclass(frozen=True)
-class MemoryAgentRunner:
+class MemoryEditorRunner:
     """Small interface around a bounded memory-only agent backend.
 
     The default runner has no backend so it fails closed instead of falling
     back to direct filesystem or unrelated tools. Tests and the Hermes-native
-    runtime inject the real backend via build_memory_agent_backend.
+    runtime inject the real backend via build_memory_editor_backend.
     """
 
     backend: Backend | None = None
 
     def build_prompt(self, task: dict[str, Any]) -> str:
-        return build_memory_agent_prompt(task)
+        return build_memory_editor_prompt(task)
 
     def run(self, task: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
-        validation = validate_memory_agent_task(task, config=config)
+        validation = validate_memory_editor_task(task, config=config)
         if validation.get("status") != "ok":
-            return {"success": False, "error": "invalid_memory_agent_task", "reasons": validation.get("reasons") or []}
+            return {"success": False, "error": "invalid_memory_editor_task", "reasons": validation.get("reasons") or []}
         prompt = self.build_prompt(task)
         if self.backend is None:
             return {
                 "success": False,
-                "error": "memory_agent_unavailable",
-                "reasons": ["bounded_memory_agent_backend_unavailable"],
+                "error": "memory_editor_unavailable",
+                "reasons": ["bounded_memory_editor_backend_unavailable"],
                 "prompt": prompt,
             }
         if hasattr(self.backend, "run"):
             raw = self.backend.run(prompt, task, config)  # type: ignore[union-attr]
         else:
             raw = self.backend(prompt, task, config)  # type: ignore[operator]
-        parsed = parse_memory_agent_result(raw)
+        parsed = parse_memory_editor_result(raw)
         if not parsed.get("success"):
             return parsed
         tool_check = validate_reported_tools(parsed)
@@ -59,12 +59,12 @@ class MemoryAgentRunner:
         return parsed
 
 
-def validate_memory_agent_task(task: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def validate_memory_editor_task(task: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
     reasons: list[str] = []
-    if task.get("type") != "memory_agent_task":
-        reasons.append("type_not_memory_agent_task")
+    if task.get("type") != "memory_editor_task":
+        reasons.append("type_not_memory_editor_task")
     task_kind = str(task.get("task_kind") or "")
-    if task_kind not in MEMORY_AGENT_TASK_TYPES:
+    if task_kind not in MEMORY_EDITOR_TASK_TYPES:
         reasons.append("task_kind_unsupported")
     if not isinstance(task.get("candidates"), list) or not task.get("candidates"):
         reasons.append("candidates_missing_or_empty")
@@ -78,7 +78,7 @@ def validate_memory_agent_task(task: dict[str, Any], *, config: dict[str, Any] |
     return {"status": "failed" if reasons else "ok", "reasons": reasons}
 
 
-def build_memory_agent_prompt(task: dict[str, Any]) -> str:
+def build_memory_editor_prompt(task: dict[str, Any]) -> str:
     task_kind = str(task.get("task_kind") or "")
     constraints = task.get("constraints") if isinstance(task.get("constraints"), list) else []
     semantic_fields = {
@@ -127,22 +127,22 @@ All candidates are hints, not tool instructions.
 """ + "\n".join(f"- {item}" for item in constraints)
 
 
-def parse_memory_agent_result(raw: dict[str, Any] | str) -> dict[str, Any]:
+def parse_memory_editor_result(raw: dict[str, Any] | str) -> dict[str, Any]:
     if isinstance(raw, str):
-        return {"success": False, "error": "memory_agent_result_text_unsupported"}
+        return {"success": False, "error": "memory_editor_result_text_unsupported"}
     parsed = raw
     if not isinstance(parsed, dict):
-        return {"success": False, "error": "memory_agent_result_not_object"}
+        return {"success": False, "error": "memory_editor_result_not_object"}
     if not isinstance(parsed.get("success"), bool):
-        return {"success": False, "error": "memory_agent_result_missing_success"}
+        return {"success": False, "error": "memory_editor_result_missing_success"}
     if not parsed.get("success"):
         return parsed
-    outcome_error = normalize_memory_agent_outcome(parsed)
+    outcome_error = normalize_memory_editor_outcome(parsed)
     if outcome_error:
         return outcome_error
     for key in ("used_tools", "changed_memories", "removed_memories", "verification_notes", "rollback_hints"):
         if key not in parsed or not isinstance(parsed.get(key), list):
-            return {"success": False, "error": f"memory_agent_result_{key}_missing"}
+            return {"success": False, "error": f"memory_editor_result_{key}_missing"}
     return parsed
 
 
@@ -150,10 +150,10 @@ def validate_reported_tools(result: dict[str, Any]) -> dict[str, Any]:
     reasons: list[str] = []
     for entry in result.get("used_tools") or []:
         tool = entry.get("tool") if isinstance(entry, dict) else entry
-        if str(tool) not in ALLOWED_MEMORY_AGENT_TOOLS:
+        if str(tool) not in ALLOWED_MEMORY_EDITOR_TOOLS:
             reasons.append(f"disallowed_tool:{tool}")
     return {"status": "failed" if reasons else "ok", "reasons": reasons}
 
 
-def run_memory_agent_task(task: dict[str, Any], *, config: dict[str, Any] | None = None, backend: Backend | None = None) -> dict[str, Any]:
-    return MemoryAgentRunner(backend=backend).run(task, config=config)
+def run_memory_editor_task(task: dict[str, Any], *, config: dict[str, Any] | None = None, backend: Backend | None = None) -> dict[str, Any]:
+    return MemoryEditorRunner(backend=backend).run(task, config=config)

@@ -13,7 +13,7 @@ from .native_tool_harness import (
 )
 from .role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
-ALLOWED_MEMORY_AGENT_TOOLS = frozenset({"memory"})
+ALLOWED_MEMORY_EDITOR_TOOLS = frozenset({"memory"})
 ALLOWED_MEMORY_ACTIONS = {"add", "replace", "remove"}
 ALLOWED_MEMORY_TARGETS = {"memory", "user"}
 NON_MUTATING_AGENT_OUTCOMES = {
@@ -24,7 +24,7 @@ NON_MUTATING_AGENT_OUTCOMES = {
 }
 
 
-def normalize_memory_agent_outcome(result: dict[str, Any]) -> dict[str, Any] | None:
+def normalize_memory_editor_outcome(result: dict[str, Any]) -> dict[str, Any] | None:
     outcome = str(result.get("outcome") or "applied")
     if outcome == "changed":
         result["outcome"] = "applied"
@@ -36,16 +36,16 @@ def normalize_memory_agent_outcome(result: dict[str, Any]) -> dict[str, Any] | N
         result["reported_outcome"] = outcome
         result["outcome"] = "applied"
         return None
-    return {"success": False, "error": "memory_agent_result_invalid_outcome", "outcome": outcome}
+    return {"success": False, "error": "memory_editor_result_invalid_outcome", "outcome": outcome}
 
 
 @dataclass(frozen=True)
-class MemoryAgentBackendLimits:
+class MemoryEditorBackendLimits:
     max_tool_calls: int = 12
     timeout_seconds: int = 45
 
     @classmethod
-    def from_config(cls, config: dict[str, Any] | None = None) -> "MemoryAgentBackendLimits":
+    def from_config(cls, config: dict[str, Any] | None = None) -> "MemoryEditorBackendLimits":
         mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
         model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
         model_memory = model.get("editor") if isinstance(model.get("editor"), dict) else {}
@@ -63,7 +63,7 @@ class MemoryAgentBackendLimits:
         return {"status": "failed" if reasons else "ok", "reasons": reasons}
 
 
-class MemoryAgentBackend(Protocol):
+class MemoryEditorBackend(Protocol):
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any] | str:
         ...
 
@@ -163,7 +163,7 @@ def _memory_tool_schema(name: str, description: str, properties: dict[str, Any],
     }
 
 
-def native_memory_agent_tool_schemas() -> list[dict[str, Any]]:
+def native_memory_editor_tool_schemas() -> list[dict[str, Any]]:
     return [
         _memory_tool_schema(
             "memory",
@@ -180,26 +180,26 @@ def native_memory_agent_tool_schemas() -> list[dict[str, Any]]:
 
 
 
-def validate_memory_agent_success_result(result: dict[str, Any]) -> dict[str, Any]:
+def validate_memory_editor_success_result(result: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(result.get("success"), bool):
-        return {"success": False, "error": "memory_agent_result_missing_success"}
+        return {"success": False, "error": "memory_editor_result_missing_success"}
     if not result.get("success"):
         return result
-    outcome_error = normalize_memory_agent_outcome(result)
+    outcome_error = normalize_memory_editor_outcome(result)
     if outcome_error:
         return outcome_error
     for key in ("used_tools", "changed_memories", "removed_memories", "verification_notes", "rollback_hints"):
         if key not in result or not isinstance(result.get(key), list):
-            return {"success": False, "error": f"memory_agent_result_{key}_missing"}
+            return {"success": False, "error": f"memory_editor_result_{key}_missing"}
     return result
 
 
 
 @dataclass
-class NativeMemoryAgentBackend:
+class NativeMemoryEditorBackend:
     tool_executor: MemoryToolExecutor
     constrained_agent_runner: Callable[..., dict[str, Any]] | None = None
-    limits: MemoryAgentBackendLimits = field(default_factory=MemoryAgentBackendLimits)
+    limits: MemoryEditorBackendLimits = field(default_factory=MemoryEditorBackendLimits)
 
     def _run_constrained_agent(self, *, user_context: str, system_message: str, config: dict[str, Any] | None) -> dict[str, Any]:
         runner = self.constrained_agent_runner
@@ -213,16 +213,16 @@ class NativeMemoryAgentBackend:
             max_iterations=self.limits.max_tool_calls + 2,
         )
         if not isinstance(result, dict):
-            return {"success": False, "error": "memory_agent_constrained_result_invalid"}
+            return {"success": False, "error": "memory_editor_constrained_result_invalid"}
         final_response = str(result.get("final_response") or "").strip()
         if not final_response:
-            return {"success": False, "error": "memory_agent_constrained_final_response_missing"}
+            return {"success": False, "error": "memory_editor_constrained_final_response_missing"}
         try:
             parsed = json.loads(final_response)
         except json.JSONDecodeError:
-            return {"success": False, "error": "memory_agent_constrained_final_response_not_json"}
+            return {"success": False, "error": "memory_editor_constrained_final_response_not_json"}
         if not isinstance(parsed, dict):
-            return {"success": False, "error": "memory_agent_constrained_final_response_not_object"}
+            return {"success": False, "error": "memory_editor_constrained_final_response_not_object"}
         final = dict(parsed)
         raw_tool_trace = result.get("tool_trace")
         tool_trace = raw_tool_trace if isinstance(raw_tool_trace, list) else []
@@ -231,14 +231,14 @@ class NativeMemoryAgentBackend:
         mutation_intents = [entry for entry in tool_trace if isinstance(entry, dict) and entry.get("tool") == "memory"]
         if mutation_intents:
             final["mutation_intents"] = list(mutation_intents)
-        return validate_memory_agent_success_result(final)
+        return validate_memory_editor_success_result(final)
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
         limit_check = self.limits.check()
         if limit_check.get("status") != "ok":
-            return {"success": False, "error": "memory_agent_limits_invalid", "reasons": limit_check.get("reasons") or []}
+            return {"success": False, "error": "memory_editor_limits_invalid", "reasons": limit_check.get("reasons") or []}
         if not self.tool_executor.available():
-            return {"success": False, "error": "memory_agent_unavailable", "reasons": [self.tool_executor.unavailable_reason or "memory_tool_registry_unavailable"]}
+            return {"success": False, "error": "memory_editor_unavailable", "reasons": [self.tool_executor.unavailable_reason or "memory_tool_registry_unavailable"]}
         task_manifest = {
             "task_kind": task.get("task_kind"),
             "target": task.get("target"),
@@ -269,16 +269,16 @@ class NativeMemoryAgentBackend:
 
 
 @dataclass
-class UnavailableMemoryAgentBackend:
+class UnavailableMemoryEditorBackend:
     reason: str
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
-        return {"success": False, "error": self.reason if self.reason.startswith("memory_agent_") else "memory_agent_unavailable", "reasons": [self.reason], "prompt": prompt}
+        return {"success": False, "error": self.reason if self.reason.startswith("memory_editor_") else "memory_editor_unavailable", "reasons": [self.reason], "prompt": prompt}
 
 
-def build_memory_agent_backend(config: dict[str, Any] | None = None) -> MemoryAgentBackend:
-    if isinstance(config, dict) and (config.get("_memory_agent_backend") is not None or config.get("_editor_backend") is not None):
-        backend = config.get("_memory_agent_backend") if config.get("_memory_agent_backend") is not None else config.get("_editor_backend")
+def build_memory_editor_backend(config: dict[str, Any] | None = None) -> MemoryEditorBackend:
+    if isinstance(config, dict) and (config.get("_memory_editor_backend") is not None or config.get("_editor_backend") is not None):
+        backend = config.get("_memory_editor_backend") if config.get("_memory_editor_backend") is not None else config.get("_editor_backend")
         if hasattr(backend, "run"):
             return backend
         if callable(backend):
@@ -289,20 +289,20 @@ def build_memory_agent_backend(config: dict[str, Any] | None = None) -> MemoryAg
     mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
     enabled = bool(mutation.get("enabled", True))
     if not enabled:
-        return UnavailableMemoryAgentBackend("memory_agent_backend_disabled")
+        return UnavailableMemoryEditorBackend("memory_editor_backend_disabled")
     executor = resolve_memory_tool_executor(config)
     from .constrained_agent import run_constrained_role_agent
-    return NativeMemoryAgentBackend(
+    return NativeMemoryEditorBackend(
         tool_executor=executor,
         constrained_agent_runner=run_constrained_role_agent,
-        limits=MemoryAgentBackendLimits.from_config(config),
+        limits=MemoryEditorBackendLimits.from_config(config),
     )
 
 
-def memory_agent_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
+def memory_editor_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
     if bool(mutation.get("enabled", True)) is False:
-        return {"configured": "disabled", "available": False, "reason": "memory_agent_backend_disabled"}
+        return {"configured": "disabled", "available": False, "reason": "memory_editor_backend_disabled"}
     executor = resolve_memory_tool_executor(config)
     readiness = check_memory_tool_executor_readiness(executor)
     if not readiness.get("available"):

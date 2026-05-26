@@ -39,7 +39,7 @@ ACTIONS = {
     "memory_add",
     "memory_replace",
     "memory_remove",
-    "memory_agent",
+    "memory_editor",
     "editor",
     "prompt_overlay_promote",
     "no_op",
@@ -51,7 +51,7 @@ MUTATION_CAPABLE_ACTIONS = {
     "memory_add",
     "memory_replace",
     "memory_remove",
-    "memory_agent",
+    "memory_editor",
     "editor",
     "prompt_overlay_promote",
 }
@@ -68,7 +68,7 @@ FORBIDDEN_LARGE_CONTEXT_FIELDS = {
     "system_prompt",
     "user_prompt",
     "candidate_prompt",
-    "skill_agent_instructions_full",
+    "skill_editor_instructions_full",
     "large_payload",
 }
 

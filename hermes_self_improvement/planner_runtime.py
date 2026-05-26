@@ -451,7 +451,7 @@ def build_planner_runtime_digest(evidence_pack: dict[str, Any]) -> dict[str, Any
         "unmatched_evidence": {"count": len(unmatched), "by_reason": by_reason, "examples": unmatched[:10]},
         "constraints": {
             "mutable_targets_only": True,
-            "skill_agent_tools_only": ["skills_list", "skill_view", "skill_manage"],
+            "skill_editor_tools_only": ["skills_list", "skill_view", "skill_manage"],
             "defer_for": [],
             "defer_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge"],
         },
@@ -486,7 +486,7 @@ def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
                 "priority": "medium",
                 "risk": "low",
                 "change_intent": "address attached self-improvement evidence",
-                "skill_agent_instructions": "Inspect the skill and apply a small, reusable procedural improvement only if the attached evidence still fits this skill.",
+                "skill_editor_instructions": "Inspect the skill and apply a small, reusable procedural improvement only if the attached evidence still fits this skill.",
                 "evidence_ids": evidence_ids,
                 "rationale": f"{len(evidence_ids)} attached evidence item(s) matched this mutable Curator candidate, including strong/medium evidence.",
             })
@@ -588,7 +588,7 @@ def _normalize_create_skill_decision(
         "priority": str(raw.get("priority") or "medium") if str(raw.get("priority") or "medium") in ALLOWED_PRIORITIES else "medium",
         "risk": str(raw.get("risk") or "medium") if str(raw.get("risk") or "medium") in ALLOWED_RISKS else "medium",
     }
-    for key, max_chars in (("reason", 240), ("rationale", 600), ("change_intent", 280), ("skill_agent_instructions", 900)):
+    for key, max_chars in (("reason", 240), ("rationale", 600), ("change_intent", 280), ("skill_editor_instructions", 900)):
         if raw.get(key) is not None:
             normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
     if isinstance(raw.get("non_goals"), list):
@@ -680,7 +680,7 @@ def _normalize_decision(
     if raw.get("rationale") is not None:
         normalized["rationale"] = _redacted_preview(raw.get("rationale"), max_chars=600)
     if decision == "mutate_skill":
-        for key, max_chars in (("change_intent", 280), ("skill_agent_instructions", 900), ("editor_instructions", 900)):
+        for key, max_chars in (("change_intent", 280), ("skill_editor_instructions", 900), ("editor_instructions", 900)):
             if raw.get(key) is not None:
                 normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
     elif decision == "archive_skill":
@@ -697,7 +697,7 @@ def _normalize_decision(
         if raw.get("change_intent") is not None:
             normalized["change_intent"] = _redacted_preview(raw.get("change_intent"), max_chars=280)
     else:
-        notes = raw.get("notes") or raw.get("change_intent") or raw.get("skill_agent_instructions")
+        notes = raw.get("notes") or raw.get("change_intent") or raw.get("skill_editor_instructions")
         if notes is not None:
             normalized["notes"] = _redacted_preview(notes, max_chars=360)
     if forced_skip_reason:
@@ -885,7 +885,7 @@ def build_planner_runtime_quality_report(
         "unmatched_by_reason": unmatched.get("by_reason") if isinstance(unmatched.get("by_reason"), dict) else {},
         "mutate_skill_count": len(selected),
         "selected_with_evidence": sum(1 for item in selected if item.get("evidence_ids")),
-        "action_like_skips": sum(1 for item in skipped if item.get("change_intent") or item.get("skill_agent_instructions")),
+        "action_like_skips": sum(1 for item in skipped if item.get("change_intent") or item.get("skill_editor_instructions")),
         "mutate_memory_count": sum(1 for item in planner_decisions if item.get("decision") == "mutate_memory"),
         "calibrate_evaluator_count": sum(1 for item in planner_decisions if item.get("decision") == "calibrate_evaluator"),
         "hint_attached_evidence_count": len(hint_attached_evidence_ids),
@@ -901,7 +901,7 @@ def build_planner_runtime_quality_report(
         "cluster_evidence_count": len(cluster_evidence_ids),
         "cluster_attached_candidate_count": len(cluster_attached_candidates),
         "cluster_selected_count": cluster_selected_count,
-        "skill_agent_task_count": len(prompt_lengths),
+        "skill_editor_task_count": len(prompt_lengths),
         "editor_prompt_chars": {
             "min": min(prompt_lengths) if prompt_lengths else 0,
             "max": max(prompt_lengths) if prompt_lengths else 0,

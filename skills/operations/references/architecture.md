@@ -57,16 +57,16 @@ LLM judgment is split by role and permission boundary, not by one generic auxili
 |---|---|---|---|
 | `planner` | `model.planner` | `skills_list`, `skill_view` only | Hermes constrained agent |
 | `editor` | `model.editor` | official skill tools + official memory tool/provider | Hermes constrained agent |
-| `memory_extractor` | `model.memory_extractor` | tool-free | Hermes auxiliary LLM call with host-prepared conversation/memory context |
+| `planner_memory` | `model.planner_memory` | tool-free | Hermes auxiliary LLM call with host-prepared conversation/memory context |
 | DSPy evaluator scoring / GEPA prompt optimization | `model.evaluator` | tool-free | DSPy/GEPA through the Hermes auxiliary LM bridge |
 
-`provider: auto` with an empty `model` means the plugin does not pin a concrete model and lets Hermes use its normal auto/main routing. `memory_extractor` only proposes normalized memory-gap candidates; it does not mutate memory. Memory changes remain owned by editor through the official memory tool.
+`provider: auto` with an empty `model` means the plugin does not pin a concrete model and lets Hermes use its normal auto/main routing. `planner_memory` only proposes normalized memory-gap candidates; it does not mutate memory. Memory changes remain owned by editor through the official memory tool.
 
 GEPA / DSPy are not live proposal scorers. They belong to `calibrate`, where they improve runtime-private evaluator, prompt, and rubric artifacts for later planner and agent runs. Scoring remains advisory and never grants mutation permission.
 
 ## Improve pipeline and editor
 
-`improve` runs skill and memory changes as `evidence builder -> planner / memory_extractor -> editor`. The planner receives a compact redacted digest of mutable skill candidates, memory candidates, target-resolution metadata, evidence ids/previews, and unmatched evidence counts. Planner decisions are `mutate_skill`, `archive_skill`, `create_skill`, `mutate_memory`, `calibrate_evaluator`, `skip`, or `defer`. Skill patch/merge semantics are represented by `decision: "mutate_skill"` plus `maintenance_action: "patch" | "merge"`.
+`improve` runs skill and memory changes as `evidence builder -> planner / planner_memory -> editor`. The planner receives a compact redacted digest of mutable skill candidates, memory candidates, target-resolution metadata, evidence ids/previews, and unmatched evidence counts. Planner decisions are `mutate_skill`, `archive_skill`, `create_skill`, `mutate_memory`, `calibrate_evaluator`, `skip`, or `defer`. Skill patch/merge semantics are represented by `decision: "mutate_skill"` plus `maintenance_action: "patch" | "merge"`.
 
 Dry-run executes planning and writes the planner payload plus digest into the run artifact, but does not execute the editor. Mutating runs send `mutate_skill` decisions to editor with bounded editor instructions and selected `evidence_ids`, and send `mutate_memory` decisions to editor through the official memory tool path. Planner fallback remains deterministic and evidence-attached; weak-only evidence does not grant mutation permission.
 

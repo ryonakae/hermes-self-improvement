@@ -322,7 +322,7 @@ def make_planner_memory_candidate(
     item = {
         "id": candidate_id or "mem_gap_" + _sha256_text(json.dumps(payload, ensure_ascii=False, sort_keys=True))[:12],
         "kind": "memory_gap_candidate",
-        "source": "memory_extractor",
+        "source": "planner_memory",
         "likely_targets": [{"target": "memory", "weight": 0.9}],
         "memory": normalized,
         "context_windows": context_windows[:5],
@@ -355,7 +355,7 @@ def build_planner_memory_digest(
     }
 
 
-MEMORY_EXTRACTOR_SYSTEM = (
+PLANNER_MEMORY_SYSTEM = (
     "Extract durable Hermes memory candidates from conversation windows. Return JSON only: "
     "{\"candidates\":[{\"candidate_id\":str,\"target\":\"user|memory\","
     "\"candidate_fact\":str,\"old_text\":str,\"confidence\":\"low|medium|high\",\"relation_to_existing\":str,\"reason\":str}]}. "
@@ -365,7 +365,7 @@ MEMORY_EXTRACTOR_SYSTEM = (
 
 def build_planner_memory_messages(digest: dict[str, Any]) -> list[dict[str, Any]]:
     return [
-        {"role": "system", "content": MEMORY_EXTRACTOR_SYSTEM},
+        {"role": "system", "content": PLANNER_MEMORY_SYSTEM},
         {"role": "user", "content": json.dumps(digest, ensure_ascii=False, sort_keys=True)},
     ]
 
@@ -373,7 +373,7 @@ def build_planner_memory_messages(digest: dict[str, Any]) -> list[dict[str, Any]
 def _planner_memory_model_config(config: dict[str, Any]) -> dict[str, Any]:
     raw_model = config.get("model")
     model_config = raw_model if isinstance(raw_model, dict) else {}
-    raw_value = model_config.get("memory_extractor") or model_config.get("planner")
+    raw_value = model_config.get("planner_memory") or model_config.get("planner")
     value = raw_value if isinstance(raw_value, dict) else {}
     return value or {}
 

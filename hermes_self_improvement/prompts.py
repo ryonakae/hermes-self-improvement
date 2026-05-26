@@ -33,7 +33,7 @@ PLANNER_USER_PREFIX = (
     "When you provide structured decisions, use the existing decisions array fields: skill/proposed_skill_name, decision, maintenance_action, target_skill, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n\n"
 )
 
-SKILL_AGENT_BASE_SECTIONS = [
+SKILL_EDITOR_BASE_SECTIONS = [
     "You are the Hermes self-improvement editor.",
     "",
     "Role:",
@@ -60,7 +60,7 @@ EDITOR_ALLOWED_TOOLS_AND_STOPS = [
     "- Final assistant response must be a JSON object with success, outcome, changed_skills, created_skills, deleted_skills, verification_notes, and rollback_hints.",
 ]
 
-MEMORY_AGENT_BASE_SECTIONS = [
+MEMORY_EDITOR_BASE_SECTIONS = [
     "You are the Hermes self-improvement memory agent.",
     "",
     "Role:",
@@ -69,7 +69,7 @@ MEMORY_AGENT_BASE_SECTIONS = [
     "- Prefer a structured skipped outcome over speculative mutation.",
 ]
 
-MEMORY_AGENT_ALLOWED_TOOLS_AND_STOPS = [
+MEMORY_EDITOR_ALLOWED_TOOLS_AND_STOPS = [
     "",
     "Allowed tools:",
     "- memory (action add | replace | remove, target memory | user)",
@@ -204,7 +204,7 @@ def base_prompt_spec(role: str) -> dict[str, Any]:
             "schema_name": "self_improvement_base_prompt_spec",
             "schema_version": PROMPT_SCHEMA_VERSION,
             "role": "editor",
-            "sections": SKILL_AGENT_BASE_SECTIONS + EDITOR_ALLOWED_TOOLS_AND_STOPS + MEMORY_AGENT_BASE_SECTIONS + MEMORY_AGENT_ALLOWED_TOOLS_AND_STOPS,
+            "sections": SKILL_EDITOR_BASE_SECTIONS + EDITOR_ALLOWED_TOOLS_AND_STOPS + MEMORY_EDITOR_BASE_SECTIONS + MEMORY_EDITOR_ALLOWED_TOOLS_AND_STOPS,
         }
     if role == "evaluator":
         return {
@@ -278,7 +278,7 @@ def render_editor_instructions(
     overlay: dict[str, Any] | None = None,
     llm_brief_markdown: str | None = None,
 ) -> dict[str, Any]:
-    sections = list(SKILL_AGENT_BASE_SECTIONS)
+    sections = list(SKILL_EDITOR_BASE_SECTIONS)
     addendum = _overlay_addendum(overlay)
     if addendum:
         sections.extend(["", "Runtime-private operating guidance:", addendum])
@@ -337,4 +337,4 @@ def render_editor_instructions(
 
 
 # Backwards-internal alias during module migration; active prompt source remains editor.
-render_skill_agent_instructions = render_editor_instructions
+render_skill_editor_instructions = render_editor_instructions

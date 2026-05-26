@@ -11,7 +11,7 @@ from .planner_runtime import (
     run_planner_runtime,
 )
 from .planner_memory import (
-    MEMORY_EXTRACTOR_SYSTEM,
+    PLANNER_MEMORY_SYSTEM,
     build_planner_memory_digest,
     build_planner_memory_messages,
     build_planner_memory_windows,
@@ -19,7 +19,7 @@ from .planner_memory import (
     reconcile_planner_memory_payload_with_existing_memories,
 )
 from .planner_targets import (
-    TARGET_RESOLVER_SYSTEM,
+    PLANNER_TARGET_SYSTEM,
     build_target_resolution_digest,
     build_planner_targets_messages,
     build_planner_targets_prompt,
@@ -90,8 +90,8 @@ def run_planner(digest: dict[str, Any], *, config: dict[str, Any] | None = None)
 
 
 __all__ = [
-    "MEMORY_EXTRACTOR_SYSTEM",
-    "TARGET_RESOLVER_SYSTEM",
+    "PLANNER_MEMORY_SYSTEM",
+    "PLANNER_TARGET_SYSTEM",
     "build_planner_memory_digest",
     "build_planner_digest",
     "build_planner_messages",

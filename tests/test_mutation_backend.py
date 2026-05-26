@@ -6,9 +6,9 @@ import types
 from types import SimpleNamespace
 
 from hermes_self_improvement.editor_backend import (
-    ALLOWED_SKILL_AGENT_TOOLS,
-    NativeSkillAgentBackend,
-    SkillAgentBackendLimits,
+    ALLOWED_SKILL_EDITOR_TOOLS,
+    NativeSkillEditorBackend,
+    SkillEditorBackendLimits,
     SkillToolExecutor,
     build_editor_backend,
     check_skill_tool_executor_readiness,
@@ -41,7 +41,7 @@ def _content_response(content: str = "done"):
 
 
 def test_backend_contract_allows_only_skill_tools():
-    assert ALLOWED_SKILL_AGENT_TOOLS == {"skills_list", "skill_view", "skill_manage"}
+    assert ALLOWED_SKILL_EDITOR_TOOLS == {"skills_list", "skill_view", "skill_manage"}
 
 
 def test_production_skill_tool_schemas_do_not_expose_submit_result_tool():
@@ -54,7 +54,7 @@ def test_production_skill_tool_schemas_do_not_expose_submit_result_tool():
 
 
 def test_editor_backend_allowed_tools_are_subset_of_role_permission_matrix():
-    assert ALLOWED_SKILL_AGENT_TOOLS.issubset(ROLE_TOOL_PERMISSIONS["editor"].allowed_tool_names)
+    assert ALLOWED_SKILL_EDITOR_TOOLS.issubset(ROLE_TOOL_PERMISSIONS["editor"].allowed_tool_names)
 
 
 def test_backend_contract_requires_success_schema_fields():
@@ -342,13 +342,13 @@ def test_validate_merge_skill_rejects_source_as_own_successor():
 
 
 def test_backend_limits_are_fail_closed():
-    limits = SkillAgentBackendLimits(max_tool_calls=0, timeout_seconds=0)
+    limits = SkillEditorBackendLimits(max_tool_calls=0, timeout_seconds=0)
     assert limits.check()["status"] == "failed"
     assert limits.check()["reasons"] == ["max_tool_calls_must_be_positive", "timeout_seconds_must_be_positive"]
 
 
 def test_editor_limits_only_configures_tool_calls_and_timeout():
-    limits = SkillAgentBackendLimits.from_config({"mutation": {"max_tool_calls": 12}})
+    limits = SkillEditorBackendLimits.from_config({"mutation": {"max_tool_calls": 12}})
 
     assert limits.max_tool_calls == 12
     assert not hasattr(limits, "max_iterations")
@@ -410,7 +410,7 @@ def test_build_editor_backend_defaults_to_constrained_runner():
         )
     })
 
-    assert isinstance(backend, NativeSkillAgentBackend)
+    assert isinstance(backend, NativeSkillEditorBackend)
     assert backend.constrained_agent_runner is not None
 
 
@@ -436,7 +436,7 @@ def test_native_backend_can_validate_constrained_agent_result_with_tool_trace():
             ],
         }
 
-    backend = NativeSkillAgentBackend(
+    backend = NativeSkillEditorBackend(
         tool_executor=SkillToolExecutor(
             skills_list_fn=lambda **_: {"success": True},
             skill_view_fn=lambda **_: {"success": True, "content": "---\nname: demo-skill\n---\nnew guidance"},

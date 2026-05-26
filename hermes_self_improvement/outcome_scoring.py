@@ -114,7 +114,7 @@ def _signal_components(signals: dict[str, Any]) -> dict[str, float]:
         components["memory_retrieved_useful"] = COMPONENT_WEIGHTS["memory_retrieved_useful"]
     if signals.get("planner_selected_low_evidence") is True:
         components["low_evidence_penalty"] = COMPONENT_WEIGHTS["low_evidence_penalty"]
-    if signals.get("skill_agent_no_op_despite_strong_evidence") is True:
+    if signals.get("skill_editor_no_op_despite_strong_evidence") is True:
         components["no_op_strong_evidence_penalty"] = COMPONENT_WEIGHTS["no_op_strong_evidence_penalty"]
     if signals.get("duplicate_noop_prevented") is True:
         components["duplicate_noop_prevented"] = COMPONENT_WEIGHTS["duplicate_noop_prevented"]
@@ -177,8 +177,7 @@ def score_episode_outcomes(episode: dict[str, Any], observations: list[dict[str,
         "target_kind": episode.get("target_kind"),
         "target_id": episode.get("target_id"),
         "planner_prompt_hash": episode.get("planner_prompt_hash"),
-        "skill_agent_prompt_hash": episode.get("skill_agent_prompt_hash"),
-        "memory_agent_prompt_hash": episode.get("memory_agent_prompt_hash"),
+        "editor_prompt_hash": episode.get("editor_prompt_hash"),
         "evaluator_hash": episode.get("evaluator_hash"),
         "score": _round_or_none(mean(score_values)) if score_values else None,
         "confidence": round(mean(confidence_values), 4) if confidence_values else 0.0,
@@ -211,14 +210,12 @@ def build_outcome_score_aggregate(*, config: dict[str, Any], limit: int = 1000) 
     scored_with_observations = [row for row in scored if row.get("observation_count")]
 
     by_planner_runtime: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    by_skill_agent: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    by_memory_agent: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_editor: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_evaluator: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_target_kind: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in scored:
         by_planner_runtime[str(row.get("planner_prompt_hash") or "unknown")].append(row)
-        by_skill_agent[str(row.get("skill_agent_prompt_hash") or "unknown")].append(row)
-        by_memory_agent[str(row.get("memory_agent_prompt_hash") or "unknown")].append(row)
+        by_editor[str(row.get("editor_prompt_hash") or "unknown")].append(row)
         by_evaluator[str(row.get("evaluator_hash") or "unknown")].append(row)
         by_target_kind[str(row.get("target_kind") or "unknown")].append(row)
 
@@ -230,8 +227,7 @@ def build_outcome_score_aggregate(*, config: dict[str, Any], limit: int = 1000) 
         "scored_episode_count": len(scored_with_observations),
         "overall": _bucket_summary(scored),
         "by_planner_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_planner_runtime.items())},
-        "by_skill_agent_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_skill_agent.items())},
-        "by_memory_agent_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_memory_agent.items())},
+        "by_editor_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_editor.items())},
         "by_evaluator_hash": {key: _bucket_summary(value) for key, value in sorted(by_evaluator.items())},
         "by_target_kind": {key: _bucket_summary(value) for key, value in sorted(by_target_kind.items())},
     }

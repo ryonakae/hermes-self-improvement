@@ -128,7 +128,7 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
         if schema == "self_improvement_run_result":
             planner_signals = _planner_runtime_prompt_signal_count(_planner_quality_from_run(payload))
             if planner_signals:
-                summary["improvement_planner_prompt_signals"] = int(summary.get("improvement_planner_prompt_signals") or 0) + planner_signals
+                summary["planner_runtime_prompt_signals"] = int(summary.get("planner_runtime_prompt_signals") or 0) + planner_signals
                 summary["total_events"] += 1
                 if str(path) not in summary["sources"]:
                     summary["sources"].append(str(path))
@@ -180,7 +180,7 @@ def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: in
     under_observation_total = int(under_observation.get("quality") or 0) + int(under_observation.get("skill_usage") or 0)
     strong = int(evidence.get("bad_outcomes") or 0) + int(evidence.get("disagreements") or 0)
     strong += int((outcome_prepass.get("signals") or {}).get("user_correction_recurrence") or 0) if isinstance(outcome_prepass.get("signals"), dict) else 0
-    medium = len(recurring_clusters) + len(actionable_groups) + int(evidence.get("improvement_planner_prompt_signals") or 0)
+    medium = len(recurring_clusters) + len(actionable_groups) + int(evidence.get("planner_runtime_prompt_signals") or 0)
     return {
         "weak": unmatched_count + under_observation_total,
         "medium": medium,

@@ -218,10 +218,10 @@ def _candidate_metric(gold: Any, pred: Any, trace: Any = None, pred_name: Any = 
 
 def _build_overlay_program(dspy: Any, *, lm: Any | None = None) -> Any:
     class OverlayCandidateSignature(dspy.Signature):
-        evidence_markdown = dspy.InputField(desc="Markdown-rendered calibration/run context for improvement_planner/skill_agent/memory_agent/evaluator judgment.")
+        evidence_markdown = dspy.InputField(desc="Markdown-rendered calibration/run context for planner_runtime/skill_editor/memory_editor/evaluator judgment.")
         evidence_json = dspy.InputField(desc="Compact calibration evidence summary as program-owned JSON.")
         cases_json = dspy.InputField(desc="Overlay-set runtime eval cases as JSON array.")
-        current_overlays_json = dspy.InputField(desc="Current improvement_planner/skill_agent/memory_agent/evaluator overlay identities as JSON.")
+        current_overlays_json = dspy.InputField(desc="Current planner_runtime/skill_editor/memory_editor/evaluator overlay identities as JSON.")
         candidate_set_json = dspy.OutputField(
             desc=(
                 "JSON object with gepa_result, baseline_score, candidate_score, and targets for "

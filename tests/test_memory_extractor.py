@@ -5,7 +5,7 @@ import hermes_self_improvement.llm_telemetry as llm_telemetry
 import hermes_self_improvement.planner as planner_module
 from hermes_self_improvement.runner_steps import run_memory_improvement_step
 from hermes_self_improvement.planner import (
-    MEMORY_EXTRACTOR_SYSTEM,
+    PLANNER_MEMORY_SYSTEM,
     build_planner_windows,
     build_planner_messages,
     make_planner_candidate,
@@ -21,7 +21,7 @@ def test_build_planner_messages_splits_system_and_user():
     messages = build_planner_messages(digest)
 
     assert [m["role"] for m in messages] == ["system", "user"]
-    assert messages[0]["content"] == MEMORY_EXTRACTOR_SYSTEM
+    assert messages[0]["content"] == PLANNER_MEMORY_SYSTEM
     assert "Return JSON only" in messages[0]["content"]
     assert "Return JSON only" not in messages[1]["content"]
     assert "center_index" in messages[1]["content"]

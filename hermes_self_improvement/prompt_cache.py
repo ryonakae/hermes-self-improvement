@@ -7,7 +7,7 @@ Wraps each ``_call_*_llm`` site with two cache strategies:
   through (``agent/anthropic_adapter.py``); ``call_llm`` itself does not.
 - OpenAI / Codex Responses: produce a ``prompt_cache_key`` to be merged into
   ``extra_body``. The key embeds a hash of the static system content (and the
-  optional overlay hash for ``improvement_planner`` / ``skill_agent`` / ``memory_agent`` / ``evaluator``) so that prompt
+  optional overlay hash for ``planner_runtime`` / ``skill_editor`` / ``memory_editor`` / ``evaluator``) so that prompt
   changes auto-invalidate the cache scope.
 
 Non-Anthropic providers silently ignore ``cache_control`` block markers, so the

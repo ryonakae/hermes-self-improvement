@@ -14,7 +14,7 @@ from .native_tool_harness import (
 )
 from .role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
-ALLOWED_SKILL_AGENT_TOOLS = frozenset({"skills_list", "skill_view", "skill_manage"})
+ALLOWED_SKILL_EDITOR_TOOLS = frozenset({"skills_list", "skill_view", "skill_manage"})
 ALLOWED_SKILL_MANAGE_ACTIONS = {"create", "patch", "edit", "delete", "write_file", "remove_file"}
 NON_MUTATING_AGENT_OUTCOMES = {
     "skipped_superseded",
@@ -27,18 +27,18 @@ _MERGE_SUCCESS_FIELDS = ("merged_from", "archive_candidates")
 
 
 @dataclass(frozen=True)
-class SkillAgentBackendLimits:
+class SkillEditorBackendLimits:
     max_tool_calls: int = 12
     timeout_seconds: int = 45
 
     @classmethod
-    def from_config(cls, config: dict[str, Any] | None = None) -> "SkillAgentBackendLimits":
+    def from_config(cls, config: dict[str, Any] | None = None) -> "SkillEditorBackendLimits":
         mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
         model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
-        model_skill_agent = model.get("editor") if isinstance(model.get("editor"), dict) else {}
+        model_skill_editor = model.get("editor") if isinstance(model.get("editor"), dict) else {}
         return cls(
             max_tool_calls=max(0, _coerce_int(mutation.get("max_tool_calls"), cls.max_tool_calls)),
-            timeout_seconds=max(1, _coerce_int(model_skill_agent.get("timeout") or mutation.get("timeout_seconds"), cls.timeout_seconds)),
+            timeout_seconds=max(1, _coerce_int(model_skill_editor.get("timeout") or mutation.get("timeout_seconds"), cls.timeout_seconds)),
         )
 
     def check(self) -> dict[str, Any]:
@@ -50,7 +50,7 @@ class SkillAgentBackendLimits:
         return {"status": "failed" if reasons else "ok", "reasons": reasons}
 
 
-class SkillAgentBackend(Protocol):
+class SkillEditorBackend(Protocol):
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any] | str:
         ...
 
@@ -58,7 +58,7 @@ class SkillAgentBackend(Protocol):
 
 def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(result.get("success"), bool):
-        return {"success": False, "error": "skill_agent_result_missing_success"}
+        return {"success": False, "error": "skill_editor_result_missing_success"}
     outcome = str(result.get("outcome") or "")
     if not result.get("success") and outcome in NON_MUTATING_AGENT_OUTCOMES:
         result["success"] = True
@@ -66,7 +66,7 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
         return result
     for key in _REQUIRED_SUCCESS_FIELDS:
         if key not in result or not isinstance(result.get(key), list):
-            return {"success": False, "error": f"skill_agent_result_{key}_missing"}
+            return {"success": False, "error": f"skill_editor_result_{key}_missing"}
     allowed_targets = set(result.get("_allowed_targets") or [])
     expected_target = str(result.get("_expected_target") or "").strip()
     task_kind = str(result.get("_task_kind") or "").strip()
@@ -80,7 +80,7 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
             result["created_skills_inferred_from_trace"] = True
     changed = [str(name) for key in ("changed_skills", "created_skills", "deleted_skills") for name in (result.get(key) or [])]
     if changed and not result.get("verification_notes"):
-        return {"success": False, "error": "skill_agent_result_verification_notes_missing"}
+        return {"success": False, "error": "skill_editor_result_verification_notes_missing"}
     if result.get("success") and outcome and outcome not in {"applied", "changed", *NON_MUTATING_AGENT_OUTCOMES}:
         result["reported_outcome"] = outcome
         result["outcome"] = "applied" if changed else outcome
@@ -89,13 +89,13 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
     if allowed_targets:
         escaped = sorted(name for name in changed if name not in allowed_targets)
         if escaped:
-            return {"success": False, "error": "skill_agent_result_target_escape", "escaped_targets": escaped}
+            return {"success": False, "error": "skill_editor_result_target_escape", "escaped_targets": escaped}
     if task_kind == "skill_create" and expected_target:
         created = {str(name) for name in result.get("created_skills") or []}
         if expected_target not in created:
-            return {"success": False, "error": "skill_agent_result_created_skill_missing", "expected_target": expected_target, "created_skills": sorted(created), "used_tools": result.get("used_tools") or []}
+            return {"success": False, "error": "skill_editor_result_created_skill_missing", "expected_target": expected_target, "created_skills": sorted(created), "used_tools": result.get("used_tools") or []}
         if not _tool_trace_has_skill_manage(result.get("used_tools") or [], action="create", name=expected_target):
-            return {"success": False, "error": "skill_agent_result_create_tool_trace_missing", "expected_target": expected_target, "used_tools": result.get("used_tools") or []}
+            return {"success": False, "error": "skill_editor_result_create_tool_trace_missing", "expected_target": expected_target, "used_tools": result.get("used_tools") or []}
     if task_kind == "skill_improve" and expected_target:
         outcome = str(result.get("outcome") or "")
         if outcome not in NON_MUTATING_AGENT_OUTCOMES:
@@ -103,31 +103,31 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
             if maintenance_action == "merge":
                 trace = result.get("used_tools") or []
                 if not merge_target_skill:
-                    return {"success": False, "error": "skill_agent_result_merge_target_missing"}
+                    return {"success": False, "error": "skill_editor_result_merge_target_missing"}
                 if merge_target_skill == expected_target:
-                    return {"success": False, "error": "skill_agent_result_merge_self_successor_forbidden"}
+                    return {"success": False, "error": "skill_editor_result_merge_self_successor_forbidden"}
                 for key in _MERGE_SUCCESS_FIELDS:
                     if key not in result or not isinstance(result.get(key), list):
-                        return {"success": False, "error": f"skill_agent_result_{key}_missing"}
+                        return {"success": False, "error": f"skill_editor_result_{key}_missing"}
                 if expected_target not in {str(name) for name in result.get("merged_from") or []}:
-                    return {"success": False, "error": "skill_agent_result_merged_from_missing", "expected_source": expected_target}
+                    return {"success": False, "error": "skill_editor_result_merged_from_missing", "expected_source": expected_target}
                 if expected_target not in {str(name) for name in result.get("archive_candidates") or []}:
-                    return {"success": False, "error": "skill_agent_result_archive_candidate_missing", "expected_source": expected_target}
+                    return {"success": False, "error": "skill_editor_result_archive_candidate_missing", "expected_source": expected_target}
                 if result.get("deleted_skills"):
-                    return {"success": False, "error": "skill_agent_result_merge_deleted_source_forbidden", "deleted_skills": result.get("deleted_skills")}
+                    return {"success": False, "error": "skill_editor_result_merge_deleted_source_forbidden", "deleted_skills": result.get("deleted_skills")}
                 if expected_target in changed_targets:
-                    return {"success": False, "error": "skill_agent_result_merge_source_change_forbidden", "changed_skills": sorted(changed_targets)}
+                    return {"success": False, "error": "skill_editor_result_merge_source_change_forbidden", "changed_skills": sorted(changed_targets)}
                 if merge_target_skill not in changed_targets:
-                    return {"success": False, "error": "skill_agent_result_merge_target_change_missing", "expected_target": merge_target_skill}
+                    return {"success": False, "error": "skill_editor_result_merge_target_change_missing", "expected_target": merge_target_skill}
                 if not _tool_trace_has_successful_tool(trace, tool="skill_view", name=expected_target) or not _tool_trace_has_successful_tool(trace, tool="skill_view", name=merge_target_skill):
-                    return {"success": False, "error": "skill_agent_result_merge_read_trace_missing"}
+                    return {"success": False, "error": "skill_editor_result_merge_read_trace_missing"}
                 if not _tool_trace_has_skill_manage_action(trace, actions={"patch", "edit"}, name=merge_target_skill):
-                    return {"success": False, "error": "skill_agent_result_merge_target_patch_trace_missing", "expected_target": merge_target_skill}
+                    return {"success": False, "error": "skill_editor_result_merge_target_patch_trace_missing", "expected_target": merge_target_skill}
             else:
                 if expected_target not in changed_targets:
-                    return {"success": False, "error": "skill_agent_result_changed_skill_missing"}
+                    return {"success": False, "error": "skill_editor_result_changed_skill_missing"}
                 if not _tool_trace_has_skill_manage(result.get("used_tools") or [], action=None, name=expected_target):
-                    return {"success": False, "error": "skill_agent_result_change_tool_trace_missing"}
+                    return {"success": False, "error": "skill_editor_result_change_tool_trace_missing"}
     for key in ("_allowed_targets", "_expected_target", "_task_kind", "_maintenance_action", "_merge_target_skill"):
         result.pop(key, None)
     return result
@@ -342,8 +342,8 @@ class SkillToolExecutor:
     unavailable_reason: str | None = None
 
     def call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        if tool not in ALLOWED_SKILL_AGENT_TOOLS:
-            return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_SKILL_AGENT_TOOLS)}
+        if tool not in ALLOWED_SKILL_EDITOR_TOOLS:
+            return {"success": False, "error": "disallowed_tool_requested", "tool": tool, "allowed_tools": sorted(ALLOWED_SKILL_EDITOR_TOOLS)}
         if not isinstance(args, dict):
             return {"success": False, "error": "tool_args_not_object", "tool": tool}
         fn = {"skills_list": self.skills_list_fn, "skill_view": self.skill_view_fn, "skill_manage": self.skill_manage_fn}.get(tool)
@@ -436,7 +436,7 @@ def _skill_tool_schema(name: str, description: str, properties: dict[str, Any], 
     }
 
 
-def native_skill_agent_tool_schemas() -> list[dict[str, Any]]:
+def native_skill_editor_tool_schemas() -> list[dict[str, Any]]:
     return [
         _skill_tool_schema("skills_list", "List available Hermes skills.", {}, []),
         _skill_tool_schema(
@@ -466,10 +466,10 @@ def native_skill_agent_tool_schemas() -> list[dict[str, Any]]:
 
 
 @dataclass
-class NativeSkillAgentBackend:
+class NativeSkillEditorBackend:
     tool_executor: SkillToolExecutor
     constrained_agent_runner: Callable[..., dict[str, Any]] | None = None
-    limits: SkillAgentBackendLimits = field(default_factory=SkillAgentBackendLimits)
+    limits: SkillEditorBackendLimits = field(default_factory=SkillEditorBackendLimits)
 
     def _validate_final_result(self, final: dict[str, Any], task: dict[str, Any]) -> dict[str, Any]:
         allowed_targets = _task_allowed_targets(task)
@@ -493,7 +493,7 @@ class NativeSkillAgentBackend:
             if post_validation.get("status") != "passed":
                 return {
                     "success": False,
-                    "error": "skill_agent_post_validation_failed",
+                    "error": "skill_editor_post_validation_failed",
                     "post_validation": post_validation,
                     "raw_result": _redact_large(validated),
                 }
@@ -511,16 +511,16 @@ class NativeSkillAgentBackend:
             max_iterations=self.limits.max_tool_calls + 2,
         )
         if not isinstance(result, dict):
-            return {"success": False, "error": "skill_agent_constrained_result_invalid"}
+            return {"success": False, "error": "skill_editor_constrained_result_invalid"}
         final_response = str(result.get("final_response") or "").strip()
         if not final_response:
-            return {"success": False, "error": "skill_agent_constrained_final_response_missing"}
+            return {"success": False, "error": "skill_editor_constrained_final_response_missing"}
         try:
             parsed = json.loads(final_response)
         except json.JSONDecodeError:
-            return {"success": False, "error": "skill_agent_constrained_final_response_not_json"}
+            return {"success": False, "error": "skill_editor_constrained_final_response_not_json"}
         if not isinstance(parsed, dict):
-            return {"success": False, "error": "skill_agent_constrained_final_response_not_object"}
+            return {"success": False, "error": "skill_editor_constrained_final_response_not_object"}
         final = dict(parsed)
         tool_trace = result.get("tool_trace") if isinstance(result.get("tool_trace"), list) else []
         final["used_tools"] = list(tool_trace)
@@ -533,9 +533,9 @@ class NativeSkillAgentBackend:
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
         limit_check = self.limits.check()
         if limit_check.get("status") != "ok":
-            return {"success": False, "error": "skill_agent_limits_invalid", "reasons": limit_check.get("reasons") or []}
+            return {"success": False, "error": "skill_editor_limits_invalid", "reasons": limit_check.get("reasons") or []}
         if not self.tool_executor.available():
-            return {"success": False, "error": "skill_agent_unavailable", "reasons": [self.tool_executor.unavailable_reason or "skill_tool_registry_unavailable"]}
+            return {"success": False, "error": "skill_editor_unavailable", "reasons": [self.tool_executor.unavailable_reason or "skill_tool_registry_unavailable"]}
         task_manifest = {
             "task_kind": task.get("task_kind"),
             "targets": task.get("targets"),
@@ -562,16 +562,16 @@ class NativeSkillAgentBackend:
 
 
 @dataclass
-class UnavailableSkillAgentBackend:
+class UnavailableSkillEditorBackend:
     reason: str
 
     def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
-        return {"success": False, "error": self.reason if self.reason.startswith("skill_agent_") else "skill_agent_unavailable", "reasons": [self.reason], "prompt": prompt}
+        return {"success": False, "error": self.reason if self.reason.startswith("skill_editor_") else "skill_editor_unavailable", "reasons": [self.reason], "prompt": prompt}
 
 
-def build_skill_agent_backend(config: dict[str, Any] | None = None) -> SkillAgentBackend:
-    if isinstance(config, dict) and (config.get("_skill_agent_backend") is not None or config.get("_editor_backend") is not None):
-        backend = config.get("_skill_agent_backend") if config.get("_skill_agent_backend") is not None else config.get("_editor_backend")
+def build_skill_editor_backend(config: dict[str, Any] | None = None) -> SkillEditorBackend:
+    if isinstance(config, dict) and (config.get("_skill_editor_backend") is not None or config.get("_editor_backend") is not None):
+        backend = config.get("_skill_editor_backend") if config.get("_skill_editor_backend") is not None else config.get("_editor_backend")
         if hasattr(backend, "run"):
             return backend
         if callable(backend):
@@ -583,25 +583,25 @@ def build_skill_agent_backend(config: dict[str, Any] | None = None) -> SkillAgen
     enabled = bool(mutation.get("enabled", True))
     backend_name = str(mutation.get("backend") or "native_skill_tool")
     if not enabled or backend_name == "disabled":
-        return UnavailableSkillAgentBackend("skill_agent_backend_disabled")
+        return UnavailableSkillEditorBackend("skill_editor_backend_disabled")
     if backend_name != "native_skill_tool":
-        return UnavailableSkillAgentBackend("skill_agent_backend_unknown")
+        return UnavailableSkillEditorBackend("skill_editor_backend_unknown")
     executor = resolve_skill_tool_executor(config)
     from .constrained_agent import run_constrained_role_agent
-    return NativeSkillAgentBackend(
+    return NativeSkillEditorBackend(
         tool_executor=executor,
         constrained_agent_runner=run_constrained_role_agent,
-        limits=SkillAgentBackendLimits.from_config(config),
+        limits=SkillEditorBackendLimits.from_config(config),
     )
 
 
-def skill_agent_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
+def skill_editor_backend_status(config: dict[str, Any] | None = None) -> dict[str, Any]:
     mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
     configured = str(mutation.get("backend") or "native_skill_tool")
     if bool(mutation.get("enabled", True)) is False or configured == "disabled":
-        return {"configured": configured, "available": False, "reason": "skill_agent_backend_disabled"}
+        return {"configured": configured, "available": False, "reason": "skill_editor_backend_disabled"}
     if configured != "native_skill_tool":
-        return {"configured": configured, "available": False, "reason": "skill_agent_backend_unknown"}
+        return {"configured": configured, "available": False, "reason": "skill_editor_backend_unknown"}
     executor = resolve_skill_tool_executor(config)
     readiness = check_skill_tool_executor_readiness(executor)
     if not readiness.get("available"):

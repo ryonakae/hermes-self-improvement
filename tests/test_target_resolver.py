@@ -3,7 +3,7 @@ from hermes_self_improvement.planner import build_planner_digest
 from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from hermes_self_improvement.prompts import base_prompt_hash
 from hermes_self_improvement.planner import (
-    TARGET_RESOLVER_SYSTEM,
+    PLANNER_TARGET_SYSTEM,
     build_target_resolution_digest,
     build_planner_messages,
     build_planner_prompt,
@@ -359,7 +359,7 @@ def test_build_planner_messages_splits_system_and_user():
     messages = build_planner_messages(digest)
 
     assert [m["role"] for m in messages] == ["system", "user"]
-    assert messages[0]["content"] == TARGET_RESOLVER_SYSTEM
+    assert messages[0]["content"] == PLANNER_TARGET_SYSTEM
     assert "attach_existing_skill" in messages[0]["content"]
     # user content is digest JSON, not instruction text
     assert "attach_existing_skill" not in messages[1]["content"]

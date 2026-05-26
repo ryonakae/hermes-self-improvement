@@ -91,7 +91,7 @@ def validate_prompt_overlay_candidate(candidate: dict[str, Any], *, role: str, m
 
 
 def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
-    if role == "improvement_planner":
+    if role == "planner_runtime":
         weak_rate = ((evidence.get("credit_assignment") or {}).get("overall") or {}).get("weak_only_selected_rate")
         suffix = f" Current weak-only selected rate: {weak_rate}." if weak_rate is not None else ""
         return (
@@ -105,7 +105,7 @@ def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
             "Runtime eval cases indicate evaluator recommendations should track actual outcomes. "
             "Prefer defer for insufficient confidence, keep successful low-risk mutations eligible, and do not override mutation scope."
         )
-    if role == "memory_agent":
+    if role == "memory_editor":
         return (
             "Runtime eval cases indicate memory edits should stay narrow and verifiable. "
             "Use exact old_text from current_entries for replace/remove, prefer add only for genuinely new durable facts, "
@@ -113,21 +113,21 @@ def _fallback_addendum(role: str, evidence: dict[str, Any]) -> str:
             "and on memory_capacity_exceeded remove a stale entry before retrying add."
         )
     return (
-        "Runtime eval cases indicate skill_agent edits should remain narrow. "
+        "Runtime eval cases indicate skill_editor edits should remain narrow. "
         "If selected evidence does not match the target skill, produce no mutation; otherwise keep patches procedural and minimal."
     )
 
 
 def _fallback_case_behaviors(role: str) -> dict[str, Any]:
-    if role == "improvement_planner":
+    if role == "planner_runtime":
         return {
             "planner_weak_only_skip": {"decision": "skip"},
             "planner_ambiguous_target_defer": {"decision": "defer", "reason": "target_provenance_unsafe"},
         }
-    if role == "memory_agent":
+    if role == "memory_editor":
         return {
-            "memory_agent_duplicate_skip": {"mutation": "skip", "reason": "memory_duplicate_existing"},
-            "memory_agent_sensitive_skip": {"mutation": "skip", "reason": "sensitive_memory_gap_candidate"},
+            "memory_editor_duplicate_skip": {"mutation": "skip", "reason": "memory_duplicate_existing"},
+            "memory_editor_sensitive_skip": {"mutation": "skip", "reason": "sensitive_memory_gap_candidate"},
         }
     return {"editor_target_mismatch_skip": {"mutation": "skip", "reason": "target_mismatch"}}
 

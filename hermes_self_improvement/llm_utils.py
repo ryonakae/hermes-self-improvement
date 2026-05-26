@@ -1,8 +1,8 @@
 """Common helpers shared by plugin LLM call sites.
 
 Imported by every site that calls the auxiliary LLM
-(memory_extractor, target_resolver, improvement_planner, skill_agent,
-memory_agent, prompt_optimizer).
+(planner_memory, planner_target, planner_runtime, skill_editor,
+memory_editor, prompt_optimizer).
 """
 
 from __future__ import annotations

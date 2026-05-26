@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
-from hermes_self_improvement.editor_backend import NativeSkillAgentBackend, SkillToolExecutor, editor_backend_status
+from hermes_self_improvement.editor_backend import NativeSkillEditorBackend, SkillToolExecutor, editor_backend_status
 
 
 def _sha256(text: str) -> str:
@@ -70,7 +70,7 @@ def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools
             ],
         }
 
-    backend = NativeSkillAgentBackend(
+    backend = NativeSkillEditorBackend(
         tool_executor=executor,
         constrained_agent_runner=fake_constrained_agent,
     )

@@ -3,29 +3,29 @@ from __future__ import annotations
 from typing import Any
 
 from .editor_backend_memory import (
-    ALLOWED_MEMORY_AGENT_TOOLS,
-    MemoryAgentBackend,
-    MemoryAgentBackendLimits,
+    ALLOWED_MEMORY_EDITOR_TOOLS,
+    MemoryEditorBackend,
+    MemoryEditorBackendLimits,
     MemoryToolExecutor,
-    NativeMemoryAgentBackend,
-    UnavailableMemoryAgentBackend,
-    build_memory_agent_backend,
+    NativeMemoryEditorBackend,
+    UnavailableMemoryEditorBackend,
+    build_memory_editor_backend,
     check_memory_tool_executor_readiness,
-    memory_agent_backend_status,
-    native_memory_agent_tool_schemas,
-    validate_memory_agent_success_result,
+    memory_editor_backend_status,
+    native_memory_editor_tool_schemas,
+    validate_memory_editor_success_result,
 )
 from .editor_backend_skill import (
-    ALLOWED_SKILL_AGENT_TOOLS,
-    NativeSkillAgentBackend,
-    SkillAgentBackend,
-    SkillAgentBackendLimits,
+    ALLOWED_SKILL_EDITOR_TOOLS,
+    NativeSkillEditorBackend,
+    SkillEditorBackend,
+    SkillEditorBackendLimits,
     SkillToolExecutor,
-    UnavailableSkillAgentBackend,
-    build_skill_agent_backend,
+    UnavailableSkillEditorBackend,
+    build_skill_editor_backend,
     check_skill_tool_executor_readiness,
-    native_skill_agent_tool_schemas,
-    skill_agent_backend_status,
+    native_skill_editor_tool_schemas,
+    skill_editor_backend_status,
     validate_backend_success_result as _validate_skill_backend_success_result,
 )
 
@@ -34,10 +34,10 @@ def _normalize_editor_error(result: dict[str, Any]) -> dict[str, Any]:
     converted = dict(result)
     error = converted.get("error")
     if isinstance(error, str):
-        converted["error"] = error.replace("skill_agent_result", "editor_result").replace("memory_agent_result", "editor_result").replace("skill_agent_backend", "editor_backend").replace("memory_agent_backend", "editor_backend")
+        converted["error"] = error.replace("skill_editor_result", "editor_result").replace("memory_editor_result", "editor_result").replace("skill_editor_backend", "editor_backend").replace("memory_editor_backend", "editor_backend")
     reasons = converted.get("reasons")
     if isinstance(reasons, list):
-        converted["reasons"] = [str(item).replace("skill_agent_backend", "editor_backend").replace("memory_agent_backend", "editor_backend") for item in reasons]
+        converted["reasons"] = [str(item).replace("skill_editor_backend", "editor_backend").replace("memory_editor_backend", "editor_backend") for item in reasons]
     return converted
 
 
@@ -47,16 +47,16 @@ def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
 
 def native_editor_tool_schemas(kind: str = "all") -> list[dict[str, Any]]:
     if kind == "skill":
-        return native_skill_agent_tool_schemas()
+        return native_skill_editor_tool_schemas()
     if kind == "memory":
-        return native_memory_agent_tool_schemas()
-    return native_skill_agent_tool_schemas() + native_memory_agent_tool_schemas()
+        return native_memory_editor_tool_schemas()
+    return native_skill_editor_tool_schemas() + native_memory_editor_tool_schemas()
 
 
 def validate_editor_success_result(result: dict[str, Any], kind: str = "memory") -> dict[str, Any]:
     if kind == "skill":
         return validate_backend_success_result(result)
-    return _normalize_editor_error(validate_memory_agent_success_result(result))
+    return _normalize_editor_error(validate_memory_editor_success_result(result))
 
 
 def build_editor_backend(config: dict[str, Any] | None = None, kind: str | None = None) -> Any:
@@ -64,7 +64,7 @@ def build_editor_backend(config: dict[str, Any] | None = None, kind: str | None 
     injected = cfg.get("_editor_backend")
     if injected is not None:
         return injected
-    backend = build_memory_agent_backend(cfg) if kind == "memory" or "_memory_tool_executor" in cfg else build_skill_agent_backend(cfg)
+    backend = build_memory_editor_backend(cfg) if kind == "memory" or "_memory_tool_executor" in cfg else build_skill_editor_backend(cfg)
     if backend.__class__.__name__.startswith("Unavailable"):
         class EditorBackendAdapter:
             def __init__(self, inner: Any):
@@ -80,26 +80,26 @@ def build_editor_backend(config: dict[str, Any] | None = None, kind: str | None 
 def editor_backend_status(config: dict[str, Any] | None = None, kind: str | None = None) -> dict[str, Any]:
     cfg = config or {}
     if kind == "memory" or "_memory_tool_executor" in cfg:
-        status = memory_agent_backend_status(cfg)
+        status = memory_editor_backend_status(cfg)
     else:
-        status = skill_agent_backend_status(cfg)
-    if status.get("reason") in {"skill_agent_backend_disabled", "memory_agent_backend_disabled"}:
+        status = skill_editor_backend_status(cfg)
+    if status.get("reason") in {"skill_editor_backend_disabled", "memory_editor_backend_disabled"}:
         status = {**status, "reason": "editor_backend_disabled"}
     return status
 
 __all__ = [
-    "ALLOWED_MEMORY_AGENT_TOOLS",
-    "ALLOWED_SKILL_AGENT_TOOLS",
-    "MemoryAgentBackend",
-    "MemoryAgentBackendLimits",
+    "ALLOWED_MEMORY_EDITOR_TOOLS",
+    "ALLOWED_SKILL_EDITOR_TOOLS",
+    "MemoryEditorBackend",
+    "MemoryEditorBackendLimits",
     "MemoryToolExecutor",
-    "NativeMemoryAgentBackend",
-    "NativeSkillAgentBackend",
-    "SkillAgentBackend",
-    "SkillAgentBackendLimits",
+    "NativeMemoryEditorBackend",
+    "NativeSkillEditorBackend",
+    "SkillEditorBackend",
+    "SkillEditorBackendLimits",
     "SkillToolExecutor",
-    "UnavailableMemoryAgentBackend",
-    "UnavailableSkillAgentBackend",
+    "UnavailableMemoryEditorBackend",
+    "UnavailableSkillEditorBackend",
     "build_editor_backend",
     "check_memory_tool_executor_readiness",
     "check_skill_tool_executor_readiness",

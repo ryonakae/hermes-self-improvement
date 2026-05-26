@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from hermes_self_improvement.editor import (
-    SkillAgentRunner,
+    SkillEditorRunner,
     build_editor_prompt,
     parse_editor_result,
     run_editor_task,
@@ -153,7 +153,7 @@ def test_runner_rejects_self_reported_disallowed_tools(tmp_path):
     def backend(prompt, task_payload, config):
         return result_payload
 
-    result = SkillAgentRunner(backend=backend).run(task(), config={"_mutable_local_skill_roots": [root]})
+    result = SkillEditorRunner(backend=backend).run(task(), config={"_mutable_local_skill_roots": [root]})
 
     assert result["success"] is False
     assert result["error"] == "disallowed_tool_reported"

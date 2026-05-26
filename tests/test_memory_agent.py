@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 
 from hermes_self_improvement.editor import (
-    MemoryAgentRunner,
+    MemoryEditorRunner,
     build_editor_prompt,
     parse_editor_result,
     run_editor_task,
@@ -12,10 +12,10 @@ from hermes_self_improvement.editor import (
     validate_reported_tools,
 )
 from hermes_self_improvement.editor_backend import (
-    ALLOWED_MEMORY_AGENT_TOOLS,
-    MemoryAgentBackendLimits,
+    ALLOWED_MEMORY_EDITOR_TOOLS,
+    MemoryEditorBackendLimits,
     MemoryToolExecutor,
-    NativeMemoryAgentBackend,
+    NativeMemoryEditorBackend,
     build_editor_backend,
     editor_backend_status,
     native_editor_tool_schemas,
@@ -102,10 +102,10 @@ def test_native_editor_prompt_preserves_move_before_source_remove_order():
         seen["system_message"] = system_message
         return {"final_response": json.dumps(success_result())}
 
-    backend = NativeMemoryAgentBackend(
+    backend = NativeMemoryEditorBackend(
         tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **kwargs: {"success": True}, source="test"),
         constrained_agent_runner=fake_run_constrained,
-        limits=MemoryAgentBackendLimits(max_tool_calls=3, timeout_seconds=10),
+        limits=MemoryEditorBackendLimits(max_tool_calls=3, timeout_seconds=10),
     )
 
     result = backend.run("prompt", task(), config={})
@@ -198,7 +198,7 @@ def test_editor_result_rejects_unknown_successful_outcome_without_change_trace()
 
 
 def test_editor_limits_only_configures_tool_calls_and_timeout():
-    limits = MemoryAgentBackendLimits.from_config({"mutation": {"max_tool_calls": 12}})
+    limits = MemoryEditorBackendLimits.from_config({"mutation": {"max_tool_calls": 12}})
 
     assert limits.max_tool_calls == 12
     assert not hasattr(limits, "max_iterations")
@@ -237,7 +237,7 @@ def test_runner_rejects_disallowed_tool_reported_by_backend():
     def backend(prompt, task_payload, config):
         return payload
 
-    result = MemoryAgentRunner(backend=backend).run(task(), config=None)
+    result = MemoryEditorRunner(backend=backend).run(task(), config=None)
     assert result["success"] is False
     assert result["error"] == "disallowed_tool_reported"
 
@@ -250,7 +250,7 @@ def test_native_editor_tool_schemas_include_memory_and_skill_tools():
 
 
 def test_editor_backend_allowed_tools_are_subset_of_role_permission_matrix():
-    assert ALLOWED_MEMORY_AGENT_TOOLS.issubset(ROLE_TOOL_PERMISSIONS["editor"].allowed_tool_names)
+    assert ALLOWED_MEMORY_EDITOR_TOOLS.issubset(ROLE_TOOL_PERMISSIONS["editor"].allowed_tool_names)
 
 
 def test_memory_backend_does_not_import_native_loop_helpers_from_skill_backend():
@@ -260,7 +260,7 @@ def test_memory_backend_does_not_import_native_loop_helpers_from_skill_backend()
     source = inspect.getsource(backend)
 
     assert "from .editor_backend import" not in source
-    assert "native_memory_agent_tool_schemas" in source
+    assert "native_memory_editor_tool_schemas" in source
 
 
 def test_memory_tool_executor_rejects_invalid_args():
@@ -298,7 +298,7 @@ def test_build_editor_backend_defaults_to_constrained_runner():
         "_memory_tool_executor": MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True}))
     })
 
-    assert isinstance(backend, NativeMemoryAgentBackend)
+    assert isinstance(backend, NativeMemoryEditorBackend)
     assert backend.constrained_agent_runner is not None
 
 
@@ -324,12 +324,12 @@ def test_native_memory_backend_accepts_constrained_agent_result_through_existing
             ],
         }
 
-    backend = NativeMemoryAgentBackend(
+    backend = NativeMemoryEditorBackend(
         tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True})),
         constrained_agent_runner=fake_runner,
     )
 
-    result = MemoryAgentRunner(backend=backend).run(task(), config={})
+    result = MemoryEditorRunner(backend=backend).run(task(), config={})
 
     assert result["success"] is True
     assert result["outcome"] == "applied"
@@ -339,7 +339,7 @@ def test_native_memory_backend_accepts_constrained_agent_result_through_existing
 
 
 def test_build_editor_backend_uses_injected_backend():
-    injected = NativeMemoryAgentBackend(tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **_: "{}"))
+    injected = NativeMemoryEditorBackend(tool_executor=MemoryToolExecutor(memory_tool_fn=lambda **_: "{}"))
     backend = build_editor_backend({"_editor_backend": injected})
     assert backend is injected
 
@@ -360,5 +360,5 @@ def test_native_editor_tool_schemas_define_required_action_and_target():
 
 def test_allowed_editor_tools_matches_schema():
     schema_names = {schema["function"]["name"] for schema in native_editor_tool_schemas()}
-    assert ALLOWED_MEMORY_AGENT_TOOLS == {"memory"}
-    assert ALLOWED_MEMORY_AGENT_TOOLS.issubset(schema_names)
+    assert ALLOWED_MEMORY_EDITOR_TOOLS == {"memory"}
+    assert ALLOWED_MEMORY_EDITOR_TOOLS.issubset(schema_names)

@@ -26,7 +26,7 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - `improve` は skill / memory 変更を episode として append-only に記録する。`calibrate` は rolling window（既定30日）で観測を見直し、明示的に紐づく observation だけを outcome scoring に使う。unmatched observation は artifact に残し、弱・中・強の材料分類と繰り返し失敗の runtime eval case 化に使う。`improve` run artifact に unmatched candidates や conversation memory gaps が残った場合も、overlay calibration 用の runtime-private eval cases にできる。
 - DSPy/GEPA は hook / plugin discovery path では lazy import を維持し、Hermes runtime 全体の必須依存にしない。
 - Proposal scoring は deterministic heuristic のみ。scoring は report ordering / diagnostic signals 用の advisory 情報で、無人変更の許可として扱わない。LLM 判断は planner / editor / evaluator の現在の site が担当する。GEPA/DSPy は `calibrate` で evaluator / prompt / rubric 改善に使う。
-- Model routing は current schema の `model.planner`（skill / memory 改善判断と unresolved evidence の target 解決）、`model.editor`（skill / memory mutation）、`model.memory_extractor`（tool-free memory gap extraction）、`model.evaluator`（tool-free DSPy/GEPA evaluator calibration）だけを使う。`provider: auto` と空の `model` は Hermes の通常 auto/main routing に任せる指定。旧 role key は残さない。
+- Model routing は current schema の `model.planner`（skill / memory 改善判断と unresolved evidence の target 解決）、`model.editor`（skill / memory mutation）、`model.planner_memory`（tool-free memory gap extraction）、`model.evaluator`（tool-free DSPy/GEPA evaluator calibration）だけを使う。`provider: auto` と空の `model` は Hermes の通常 auto/main routing に任せる指定。旧 role key は残さない。
 - 変更前に `git status --short` と対象 diff を確認し、無関係な変更を巻き戻さない。
 
 ## 主要パス

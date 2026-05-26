@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .editor_backend_skill import ALLOWED_SKILL_AGENT_TOOLS, SkillAgentBackend
+from .editor_backend_skill import ALLOWED_SKILL_EDITOR_TOOLS, SkillEditorBackend
 from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
 from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
-SKILL_AGENT_TASK_TYPES = {
+SKILL_EDITOR_TASK_TYPES = {
     "skill_create",
     "skill_improve",
     "skill_delete",
@@ -24,15 +24,15 @@ NON_MUTATING_AGENT_OUTCOMES = {
     "stopped_conflict",
     "stopped_uncertain_needs_review",
 }
-Backend = Callable[[str, dict[str, Any], dict[str, Any] | None], dict[str, Any] | str] | SkillAgentBackend
+Backend = Callable[[str, dict[str, Any], dict[str, Any] | None], dict[str, Any] | str] | SkillEditorBackend
 
 
-class SkillAgentError(ValueError):
+class SkillEditorError(ValueError):
     """Raised when a semantic mutation-agent task is invalid or unsafe."""
 
 
 @dataclass(frozen=True)
-class SkillAgentRunner:
+class SkillEditorRunner:
     """Small interface around a bounded skills-only mutation agent backend.
 
     The default runner intentionally has no backend. It fails closed instead of
@@ -43,17 +43,17 @@ class SkillAgentRunner:
     backend: Backend | None = None
 
     def build_prompt(self, task: dict[str, Any]) -> str:
-        return build_skill_agent_prompt(task)
+        return build_skill_editor_prompt(task)
 
     def run(self, task: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
-        validation = validate_skill_agent_task(task, config=config)
+        validation = validate_skill_editor_task(task, config=config)
         if validation.get("status") != "ok":
-            return {"success": False, "error": "invalid_skill_agent_task", "reasons": validation.get("reasons") or []}
+            return {"success": False, "error": "invalid_skill_editor_task", "reasons": validation.get("reasons") or []}
         prompt = self.build_prompt(task)
         if self.backend is None:
             return {
                 "success": False,
-                "error": "skill_agent_unavailable",
+                "error": "skill_editor_unavailable",
                 "reasons": ["bounded_skills_only_agent_backend_unavailable"],
                 "prompt": prompt,
             }
@@ -61,7 +61,7 @@ class SkillAgentRunner:
             raw = self.backend.run(prompt, task, config)  # type: ignore[union-attr]
         else:
             raw = self.backend(prompt, task, config)  # type: ignore[operator]
-        parsed = parse_skill_agent_result(raw)
+        parsed = parse_skill_editor_result(raw)
         if not parsed.get("success"):
             return parsed
         tool_check = validate_reported_tools(parsed)
@@ -79,21 +79,21 @@ def _target_names(task: dict[str, Any]) -> dict[str, str]:
             continue
         name = str(value).strip()
         if Path(name).parts != (name,) or name in {".", ".."}:
-            raise SkillAgentError(f"{key}_invalid")
+            raise SkillEditorError(f"{key}_invalid")
         names[key] = name
     return names
 
 
-def validate_skill_agent_task(task: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def validate_skill_editor_task(task: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
     reasons: list[str] = []
-    if task.get("type") != "skill_agent_task":
-        reasons.append("mutation_type_not_skill_agent_task")
+    if task.get("type") != "skill_editor_task":
+        reasons.append("mutation_type_not_skill_editor_task")
     task_kind = str(task.get("task_kind") or "")
-    if task_kind not in SKILL_AGENT_TASK_TYPES:
+    if task_kind not in SKILL_EDITOR_TASK_TYPES:
         reasons.append("task_kind_unsupported")
     try:
         targets = _target_names(task)
-    except SkillAgentError as exc:
+    except SkillEditorError as exc:
         return {"status": "failed", "reasons": [str(exc)]}
 
     required_existing: set[str] = set()
@@ -133,7 +133,7 @@ def validate_skill_agent_task(task: dict[str, Any], *, config: dict[str, Any] | 
 
     constraints = task.get("constraints") if isinstance(task.get("constraints"), list) else []
     joined_constraints = "\n".join(str(item) for item in constraints)
-    for tool_name in sorted(ALLOWED_SKILL_AGENT_TOOLS):
+    for tool_name in sorted(ALLOWED_SKILL_EDITOR_TOOLS):
         if tool_name not in joined_constraints:
             reasons.append(f"constraint_missing_{tool_name}")
     forbidden_tokens = ("terminal", "file tools", "git", "direct filesystem")
@@ -142,7 +142,7 @@ def validate_skill_agent_task(task: dict[str, Any], *, config: dict[str, Any] | 
     return {"status": "failed" if reasons else "ok", "reasons": reasons, "targets": targets}
 
 
-def build_skill_agent_prompt(task: dict[str, Any]) -> str:
+def build_skill_editor_prompt(task: dict[str, Any]) -> str:
     task_kind = str(task.get("task_kind") or "")
     targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
     constraints = task.get("constraints") if isinstance(task.get("constraints"), list) else []
@@ -186,25 +186,25 @@ Hard constraints:
 """ + "\n".join(f"- {item}" for item in constraints)
 
 
-def parse_skill_agent_result(raw: dict[str, Any] | str) -> dict[str, Any]:
+def parse_skill_editor_result(raw: dict[str, Any] | str) -> dict[str, Any]:
     if isinstance(raw, str):
-        return {"success": False, "error": "skill_agent_result_text_unsupported"}
+        return {"success": False, "error": "skill_editor_result_text_unsupported"}
     parsed = raw
     if not isinstance(parsed, dict):
-        return {"success": False, "error": "skill_agent_result_not_object"}
+        return {"success": False, "error": "skill_editor_result_not_object"}
     if not isinstance(parsed.get("success"), bool):
-        return {"success": False, "error": "skill_agent_result_missing_success"}
+        return {"success": False, "error": "skill_editor_result_missing_success"}
     if not parsed.get("success"):
         return parsed
     outcome = str(parsed.get("outcome") or "applied")
     if outcome == "changed":
         outcome = "applied"
     if outcome != "applied" and outcome not in NON_MUTATING_AGENT_OUTCOMES:
-        return {"success": False, "error": "skill_agent_result_invalid_outcome", "outcome": outcome}
+        return {"success": False, "error": "skill_editor_result_invalid_outcome", "outcome": outcome}
     parsed["outcome"] = outcome
     for key in ("used_tools", "changed_skills", "created_skills", "deleted_skills", "verification_notes", "rollback_hints"):
         if key not in parsed or not isinstance(parsed.get(key), list):
-            return {"success": False, "error": f"skill_agent_result_{key}_missing"}
+            return {"success": False, "error": f"skill_editor_result_{key}_missing"}
     return parsed
 
 
@@ -212,10 +212,10 @@ def validate_reported_tools(result: dict[str, Any]) -> dict[str, Any]:
     reasons: list[str] = []
     for entry in result.get("used_tools") or []:
         tool = entry.get("tool") if isinstance(entry, dict) else entry
-        if str(tool) not in ALLOWED_SKILL_AGENT_TOOLS:
+        if str(tool) not in ALLOWED_SKILL_EDITOR_TOOLS:
             reasons.append(f"disallowed_tool:{tool}")
     return {"status": "failed" if reasons else "ok", "reasons": reasons}
 
 
-def run_skill_agent_task(task: dict[str, Any], *, config: dict[str, Any] | None = None, backend: Backend | None = None) -> dict[str, Any]:
-    return SkillAgentRunner(backend=backend).run(task, config=config)
+def run_skill_editor_task(task: dict[str, Any], *, config: dict[str, Any] | None = None, backend: Backend | None = None) -> dict[str, Any]:
+    return SkillEditorRunner(backend=backend).run(task, config=config)
