@@ -18,16 +18,16 @@
 - Old role/module naming has been removed from active runtime surfaces, status/report output, internal module filenames, symbol names, and primary artifact keys.
 - Runtime setup is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
 - `improve --dry-run --json` completes and writes evidence packs, run artifacts, and episodes.
-- Current validation baseline: full suite passes (`779 passed, 2 skipped`).
+- Current validation baseline: full suite passes (`787 passed, 2 skipped`).
 
 ### Partially complete
 
 - Planner/editor/evaluator/calibrator naming migration is complete enough for release-facing/runtime-facing surfaces, but older roadmap text and some historical milestone docs still describe the superseded resolver / planner / agent split and need periodic maintenance when touched.
-- Evidence handoff is compact and structured, but the canonical persisted observation source is still `state/events.jsonl` plus deterministic reconstruction, not first-class stored turn-trace artifacts.
+- Evidence handoff is compact and structured, and completed observed turns now persist first-class turn-trace artifacts alongside `state/events.jsonl`; cluster summary and evidence index/detail artifacts are still pending.
 
 ### Not yet complete
 
-- The plan's intended canonical observation model (`turn trace -> cluster summary -> evidence index/detail`) is not fully implemented as the primary persisted runtime model.
+- The plan's intended canonical observation model is partially implemented: `turn trace` persistence exists, but `cluster summary -> evidence index/detail` is not yet the primary persisted runtime model.
 - Planner still receives compact digests rebuilt from events/windows rather than a first-class evidence-index/detail store with planner drilldown requests.
 - The redesign's quality goal is only partly met: the loop is operational, but recent dry-runs still skew heavily toward `skip` and outcome attribution remains mostly `unknown`, so decision quality and outcome maturity still need dogfood-driven improvement.
 

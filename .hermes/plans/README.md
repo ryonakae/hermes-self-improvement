@@ -7,8 +7,8 @@ Update note (2026-05-26): when implementation slices land, update this index and
 As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`
-  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, but operational dogfood/final readiness and the deeper observation-model replacement remain unfinished.
-  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 8.8合目. The active work is scheduled-run dogfood, compact final readiness reporting, and replacing event-centric observation persistence with the intended turn-trace/evidence-index model.
+  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slice A turn-trace persistence is implemented, but operational dogfood/final readiness and the remaining cluster/index/detail replacement are unfinished.
+  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 8.9合目. The active work is Slice B cluster/evidence-index artifacts, planner handoff migration, scheduled-run dogfood, and compact final readiness reporting.
 
 - `2026-05-25-self-improvement-role-redesign.md`
   - **Status:** active redesign/status ledger.
@@ -17,12 +17,12 @@ As of 2026-05-10, the long-term roadmap is:
 The current active hardening plans are:
 
 - `2026-05-26-turn-trace-and-readiness-followup.md`
-  - **Status:** active next-step plan.
+  - **Status:** active follow-up plan; Slice A implemented, Slice B is next.
   - Breaks the remaining redesign work into concrete slices: (A) persist canonical turn-trace artifacts, (B) build deterministic cluster summary + evidence index/detail artifacts, (C) migrate planner handoff to the index/detail model, (D) retune decision quality on the new substrate, and (E) finish steady-state dogfood plus final readiness reporting.
 
 - `2026-05-26-slice-a-turn-trace-persistence.md`
-  - **Status:** active implementation-ready child plan.
-  - Expands Slice A into concrete TDD tasks: trace path/schema helpers, deterministic turn assembly, redaction shaping, persistence write path, coexistence with `events.jsonl`, minimal status/report visibility, and final roadmap/status updates.
+  - **Status:** implemented / validated.
+  - Expands and completed Slice A concrete TDD tasks: trace path/schema helpers, deterministic turn assembly, redaction shaping, persistence write path, coexistence with `events.jsonl`, minimal status visibility, and final roadmap/status updates. Validation: `pytest tests -q` => `787 passed, 2 skipped`; `py_compile` ok; `git diff --check` ok; `status` and `improve --dry-run --json` ok.
 
 - `2026-05-24-memory-hygiene-simplification-and-doc-alignment.md`
   - **Status:** implemented / reviewed / validated.

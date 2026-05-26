@@ -44,7 +44,7 @@ from .runner_steps import (
     run_skill_improvement_step,
 )
 from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
-from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json
+from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json, _turn_trace_artifact_summary
 from .prompt_overlays import DEFAULT_PROMPT_SEED_ROLES
 from .recovery_engine import memory_rollback_status
 from .scoring import score_proposals_impl
@@ -1159,6 +1159,8 @@ def _latest_run_artifact(config: dict[str, Any]) -> Path | None:
 def _render_status_summary(payload: dict[str, Any]) -> str:
     editor_backend_payload = payload.get("editor_backend") if isinstance(payload.get("editor_backend"), dict) else {}
     curator_integration = payload.get("curator_integration") if isinstance(payload.get("curator_integration"), dict) else {}
+    raw_trace_artifacts = payload.get("trace_artifacts")
+    trace_artifacts: dict[str, Any] = raw_trace_artifacts if isinstance(raw_trace_artifacts, dict) else {}
     policy = payload.get("autonomous_policy") if isinstance(payload.get("autonomous_policy"), dict) else {}
     lines = [
         f"{PLUGIN_NAME} status",
@@ -1200,6 +1202,8 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         f"- event path: {payload.get('event_path')}",
         f"- recent sample events: {int(payload.get('event_count_sample') or 0)}",
         f"- last event: {payload.get('last_event_ts') or 'none'}",
+        f"- turn traces: {int(trace_artifacts.get('count') or 0)}",
+        f"- latest trace: {trace_artifacts.get('latest_path') or 'none'}",
         f"- last run: {payload.get('last_run_artifact') or 'none'}",
         "Curator integration:",
         f"- skill telemetry source: {curator_integration.get('skill_telemetry_source') or 'unknown'}",
@@ -2270,6 +2274,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
                 "window_days": int((config.get("calibration", {}).get("evidence", {}) or {}).get("window_days", DEFAULT_CALIBRATION["evidence"]["window_days"])),
             },
             "last_run_artifact": str(_latest_run_artifact(config)) if _latest_run_artifact(config) else None,
+            "trace_artifacts": _turn_trace_artifact_summary(config),
             "curator_integration": {
                 "skill_telemetry_source": "Hermes Curator",
                 "hook_mode": "observation_only",

@@ -38,18 +38,18 @@ The key product promise is not “make many changes.” It is:
 
 ## Current Position — 2026-05-26
 
-Overall: **about 8.8合目** for the original long-term roadmap if we count structural migration and runtime stabilization, but still **not complete** because the observation-model redesign and final steady-state proof are unfinished.
+Overall: **about 8.9合目** for the original long-term roadmap if we count structural migration, runtime stabilization, and Slice A turn-trace persistence, but still **not complete** because cluster/index/detail artifacts, planner handoff migration, and final steady-state proof are unfinished.
 
 ### What changed since the earlier 2026-05-10 snapshot
 
 - The active runtime surface is now `planner / editor / evaluator / calibrator`; old role/module naming has been removed from runtime/status/report/internal module names.
 - Runtime is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
 - `improve --dry-run --json` now completes cleanly and writes evidence packs, run artifacts, and episodes under the new naming.
-- Full test baseline is green (`779 passed, 2 skipped`).
+- Full test baseline is green (`787 passed, 2 skipped`).
 
 ### Important caveat
 
-The newer role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That part is **not complete yet**. The runtime still persists canonical observation data as `state/events.jsonl` and reconstructs compact windows/digests from events before handing them to planner. So the plugin is operational and structurally migrated, but the deeper observation-model replacement is still in progress.
+The newer role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. Slice A is now complete: completed observed turns persist first-class turn-trace artifacts alongside `state/events.jsonl`. The remaining gap is Slice B/C: materialize cluster/index/detail artifacts from traces and migrate planner handoff away from event-window-derived digests. So the plugin is operational and structurally migrated, but the deeper observation-model replacement is still in progress.
 
 ### Strong areas
 

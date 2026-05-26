@@ -8,7 +8,7 @@
 
 **Goal:** Finish the unfinished part of the redesign: replace event-centric observation persistence with a first-class turn-trace/evidence-index model, then prove the runtime reaches a trustworthy steady state.
 
-**Architecture:** Keep the current `planner / editor / evaluator / calibrator` role split and the current runtime safety boundaries. Do not add new roles, approval lanes, or side queues. Replace the observation substrate under the existing `improve`/`calibrate` flows: persist canonical turn-trace artifacts, build deterministic cluster summaries and evidence index/detail views from those traces, make planner read the index rather than raw event-derived digests, and then dogfood the resulting runtime long enough to judge quality/readiness from actual outcomes.
+**Architecture:** Keep the current `planner / editor / evaluator / calibrator` role split and the current runtime safety boundaries. Do not add new roles, approval lanes, or side queues. Replace the observation substrate under the existing `improve`/`calibrate` flows: persist canonical turn-trace artifacts, build deterministic cluster summaries and evidence index/detail views from those traces, make planner read the index rather than raw event-derived digests, and then dogfood the resulting runtime long enough to assess quality/readiness from actual outcomes.
 
 **Tech Stack:** Hermes standalone plugin, Python, pytest, existing observer hooks, self-improvement runtime artifacts under `~/.hermes/self-improvement/`, existing planner/editor/evaluator/calibrator prompt surfaces.
 
@@ -20,8 +20,9 @@ As of 2026-05-26:
 
 - Structural migration is mostly done.
 - Runtime is healthy.
-- Full suite is green.
+- Full suite is green (`787 passed, 2 skipped`).
 - `improve --dry-run --json` produces evidence packs, run artifacts, and episodes.
+- Slice A is implemented: completed turns now persist canonical turn-trace artifacts alongside `events.jsonl`, with status visibility for trace count/latest path.
 
 But the redesign is still incomplete because:
 
@@ -45,7 +46,6 @@ This plan is therefore **not another naming cleanup**. It is the remaining execu
 
 ### Not done yet
 
-- First-class stored turn traces.
 - First-class cluster summary artifact.
 - First-class evidence index/detail artifact and planner drilldown flow.
 - Proof that the resulting planner produces better-than-current skip/unknown-heavy behavior.
@@ -86,8 +86,10 @@ Detailed execution plan:
 - `tests/test_observer.py`
 - new focused trace tests
 
+**Status:** Implemented / validated on 2026-05-26. Completed turns write canonical trace artifacts; trace ids/order/redaction are tested; `events.jsonl` remains additive; status shows trace count/latest path. Validation: `pytest tests -q` => `787 passed, 2 skipped`; `py_compile` ok; `git diff --check` ok; `hermes self-improvement status` ok; `improve --dry-run --json` ok; isolated runtime smoke wrote a trace artifact.
+
 **Exit criteria:**
-- A dry-run writes turn-trace artifacts.
+- Completed turn observation writes turn-trace artifacts.
 - Trace ids are deterministic enough for replay/cluster tests.
 - Existing report/improve/calibrate behavior does not regress.
 
@@ -190,7 +192,7 @@ Detailed execution plan:
 - updated plans index
 
 **Exit criteria:**
-- Readiness is judged from observed runs, not inferred from green tests.
+- Readiness is assessed from observed runs, not inferred from green tests.
 - The roadmap is either explicitly completed or explicitly blocked with named reasons.
 
 ---
@@ -226,6 +228,6 @@ Minimum status fields to update:
 
 ## Current next slice
 
-**Start with Slice A — Persist canonical turn-trace artifacts.**
+**Start with Slice B — Build deterministic cluster summary + evidence index/detail artifacts.**
 
-That is the first slice that changes the real unfinished core of the redesign. Everything after that depends on it.
+Slice A is complete enough to provide stable trace artifacts. Slice B should consume those traces mechanically, without adding an LLM summarizer or making planner read raw trace bodies.

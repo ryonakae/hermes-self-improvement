@@ -960,6 +960,7 @@ def test_status_summary_is_human_readable_not_json():
         "event_path": "/tmp/events.jsonl",
         "event_count_sample": 5,
         "last_event_ts": "2026-04-30T00:00:00Z",
+        "trace_artifacts": {"count": 2, "root": "/tmp/traces", "latest_path": "/tmp/traces/2026-05-26/turn-abc.json"},
         "last_run_artifact": "/tmp/run.json",
         "dspy_available": False,
         "editor_backend": {"available": True},
@@ -974,6 +975,8 @@ def test_status_summary_is_human_readable_not_json():
     assert "active evaluator: missing" in text
     assert "next: hermes self-improvement setup" in text
     assert "Curator integration:" in text
+    assert "turn traces: 2" in text
+    assert "latest trace: /tmp/traces/2026-05-26/turn-abc.json" in text
     assert "skill candidates: 7" in text
     assert '"enabled"' not in text
 

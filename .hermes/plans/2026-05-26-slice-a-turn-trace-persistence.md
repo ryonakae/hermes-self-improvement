@@ -9,6 +9,8 @@
 
 **Goal:** Persist one canonical turn-trace artifact per observed Hermes turn so the redesign no longer depends on `state/events.jsonl` as the only observation source of truth.
 
+**Status — 2026-05-26:** Implemented / validated. The observer now writes date-partitioned `self_improvement_turn_trace` artifacts for completed turns while keeping `state/events.jsonl` additive during migration. Status surfaces trace count/latest path. Validation: `pytest tests -q` => `787 passed, 2 skipped`; `py_compile` ok; `git diff --check` ok; `hermes self-improvement status` ok; `improve --dry-run --json` ok; isolated runtime smoke wrote `traces/2026-05-26/turn-*.json`.
+
 **Architecture:** Keep the current observer hook set, but add a deterministic turn assembler on top of it. Events still exist during migration, but a completed turn should also emit a standalone trace artifact under the self-improvement runtime root. The first pass does not need cluster summary or planner consumption yet; it only needs a stable persisted per-turn trace model that later slices can read.
 
 **Tech Stack:** Python, pytest, existing observer hooks, JSON runtime artifacts under `~/.hermes/self-improvement/`, existing redaction helpers.

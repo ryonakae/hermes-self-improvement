@@ -83,10 +83,15 @@ def test_register_exposes_curator_aligned_tool_surface():
 
 def test_status_tool_reports_memory_rollback_readiness(tmp_path):
     mod = load_plugin_module()
+    trace_path = tmp_path / "self-improvement" / "traces" / "2026-05-26" / "turn-abc.json"
+    trace_path.parent.mkdir(parents=True)
+    trace_path.write_text('{"schema_name":"self_improvement_turn_trace"}\n', encoding="utf-8")
 
     raw = mod._handle_self_improvement_status_tool({"config": {"_self_improvement_root": str(tmp_path / "self-improvement")}})
     payload = parse_tool_payload(raw)
 
+    assert payload["trace_artifacts"]["count"] == 1
+    assert payload["trace_artifacts"]["latest_path"] == str(trace_path)
     assert payload["memory_rollback"]["supported"] is False
     assert payload["memory_rollback"]["reason"] == "unsupported_pending_store_validation"
     assert payload["memory_rollback"]["execution"] == "blocked"

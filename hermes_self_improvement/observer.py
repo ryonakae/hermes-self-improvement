@@ -10,6 +10,8 @@ from typing import Any
 from .config import DEFAULT_PREVIEW_CHARS, DEFAULT_RETENTION_DAYS, get_hermes_home, load_config
 PLUGIN_NAME = "hermes-self-improvement"
 UTC = timezone.utc
+TURN_TRACE_SCHEMA_NAME = "self_improvement_turn_trace"
+TURN_TRACE_SCHEMA_VERSION = "1.0"
 
 SENSITIVE_ARG_KEYS = {
     "api_key", "token", "password", "secret", "authorization", "cookie",
@@ -130,6 +132,88 @@ def _event_path(config: dict[str, Any]) -> Path:
     return _self_improvement_root(config) / "state" / "events.jsonl"
 
 
+def _turn_trace_root(config: dict[str, Any]) -> Path:
+    return _self_improvement_root(config) / "traces"
+
+
+def _turn_trace_path(config: dict[str, Any], *, created_at: str | datetime, turn_id: str) -> Path:
+    dt = _parse_dt(created_at) if not isinstance(created_at, datetime) else created_at.astimezone(UTC)
+    if dt is None:
+        raise ValueError("invalid_turn_trace_created_at")
+    return _turn_trace_root(config) / dt.strftime("%Y-%m-%d") / f"{turn_id}.json"
+
+
+def _turn_trace_step(ev: dict[str, Any], step_index: int) -> dict[str, Any]:
+    return {
+        "step_index": step_index,
+        "kind": "tool" if str(ev.get("event") or "").endswith("tool_call") else "api" if str(ev.get("event") or "").endswith("api_request") else "session",
+        "event": str(ev.get("event") or ""),
+        "tool_name": str(ev.get("tool_name") or ""),
+        "status": str(ev.get("status") or "ok"),
+        "error_kind": str(ev.get("error_kind") or ""),
+        "provider": str(ev.get("provider") or ""),
+        "model": str(ev.get("model") or ""),
+        "finish_reason": str(ev.get("finish_reason") or ""),
+        "args_preview": _redact_value(ev.get("args_preview")),
+        "result_preview": _redact_text(str(ev.get("result_preview") or "")),
+    }
+
+
+def _assemble_turn_trace(events: list[dict[str, Any]]) -> dict[str, Any]:
+    ordered = sorted(
+        [ev for ev in events if isinstance(ev, dict)],
+        key=lambda ev: (
+            _parse_dt(ev.get("ts")) or datetime.fromtimestamp(0, UTC),
+            str(ev.get("event") or ""),
+            str(ev.get("tool_name") or ""),
+        ),
+    )
+    if not ordered:
+        raise ValueError("turn_trace_events_empty")
+    first = ordered[0]
+    user_preview = next((_redact_text(str(ev.get("user_message_preview") or "")) for ev in ordered if ev.get("user_message_preview")), "")
+    assistant_preview = next((_redact_text(str(ev.get("assistant_response_preview") or "")) for ev in ordered if ev.get("assistant_response_preview")), "")
+    steps = [_turn_trace_step(ev, index) for index, ev in enumerate(ordered)]
+    basis = _stable_json([
+        {
+            "ts": ev.get("ts"),
+            "event": ev.get("event"),
+            "session_id": ev.get("session_id"),
+            "task_id": ev.get("task_id"),
+            "tool_name": ev.get("tool_name"),
+            "status": ev.get("status"),
+            "error_kind": ev.get("error_kind"),
+        }
+        for ev in ordered
+    ])
+    finish_reasons = [str(ev.get("finish_reason")) for ev in ordered if str(ev.get("finish_reason") or "")]
+    final_error_kinds = []
+    for ev in ordered:
+        error_kind = str(ev.get("error_kind") or "")
+        if error_kind and error_kind not in final_error_kinds:
+            final_error_kinds.append(error_kind)
+    return {
+        "schema_name": TURN_TRACE_SCHEMA_NAME,
+        "schema_version": TURN_TRACE_SCHEMA_VERSION,
+        "turn_id": "turn-" + _sha256_text(basis)[:16],
+        "session_id": str(first.get("session_id") or ""),
+        "task_id": str(first.get("task_id") or ""),
+        "platform": str(first.get("platform") or ""),
+        "created_at": str(first.get("ts") or ""),
+        "turn_status": "completed",
+        "user_message_preview": user_preview,
+        "assistant_response_preview": assistant_preview,
+        "steps": steps,
+        "summary": {
+            "tool_count": sum(1 for ev in ordered if str(ev.get("event") or "").endswith("tool_call")),
+            "tool_error_count": sum(1 for ev in ordered if str(ev.get("event") or "").endswith("tool_call") and str(ev.get("status") or "").lower() in {"warning", "error", "failed"}),
+            "api_call_count": sum(1 for ev in ordered if str(ev.get("event") or "").endswith("api_request")),
+            "finish_reasons": finish_reasons,
+            "final_error_kinds": final_error_kinds,
+        },
+    }
+
+
 def _report_dir(config: dict[str, Any]) -> Path:
     return _self_improvement_root(config) / "daily"
 
@@ -142,6 +226,26 @@ def _append_jsonl(path: Path, event: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(event, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+
+
+def _write_turn_trace(config: dict[str, Any], trace: dict[str, Any]) -> Path:
+    path = _turn_trace_path(config, created_at=trace["created_at"], turn_id=trace["turn_id"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(trace, ensure_ascii=False, sort_keys=True, indent=2, default=str) + "\n", encoding="utf-8")
+    tmp_path.replace(path)
+    return path
+
+
+def _turn_trace_artifact_summary(config: dict[str, Any]) -> dict[str, Any]:
+    root = _turn_trace_root(config)
+    paths = sorted((path for path in root.glob("*/*.json") if path.is_file()), key=lambda path: path.stat().st_mtime) if root.exists() else []
+    latest = paths[-1] if paths else None
+    return {
+        "root": str(root),
+        "count": len(paths),
+        "latest_path": str(latest) if latest else None,
+    }
 
 
 def _load_events(path: Path, since: datetime | None = None, limit: int | None = None) -> list[dict[str, Any]]:
@@ -225,6 +329,7 @@ class RuntimeObserver:
         self.preview_chars = int(config.get("preview_chars", DEFAULT_PREVIEW_CHARS))
         self.retention_days = int(config.get("retention_days", DEFAULT_RETENTION_DAYS))
         self.path = _event_path(config)
+        self._turn_events: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._pruned_this_process = False
         self.last_prune_stats: dict[str, int] = {"kept": 0, "pruned": 0, "malformed": 0}
 
@@ -280,6 +385,26 @@ class RuntimeObserver:
                 "interrupted": payload.get("interrupted"),
             })
         _append_jsonl(self.path, ev)
+        self._record_turn_event(ev)
+
+    def _record_turn_event(self, ev: dict[str, Any]) -> None:
+        key = (str(ev.get("session_id") or ""), str(ev.get("task_id") or ""))
+        if not key[0] and not key[1]:
+            return
+        events = self._turn_events.setdefault(key, [])
+        events.append(dict(ev))
+        if not self._is_turn_completion_event(ev):
+            return
+        trace = _assemble_turn_trace(events)
+        _write_turn_trace(self.config, trace)
+        self._turn_events.pop(key, None)
+
+    def _is_turn_completion_event(self, ev: dict[str, Any]) -> bool:
+        event = ev.get("event")
+        enabled_hooks = set(self.config.get("observe_hooks") or [])
+        if "post_llm_call" in enabled_hooks:
+            return event == "post_llm_call"
+        return event in {"post_api_request", "post_llm_call"}
 
     def _populate_tool_event(self, ev: dict[str, Any], payload: dict[str, Any]) -> None:
         tool_name = payload.get("tool_name") or ""
