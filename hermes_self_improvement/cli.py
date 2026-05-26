@@ -20,7 +20,7 @@ from .config import (
 from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
 from .planner import (
     build_planner_windows,
-    build_memory_extractor_digest as build_planner_digest,
+    build_planner_memory_digest as build_planner_digest,
     make_planner_candidate,
     reconcile_planner_payload_with_existing_memories,
     run_planner,
@@ -31,9 +31,9 @@ from .evidence import build_evidence_pack, write_evidence_pack
 from .episodes import record_run_episodes
 from .editor import run_editor_task
 from .editor_backend import build_editor_backend, editor_backend_status
-from .skill_agent_backend import build_skill_agent_backend
-from .memory_agent_backend import build_memory_agent_backend
-from .skill_agent import run_skill_agent_task
+from .editor_backend_skill import build_skill_agent_backend
+from .editor_backend_memory import build_memory_agent_backend
+from .editor_skill import run_skill_agent_task
 from .next_actions import render_next_actions
 from .runner_steps import (
     _execute_memory_context,

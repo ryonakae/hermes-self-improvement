@@ -210,13 +210,13 @@ def build_outcome_score_aggregate(*, config: dict[str, Any], limit: int = 1000) 
     scored = [score_episode_outcomes(episode, observations) for episode in episodes]
     scored_with_observations = [row for row in scored if row.get("observation_count")]
 
-    by_improvement_planner: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_planner_runtime: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_skill_agent: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_memory_agent: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_evaluator: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_target_kind: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in scored:
-        by_improvement_planner[str(row.get("planner_prompt_hash") or "unknown")].append(row)
+        by_planner_runtime[str(row.get("planner_prompt_hash") or "unknown")].append(row)
         by_skill_agent[str(row.get("skill_agent_prompt_hash") or "unknown")].append(row)
         by_memory_agent[str(row.get("memory_agent_prompt_hash") or "unknown")].append(row)
         by_evaluator[str(row.get("evaluator_hash") or "unknown")].append(row)
@@ -229,7 +229,7 @@ def build_outcome_score_aggregate(*, config: dict[str, Any], limit: int = 1000) 
         "observation_count": len(observations),
         "scored_episode_count": len(scored_with_observations),
         "overall": _bucket_summary(scored),
-        "by_planner_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_improvement_planner.items())},
+        "by_planner_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_planner_runtime.items())},
         "by_skill_agent_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_skill_agent.items())},
         "by_memory_agent_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_memory_agent.items())},
         "by_evaluator_hash": {key: _bucket_summary(value) for key, value in sorted(by_evaluator.items())},

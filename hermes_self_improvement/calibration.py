@@ -69,7 +69,7 @@ def _planner_quality_from_run(payload: dict[str, Any]) -> dict[str, Any]:
     return quality
 
 
-def _improvement_planner_prompt_signal_count(quality: dict[str, Any]) -> int:
+def _planner_runtime_prompt_signal_count(quality: dict[str, Any]) -> int:
     signals = int(quality.get("action_like_skips") or 0) + int(quality.get("weak_only_selected_count") or 0)
     selected = int(quality.get("mutate_skill_count") or 0)
     selected_with_evidence = int(quality.get("selected_with_evidence") or 0)
@@ -126,7 +126,7 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
             summary["sources"].append(str(path))
 
         if schema == "self_improvement_run_result":
-            planner_signals = _improvement_planner_prompt_signal_count(_planner_quality_from_run(payload))
+            planner_signals = _planner_runtime_prompt_signal_count(_planner_quality_from_run(payload))
             if planner_signals:
                 summary["improvement_planner_prompt_signals"] = int(summary.get("improvement_planner_prompt_signals") or 0) + planner_signals
                 summary["total_events"] += 1

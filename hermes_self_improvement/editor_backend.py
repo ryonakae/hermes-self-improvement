@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .memory_agent_backend import (
+from .editor_backend_memory import (
     ALLOWED_MEMORY_AGENT_TOOLS,
     MemoryAgentBackend,
     MemoryAgentBackendLimits,
@@ -15,7 +15,7 @@ from .memory_agent_backend import (
     native_memory_agent_tool_schemas,
     validate_memory_agent_success_result,
 )
-from .skill_agent_backend import (
+from .editor_backend_skill import (
     ALLOWED_SKILL_AGENT_TOOLS,
     NativeSkillAgentBackend,
     SkillAgentBackend,

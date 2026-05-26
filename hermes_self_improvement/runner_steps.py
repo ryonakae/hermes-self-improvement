@@ -6,18 +6,18 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .skill_agent import run_skill_agent_task
-from .skill_agent_backend import build_skill_agent_backend
+from .editor_skill import run_skill_agent_task
+from .editor_backend_skill import build_skill_agent_backend
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_archive_operation
 from .editor import build_editor_prompt, run_editor_task
 from .memory_context import build_related_memory_lookup_context
 from .observer import _redact_text
-from .improvement_planner import build_improvement_planner_digest, build_improvement_planner_quality_report, run_improvement_planner
+from .planner_runtime import build_planner_runtime_digest, build_planner_runtime_quality_report, run_planner_runtime
 from .prompt_overlays import load_active_prompt_overlay
 from .prompts import base_prompt_hash, render_editor_instructions
 from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
-from .target_resolver import build_target_resolution_digest, run_target_resolver
+from .planner_targets import build_target_resolution_digest, run_planner_targets
 from .evidence import resolve_coverage_alias
 from .skill_reference_rewriter import apply_skill_reference_rewrite_plan, build_skill_reference_rewrite_plan
 
@@ -545,7 +545,7 @@ def _normalize_capacity_operation(raw: dict[str, Any], *, target: str) -> dict[s
 
 def _capacity_compaction_operations(*, failed_operation: dict[str, Any] | None, failure_result: dict[str, Any], target: str, content: str, config: dict[str, Any]) -> list[dict[str, Any]]:
     # memory_capacity_planner の LLM 呼び出しは廃止 (PR2-c)。
-    # capacity 圧迫時の compaction は memory_agent (memory_agent_backend.py) に集約する。
+    # capacity 圧迫時の compaction は editor memory lane (editor_backend_memory.py) に集約する。
     # 一時的に互換注入用フックは残し、deterministic な計画は外部から渡されたときだけ採用する。
     planner = config.get("_memory_capacity_planner_fn")
     raw: list[Any] = []
@@ -846,7 +846,7 @@ def _memory_inventory_operations(evidence: list[dict[str, Any]], config: dict[st
     """Return memory operations derived from deterministic evidence hints.
 
     PR2-c で memory_inventory_planner の LLM 呼び出しは廃止した。判断負荷は
-    新設の memory_agent (memory_agent_backend.py) に集約する。ここでは
+    新設の editor memory lane (editor_backend_memory.py) に集約する。ここでは
     `target_resolution_hint` に明示的に書かれた hinted operation だけを
     実行候補として返し、それ以外は memory_agent に委ねる方針に切り替えた。
     互換注入用フック `_memory_inventory_planner_fn` は引き続き受け付ける。
@@ -1075,7 +1075,7 @@ def run_skill_improvement_step(
             "decisions": [],
         }
     model_cfg = (config or {}).get("model") if isinstance((config or {}).get("model"), dict) else {}
-    if not candidate_by_name and not callable((config or {}).get("_improvement_planner_func")) and not callable((config or {}).get("_planner_func")) and not isinstance(model_cfg.get("planner"), dict):
+    if not candidate_by_name and not callable((config or {}).get("_planner_runtime_func")) and not callable((config or {}).get("_planner_func")) and not isinstance(model_cfg.get("planner"), dict):
         return {
             "status": "no_skill_candidates",
             "changed": 0,
@@ -1088,10 +1088,10 @@ def run_skill_improvement_step(
         skill_candidates=candidates,
         memory_context={},
     )
-    target_resolutions = run_target_resolver(target_resolution_digest, config=config)
+    target_resolutions = run_planner_targets(target_resolution_digest, config=config)
     evidence_pack = {**evidence_pack, "target_resolutions": target_resolutions}
-    digest = build_improvement_planner_digest(evidence_pack)
-    planner = run_improvement_planner(digest, config=config)
+    digest = build_planner_runtime_digest(evidence_pack)
+    planner = run_planner_runtime(digest, config=config)
     all_evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
     evidence_by_id = {str(item.get("id") or ""): item for item in all_evidence if isinstance(item, dict)}
     digest_by_name = {str(item.get("name") or ""): item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)}
@@ -1379,7 +1379,7 @@ def run_skill_improvement_step(
             "result": result,
         })
 
-    quality = build_improvement_planner_quality_report(digest=digest, planner=planner, runner_decisions=decisions)
+    quality = build_planner_runtime_quality_report(digest=digest, planner=planner, runner_decisions=decisions)
     return {
         "status": "completed" if decisions else "no_planner_decisions",
         "changed": len(set(changed_skills)),

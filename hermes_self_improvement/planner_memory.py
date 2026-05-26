@@ -94,7 +94,7 @@ def _rank_reason_from_signals(signals: dict[str, Any], lexical_reason: str) -> s
     return lexical_reason
 
 
-def build_memory_extractor_windows(
+def build_planner_memory_windows(
     events: list[dict[str, Any]],
     *,
     radius: int = 3,
@@ -119,7 +119,7 @@ def build_memory_extractor_windows(
     return windows[:limit]
 
 
-def normalize_memory_extractor_payload(payload: Any) -> dict[str, Any]:
+def normalize_planner_memory_payload(payload: Any) -> dict[str, Any]:
     raw_candidates = payload.get("candidates") if isinstance(payload, dict) else []
     if not isinstance(raw_candidates, list):
         raw_candidates = []
@@ -229,8 +229,8 @@ def _looks_workflow_shaped(text: str) -> bool:
     return any(marker in lowered for marker in _WORKFLOW_SHAPED_MARKERS)
 
 
-def reconcile_memory_extractor_payload_with_existing_memories(payload: Any, *, existing_memories: list[Any] | None = None) -> dict[str, Any]:
-    normalized = normalize_memory_extractor_payload(payload)
+def reconcile_planner_memory_payload_with_existing_memories(payload: Any, *, existing_memories: list[Any] | None = None) -> dict[str, Any]:
+    normalized = normalize_planner_memory_payload(payload)
     memories = existing_memories or []
     missing_relations = {"", "missing", "new", "new_memory", "no_existing", "no_existing_memory"}
     for candidate in normalized.get("candidates") or []:
@@ -297,7 +297,7 @@ def reconcile_memory_extractor_payload_with_existing_memories(payload: Any, *, e
     return normalized
 
 
-def make_memory_extractor_candidate(
+def make_planner_memory_candidate(
     *,
     candidate_id: str | None = None,
     target: str,
@@ -316,7 +316,7 @@ def make_memory_extractor_candidate(
         "confidence": confidence,
         "relation_to_existing": relation_to_existing,
     }
-    normalized = normalize_memory_extractor_payload({"candidates": [{"candidate_id": candidate_id or "", **payload}]})["candidates"][0]
+    normalized = normalize_planner_memory_payload({"candidates": [{"candidate_id": candidate_id or "", **payload}]})["candidates"][0]
     if routing_hint and routing_hint in ALLOWED_ROUTING_HINTS:
         normalized["routing_hint"] = routing_hint
     item = {
@@ -331,7 +331,7 @@ def make_memory_extractor_candidate(
     return item
 
 
-def build_memory_extractor_digest(
+def build_planner_memory_digest(
     windows: list[dict[str, Any]],
     *,
     existing_memories: list[Any] | None = None,
@@ -363,14 +363,14 @@ MEMORY_EXTRACTOR_SYSTEM = (
 )
 
 
-def build_memory_extractor_messages(digest: dict[str, Any]) -> list[dict[str, Any]]:
+def build_planner_memory_messages(digest: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {"role": "system", "content": MEMORY_EXTRACTOR_SYSTEM},
         {"role": "user", "content": json.dumps(digest, ensure_ascii=False, sort_keys=True)},
     ]
 
 
-def _memory_extractor_model_config(config: dict[str, Any]) -> dict[str, Any]:
+def _planner_memory_model_config(config: dict[str, Any]) -> dict[str, Any]:
     raw_model = config.get("model")
     model_config = raw_model if isinstance(raw_model, dict) else {}
     raw_value = model_config.get("memory_extractor") or model_config.get("planner")
@@ -378,8 +378,8 @@ def _memory_extractor_model_config(config: dict[str, Any]) -> dict[str, Any]:
     return value or {}
 
 
-def _call_memory_extractor_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    extractor_config = _memory_extractor_model_config(config)
+def _call_planner_memory_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    extractor_config = _planner_memory_model_config(config)
     provider = extractor_config.get("provider") or "auto"
     model = extractor_config.get("model") or None
     timeout = _coerce_int(extractor_config.get("timeout"), default=60)
@@ -388,7 +388,7 @@ def _call_memory_extractor_llm(*, digest: dict[str, Any], config: dict[str, Any]
     api_key = extractor_config.get("api_key") or None
     raw_extra = extractor_config.get("extra_body")
     configured_extra: dict[str, Any] = raw_extra if isinstance(raw_extra, dict) else {}
-    messages = build_memory_extractor_messages(digest)
+    messages = build_planner_memory_messages(digest)
     _ensure_hermes_agent_on_path()
     from agent.auxiliary_client import call_llm, extract_content_or_reasoning
     from .llm_telemetry import record_llm_call
@@ -423,9 +423,9 @@ def _call_memory_extractor_llm(*, digest: dict[str, Any], config: dict[str, Any]
     return _extract_json_object(response_text)
 
 
-def run_memory_extractor(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_planner_memory(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
-    extractor_func = cfg.get("_memory_extractor_func") if isinstance(cfg, dict) else None
+    extractor_func = cfg.get("_planner_memory_func") if isinstance(cfg, dict) else None
     if callable(extractor_func):
         try:
             payload = extractor_func(digest=digest, config=cfg)
@@ -433,9 +433,9 @@ def run_memory_extractor(digest: dict[str, Any], *, config: dict[str, Any] | Non
             return {"candidates": [], "extractor_error": _redact_text(str(exc), max_chars=240)}
     elif isinstance(cfg.get("model"), dict):
         try:
-            payload = _call_memory_extractor_llm(digest=digest, config=cfg)
+            payload = _call_planner_memory_llm(digest=digest, config=cfg)
         except Exception as exc:
             return {"candidates": [], "extractor_error": _redact_text(str(exc), max_chars=240)}
     else:
         payload = {"candidates": []}
-    return normalize_memory_extractor_payload(payload)
+    return normalize_planner_memory_payload(payload)

@@ -39,7 +39,7 @@ Hermes の skill / memory / scorer / evaluator を改善するための user plu
 - `hermes_self_improvement/observer.py`: hook observer、redaction、JSONL telemetry
 - `hermes_self_improvement/evidence.py`: event aggregation / evidence extraction / context-windowed unmatched candidates
 - `hermes_self_improvement/planner.py`: planner facade, target resolution digest / normalization, and planner execution surface
-- `hermes_self_improvement/memory_extractor.py`: conversation window ranking and memory gap candidates
+- `hermes_self_improvement/planner_memory.py`: conversation window ranking and memory gap candidates
 - `hermes_self_improvement/calibration.py`: calibration evidence、outcome prepass、regression-gated active evaluator promotion
 - `hermes_self_improvement/runtime_eval_cases.py`: runtime-private eval case builders for episodes, unmatched observations, and improve run artifacts
 - `hermes_self_improvement/outcome_observer.py`: `calibrate` 前処理で outcome observation を生成する lightweight producer

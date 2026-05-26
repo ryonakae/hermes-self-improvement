@@ -85,9 +85,9 @@ PY
 
 役割別モジュール (LLM site 名で参照):
 
-- evidence 収集: `evidence.py`、`target_resolver.py`、`memory_extractor.py`
-- 改善判断: `improvement_planner.py`
-- mutation 実行: `skill_agent.py` + `skill_agent_backend.py`、`memory_agent.py` + `memory_agent_backend.py`
+- evidence 収集: `evidence.py`、`planner_targets.py`、`planner_memory.py`
+- 改善判断: `planner.py` / `planner_runtime.py`
+- mutation 実行: `editor.py` / `editor_skill.py` / `editor_memory.py`、`editor_backend.py` / `editor_backend_skill.py` / `editor_backend_memory.py`
 - mutation 下位層: `mutation_policy.py`、`mutation_worker.py`
 - evaluator: `calibration.py`、`runtime_eval_cases.py`
 - 計測: `llm_telemetry.py`、`prompt_cache.py`

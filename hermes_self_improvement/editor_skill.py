@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .skill_agent_backend import ALLOWED_SKILL_AGENT_TOOLS, SkillAgentBackend
+from .editor_backend_skill import ALLOWED_SKILL_AGENT_TOOLS, SkillAgentBackend
 from .prompts import SKILL_MEMORY_CLASSIFICATION_BLOCK
 from .skill_snapshot import SkillSnapshotError, capture_skill_snapshot
 SKILL_AGENT_TASK_TYPES = {

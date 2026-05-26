@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .memory_agent_backend import (
+from .editor_backend_memory import (
     ALLOWED_MEMORY_AGENT_TOOLS,
     MemoryAgentBackend,
     normalize_memory_agent_outcome,

@@ -181,7 +181,7 @@ def _coverage_adjusted_maintenance_affordance(affordance: dict[str, Any], covera
     return adjusted
 
 
-def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+def build_planner_runtime_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
     skill_ids = [str(item) for item in views.get("skill", [])]
     skill_evidence = _evidence_by_ids(evidence_pack, skill_ids)
@@ -787,7 +787,7 @@ def _message_content_to_text(content: Any) -> str:
     return str(content or "")
 
 
-def _call_improvement_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+def _call_planner_runtime_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
     planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
     provider = planner_config.get("provider") or "auto"
@@ -827,7 +827,7 @@ def _call_improvement_planner_llm(*, digest: dict[str, Any], config: dict[str, A
     return payload
 
 
-def build_improvement_planner_quality_report(
+def build_planner_runtime_quality_report(
     *,
     digest: dict[str, Any],
     planner: dict[str, Any],
@@ -910,16 +910,16 @@ def build_improvement_planner_quality_report(
     }
 
 
-def run_improvement_planner(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_planner_runtime(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
-    planner_func = cfg.get("_improvement_planner_func") or cfg.get("_planner_func") if isinstance(cfg, dict) else None
+    planner_func = cfg.get("_planner_runtime_func") or cfg.get("_planner_func") if isinstance(cfg, dict) else None
     used_llm = False
     try:
         if callable(planner_func):
             payload = planner_func(digest=digest, config=cfg)
         elif isinstance(cfg.get("model"), dict):
             used_llm = True
-            payload = _call_improvement_planner_llm(digest=digest, config=cfg)
+            payload = _call_planner_runtime_llm(digest=digest, config=cfg)
         else:
             return _fallback_plan_from_digest(digest)
         return _normalize_planner_payload(payload, digest)

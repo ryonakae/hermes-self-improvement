@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .memory_agent import (
+from .editor_memory import (
     MemoryAgentError,
     MemoryAgentRunner as _MemoryAgentRunner,
     build_memory_agent_prompt,
@@ -11,7 +11,7 @@ from .memory_agent import (
     validate_memory_agent_task,
     validate_reported_tools as validate_memory_reported_tools,
 )
-from .skill_agent import (
+from .editor_skill import (
     NON_MUTATING_AGENT_OUTCOMES,
     SKILL_AGENT_TASK_TYPES,
     SkillAgentError,

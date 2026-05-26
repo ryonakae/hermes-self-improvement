@@ -42,7 +42,7 @@ def _skill_target_block_reason(target: str, known_skill_targets: dict[str, dict[
     return None
 
 
-def normalize_target_resolver_payload(
+def normalize_planner_targets_payload(
     payload: Any,
     *,
     known_skill_targets: dict[str, dict[str, Any]],
@@ -305,7 +305,7 @@ TARGET_RESOLVER_SYSTEM = (
 )
 
 
-def _target_resolver_system_with_overlay(config: dict[str, Any] | None = None) -> tuple[str, dict[str, Any] | None]:
+def _planner_targets_system_with_overlay(config: dict[str, Any] | None = None) -> tuple[str, dict[str, Any] | None]:
     overlay = None
     if config is not None:
         overlay = load_active_prompt_overlay(config, role="planner", base_hash=base_prompt_hash("planner"))
@@ -315,13 +315,13 @@ def _target_resolver_system_with_overlay(config: dict[str, Any] | None = None) -
     return TARGET_RESOLVER_SYSTEM, overlay
 
 
-def build_target_resolver_prompt(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> str:
-    system_message, _overlay = _target_resolver_system_with_overlay(config)
+def build_planner_targets_prompt(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> str:
+    system_message, _overlay = _planner_targets_system_with_overlay(config)
     return system_message + "\n\n" + json.dumps(digest, ensure_ascii=False, sort_keys=True)
 
 
-def build_target_resolver_messages(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    system_message, _overlay = _target_resolver_system_with_overlay(config)
+def build_planner_targets_messages(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    system_message, _overlay = _planner_targets_system_with_overlay(config)
     return [
         {"role": "system", "content": system_message},
         {"role": "user", "content": json.dumps(digest, ensure_ascii=False, sort_keys=True)},
@@ -337,7 +337,7 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
     user_message = json.dumps(digest, ensure_ascii=False, sort_keys=True)
     from .llm_telemetry import record_llm_call
 
-    system_message, _overlay = _target_resolver_system_with_overlay(config)
+    system_message, _overlay = _planner_targets_system_with_overlay(config)
     result = run_constrained_role_agent(
         role="planner",
         system_message=system_message,
@@ -364,7 +364,7 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
     return _extract_json_object(response_text)
 
 
-def run_target_resolver(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_planner_targets(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
     known: dict[str, dict[str, Any]] = {}
     for tier_key in ("skill_targets", "skill_targets_other_names"):
@@ -377,11 +377,11 @@ def run_target_resolver(digest: dict[str, Any], *, config: dict[str, Any] | None
             # names-only entries omit mutable/pinned/state/provenance; default to
             # mutable=True so the attachment block_reason check accepts them.
             known[name] = {"mutable": item.get("mutable", True), **item}
-    resolver_func = cfg.get("_target_resolver_func") if isinstance(cfg, dict) else None
+    resolver_func = cfg.get("_planner_targets_func") if isinstance(cfg, dict) else None
     if callable(resolver_func):
         payload = resolver_func(digest=digest, config=cfg)
     elif isinstance(cfg.get("model"), dict):
         payload = _call_resolver_llm(digest=digest, config=cfg)
     else:
         payload = {"resolutions": []}
-    return normalize_target_resolver_payload(payload, known_skill_targets=known)
+    return normalize_planner_targets_payload(payload, known_skill_targets=known)
