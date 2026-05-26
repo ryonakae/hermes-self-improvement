@@ -80,8 +80,8 @@ def test_memory_capacity_falls_back_to_active_external_provider_when_still_full(
 def test_memory_capacity_uses_injected_compaction_planner_when_provided():
     # PR2-c: memory_capacity_planner の LLM 呼び出しは廃止された。
     # 互換注入フック `_memory_capacity_planner_fn` から compaction を受け取れる
-    # ことだけを検証する。本来の compaction 計画は memory_agent
-    # (memory_agent_backend.py) に移譲される。
+    # ことだけを検証する。本来の compaction 計画は editor
+    # (editor_backend.py) に移譲される。
     calls = []
 
     def fake_memory(**args):

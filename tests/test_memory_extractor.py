@@ -2,23 +2,23 @@ import sys
 import types
 
 import hermes_self_improvement.llm_telemetry as llm_telemetry
-import hermes_self_improvement.memory_extractor as memory_extractor_module
+import hermes_self_improvement.planner as planner_module
 from hermes_self_improvement.runner_steps import run_memory_improvement_step
-from hermes_self_improvement.memory_extractor import (
+from hermes_self_improvement.planner import (
     MEMORY_EXTRACTOR_SYSTEM,
-    build_memory_extractor_windows,
-    build_memory_extractor_messages,
-    make_memory_extractor_candidate,
-    normalize_memory_extractor_payload,
-    reconcile_memory_extractor_payload_with_existing_memories,
-    run_memory_extractor,
+    build_planner_windows,
+    build_planner_messages,
+    make_planner_candidate,
+    normalize_planner_payload,
+    reconcile_planner_payload_with_existing_memories,
+    run_planner,
 )
 
 
-def test_build_memory_extractor_messages_splits_system_and_user():
+def test_build_planner_messages_splits_system_and_user():
     digest = {"windows": [{"center_index": 0}], "existing_memories": []}
 
-    messages = build_memory_extractor_messages(digest)
+    messages = build_planner_messages(digest)
 
     assert [m["role"] for m in messages] == ["system", "user"]
     assert messages[0]["content"] == MEMORY_EXTRACTOR_SYSTEM
@@ -40,7 +40,7 @@ def test_rank_conversation_windows_prefers_user_correction_but_keeps_other_windo
         {"event": "post_llm_call", "session_id": "s2", "user_message_preview": "普通の相談"},
     ]
 
-    windows = build_memory_extractor_windows(events, limit=10)
+    windows = build_planner_windows(events, limit=10)
 
     assert len(windows) == 2
     assert windows[0]["rank_reason"] in {"correction_like", "preference_like"}
@@ -70,7 +70,7 @@ def test_rank_conversation_windows_prefers_structural_failure_retry_over_lexical
         {"event": "post_llm_call", "session_id": "s2", "user_message_preview": "それは違う。plugin側だけで進めて"},
     ]
 
-    windows = build_memory_extractor_windows(events, limit=10)
+    windows = build_planner_windows(events, limit=10)
 
     assert windows[0]["center_index"] == 1
     assert windows[0]["rank_reason"] == "structural_failure_retry_value_delta"
@@ -79,7 +79,7 @@ def test_rank_conversation_windows_prefers_structural_failure_retry_over_lexical
     assert windows[0]["rank_signals"]["has_value_token_delta"] is True
 
 
-def test_memory_extractor_structural_ranking_ignores_generic_value_tokens():
+def test_planner_structural_ranking_ignores_generic_value_tokens():
     events = [
         {
             "event": "post_tool_call",
@@ -102,7 +102,7 @@ def test_memory_extractor_structural_ranking_ignores_generic_value_tokens():
         },
     ]
 
-    windows = build_memory_extractor_windows(events, limit=10)
+    windows = build_planner_windows(events, limit=10)
 
     assert windows[0]["rank_reason"] == "sampled_context"
     assert windows[0]["rank_signals"]["has_value_token_delta"] is False
@@ -115,13 +115,13 @@ def test_conversation_window_includes_surrounding_context():
         {"event": "post_llm_call", "session_id": "s1", "assistant_response_preview": "了解、plugin側に絞ります"},
     ]
 
-    windows = build_memory_extractor_windows(events, radius=1, limit=5)
+    windows = build_planner_windows(events, radius=1, limit=5)
 
     assert len(windows[0]["events"]) == 3
     assert windows[0]["center_index"] == 1
 
 
-def test_normalize_memory_extractor_payload_strips_action_and_preserves_candidate_fields():
+def test_normalize_planner_payload_strips_action_and_preserves_candidate_fields():
     payload = {
         "candidates": [
             {
@@ -136,15 +136,15 @@ def test_normalize_memory_extractor_payload_strips_action_and_preserves_candidat
         ]
     }
 
-    out = normalize_memory_extractor_payload(payload)
+    out = normalize_planner_payload(payload)
 
     assert "action" not in out["candidates"][0]
     assert out["candidates"][0]["target"] == "user"
     assert out["candidates"][0]["candidate_fact"].startswith("Ryo prefers")
 
 
-def test_make_memory_extractor_candidate_does_not_emit_memory_operation():
-    candidate = make_memory_extractor_candidate(
+def test_make_planner_candidate_does_not_emit_memory_operation():
+    candidate = make_planner_candidate(
         candidate_id="m1",
         target="user",
         candidate_fact="Ryo prefers simple apply/defer/skip/block decisions for self-improvement.",
@@ -169,7 +169,7 @@ def test_reconcile_memory_gap_payload_routes_workflow_shaped_fact_to_skill_route
         "relation_to_existing": "missing",
     }]}
 
-    out = reconcile_memory_extractor_payload_with_existing_memories(payload, existing_memories=[])
+    out = reconcile_planner_payload_with_existing_memories(payload, existing_memories=[])
 
     candidate = out["candidates"][0]
     assert candidate["routing_hint"] == "defer_unclear"
@@ -186,7 +186,7 @@ def test_reconcile_memory_gap_payload_routes_raw_tool_output_to_diagnostic():
         "relation_to_existing": "missing",
     }]}
 
-    out = reconcile_memory_extractor_payload_with_existing_memories(payload, existing_memories=[])
+    out = reconcile_planner_payload_with_existing_memories(payload, existing_memories=[])
 
     candidate = out["candidates"][0]
     assert candidate["routing_hint"] == "defer_unclear"
@@ -202,7 +202,7 @@ def test_reconcile_memory_gap_payload_marks_near_duplicate_as_skip_duplicate():
         "confidence": "high",
     }]}
 
-    out = reconcile_memory_extractor_payload_with_existing_memories(
+    out = reconcile_planner_payload_with_existing_memories(
         payload,
         existing_memories=[{"target": "memory", "text": "Hermes runtime root is ~/.hermes."}],
     )
@@ -220,7 +220,7 @@ def test_reconcile_memory_gap_payload_marks_semantic_duplicate_browser_guidance_
         "relation_to_existing": "missing",
     }]}
 
-    out = reconcile_memory_extractor_payload_with_existing_memories(
+    out = reconcile_planner_payload_with_existing_memories(
         payload,
         existing_memories=[{"target": "memory", "text": "Hermes browser はデフォルト browser tool interface を前提にする。現 backend が agent-browser の場合でも通常は直叩きせず、backend troubleshooting時だけ `AGENT_BROWSER_ARGS`/`AGENT_BROWSER_PROFILE` 等を扱う。"}],
     )
@@ -240,7 +240,7 @@ def test_reconcile_memory_gap_payload_marks_related_stale_memory_as_replace_exis
         "confidence": "high",
     }]}
 
-    out = reconcile_memory_extractor_payload_with_existing_memories(
+    out = reconcile_planner_payload_with_existing_memories(
         payload,
         existing_memories=[{"target": "memory", "text": "Hermes runtime root is /opt/data."}],
     )
@@ -260,7 +260,7 @@ def test_reconcile_memory_gap_payload_marks_unclear_existing_relation_as_defer()
         "relation_to_existing": "extends existing herm-tui footer guidance",
     }]}
 
-    out = reconcile_memory_extractor_payload_with_existing_memories(payload, existing_memories=[])
+    out = reconcile_planner_payload_with_existing_memories(payload, existing_memories=[])
 
     candidate = out["candidates"][0]
     assert candidate["routing_hint"] == "defer_unclear"
@@ -271,13 +271,13 @@ def test_memory_gap_extractor_returns_empty_candidates_on_llm_parse_failure():
     def broken_extractor(**_kwargs):
         raise ValueError("bad llm json")
 
-    out = run_memory_extractor({"windows": []}, config={"_memory_extractor_func": broken_extractor})
+    out = run_planner({"windows": []}, config={"_planner_func": broken_extractor})
 
     assert out["candidates"] == []
     assert out["extractor_error"] == "bad llm json"
 
 
-def test_memory_extractor_llm_uses_memory_extractor_model_config(monkeypatch):
+def test_planner_llm_uses_planner_model_config(monkeypatch):
     calls = []
     telemetry = []
 
@@ -290,14 +290,14 @@ def test_memory_extractor_llm_uses_memory_extractor_model_config(monkeypatch):
         extract_content_or_reasoning=lambda response: response["content"],
     )
     monkeypatch.setitem(sys.modules, "agent.auxiliary_client", fake_auxiliary)
-    monkeypatch.setattr(memory_extractor_module, "_ensure_hermes_agent_on_path", lambda: None)
+    monkeypatch.setattr(planner_module, "_ensure_hermes_agent_on_path", lambda: None)
     monkeypatch.setattr(llm_telemetry, "record_llm_call", lambda **kwargs: telemetry.append(kwargs))
 
-    out = run_memory_extractor(
+    out = run_planner(
         {"windows": []},
         config={
             "model": {
-                "memory_extractor": {
+                "planner": {
                     "provider": "openrouter",
                     "model": "anthropic/claude-sonnet-4",
                     "base_url": "https://openrouter.ai/api/v1",
@@ -319,6 +319,6 @@ def test_memory_extractor_llm_uses_memory_extractor_model_config(monkeypatch):
     assert calls[0]["timeout"] == 77
     assert calls[0]["max_tokens"] == 456
     assert calls[0]["extra_body"]["reasoning"] == {"enabled": False}
-    assert telemetry[0]["site"] == "memory_extractor"
+    assert telemetry[0]["site"] == "planner"
     assert telemetry[0]["provider"] == "openrouter"
     assert telemetry[0]["model"] == "anthropic/claude-sonnet-4"

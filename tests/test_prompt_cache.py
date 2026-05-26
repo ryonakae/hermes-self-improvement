@@ -42,9 +42,9 @@ def test_apply_caching_includes_overlay_hash_when_provided():
         {"role": "user", "content": "task brief"},
     ]
 
-    _, extras_a = apply_caching(messages, site="skill_agent", overlay_hash="abc123def456ghi")
-    _, extras_b = apply_caching(messages, site="skill_agent", overlay_hash="zzz999zzz999zzz")
-    _, extras_none = apply_caching(messages, site="skill_agent")
+    _, extras_a = apply_caching(messages, site="editor", overlay_hash="abc123def456ghi")
+    _, extras_b = apply_caching(messages, site="editor", overlay_hash="zzz999zzz999zzz")
+    _, extras_none = apply_caching(messages, site="editor")
 
     # Different overlay hashes produce different keys.
     assert extras_a["prompt_cache_key"] != extras_b["prompt_cache_key"]
@@ -57,12 +57,12 @@ def test_apply_caching_includes_overlay_hash_when_provided():
 def test_apply_caching_handles_missing_system_message():
     messages = [{"role": "user", "content": "no system"}]
 
-    cached, extras = apply_caching(messages, site="target_resolver")
+    cached, extras = apply_caching(messages, site="planner")
 
     # Without system, content is preserved verbatim.
     assert cached == messages
     # Cache key still uses a 'nosys' marker slot.
-    assert "self_improvement:target_resolver:nosys" in extras["prompt_cache_key"]
+    assert "self_improvement:planner:nosys" in extras["prompt_cache_key"]
 
 
 def test_apply_caching_keeps_existing_block_format():

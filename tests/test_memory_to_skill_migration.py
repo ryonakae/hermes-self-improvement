@@ -70,7 +70,7 @@ def test_memory_to_skill_migration_patches_skill_before_removing_memory(tmp_path
 
     result = apply_memory_to_skill_migrations(
         memory_step=memory_step_with_skill_route(),
-        config={"_memory_tool_fn": fake_memory, "_skill_agent_backend": fake_backend, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
+        config={"_memory_tool_fn": fake_memory, "_editor_backend": fake_backend, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
         mutate=True,
     )
 
@@ -89,11 +89,11 @@ def test_memory_to_skill_migration_keeps_memory_when_skill_fails(tmp_path):
     memory_calls = []
 
     def failing_backend(prompt, task, config=None):
-        return {"success": False, "error": "skill_agent_failed"}
+        return {"success": False, "error": "editor_failed"}
 
     result = apply_memory_to_skill_migrations(
         memory_step=memory_step_with_skill_route(),
-        config={"_memory_tool_fn": lambda **args: memory_calls.append(args), "_skill_agent_backend": failing_backend, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
+        config={"_memory_tool_fn": lambda **args: memory_calls.append(args), "_editor_backend": failing_backend, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
         mutate=True,
     )
 
@@ -109,7 +109,7 @@ def test_memory_to_skill_migration_dry_run_previews_without_mutation(tmp_path):
 
     result = apply_memory_to_skill_migrations(
         memory_step=memory_step_with_skill_route(),
-        config={"_memory_tool_fn": lambda **args: calls.append(("memory", args)), "_skill_agent_backend": lambda *args, **kwargs: calls.append(("skill", args)) or success_payload(), "_mutable_local_skill_roots": [root]},
+        config={"_memory_tool_fn": lambda **args: calls.append(("memory", args)), "_editor_backend": lambda *args, **kwargs: calls.append(("skill", args)) or success_payload(), "_mutable_local_skill_roots": [root]},
         mutate=False,
     )
 
@@ -148,7 +148,7 @@ def test_memory_to_skill_migration_rejects_unverified_skill_success_without_remo
 
     result = apply_memory_to_skill_migrations(
         memory_step=memory_step_with_skill_route(),
-        config={"_memory_tool_fn": lambda **args: memory_calls.append(args), "_skill_agent_backend": unverified_backend, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
+        config={"_memory_tool_fn": lambda **args: memory_calls.append(args), "_editor_backend": unverified_backend, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
         mutate=True,
     )
 
@@ -165,7 +165,7 @@ def test_memory_to_skill_migration_uses_exact_old_text_for_remove(tmp_path):
 
     result = apply_memory_to_skill_migrations(
         memory_step=memory_step_with_skill_route(old_text=old_text, source_target="user"),
-        config={"_memory_tool_fn": lambda **args: memory_calls.append(args) or {"success": True, "changed": True}, "_skill_agent_backend": lambda *args, **kwargs: success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries(old_text=old_text, source_target="user")},
+        config={"_memory_tool_fn": lambda **args: memory_calls.append(args) or {"success": True, "changed": True}, "_editor_backend": lambda *args, **kwargs: success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries(old_text=old_text, source_target="user")},
         mutate=True,
     )
 
@@ -185,7 +185,7 @@ def test_memory_to_skill_migration_replays_stored_preview_without_recomputing_ro
 
     result = apply_memory_to_skill_migrations(
         memory_step=preview_step,
-        config={"_memory_tool_fn": lambda **args: memory_calls.append(args) or {"success": True, "changed": True}, "_skill_agent_backend": lambda *args, **kwargs: success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries(old_text="stored exact text")},
+        config={"_memory_tool_fn": lambda **args: memory_calls.append(args) or {"success": True, "changed": True}, "_editor_backend": lambda *args, **kwargs: success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries(old_text="stored exact text")},
         mutate=True,
         replay_preview_only=True,
     )
@@ -201,7 +201,7 @@ def test_memory_to_skill_migration_reports_skill_change_when_memory_remove_fails
 
     result = apply_memory_to_skill_migrations(
         memory_step=memory_step_with_skill_route(),
-        config={"_memory_tool_fn": lambda **args: {"success": False, "error": "remove_failed"}, "_skill_agent_backend": lambda *args, **kwargs: success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
+        config={"_memory_tool_fn": lambda **args: {"success": False, "error": "remove_failed"}, "_editor_backend": lambda *args, **kwargs: success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
         mutate=True,
     )
 
@@ -218,7 +218,7 @@ def test_memory_to_skill_migration_rejects_non_current_old_text_before_skill_cal
 
     result = apply_memory_to_skill_migrations(
         memory_step=memory_step_with_skill_route(old_text="stale text"),
-        config={"_memory_tool_fn": lambda **args: calls.append(("memory", args)), "_skill_agent_backend": lambda *args, **kwargs: calls.append(("skill", args)) or success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries(old_text="current text")},
+        config={"_memory_tool_fn": lambda **args: calls.append(("memory", args)), "_editor_backend": lambda *args, **kwargs: calls.append(("skill", args)) or success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries(old_text="current text")},
         mutate=True,
     )
 
@@ -240,7 +240,7 @@ def test_memory_to_skill_migration_requires_applied_changed_skill_not_created_on
 
     result = apply_memory_to_skill_migrations(
         memory_step=memory_step_with_skill_route(),
-        config={"_memory_tool_fn": lambda **args: memory_calls.append(args), "_skill_agent_backend": created_only_backend, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
+        config={"_memory_tool_fn": lambda **args: memory_calls.append(args), "_editor_backend": created_only_backend, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
         mutate=True,
     )
 
@@ -256,7 +256,7 @@ def test_memory_to_skill_replay_ignores_non_preview_memory_to_skill_decisions(tm
 
     result = apply_memory_to_skill_migrations(
         memory_step=memory_step_with_skill_route(),
-        config={"_memory_tool_fn": lambda **args: calls.append(("memory", args)), "_skill_agent_backend": lambda *args, **kwargs: calls.append(("skill", args)) or success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
+        config={"_memory_tool_fn": lambda **args: calls.append(("memory", args)), "_editor_backend": lambda *args, **kwargs: calls.append(("skill", args)) or success_payload(), "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
         mutate=True,
         replay_preview_only=True,
     )

@@ -176,7 +176,7 @@ def score_episode_outcomes(episode: dict[str, Any], observations: list[dict[str,
         "episode_id": episode_id,
         "target_kind": episode.get("target_kind"),
         "target_id": episode.get("target_id"),
-        "improvement_planner_prompt_hash": episode.get("improvement_planner_prompt_hash"),
+        "planner_prompt_hash": episode.get("planner_prompt_hash"),
         "skill_agent_prompt_hash": episode.get("skill_agent_prompt_hash"),
         "memory_agent_prompt_hash": episode.get("memory_agent_prompt_hash"),
         "evaluator_hash": episode.get("evaluator_hash"),
@@ -216,7 +216,7 @@ def build_outcome_score_aggregate(*, config: dict[str, Any], limit: int = 1000) 
     by_evaluator: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_target_kind: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in scored:
-        by_improvement_planner[str(row.get("improvement_planner_prompt_hash") or "unknown")].append(row)
+        by_improvement_planner[str(row.get("planner_prompt_hash") or "unknown")].append(row)
         by_skill_agent[str(row.get("skill_agent_prompt_hash") or "unknown")].append(row)
         by_memory_agent[str(row.get("memory_agent_prompt_hash") or "unknown")].append(row)
         by_evaluator[str(row.get("evaluator_hash") or "unknown")].append(row)
@@ -229,7 +229,7 @@ def build_outcome_score_aggregate(*, config: dict[str, Any], limit: int = 1000) 
         "observation_count": len(observations),
         "scored_episode_count": len(scored_with_observations),
         "overall": _bucket_summary(scored),
-        "by_improvement_planner_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_improvement_planner.items())},
+        "by_planner_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_improvement_planner.items())},
         "by_skill_agent_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_skill_agent.items())},
         "by_memory_agent_prompt_hash": {key: _bucket_summary(value) for key, value in sorted(by_memory_agent.items())},
         "by_evaluator_hash": {key: _bucket_summary(value) for key, value in sorted(by_evaluator.items())},

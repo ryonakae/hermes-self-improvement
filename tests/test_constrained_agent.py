@@ -25,10 +25,10 @@ def test_constrained_agent_uses_role_toolsets_and_whitelist(monkeypatch):
     )
 
     result = run_constrained_role_agent(
-        role="target_resolver",
+        role="planner",
         user_message="{}",
         system_message="resolver",
-        config={"model": {"target_resolver": {"provider": "openrouter", "model": "fake", "max_tokens": 123}}},
+        config={"model": {"planner": {"provider": "openrouter", "model": "fake", "max_tokens": 123}}},
     )
 
     assert calls["agent_kwargs"]["enabled_toolsets"] == ["skills"]
@@ -70,10 +70,10 @@ def test_constrained_agent_uses_hermes_main_model_when_role_model_is_unset(monke
     )
 
     run_constrained_role_agent(
-        role="skill_agent",
+        role="editor",
         user_message="{}",
         system_message="skill agent",
-        config={"model": {"skill_agent": {"provider": "auto", "model": "", "max_tokens": 321}}},
+        config={"model": {"editor": {"provider": "auto", "model": "", "max_tokens": 321}}},
     )
 
     assert calls["agent_kwargs"]["provider"] == "openai-codex"
@@ -109,10 +109,10 @@ def test_constrained_agent_prefers_explicit_role_model_config(monkeypatch):
     monkeypatch.setattr("hermes_self_improvement.constrained_agent._resolve_runtime_provider", fake_resolve)
 
     run_constrained_role_agent(
-        role="target_resolver",
+        role="planner",
         user_message="{}",
         system_message="resolver",
-        config={"model": {"target_resolver": {"provider": "anthropic", "model": "claude-sonnet-4", "api_key": "role-key"}}},
+        config={"model": {"planner": {"provider": "anthropic", "model": "claude-sonnet-4", "api_key": "role-key"}}},
     )
 
     assert calls["resolve_kwargs"]["requested"] == "anthropic"
@@ -150,10 +150,10 @@ def test_constrained_agent_recovers_final_response_from_messages(monkeypatch):
     monkeypatch.setattr("hermes_self_improvement.constrained_agent.clear_thread_tool_whitelist", lambda: None)
 
     result = run_constrained_role_agent(
-        role="target_resolver",
+        role="planner",
         user_message="{}",
         system_message="resolver",
-        config={"model": {"target_resolver": {}}},
+        config={"model": {"planner": {}}},
     )
 
     assert result["final_response"] == '{"resolutions": []}'
@@ -188,10 +188,10 @@ def test_constrained_agent_adds_tool_trace_from_agent_messages(monkeypatch):
     monkeypatch.setattr("hermes_self_improvement.constrained_agent.clear_thread_tool_whitelist", lambda: None)
 
     result = run_constrained_role_agent(
-        role="skill_agent",
+        role="editor",
         user_message="{}",
         system_message="skill agent",
-        config={"model": {"skill_agent": {}}},
+        config={"model": {"editor": {}}},
     )
 
     assert result["tool_trace"] == [{"tool": "skill_view", "success": True, "name": "demo-skill"}]
@@ -211,10 +211,10 @@ def test_constrained_agent_suppresses_internal_agent_stdout(monkeypatch, capsys)
     monkeypatch.setattr("hermes_self_improvement.constrained_agent.clear_thread_tool_whitelist", lambda: None)
 
     run_constrained_role_agent(
-        role="target_resolver",
+        role="planner",
         user_message="{}",
         system_message="resolver",
-        config={"model": {"target_resolver": {}}},
+        config={"model": {"planner": {}}},
     )
 
     assert capsys.readouterr().out == ""

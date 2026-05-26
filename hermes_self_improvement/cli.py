@@ -18,17 +18,19 @@ from .config import (
     load_config,
 )
 from .credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
-from .memory_extractor import (
-    build_memory_extractor_windows,
-    build_memory_extractor_digest,
-    make_memory_extractor_candidate,
-    reconcile_memory_extractor_payload_with_existing_memories,
-    run_memory_extractor,
+from .planner import (
+    build_planner_windows,
+    build_memory_extractor_digest as build_planner_digest,
+    make_planner_candidate,
+    reconcile_planner_payload_with_existing_memories,
+    run_planner,
 )
 from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
 from .diagnostic_signals import build_diagnostic_signals, normalize_report_diagnostic_signals
 from .evidence import build_evidence_pack, write_evidence_pack
 from .episodes import record_run_episodes
+from .editor import run_editor_task
+from .editor_backend import build_editor_backend
 from .skill_agent_backend import build_skill_agent_backend, skill_agent_backend_status
 from .memory_agent_backend import build_memory_agent_backend, memory_agent_backend_status
 from .skill_agent import run_skill_agent_task
@@ -904,10 +906,10 @@ def run_improve(
         if report_signals:
             evidence_pack = _attach_diagnostic_signals_to_evidence_pack(evidence_pack, report_signals)
     existing_memories = _load_builtin_memory_entries(_builtin_memory_paths(config))
-    conversation_windows = build_memory_extractor_windows(events)
-    memory_extractor_digest = build_memory_extractor_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
-    memory_gap_payload = reconcile_memory_extractor_payload_with_existing_memories(
-        run_memory_extractor(memory_extractor_digest, config=config),
+    conversation_windows = build_planner_windows(events)
+    memory_extractor_digest = build_planner_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
+    memory_gap_payload = reconcile_planner_payload_with_existing_memories(
+        run_planner(memory_extractor_digest, config=config),
         existing_memories=existing_memories,
     )
     memory_gap_evidence = []
@@ -917,7 +919,7 @@ def run_improve(
             continue
         if candidate.get("routing_hint") in skip_hints:
             continue
-        memory_gap_evidence.append(make_memory_extractor_candidate(
+        memory_gap_evidence.append(make_planner_candidate(
             candidate_id=str(candidate.get("candidate_id") or "") or None,
             target=str(candidate.get("target") or "user"),
             candidate_fact=str(candidate.get("candidate_fact") or ""),
@@ -965,8 +967,8 @@ def run_improve(
     memory_config = dict(config) if isinstance(config, dict) else {}
     memory_config["_memory_current_entries"] = existing_memories
     memory_config.setdefault("_hermes_home", str(get_hermes_home()))
-    if memory_config.get("_memory_agent_backend") is None:
-        memory_config["_memory_agent_backend"] = build_memory_agent_backend(config)
+    if memory_config.get("_editor_backend") is None:
+        memory_config["_editor_backend"] = build_editor_backend(memory_config)
     memory_step = run_memory_improvement_step(evidence_pack=evidence_pack, config=memory_config, mutate=mutate)
     memory_to_skill_config = dict(memory_config)
     memory_to_skill_step = apply_memory_to_skill_migrations(memory_step=memory_step, config=memory_to_skill_config, mutate=mutate)
@@ -1055,7 +1057,7 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
     if not source.get("dry_run"):
         raise SystemExit("--from-run requires an improve dry-run artifact")
     steps = source.get("step_decisions") if isinstance(source.get("step_decisions"), dict) else {}
-    backend = build_skill_agent_backend(config)
+    backend = build_editor_backend(config)
     external_provider = _external_memory_provider(config)
 
     skill_source = steps.get("skill") if isinstance(steps.get("skill"), dict) else {}
@@ -1072,7 +1074,7 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
         if not task:
             skill_decisions.append({**decision, "decision": "rejected", "reason": "replay_task_missing", "changed": False})
             continue
-        result = run_skill_agent_task(task, config=config, backend=backend)
+        result = run_editor_task(task, config=config, backend=backend)
         changed = bool(result.get("success") and (result.get("changed_skills") or result.get("created_skills") or result.get("deleted_skills")))
         if changed:
             changed_skills.extend(str(name) for name in (result.get("changed_skills") or []))
@@ -1711,7 +1713,7 @@ def _memory_agent_current_entry_visibility_line(memory_agent: dict[str, Any]) ->
     omitted = int(memory_agent.get("current_entries_omitted_count") or 0)
     parts.append(f"omitted {omitted}")
     mode = "preview visibility" if memory_agent.get("status") == "preview" else "mutating backend task"
-    return f"- current entries visible to memory_agent: {', '.join(parts)} ({mode})"
+    return f"- current entries visible to editor: {', '.join(parts)} ({mode})"
 
 
 _UNRESOLVED_REASON_GROUPS = (
@@ -1835,7 +1837,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
     planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
     planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
-    skill_agent_prompt_chars = planner_quality.get("skill_agent_prompt_chars") if isinstance(planner_quality.get("skill_agent_prompt_chars"), dict) else {}
+    editor_prompt_chars = planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {}
     planner_decisions = planner.get("decisions") if isinstance(planner.get("decisions"), list) else []
     skill_decisions = skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "mutate_skill"][:5]
@@ -1844,8 +1846,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     memory_to_skill_decisions = [item for item in (memory_to_skill_step.get("decisions") or []) if isinstance(item, dict)]
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
-    planner_prompt = prompt_sources.get("improvement_planner") if isinstance(prompt_sources.get("improvement_planner"), dict) else {}
-    skill_agent_prompt = prompt_sources.get("skill_agent") if isinstance(prompt_sources.get("skill_agent"), dict) else {}
+    planner_prompt = prompt_sources.get("planner") if isinstance(prompt_sources.get("planner"), dict) else {}
+    skill_agent_prompt = prompt_sources.get("editor") if isinstance(prompt_sources.get("editor"), dict) else {}
     evidence_strength_counts = planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {}
     evidence_by_kind = evidence_summary.get("evidence_by_kind") if isinstance(evidence_summary.get("evidence_by_kind"), dict) else {}
     reference_skill_coverage = [item for item in (evidence_pack.get("reference_skill_coverage") or []) if isinstance(item, dict)]
@@ -1917,7 +1919,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         reason = str(result_payload.get("outcome") or result_payload.get("error") or item.get("reason") or "unknown")
         skill_agent_stop_counts[reason] = skill_agent_stop_counts.get(reason, 0) + 1
     lookup_counts = {"completed": 0, "unavailable": 0, "failed": 0, "skipped": 0}
-    raw_memory_agent = memory_step.get("memory_agent") if isinstance(memory_step, dict) else None
+    raw_memory_agent = memory_step.get("editor") or memory_step.get("memory_agent") if isinstance(memory_step, dict) else None
     memory_agent_block = raw_memory_agent if isinstance(raw_memory_agent, dict) else {}
     memory_current_entries_line = _memory_agent_current_entry_visibility_line(memory_agent_block)
     memory_to_skill_applied = sum(1 for item in memory_to_skill_decisions if item.get("decision") == "accepted")
@@ -2017,11 +2019,11 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- proof: attached candidates {int(planner_quality.get('attached_candidate_count') or 0)}, unmatched evidence {int(planner_quality.get('unmatched_evidence_count') or 0)}, selected with evidence {int(planner_quality.get('selected_with_evidence') or 0)}, action-like skips {int(planner_quality.get('action_like_skips') or 0)}",
         f"- target hints: hint-attached evidence {int(planner_quality.get('hint_attached_evidence_count') or 0)}, hint-attached candidates {int(planner_quality.get('hint_attached_candidate_count') or 0)}, cluster evidence {int(planner_quality.get('cluster_evidence_count') or 0)}",
         f"- evidence strength: strong {strong_count}, medium {medium_count}, weak {weak_count}, weak-only selected {int(planner_quality.get('weak_only_selected_count') or 0)}",
-        f"- skill_agent prompts: tasks {int(planner_quality.get('skill_agent_task_count') or 0)}, max chars {int(skill_agent_prompt_chars.get('max') or 0)}",
+        f"- skill_agent prompts: tasks {int(planner_quality.get('skill_agent_task_count') or 0)}, max chars {int(editor_prompt_chars.get('max') or 0)}",
         "Prompt sources:",
         "- LLM context: Markdown briefs/reports; program control state: JSON manifests/run records/tool results",
-        f"- improvement_planner: {planner_prompt.get('overlay_source') or ('runtime overlay' if planner_prompt.get('overlay_active') else 'base')} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
-        f"- skill_agent: {skill_agent_prompt.get('overlay_source') or ('runtime overlay' if skill_agent_prompt.get('overlay_active') else 'not rendered' if not skill_agent_prompt else 'base')} hash {skill_agent_prompt.get('overlay_hash') or skill_agent_prompt.get('active_hash') or skill_agent_prompt.get('base_hash') or 'n/a'}",
+        f"- planner: {planner_prompt.get('overlay_source') or ('runtime overlay' if planner_prompt.get('overlay_active') else 'base')} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
+        f"- editor: {skill_agent_prompt.get('overlay_source') or ('runtime overlay' if skill_agent_prompt.get('overlay_active') else 'not rendered' if not skill_agent_prompt else 'base')} hash {skill_agent_prompt.get('overlay_hash') or skill_agent_prompt.get('active_hash') or skill_agent_prompt.get('base_hash') or 'n/a'}",
         "Skill improvements:",
         f"- changed {int(summary.get('skill_changes') or 0)} skills",
         "Skill lifecycle:",
@@ -2106,7 +2108,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
             executed_lines.extend(f"- {reason}: {count}" for reason, count in sorted(rejected_reason_counts.items()))
         lines[insert_at:insert_at] = executed_lines
     if skill_agent_stop_counts:
-        lines.append("- skill_agent stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(skill_agent_stop_counts.items())))
+        lines.append("- editor stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(skill_agent_stop_counts.items())))
     if selected_preview:
         lines.append("Selected for skill_agent:")
         for item in selected_preview:

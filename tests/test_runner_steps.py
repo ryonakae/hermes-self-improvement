@@ -5,7 +5,7 @@ from pathlib import Path
 
 from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from hermes_self_improvement.prompts import base_prompt_hash
-from hermes_self_improvement.runner_steps import build_skill_agent_task, run_memory_improvement_step, run_skill_improvement_step
+from hermes_self_improvement.runner_steps import build_editor_task, run_memory_improvement_step, run_skill_improvement_step
 
 
 def write_skill(root, name="demo-skill"):
@@ -48,16 +48,16 @@ def archive_evidence_pack():
     }
 
 
-def test_build_skill_agent_task_uses_skills_only_constraints():
-    task = build_skill_agent_task(skill_name="demo-skill", evidence=[])
+def test_build_editor_task_uses_skills_only_constraints():
+    task = build_editor_task(skill_name="demo-skill", evidence=[])
 
-    assert task["type"] == "skill_agent_task"
+    assert task["type"] == "editor_task"
     assert task["task_kind"] == "skill_improve"
     assert task["targets"] == {"primary_skill": "demo-skill"}
     assert task["observed_problem"]
     assert task["desired_outcome"]
     assert "Do not duplicate guidance" in "\n".join(task["non_goals"])
-    assert "You are the Hermes self-improvement skill_agent." in task["instructions"]
+    assert "You are the Hermes self-improvement editor." in task["instructions"]
     assert "# Candidate brief: demo-skill" in task["instructions"]
     assert "Target skill:" not in task["instructions"]
     assert "Planner decision:" not in task["instructions"]
@@ -71,15 +71,15 @@ def test_build_skill_agent_task_uses_skills_only_constraints():
     assert "direct filesystem" in joined
 
 
-def test_build_skill_agent_task_carries_patch_maintenance_action_into_task_and_prompt():
+def test_build_editor_task_carries_patch_maintenance_action_into_task_and_prompt():
     planner_decision = {
         "skill": "demo-skill",
         "decision": "mutate_skill",
         "maintenance_action": "patch",
         "evidence_ids": ["ev1"],
-        "skill_agent_instructions": "Add a pitfall about timeout retries.",
+        "editor_instructions": "Add a pitfall about timeout retries.",
     }
-    task = build_skill_agent_task(
+    task = build_editor_task(
         skill_name="demo-skill",
         evidence=[{"id": "ev1", "kind": "tool_failure_evidence", "event": {"tool_name": "patch", "status": "error"}}],
         candidate={"name": "demo-skill", "provenance": "agent_created", "state": "active"},
@@ -91,14 +91,14 @@ def test_build_skill_agent_task_carries_patch_maintenance_action_into_task_and_p
     assert "maintenance_action: patch" in task["instructions"]
 
 
-def test_build_skill_agent_task_bounds_needs_patch_quality_to_missing_sections_only():
+def test_build_editor_task_bounds_needs_patch_quality_to_missing_sections_only():
     planner_decision = {
         "skill": "demo-skill",
         "decision": "mutate_skill",
         "maintenance_action": "patch",
         "evidence_ids": ["ev1"],
     }
-    task = build_skill_agent_task(
+    task = build_editor_task(
         skill_name="demo-skill",
         evidence=[{"id": "ev1", "kind": "tool_failure_evidence", "event": {"tool_name": "patch", "status": "error"}}],
         candidate={
@@ -121,7 +121,7 @@ def test_build_skill_agent_task_bounds_needs_patch_quality_to_missing_sections_o
     assert "do not retry" in instructions.lower() or "no retry" in instructions.lower() or "outcome evidence" in instructions.lower()
 
 
-def test_build_skill_agent_task_carries_merge_maintenance_action_with_target_skill():
+def test_build_editor_task_carries_merge_maintenance_action_with_target_skill():
     planner_decision = {
         "skill": "old-skill",
         "decision": "mutate_skill",
@@ -129,7 +129,7 @@ def test_build_skill_agent_task_carries_merge_maintenance_action_with_target_ski
         "target_skill": "new-skill",
         "evidence_ids": ["ev1"],
     }
-    task = build_skill_agent_task(
+    task = build_editor_task(
         skill_name="old-skill",
         evidence=[{"id": "ev1", "kind": "tool_failure_evidence", "event": {"tool_name": "patch", "status": "error"}}],
         candidate={"name": "old-skill", "provenance": "agent_created", "state": "stale"},
@@ -150,13 +150,13 @@ def test_build_skill_agent_task_carries_merge_maintenance_action_with_target_ski
     assert "do not delete" in instructions.lower() or "no direct deletion" in instructions.lower()
 
 
-def test_build_skill_agent_task_caps_selected_evidence_for_prompt_budget():
+def test_build_editor_task_caps_selected_evidence_for_prompt_budget():
     evidence = [
         {"id": f"ev{i}", "kind": "tool_failure_evidence", "event": {"tool_name": "patch", "status": "error", "result_preview": "x" * 400}}
         for i in range(20)
     ]
 
-    task = build_skill_agent_task(skill_name="demo-skill", evidence=evidence)
+    task = build_editor_task(skill_name="demo-skill", evidence=evidence)
     payload = json.dumps(task, ensure_ascii=False)
 
     assert "omitted_evidence_count" in payload
@@ -165,37 +165,37 @@ def test_build_skill_agent_task_caps_selected_evidence_for_prompt_budget():
     assert len(task["instructions"]) < 10000
 
 
-def test_build_skill_agent_task_uses_active_editor_prompt_overlay(tmp_path):
+def test_build_editor_task_uses_active_editor_prompt_overlay(tmp_path):
     cfg = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     candidate_path = write_prompt_candidate(
         cfg,
-        role="skill_agent",
+        role="editor",
         candidate={
-            "role": "skill_agent",
-            "base_prompt_hash": base_prompt_hash("skill_agent"),
-            "candidate_prompt": {"system_addendum": "Runtime skill_agent overlay guidance."},
+            "role": "editor",
+            "base_prompt_hash": base_prompt_hash("editor"),
+            "candidate_prompt": {"system_addendum": "Runtime editor overlay guidance."},
         },
     )
-    promote_prompt_candidate(cfg, role="skill_agent", candidate_path=candidate_path, regression={"status": "passed"})
+    promote_prompt_candidate(cfg, role="editor", candidate_path=candidate_path, regression={"status": "passed"})
 
-    task = build_skill_agent_task(skill_name="demo-skill", evidence=[], config=cfg)
+    task = build_editor_task(skill_name="demo-skill", evidence=[], config=cfg)
 
-    assert "Runtime skill_agent overlay guidance." in task["instructions"]
-    assert task["prompt_source"]["skill_agent"]["overlay_active"] is True
+    assert "Runtime editor overlay guidance." in task["instructions"]
+    assert task["prompt_source"]["editor"]["overlay_active"] is True
 
 
-def test_skill_step_dry_run_records_skill_agent_preview_without_mutating(tmp_path):
+def test_skill_step_dry_run_records_editor_preview_without_mutating(tmp_path):
     cfg = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = run_skill_improvement_step(evidence_pack=evidence_pack_for("demo-skill"), config=cfg, mutate=False)
 
     assert result["status"] == "completed"
     assert result["changed"] == 0
     assert result["planner"]["summary"]["mutate_skill_count"] == 1
-    assert result["prompt_sources"]["improvement_planner"]["overlay_active"] is False
-    assert result["prompt_sources"]["skill_agent"]["overlay_active"] is False
+    assert result["prompt_sources"]["planner"]["overlay_active"] is False
+    assert result["prompt_sources"]["editor"]["overlay_active"] is False
     assert result["planner_quality"]["selected_with_evidence"] == 1
     assert result["planner_quality"]["action_like_skips"] == 0
-    assert result["planner_quality"]["skill_agent_prompt_chars"]["max"] > 0
+    assert result["planner_quality"]["editor_prompt_chars"]["max"] > 0
     assert result["decisions"][0]["decision"] == "mutate_skill_preview"
     assert result["decisions"][0]["reason"] == "planner_mutate_skill_preview"
     assert result["decisions"][0]["candidate_source"] == "curator"
@@ -220,7 +220,7 @@ def test_skill_step_dry_run_records_create_skill_preview_without_existing_candid
             ]
         }
 
-    result = run_skill_improvement_step(evidence_pack=pack, config={"_improvement_planner_func": fake_planner, "_skills_root": str(tmp_path / "skills")}, mutate=False)
+    result = run_skill_improvement_step(evidence_pack=pack, config={"_planner_func": fake_planner, "_skills_root": str(tmp_path / "skills")}, mutate=False)
 
     assert result["status"] == "completed"
     decision = result["decisions"][0]
@@ -243,7 +243,7 @@ def test_skill_step_skips_create_skill_when_local_skill_already_exists(tmp_path)
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_improvement_planner_func": fake_planner, "_skills_root": str(skills_root)},
+        config={"_planner_func": fake_planner, "_skills_root": str(skills_root)},
         mutate=False,
     )
 
@@ -268,7 +268,7 @@ def test_skill_step_skips_create_skill_when_existing_alias_covers_workflow(tmp_p
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_improvement_planner_func": fake_planner, "_skills_root": str(skills_root)},
+        config={"_planner_func": fake_planner, "_skills_root": str(skills_root)},
         mutate=False,
     )
 
@@ -282,7 +282,7 @@ def test_skill_step_skips_create_skill_when_existing_alias_covers_workflow(tmp_p
     assert "task" not in decision
 
 
-def test_skill_step_executes_create_skill_through_skill_agent_when_mutating():
+def test_skill_step_executes_create_skill_through_editor_when_mutating():
     pack = evidence_pack_for(None, candidates=[])
 
     def fake_planner(*, digest, config):
@@ -305,7 +305,7 @@ def test_skill_step_executes_create_skill_through_skill_agent_when_mutating():
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_improvement_planner_func": fake_planner, "_skill_agent_backend": FakeBackend(), "_skills_root": str(Path("/tmp/hermes-self-improvement-test-empty-skills"))},
+        config={"_planner_func": fake_planner, "_editor_backend": FakeBackend(), "_skills_root": str(Path("/tmp/hermes-self-improvement-test-empty-skills"))},
         mutate=True,
     )
 
@@ -320,7 +320,7 @@ def test_skill_step_dry_run_records_archive_preview_without_mutating():
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
-        config={"_improvement_planner_func": fake_planner},
+        config={"_planner_func": fake_planner},
         mutate=False,
     )
 
@@ -343,7 +343,7 @@ def test_skill_step_archive_preview_includes_reference_rewrite_plan(tmp_path):
     pack["skill_candidates"].append({"name": "new-skill", "state": "active", "source": "curator", "usage": {}})
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_improvement_planner_func": fake_planner, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
+        config={"_planner_func": fake_planner, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
         mutate=False,
     )
 
@@ -379,7 +379,7 @@ def test_skill_step_mutating_archive_defers_when_reference_rewrite_has_unresolve
     pack["skill_candidates"].append({"name": "new-skill", "state": "active", "source": "curator", "usage": {}})
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
+        config={"_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
         mutate=True,
     )
 
@@ -404,7 +404,7 @@ def test_skill_step_mutating_archive_without_successor_defers_when_active_refere
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
-        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
+        config={"_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
         mutate=True,
     )
 
@@ -424,7 +424,7 @@ def test_skill_step_reports_archive_tool_failure_when_official_archive_tool_fail
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
-        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": failing_archive, "_cron_jobs_path": str(tmp_path / "jobs.json"), "_skills_root": str(tmp_path / "skills")},
+        config={"_planner_func": fake_planner, "_skill_archive_fn": failing_archive, "_cron_jobs_path": str(tmp_path / "jobs.json"), "_skills_root": str(tmp_path / "skills")},
         mutate=True,
     )
 
@@ -448,7 +448,7 @@ def test_skill_step_executes_archive_with_curator_primitive_when_mutating(tmp_pa
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
-        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(tmp_path / "jobs.json"), "_skills_root": str(tmp_path / "skills")},
+        config={"_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(tmp_path / "jobs.json"), "_skills_root": str(tmp_path / "skills")},
         mutate=True,
     )
 
@@ -479,7 +479,7 @@ def test_skill_step_rewrites_references_before_archive_when_mutating(tmp_path):
     pack["skill_candidates"].append({"name": "new-skill", "state": "active", "source": "curator", "usage": {}})
     result = run_skill_improvement_step(
         evidence_pack=pack,
-        config={"_improvement_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
+        config={"_planner_func": fake_planner, "_skill_archive_fn": fake_archive, "_cron_jobs_path": str(jobs_path), "_skills_root": str(tmp_path / "skills")},
         mutate=True,
     )
 
@@ -538,8 +538,8 @@ def test_skill_step_archives_merge_archive_candidates_after_reference_rewrite(tm
     result = run_skill_improvement_step(
         evidence_pack=evidence_pack_for("old-skill", candidates=[{"name": "old-skill", "state": "stale", "source": "curator", "usage": {}}, {"name": "new-skill", "state": "active", "source": "curator", "usage": {}}]),
         config={
-            "_improvement_planner_func": fake_planner,
-            "_skill_agent_backend": fake_backend,
+            "_planner_func": fake_planner,
+            "_editor_backend": fake_backend,
             "_skill_archive_fn": fake_archive,
             "_cron_jobs_path": str(jobs_path),
             "_skills_root": str(skills_root),
@@ -576,7 +576,7 @@ def test_skill_step_converts_planner_defer_without_evidence_to_skip():
     def fake_planner(*, digest, config):
         return {"decisions": [{"skill": "thin-skill", "decision": "defer", "reason": "target_uncertain_and_insufficient_evidence", "evidence_ids": []}]}
 
-    result = run_skill_improvement_step(evidence_pack=pack, config={"_improvement_planner_func": fake_planner}, mutate=False)
+    result = run_skill_improvement_step(evidence_pack=pack, config={"_planner_func": fake_planner}, mutate=False)
 
     assert result["status"] == "completed"
     decision = result["decisions"][0]
@@ -688,14 +688,14 @@ def test_skill_step_executes_only_mutable_local_skill_via_backend(tmp_path):
 
     result = run_skill_improvement_step(
         evidence_pack=evidence_pack_for("demo-skill"),
-        config={"_mutable_local_skill_roots": [root], "_skill_agent_backend": backend},
+        config={"_mutable_local_skill_roots": [root], "_editor_backend": backend},
         mutate=True,
     )
 
     assert result["changed"] == 1
     assert result["changed_skills"] == ["demo-skill"]
     assert seen["task"]["targets"] == {"primary_skill": "demo-skill"}
-    assert "You are the Hermes self-improvement skill_agent." in seen["task"]["instructions"]
+    assert "You are the Hermes self-improvement editor." in seen["task"]["instructions"]
     assert "Markdown brief:" in seen["task"]["instructions"]
     assert "# Candidate brief: demo-skill" in seen["task"]["instructions"]
     assert "skill_manage" in seen["prompt"]
@@ -714,14 +714,14 @@ def test_skill_step_rejects_external_skill_before_backend(tmp_path):
 
     result = run_skill_improvement_step(
         evidence_pack=evidence_pack_for("external-skill"),
-        config={"_mutable_local_skill_roots": [root], "_skill_agent_backend": backend},
+        config={"_mutable_local_skill_roots": [root], "_editor_backend": backend},
         mutate=True,
     )
 
     assert called is False
     assert result["changed"] == 0
     assert result["decisions"][0]["decision"] == "rejected"
-    assert result["decisions"][0]["reason"] == "invalid_skill_agent_task"
+    assert result["decisions"][0]["reason"] == "invalid_editor_task"
 
 
 def memory_evidence_pack(operation):

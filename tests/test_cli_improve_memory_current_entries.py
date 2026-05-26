@@ -9,7 +9,7 @@ def _memory_gap_candidate(candidate_id: str = "m-current") -> dict:
     return {
         "id": candidate_id,
         "kind": "memory_gap_candidate",
-        "source": "memory_extractor",
+        "source": "planner",
         "likely_targets": [{"target": "memory", "weight": 0.9}],
         "memory": {
             "candidate_id": candidate_id,
@@ -51,7 +51,7 @@ def test_load_builtin_memory_entries_includes_exact_old_text_alias(tmp_path):
     ]
 
 
-def test_run_improve_passes_builtin_memory_entries_to_memory_agent(tmp_path, monkeypatch):
+def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypatch):
     hermes_home = tmp_path / "hermes-home"
     memories = hermes_home / "memories"
     memories.mkdir(parents=True)
@@ -91,17 +91,17 @@ def test_run_improve_passes_builtin_memory_entries_to_memory_agent(tmp_path, mon
             "skill_candidates": [],
         },
     )
-    monkeypatch.setattr(cli, "build_memory_extractor_windows", lambda events: [])
-    monkeypatch.setattr(cli, "build_memory_extractor_digest", lambda windows, *, existing_memories, recent_candidates: {})
-    monkeypatch.setattr(cli, "run_memory_extractor", lambda digest, *, config: {"candidates": []})
-    monkeypatch.setattr(cli, "reconcile_memory_extractor_payload_with_existing_memories", lambda payload, *, existing_memories: {"candidates": []})
+    monkeypatch.setattr(cli, "build_planner_windows", lambda events: [])
+    monkeypatch.setattr(cli, "build_planner_digest", lambda windows, *, existing_memories, recent_candidates: {})
+    monkeypatch.setattr(cli, "run_planner", lambda digest, *, config: {"candidates": []})
+    monkeypatch.setattr(cli, "reconcile_planner_payload_with_existing_memories", lambda payload, *, existing_memories: {"candidates": []})
     monkeypatch.setattr(cli, "build_active_skill_references", lambda config, *, candidate_names: {})
     monkeypatch.setattr(cli, "attach_active_skill_references", lambda evidence_pack, active_references: evidence_pack)
     monkeypatch.setattr(cli, "write_evidence_pack", lambda evidence_pack, reports_dir: evidence_path)
     monkeypatch.setattr(cli, "_reports_dir", lambda config: tmp_path)
     monkeypatch.setattr(cli, "run_pipeline", lambda config, *, since_hours, write_report: {"proposals": []})
     monkeypatch.setattr(cli, "run_skill_improvement_step", lambda *, evidence_pack, config, mutate: {"changed": 0, "changed_skills": []})
-    monkeypatch.setattr(cli, "build_memory_agent_backend", lambda config: FakeBackend())
+    monkeypatch.setattr(cli, "build_editor_backend", lambda config: FakeBackend())
     monkeypatch.setattr(cli, "_write_run_artifact", lambda payload, config: artifact_path)
     monkeypatch.setattr(cli, "record_run_episodes", lambda *, config, run_result: {"recorded": 0})
     monkeypatch.setattr(cli, "build_credit_assignment_aggregate", lambda *, config, limit: {})

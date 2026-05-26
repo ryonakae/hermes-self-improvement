@@ -308,7 +308,7 @@ TARGET_RESOLVER_SYSTEM = (
 def _target_resolver_system_with_overlay(config: dict[str, Any] | None = None) -> tuple[str, dict[str, Any] | None]:
     overlay = None
     if config is not None:
-        overlay = load_active_prompt_overlay(config, role="target_resolver", base_hash=base_prompt_hash("target_resolver"))
+        overlay = load_active_prompt_overlay(config, role="planner", base_hash=base_prompt_hash("planner"))
     addendum = _overlay_addendum(overlay)
     if addendum:
         return f"{TARGET_RESOLVER_SYSTEM}\n\nRuntime-private operating guidance:\n{addendum}", overlay
@@ -330,7 +330,7 @@ def build_target_resolver_messages(digest: dict[str, Any], *, config: dict[str, 
 
 def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    resolver_config = model_config.get("target_resolver") if isinstance(model_config.get("target_resolver"), dict) else {}
+    resolver_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
     provider = resolver_config.get("provider") or "auto"
     model = resolver_config.get("model") or None
     max_tokens = _coerce_int(resolver_config.get("max_tokens"), default=1800)
@@ -339,7 +339,7 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
 
     system_message, _overlay = _target_resolver_system_with_overlay(config)
     result = run_constrained_role_agent(
-        role="target_resolver",
+        role="planner",
         system_message=system_message,
         user_message=user_message,
         config=config,
@@ -352,7 +352,7 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
         {"role": "user", "content": user_message},
     ]
     record_llm_call(
-        site="target_resolver",
+        site="planner",
         messages=messages,
         response_text=response_text,
         config=config,

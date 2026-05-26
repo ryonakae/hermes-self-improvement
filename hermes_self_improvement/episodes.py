@@ -107,15 +107,11 @@ def _source_hashes(run_result: dict[str, Any], step: dict[str, Any] | None = Non
     if isinstance(step, dict) and isinstance(step.get("prompt_sources"), dict):
         prompt_sources.update(step["prompt_sources"])
     hashes = {
-        "target_resolver_prompt_hash": _prompt_hash(prompt_sources, "target_resolver"),
-        "improvement_planner_prompt_hash": _prompt_hash(prompt_sources, "improvement_planner"),
-        "skill_agent_prompt_hash": _prompt_hash(prompt_sources, "skill_agent"),
-        "memory_agent_prompt_hash": _prompt_hash(prompt_sources, "memory_agent"),
+        "planner_prompt_hash": _prompt_hash(prompt_sources, "planner"),
+        "editor_prompt_hash": _prompt_hash(prompt_sources, "editor"),
         "evaluator_hash": _evaluator_hash(run_result),
-        "target_resolver_overlay_hash": _overlay_hash(prompt_sources, "target_resolver"),
-        "improvement_planner_overlay_hash": _overlay_hash(prompt_sources, "improvement_planner"),
-        "skill_agent_overlay_hash": _overlay_hash(prompt_sources, "skill_agent"),
-        "memory_agent_overlay_hash": _overlay_hash(prompt_sources, "memory_agent"),
+        "planner_overlay_hash": _overlay_hash(prompt_sources, "planner"),
+        "editor_overlay_hash": _overlay_hash(prompt_sources, "editor"),
         "evaluator_overlay_hash": _evaluator_hash(run_result),
     }
     generation_id = _overlay_generation_id(run_result, prompt_sources)
@@ -292,10 +288,10 @@ def _memory_action(operation: dict[str, Any], *, executed: bool) -> str:
         return "memory_add"
     if op in {"replace", "memory_replace"}:
         return "memory_replace"
-    if op in {"remove", "memory_remove", "memory_agent_remove"}:
+    if op in {"remove", "memory_remove", "memory_agent_remove", "editor_remove"}:
         return "memory_remove"
-    if op == "memory_agent":
-        return "memory_agent"
+    if op in {"memory_agent", "editor"}:
+        return op
     return "no_op"
 
 
@@ -378,10 +374,8 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
     prompt_overlays = result.get("prompt_overlays") if isinstance(result.get("prompt_overlays"), dict) else {}
     evaluator_hash = str(result.get("active_evaluator_hash") or result.get("active_after_hash") or "unavailable")
     source_hashes = {
-        "target_resolver_prompt_hash": base_prompt_hash("target_resolver"),
-        "improvement_planner_prompt_hash": base_prompt_hash("improvement_planner"),
-        "skill_agent_prompt_hash": base_prompt_hash("skill_agent"),
-        "memory_agent_prompt_hash": base_prompt_hash("memory_agent"),
+        "planner_prompt_hash": base_prompt_hash("planner"),
+        "editor_prompt_hash": base_prompt_hash("editor"),
         "evaluator_hash": evaluator_hash,
     }
     for role in DEFAULT_PROMPT_SEED_ROLES:
@@ -390,7 +384,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             continue
         promoted = bool(item.get("promoted"))
         action = "prompt_overlay_promote" if promoted else "no_op"
-        target_kind = f"{role}_prompt" if role in {"target_resolver", "improvement_planner", "skill_agent", "memory_agent"} else "evaluator"
+        target_kind = f"{role}_prompt" if role in {"planner", "editor"} else "evaluator"
         seed = {"kind": "calibration", "role": role, "candidate_hash": item.get("candidate_hash"), "created_at": stamp}
         episode = {
             "schema_name": "self_improvement_episode",
@@ -410,6 +404,29 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             **source_hashes,
         }
         generation_id = _calibration_overlay_generation_id(result, item)
+        if generation_id:
+            episode["overlay_generation_id"] = generation_id
+        episodes.append(validate_episode(episode))
+    overlay_set = result.get("overlay_candidate_set") if isinstance(result.get("overlay_candidate_set"), dict) else None
+    if overlay_set:
+        generation_id = _calibration_overlay_generation_id(result, overlay_set)
+        seed = {"kind": "calibration", "role": "overlay_candidate_set", "candidate_hash": overlay_set.get("candidate_set_id") or generation_id, "created_at": stamp}
+        episode = {
+            "schema_name": "self_improvement_episode",
+            "schema_version": "1.0",
+            "episode_id": _episode_id(seed, stamp),
+            "episode_kind": "prompt_promotion" if bool(result.get("active_changed")) else "prompt_candidate",
+            "target_kind": "overlay_candidate_set",
+            "target_id": str(overlay_set.get("candidate_set_id") or generation_id or "overlay_candidate_set"),
+            "decision": "calibrate_evaluator",
+            "action": "prompt_overlay_promote" if bool(result.get("active_changed")) else "no_op",
+            "executed": bool(result.get("active_changed")),
+            "learnable": True,
+            "changed": bool(result.get("active_changed")),
+            "created_at": stamp,
+            "artifact_path": result.get("ledger_path") or result.get("artifact_path"),
+            **source_hashes,
+        }
         if generation_id:
             episode["overlay_generation_id"] = generation_id
         episodes.append(validate_episode(episode))

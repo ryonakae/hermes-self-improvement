@@ -67,7 +67,7 @@ def test_response_chars_handles_text_and_object():
 def test_record_llm_call_writes_event(tmp_path):
     config = {"_self_improvement_root": str(tmp_path)}
     record_llm_call(
-        site="target_resolver",
+        site="planner",
         messages=[
             {"role": "system", "content": "sys"},
             {"role": "user", "content": "user-prompt"},
@@ -84,7 +84,7 @@ def test_record_llm_call_writes_event(tmp_path):
     assert len(events) == 1
     ev = events[0]
     assert ev["event"] == "self_improvement_llm_call"
-    assert ev["site"] == "target_resolver"
+    assert ev["site"] == "planner"
     assert ev["model"] == "m1"
     assert ev["provider"] == "anthropic"
     assert ev["requested_model"] == "m1"

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
-from hermes_self_improvement.skill_agent_backend import NativeSkillAgentBackend, SkillToolExecutor, skill_agent_backend_status
+from hermes_self_improvement.editor_backend import NativeSkillAgentBackend, SkillToolExecutor, editor_backend_status
 
 
 def _sha256(text: str) -> str:
@@ -51,7 +51,7 @@ def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools
     executor = SkillToolExecutor(skills_list_fn=fake_list, skill_view_fn=fake_view, skill_manage_fn=fake_manage)
 
     def fake_constrained_agent(**kwargs):
-        assert kwargs["role"] == "skill_agent"
+        assert kwargs["role"] == "editor"
         view_result = executor.call("skill_view", {"name": "demo-skill"})
         patch_result = executor.call("skill_manage", {"action": "patch", "name": "demo-skill", "old_string": "Old guidance.", "new_string": "Improved guidance."})
         return {
@@ -74,7 +74,7 @@ def test_fake_llm_backend_smoke_mutates_disposable_skill_and_tracks_actual_tools
         tool_executor=executor,
         constrained_agent_runner=fake_constrained_agent,
     )
-    result = backend.run("Improve demo-skill", {"type": "skill_agent_task", "targets": {"primary_skill": "demo-skill"}}, {})
+    result = backend.run("Improve demo-skill", {"type": "editor_task", "targets": {"primary_skill": "demo-skill"}}, {})
 
     assert result["success"] is True
     assert "Improved guidance." in skill_path.read_text(encoding="utf-8")
@@ -96,7 +96,7 @@ def test_live_mutation_backend_smoke_isolated_status_only(tmp_path, monkeypatch)
     hermes_home = tmp_path / "hermes-home"
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
     assert not Path.home().joinpath(".hermes", "skills").resolve().is_relative_to(tmp_path.resolve())
-    status = skill_agent_backend_status({"mutation": {"backend": "native_skill_tool", "enabled": True}})
+    status = editor_backend_status({"mutation": {"backend": "native_skill_tool", "enabled": True}})
     if not status.get("available"):
         pytest.skip(f"mutation backend unavailable: {status.get('reason')}")
     assert status["available"] is True

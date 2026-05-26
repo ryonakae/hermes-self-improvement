@@ -20,10 +20,8 @@ def config(tmp_path: Path) -> dict:
 
 def test_default_prompt_overlay_seeds_are_markdown_and_within_limits():
     required_terms = {
-        "target_resolver": ["resolver", "unresolved", "skill", "read-only"],
-        "improvement_planner": ["apply", "defer", "USER", "MEMORY", "Skill", "create_skill"],
-        "skill_agent": ["skill_view", "skill_manage", "final JSON", "minimal"],
-        "memory_agent": ["memory", "current_entries", "final JSON", "convert_to_skill_proposal"],
+        "planner": ["apply", "defer", "USER", "MEMORY", "Skill", "unresolved"],
+        "editor": ["skill_view", "skill_manage", "memory", "final JSON", "add-before-remove"],
         "evaluator": ["evaluate", "memory", "overlay", "defer"],
     }
     for role in DEFAULT_PROMPT_SEED_ROLES:
@@ -69,22 +67,22 @@ def test_materialize_default_prompt_overlays_refreshes_stale_base_hash(tmp_path)
     materialize_default_prompt_overlays(cfg)
     active_path = Path(cfg["_self_improvement_root"]) / "evaluator" / "active-prompts.json"
     pointer = json.loads(active_path.read_text(encoding="utf-8"))
-    pointer["roles"]["improvement_planner"]["base_prompt_hash"] = "sha256:old"
+    pointer["roles"]["planner"]["base_prompt_hash"] = "sha256:old"
     active_path.write_text(json.dumps(pointer, ensure_ascii=False), encoding="utf-8")
 
     result = materialize_default_prompt_overlays(cfg)
 
     assert result["status"] == "materialized"
-    overlay = load_active_prompt_overlay(cfg, role="improvement_planner", base_hash=base_prompt_hash("improvement_planner"))
+    overlay = load_active_prompt_overlay(cfg, role="planner", base_hash=base_prompt_hash("planner"))
     assert overlay is not None
     assert overlay["source"] == "default_seed"
 
 
-def test_memory_agent_overlay_uses_add_before_remove_for_store_moves():
-    text = (DEFAULT_PROMPT_SEED_DIR / "memory_agent.md").read_text(encoding="utf-8")
+def test_editor_overlay_uses_add_before_remove_for_store_moves():
+    text = (DEFAULT_PROMPT_SEED_DIR / "editor.md").read_text(encoding="utf-8")
 
     assert "remove` then `add" not in text
-    assert "add the compact entry to the destination first" in text
-    assert "remove the source" in text
-    assert "destination add succeeds" in text
-    assert "convert_to_skill_proposal" in text
+    assert "add-before-remove" in text
+    assert "add the destination content first" in text
+    assert "remove or replace the source" in text
+    assert "memory-to-skill" in text

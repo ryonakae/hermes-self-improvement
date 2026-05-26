@@ -58,8 +58,8 @@ def write_review_outcome(config: dict, payload: dict, name: str = "outcome.json"
         "learnable": True,
         "changed": True,
         "created_at": "2026-04-30T00:00:00+00:00",
-        "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:skill_agent",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
     })
     signals = {"validation_passed": False, "user_correction": True} if payload.get("outcome") in {"failed", "rejected_by_user"} else {"validation_passed": True}
@@ -322,8 +322,8 @@ def test_calibrate_cli_handler_prints_preview_summary(monkeypatch, tmp_path, cap
             "regression": None,
             "active_changed": False,
             "prompt_overlays": {
-                "improvement_planner": {"candidate": True, "promoted": False, "reason": "planner_quality_signals"},
-                "skill_agent": {"candidate": False, "promoted": False, "reason": "no_signal"},
+                "planner": {"candidate": True, "promoted": False, "reason": "planner_quality_signals"},
+                "editor": {"candidate": False, "promoted": False, "reason": "no_signal"},
             },
         }
 
@@ -355,7 +355,7 @@ def test_calibrate_cli_handler_forwards_candidate_set_artifact(monkeypatch, tmp_
             "current_status": "updated",
             "reasons": [],
             "evidence_summary": {"total_events": 0, "disagreements": 0, "bad_outcomes": 0},
-            "overlay_candidate_set": {"status": "promoted", "source": "candidate_set_artifact", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(candidate_path), "changed_targets": ["improvement_planner_overlay"], "hard_violations": 0},
+            "overlay_candidate_set": {"status": "promoted", "source": "candidate_set_artifact", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(candidate_path), "changed_targets": ["planner_overlay"], "hard_violations": 0},
         }
 
     monkeypatch.setattr(cli, "run_calibration", fake_run_calibration)
@@ -393,7 +393,7 @@ def test_calibration_summary_includes_evaluator_sub_result_for_partial_update():
         "evidence_summary": {"total_events": 20, "disagreements": 5, "bad_outcomes": 0},
         "regression": {"status": "skipped", "reason": "candidate_not_concrete"},
         "prompt_overlays": {
-            "improvement_planner": {"candidate": True, "promoted": True, "reason": "planner_quality_signals"},
+            "planner": {"candidate": True, "promoted": True, "reason": "planner_quality_signals"},
         },
         "evaluator_update": {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False},
     })
@@ -499,7 +499,7 @@ def test_calibration_summary_includes_compact_overlay_candidate_set():
             "gepa_result": "selected",
             "candidate_set_id": "overlay-set-001",
             "candidate_set_path": "/tmp/candidate-set.json",
-            "changed_targets": ["improvement_planner_overlay"],
+            "changed_targets": ["planner_overlay"],
             "hard_violations": 0,
         },
     })
@@ -522,11 +522,11 @@ def test_calibration_summary_labels_evaluated_promote_as_would_promote():
             "gepa_result": "selected",
             "candidate_set_id": "overlay-set-001",
             "candidate_set_path": "/tmp/candidate-set.json",
-            "changed_targets": ["improvement_planner_overlay", "skill_agent_overlay"],
+            "changed_targets": ["planner_overlay", "editor_overlay"],
             "hard_violations": 0,
         },
         "prompt_overlays": {
-            "improvement_planner": {"candidate": True, "promoted": False, "reason": "no_signal"},
+            "planner": {"candidate": True, "promoted": False, "reason": "no_signal"},
         },
     })
 
@@ -779,8 +779,8 @@ def test_build_runtime_eval_cases_includes_role_episode_cases(tmp_path):
         "episode_kind": "preview_decision",
         "target_kind": "skill",
         "target_id": "demo-skill",
-        "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:skill_agent",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
         "decision": "skip",
         "action": "no_op",
@@ -795,8 +795,8 @@ def test_build_runtime_eval_cases_includes_role_episode_cases(tmp_path):
 
     cases = calibration.build_runtime_eval_cases(config)
 
-    assert {case["case_type"] for case in cases} == {"improvement_planner_weak_only_skip"}
-    assert cases[0]["case_family"] == "skill_agent"
+    assert {case["case_type"] for case in cases} == {"planner_weak_only_skip"}
+    assert cases[0]["case_family"] == "editor"
 
 
 def write_planner_quality_run(config: dict, payload: dict, name: str = "run.json") -> Path:
@@ -817,8 +817,8 @@ def test_calibration_dry_run_previews_prompt_overlay_candidates_without_active_p
     assert result["candidate"] is None
     assert result["overlay_candidate_set"]["status"] == "evaluated"
     assert result["overlay_candidate_set"]["candidate_set_id"]
-    assert result["prompt_overlays"]["improvement_planner"]["promoted"] is False
-    assert result["prompt_overlays"]["skill_agent"]["promoted"] is False
+    assert result["prompt_overlays"]["planner"]["promoted"] is False
+    assert result["prompt_overlays"]["editor"]["promoted"] is False
     assert (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists() is False
 
 
@@ -865,39 +865,39 @@ def overlay_candidate_set_payload(calibration, tmp_path: Path, *, candidate_set_
         "candidate_set_path": str(tmp_path / "candidate-set.json"),
         "gepa_result": "selected",
         "targets": {
-            "target_resolver_overlay": {
-                "target": "target_resolver_overlay",
-                "role": "target_resolver",
+            "planner_overlay": {
+                "target": "planner_overlay",
+                "role": "planner",
                 "candidate_set_id": candidate_set_id,
                 "change_status": "unchanged",
-                "base_prompt_hash": base_prompt_hash("target_resolver"),
+                "base_prompt_hash": base_prompt_hash("planner"),
                 "candidate_prompt": {"system_addendum": None, "replacement": None},
                 "candidate_hash": "sha256:target-resolver-candidate",
             },
-            "improvement_planner_overlay": {
-                "target": "improvement_planner_overlay",
-                "role": "improvement_planner",
+            "planner_overlay": {
+                "target": "planner_overlay",
+                "role": "planner",
                 "candidate_set_id": candidate_set_id,
                 "change_status": "changed",
-                "base_prompt_hash": base_prompt_hash("improvement_planner"),
+                "base_prompt_hash": base_prompt_hash("planner"),
                 "candidate_prompt": {"system_addendum": "Prefer exact evidence.", "replacement": None},
                 "candidate_hash": "sha256:planner-candidate",
             },
-            "skill_agent_overlay": {
-                "target": "skill_agent_overlay",
-                "role": "skill_agent",
+            "editor_overlay": {
+                "target": "editor_overlay",
+                "role": "editor",
                 "candidate_set_id": candidate_set_id,
                 "change_status": "unchanged",
-                "base_prompt_hash": base_prompt_hash("skill_agent"),
+                "base_prompt_hash": base_prompt_hash("editor"),
                 "candidate_prompt": {"system_addendum": None, "replacement": None},
-                "candidate_hash": "sha256:skill_agent-candidate",
+                "candidate_hash": "sha256:editor-candidate",
             },
-            "memory_agent_overlay": {
-                "target": "memory_agent_overlay",
-                "role": "memory_agent",
+            "editor_overlay": {
+                "target": "editor_overlay",
+                "role": "editor",
                 "candidate_set_id": candidate_set_id,
                 "change_status": "unchanged",
-                "base_prompt_hash": base_prompt_hash("memory_agent"),
+                "base_prompt_hash": base_prompt_hash("editor"),
                 "candidate_prompt": {"system_addendum": None, "replacement": None},
                 "candidate_hash": "sha256:memory-agent-candidate",
             },
@@ -918,7 +918,7 @@ def overlay_evaluation(*, decision: str = "promote", gepa_result: str = "selecte
     return {
         "decision": decision,
         "gepa_result": gepa_result,
-        "changed_targets": ["improvement_planner_overlay"] if decision == "promote" else [],
+        "changed_targets": ["planner_overlay"] if decision == "promote" else [],
         "hard_violations": [],
         "evaluation_hash": "sha256:evaluation",
     }
@@ -935,7 +935,7 @@ def test_calibration_execute_promotes_overlay_candidate_set_without_single_role_
     assert not hasattr(calibration, "build_prompt_overlay_candidates")
     monkeypatch.setattr(calibration, "generate_overlay_candidate_set", lambda *, config, evidence: candidate_set)
     monkeypatch.setattr(calibration, "evaluate_overlay_candidate_set", lambda value: evaluation)
-    monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: promoted.append((candidate_set, evaluation)) or {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["improvement_planner_overlay"], "candidate_paths": {"improvement_planner_overlay": str(tmp_path / "planner.json")}})
+    monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: promoted.append((candidate_set, evaluation)) or {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["planner_overlay"], "candidate_paths": {"planner_overlay": str(tmp_path / "planner.json")}})
 
     result = calibration.run_calibration(config=cfg, execute=True)
 
@@ -944,11 +944,11 @@ def test_calibration_execute_promotes_overlay_candidate_set_without_single_role_
     assert result["active_changed"] is True
     assert result["overlay_candidate_set"]["status"] == "promoted"
     assert result["overlay_candidate_set"]["overlay_generation_id"] == "overlay-set-001"
-    assert result["overlay_candidate_set"]["promoted_targets"] == ["improvement_planner_overlay"]
+    assert result["overlay_candidate_set"]["promoted_targets"] == ["planner_overlay"]
     assert "prompt_overlay_updates" not in result
-    assert result["prompt_overlays"]["improvement_planner"]["candidate"] is True
-    assert result["prompt_overlays"]["improvement_planner"]["promoted"] is True
-    assert result["prompt_overlays"]["improvement_planner"]["candidate_set_id"] == "overlay-set-001"
+    assert result["prompt_overlays"]["planner"]["candidate"] is True
+    assert result["prompt_overlays"]["planner"]["promoted"] is True
+    assert result["prompt_overlays"]["planner"]["candidate_set_id"] == "overlay-set-001"
 
 
 def test_calibration_execute_reuses_candidate_set_artifact_without_regenerating(monkeypatch, tmp_path):
@@ -964,7 +964,7 @@ def test_calibration_execute_reuses_candidate_set_artifact_without_regenerating(
         raise AssertionError("candidate set artifact reuse should not run GEPA generation")
 
     monkeypatch.setattr(calibration, "generate_overlay_candidate_set", fail_generate)
-    monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: promoted.append((candidate_set, evaluation)) or {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["improvement_planner_overlay"], "candidate_paths": {"improvement_planner_overlay": str(tmp_path / "planner.json")}})
+    monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: promoted.append((candidate_set, evaluation)) or {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["planner_overlay"], "candidate_paths": {"planner_overlay": str(tmp_path / "planner.json")}})
 
     result = calibration.run_calibration(config=cfg, execute=True, candidate_set_artifact_path=str(candidate_path))
 
@@ -975,7 +975,7 @@ def test_calibration_execute_reuses_candidate_set_artifact_without_regenerating(
     assert result["overlay_candidate_set"]["status"] == "promoted"
     assert result["overlay_candidate_set"]["source"] == "candidate_set_artifact"
     assert result["overlay_candidate_set"]["candidate_set_path"] == str(candidate_path)
-    assert result["prompt_overlays"]["improvement_planner"]["promoted"] is True
+    assert result["prompt_overlays"]["planner"]["promoted"] is True
 
 
 def test_calibration_rejects_candidate_set_artifact_in_preview_mode(tmp_path):
@@ -1003,7 +1003,7 @@ def test_calibration_reports_partial_update_when_overlay_set_promoted_but_evalua
     })
     monkeypatch.setattr(calibration, "generate_overlay_candidate_set", lambda *, config, evidence: candidate_set)
     monkeypatch.setattr(calibration, "evaluate_overlay_candidate_set", lambda value: overlay_evaluation())
-    monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["improvement_planner_overlay"], "candidate_paths": {"improvement_planner_overlay": str(tmp_path / "planner.json")}})
+    monkeypatch.setattr(calibration, "promote_overlay_candidate_set", lambda config, *, candidate_set, evaluation: {"overlay_generation_id": "overlay-set-001", "promoted_targets": ["planner_overlay"], "candidate_paths": {"planner_overlay": str(tmp_path / "planner.json")}})
 
     result = calibration.run_calibration(config=cfg, execute=True)
 
@@ -1011,8 +1011,8 @@ def test_calibration_reports_partial_update_when_overlay_set_promoted_but_evalua
     assert result["active_changed"] is True
     assert "prompt_overlay_updates" not in result
     assert result["overlay_candidate_set"]["status"] == "promoted"
-    assert result["overlay_candidate_set"]["promoted_targets"] == ["improvement_planner_overlay"]
-    assert result["prompt_overlays"]["improvement_planner"]["promoted"] is True
+    assert result["overlay_candidate_set"]["promoted_targets"] == ["planner_overlay"]
+    assert result["prompt_overlays"]["planner"]["promoted"] is True
     assert result["evaluator_update"]["status"] == "skipped"
     assert result["evaluator_update"]["reason"] == "candidate_not_concrete"
     assert "evaluator_asset_candidate_not_concrete" in result["reasons"]
@@ -1104,8 +1104,8 @@ def test_collect_calibration_evidence_includes_windowed_outcome_scores(tmp_path)
         "episode_kind": "executed_mutation",
         "target_kind": "skill",
         "target_id": "demo-skill",
-        "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:skill_agent",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
         "decision": "mutate_skill",
         "action": "skill_patch",
@@ -1146,8 +1146,8 @@ def test_collect_calibration_evidence_runs_outcome_prepass_before_scoring(tmp_pa
         "episode_kind": "executed_mutation",
         "target_kind": "skill",
         "target_id": "demo-skill",
-        "improvement_planner_prompt_hash": "sha256:planner",
-        "skill_agent_prompt_hash": "sha256:skill_agent",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
         "decision": "mutate_skill",
         "action": "skill_patch",

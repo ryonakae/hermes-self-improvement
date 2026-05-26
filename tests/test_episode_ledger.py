@@ -21,15 +21,15 @@ def sample_run_result(tmp_path):
         "execute": False,
         "artifact_path": str(artifact),
         "prompt_sources": {
-            "improvement_planner": {"base_hash": "sha256:planner"},
-            "skill_agent": {"base_hash": "sha256:skill_agent"},
+            "planner": {"base_hash": "sha256:planner"},
+            "editor": {"base_hash": "sha256:editor"},
         },
         "calibration": {"active_evaluator_hash": "sha256:evaluator"},
         "step_decisions": {
             "skill": {
                 "prompt_sources": {
-                    "improvement_planner": {"base_hash": "sha256:planner"},
-                    "skill_agent": {"base_hash": "sha256:skill_agent"},
+                    "planner": {"base_hash": "sha256:planner"},
+                    "editor": {"base_hash": "sha256:editor"},
                 },
                 "decisions": [
                     {
@@ -131,9 +131,9 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
         "active_changed": False,
         "overlay_candidate_set": {"overlay_generation_id": "overlay-set-preview", "candidate_set_id": "overlay-set-preview"},
         "prompt_overlays": {
-            "target_resolver": {"candidate": True, "promoted": False, "candidate_hash": "sha256:resolver-candidate", "candidate_set_id": "overlay-set-preview"},
-            "improvement_planner": {"candidate": True, "promoted": False, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-preview"},
-            "skill_agent": {"candidate": False, "promoted": False},
+            "planner": {"candidate": True, "promoted": False, "candidate_hash": "sha256:resolver-candidate", "candidate_set_id": "overlay-set-preview"},
+            "planner": {"candidate": True, "promoted": False, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-preview"},
+            "editor": {"candidate": False, "promoted": False},
             "evaluator": {"candidate": True, "promoted": False, "candidate_hash": "sha256:evaluator-overlay-candidate", "candidate_set_id": "overlay-set-preview"},
         },
         "candidate": {"candidate_hash": "sha256:evaluator-candidate"},
@@ -147,11 +147,11 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
     assert summary["count"] == 4
     loaded = load_recent_episodes(config=config, limit=10)
     by_target_kind = {item["target_kind"]: item for item in loaded}
-    assert by_target_kind["target_resolver_prompt"]["episode_kind"] == "prompt_candidate"
-    assert by_target_kind["target_resolver_prompt"]["target_resolver_prompt_hash"] == base_prompt_hash("target_resolver")
-    assert by_target_kind["improvement_planner_prompt"]["episode_kind"] == "prompt_candidate"
-    assert by_target_kind["improvement_planner_prompt"]["action"] == "no_op"
-    assert by_target_kind["improvement_planner_prompt"]["overlay_generation_id"] == "overlay-set-preview"
+    assert by_target_kind["planner_prompt"]["episode_kind"] == "prompt_candidate"
+    assert by_target_kind["planner_prompt"]["planner_prompt_hash"] == base_prompt_hash("planner")
+    assert by_target_kind["planner_prompt"]["episode_kind"] == "prompt_candidate"
+    assert by_target_kind["planner_prompt"]["action"] == "no_op"
+    assert by_target_kind["planner_prompt"]["overlay_generation_id"] == "overlay-set-preview"
     assert by_target_kind["evaluator"]["episode_kind"] == "prompt_candidate"
     assert by_target_kind["evaluator"]["overlay_generation_id"] == "overlay-set-preview"
 
@@ -160,20 +160,20 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
     promoted["active_evaluator_hash"] = "sha256:active-evaluator"
     promoted["overlay_candidate_set"] = {"overlay_generation_id": "overlay-set-001", "candidate_set_id": "overlay-set-001"}
     promoted["prompt_overlays"] = {
-        "target_resolver": {"candidate": True, "promoted": True, "candidate_hash": "sha256:resolver-candidate", "candidate_set_id": "overlay-set-001"},
-        "improvement_planner": {"candidate": True, "promoted": True, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-001"},
-        "skill_agent": {"candidate": True, "promoted": True, "candidate_hash": "sha256:skill_agent-candidate", "candidate_set_id": "overlay-set-001"},
+        "planner": {"candidate": True, "promoted": True, "candidate_hash": "sha256:resolver-candidate", "candidate_set_id": "overlay-set-001"},
+        "planner": {"candidate": True, "promoted": True, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-001"},
+        "editor": {"candidate": True, "promoted": True, "candidate_hash": "sha256:editor-candidate", "candidate_set_id": "overlay-set-001"},
         "evaluator": {"candidate": True, "promoted": True, "candidate_hash": "sha256:evaluator-overlay-candidate", "candidate_set_id": "overlay-set-001"},
     }
     promoted_episodes = calibration_episodes_from_result(promoted, created_at="2026-05-03T00:00:00+00:00")
     by_promoted_kind = {item["target_kind"]: item for item in promoted_episodes}
-    planner_episode = by_promoted_kind["improvement_planner_prompt"]
-    assert by_promoted_kind["target_resolver_prompt"]["action"] == "prompt_overlay_promote"
+    planner_episode = by_promoted_kind["planner_prompt"]
+    assert by_promoted_kind["planner_prompt"]["action"] == "prompt_overlay_promote"
     assert planner_episode["episode_kind"] == "prompt_promotion"
     assert planner_episode["action"] == "prompt_overlay_promote"
     assert planner_episode["executed"] is True
     assert planner_episode["overlay_generation_id"] == "overlay-set-001"
-    assert by_promoted_kind["skill_agent_prompt"]["overlay_generation_id"] == "overlay-set-001"
+    assert by_promoted_kind["editor_prompt"]["overlay_generation_id"] == "overlay-set-001"
     assert by_promoted_kind["evaluator"]["overlay_generation_id"] == "overlay-set-001"
 
 
@@ -181,8 +181,8 @@ def test_record_run_episodes_records_overlay_generation_and_hashes(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = sample_run_result(tmp_path)
     result["prompt_sources"] = {
-        "improvement_planner": {"base_hash": "sha256:planner-base", "overlay_hash": "sha256:planner-overlay", "overlay_generation_id": "overlay-generation-001"},
-        "skill_agent": {"base_hash": "sha256:skill_agent-base", "overlay_hash": "sha256:skill_agent-overlay"},
+        "planner": {"base_hash": "sha256:planner-base", "overlay_hash": "sha256:planner-overlay", "overlay_generation_id": "overlay-generation-001"},
+        "editor": {"base_hash": "sha256:editor-base", "overlay_hash": "sha256:editor-overlay"},
     }
     result["calibration"] = {"active_evaluator_hash": "sha256:evaluator-overlay"}
     result["step_decisions"]["skill"]["prompt_sources"] = result["prompt_sources"]
@@ -191,11 +191,11 @@ def test_record_run_episodes_records_overlay_generation_and_hashes(tmp_path):
 
     episode = [item for item in load_recent_episodes(config=config, limit=10) if item["target_id"] == "demo-skill"][0]
     assert episode["overlay_generation_id"] == "overlay-generation-001"
-    assert episode["improvement_planner_overlay_hash"] == "sha256:planner-overlay"
-    assert episode["skill_agent_overlay_hash"] == "sha256:skill_agent-overlay"
+    assert episode["planner_overlay_hash"] == "sha256:planner-overlay"
+    assert episode["editor_overlay_hash"] == "sha256:editor-overlay"
     assert episode["evaluator_overlay_hash"] == "sha256:evaluator-overlay"
-    assert episode["improvement_planner_prompt_hash"] == "sha256:planner-overlay"
-    assert episode["skill_agent_prompt_hash"] == "sha256:skill_agent-overlay"
+    assert episode["planner_prompt_hash"] == "sha256:planner-overlay"
+    assert episode["editor_prompt_hash"] == "sha256:editor-overlay"
     assert episode["evaluator_hash"] == "sha256:evaluator-overlay"
 
 
@@ -221,8 +221,8 @@ def test_record_run_episodes_uses_mutation_metadata_for_executed_skill_change(tm
     assert episode["action"] == "skill_patch"
     assert episode["executed"] is True
     assert episode["changed"] is True
-    assert episode["improvement_planner_prompt_hash"] == "sha256:planner"
-    assert episode["skill_agent_prompt_hash"] == "sha256:skill_agent"
+    assert episode["planner_prompt_hash"] == "sha256:planner"
+    assert episode["editor_prompt_hash"] == "sha256:editor"
     assert episode["evaluator_hash"] == "sha256:evaluator"
     assert episode["post_validation_status"] == "passed"
     assert episode["post_validation_has_pitfalls"] is True
@@ -279,7 +279,7 @@ def test_record_run_episodes_preserves_archive_skill_decision(tmp_path):
     assert episode["changed"] is True
 
 
-def test_record_run_episodes_treats_memory_agent_decision_as_executed_memory_change(tmp_path):
+def test_record_run_episodes_treats_editor_decision_as_executed_memory_change(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = sample_run_result(tmp_path)
     result["dry_run"] = False
@@ -289,18 +289,18 @@ def test_record_run_episodes_treats_memory_agent_decision_as_executed_memory_cha
             {
                 "evidence_id": "mem-agent-1",
                 "decision": "accepted",
-                "reason": "memory_agent_applied",
+                "reason": "editor_applied",
                 "changed": True,
-                "operation": {"operation": "memory_agent", "target": "memory"},
-                "result_source": "memory_agent",
+                "operation": {"operation": "editor", "target": "memory"},
+                "result_source": "editor",
             },
             {
                 "evidence_id": "mem-agent-removed",
                 "decision": "accepted",
-                "reason": "memory_agent_removed",
+                "reason": "editor_removed",
                 "changed": True,
-                "operation": {"operation": "memory_agent_remove", "target": "memory"},
-                "result_source": "memory_agent",
+                "operation": {"operation": "editor_remove", "target": "memory"},
+                "result_source": "editor",
             },
         ]
     }
@@ -309,6 +309,6 @@ def test_record_run_episodes_treats_memory_agent_decision_as_executed_memory_cha
 
     by_target = {item["target_id"]: item for item in load_recent_episodes(config=config, limit=10)}
     assert by_target["memory:mem-agent-1"]["episode_kind"] == "executed_mutation"
-    assert by_target["memory:mem-agent-1"]["action"] == "memory_agent"
+    assert by_target["memory:mem-agent-1"]["action"] == "editor"
     assert by_target["memory:mem-agent-1"]["changed"] is True
     assert by_target["memory:mem-agent-removed"]["action"] == "memory_remove"

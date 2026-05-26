@@ -145,7 +145,7 @@ def test_calibrate_tool_forwards_candidate_set_artifact(monkeypatch, tmp_path):
             "target_changed": True,
             "active_changed": True,
             "current_status": "updated",
-            "overlay_candidate_set": {"status": "promoted", "source": "candidate_set_artifact", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(candidate_path), "changed_targets": ["improvement_planner_overlay"], "hard_violations": 0},
+            "overlay_candidate_set": {"status": "promoted", "source": "candidate_set_artifact", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(candidate_path), "changed_targets": ["planner_overlay"], "hard_violations": 0},
         }
 
     mod._handle_self_improvement_calibrate_tool.__globals__["run_calibration"] = fake_run_calibration
@@ -201,11 +201,11 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
             "ledger_path": str(tmp_path / "ledger.json"),
             "candidate": {"prompt": large_details},
             "prompt_overlays": {
-                "improvement_planner": {"candidate": True, "promoted": False, "candidate_hash": "hash-planner", "candidate_path": str(tmp_path / "candidate.json"), "regression": {"status": "passed", "details": large_details}},
-                "skill_agent": {"candidate": False, "promoted": False, "candidate_hash": None, "candidate_path": None, "regression": None},
+                "planner": {"candidate": True, "promoted": False, "candidate_hash": "hash-planner", "candidate_path": str(tmp_path / "candidate.json"), "regression": {"status": "passed", "details": large_details}},
+                "editor": {"candidate": False, "promoted": False, "candidate_hash": None, "candidate_path": None, "regression": None},
             },
             "evaluator_update": {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False},
-            "overlay_candidate_set": {"status": "promoted", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["improvement_planner_overlay"], "hard_violations": 0, "candidate_payload": large_details},
+            "overlay_candidate_set": {"status": "promoted", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0, "candidate_payload": large_details},
         }
 
     mod._handle_self_improvement_calibrate_tool.__globals__["run_calibration"] = fake_run_calibration
@@ -227,9 +227,9 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
     assert payload["evaluator_update"] == {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False}
     assert payload["full_payload"]["path"] == str(tmp_path / "ledger.json")
     assert "prompt_overlays" not in payload
-    assert payload["overlay_candidate_set"] == {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["improvement_planner_overlay"], "hard_violations": 0}
+    assert payload["overlay_candidate_set"] == {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0}
     assert payload["components"] == {
-        "prompt_overlay_set": {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "changed_targets": ["improvement_planner_overlay"], "hard_violations": 0},
+        "prompt_overlay_set": {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": 0},
         "evaluator": {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False},
     }
     assert large_details not in raw
@@ -292,16 +292,16 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                     "changed": 0,
                     "changed_skills": [],
                     "prompt_sources": {
-                        "improvement_planner": {"role": "improvement_planner", "source": "base", "overlay_active": False, "base_hash": "sha256:planner"},
-                        "skill_agent": {"role": "skill_agent", "source": "runtime", "overlay_active": True, "base_hash": "sha256:skill_agent", "active_hash": "sha256:active", "path": str(tmp_path / "active-prompts.json")},
+                        "planner": {"role": "planner", "source": "base", "overlay_active": False, "base_hash": "sha256:planner"},
+                        "editor": {"role": "editor", "source": "runtime", "overlay_active": True, "base_hash": "sha256:editor", "active_hash": "sha256:active", "path": str(tmp_path / "active-prompts.json")},
                     },
                     "planner": {
                         "status": "completed",
                         "planner_source": "deterministic_fallback",
                         "summary": {"candidate_count": 2, "mutate_skill_count": 1, "archive_skill_count": 1, "skipped": 1, "deferred": 0, "mutate_memory_count": 0, "calibrate_evaluator_count": 0},
-                        "decisions": [{"skill": "a", "decision": "mutate_skill", "skill_agent_instructions": large_instruction}],
+                        "decisions": [{"skill": "a", "decision": "mutate_skill", "editor_instructions": large_instruction}],
                     },
-                    "planner_quality": {"attached_candidate_count": 1, "unmatched_evidence_count": 2, "selected_with_evidence": 1, "action_like_skips": 0, "hint_attached_evidence_count": 1, "hint_attached_candidate_count": 1, "cluster_evidence_count": 0, "attachments_by_match_kind": {"hint_tool_class": 1}, "skill_agent_task_count": 1, "skill_agent_prompt_chars": {"max": 500, "min": 500, "total": 500}},
+                    "planner_quality": {"attached_candidate_count": 1, "unmatched_evidence_count": 2, "selected_with_evidence": 1, "action_like_skips": 0, "hint_attached_evidence_count": 1, "hint_attached_candidate_count": 1, "cluster_evidence_count": 0, "attachments_by_match_kind": {"hint_tool_class": 1}, "editor_task_count": 1, "editor_prompt_chars": {"max": 500, "min": 500, "total": 500}},
                     "decisions": [
                         {"skill": "a", "decision": "mutate_skill_preview", "reason": "planner_mutate_skill_preview", "task": {"instructions": large_instruction}},
                         {"skill": "b", "decision": "defer", "reason": "target_uncertain"},
@@ -333,16 +333,16 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["evidence"]["views"] == {"skill": 2, "memory": 1, "evaluator": 0}
     assert payload["steps"]["proposals_considered"] == 4
     assert payload["steps"]["skill"]["decision_count"] == 3
-    assert payload["steps"]["prompt_sources"]["improvement_planner"]["overlay_active"] is False
-    assert payload["steps"]["prompt_sources"]["skill_agent"]["overlay_active"] is True
-    assert payload["steps"]["prompt_sources"]["skill_agent"]["active_hash"] == "sha256:active"
+    assert payload["steps"]["prompt_sources"]["planner"]["overlay_active"] is False
+    assert payload["steps"]["prompt_sources"]["editor"]["overlay_active"] is True
+    assert payload["steps"]["prompt_sources"]["editor"]["active_hash"] == "sha256:active"
     assert payload["steps"]["skill_planner"]["mutate_skill_count"] == 1
     assert payload["steps"]["skill_planner"]["archive_skill_count"] == 1
     assert payload["steps"]["skill_planner"]["source"] == "deterministic_fallback"
     assert payload["steps"]["skill_planner"]["quality"]["selected_with_evidence"] == 1
     assert payload["steps"]["skill_planner"]["quality"]["hint_attached_evidence_count"] == 1
     assert payload["steps"]["skill_planner"]["quality"]["attachments_by_match_kind"] == {"hint_tool_class": 1}
-    assert payload["steps"]["skill_planner"]["quality"]["skill_agent_prompt_chars"]["max"] == 500
+    assert payload["steps"]["skill_planner"]["quality"]["editor_prompt_chars"]["max"] == 500
     assert payload["steps"]["memory"]["related_lookups"]["completed"] == 1
     assert payload["action_summary"] == {"apply": 2, "defer": 1, "skip": 1, "block": 1}
     assert payload["actionable"]["mutation_ready_count"] == 2

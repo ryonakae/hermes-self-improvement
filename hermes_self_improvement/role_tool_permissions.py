@@ -11,23 +11,14 @@ class RoleToolPermission:
 
 
 ROLE_TOOL_PERMISSIONS: dict[str, RoleToolPermission] = {
-    "target_resolver": RoleToolPermission(
+    "planner": RoleToolPermission(
         enabled_toolsets=("skills",),
         allowed_tool_names=frozenset({"skills_list", "skill_view"}),
     ),
-    "improvement_planner": RoleToolPermission(
-        enabled_toolsets=("skills",),
-        allowed_tool_names=frozenset({"skills_list", "skill_view"}),
+    "editor": RoleToolPermission(
+        enabled_toolsets=("skills", "memory"),
+        allowed_tool_names=frozenset({"skills_list", "skill_view", "skill_manage", "memory"}),
     ),
-    "skill_agent": RoleToolPermission(
-        enabled_toolsets=("skills",),
-        allowed_tool_names=frozenset({"skills_list", "skill_view", "skill_manage"}),
-    ),
-    "memory_agent": RoleToolPermission(
-        enabled_toolsets=("memory",),
-        allowed_tool_names=frozenset({"memory"}),
-    ),
-    "memory_extractor": RoleToolPermission(tool_free=True),
     "evaluator": RoleToolPermission(tool_free=True),
-    "prompt_optimizer": RoleToolPermission(tool_free=True),
+    "calibrator": RoleToolPermission(tool_free=True),
 }

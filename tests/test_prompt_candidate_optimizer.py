@@ -15,7 +15,7 @@ from hermes_self_improvement.prompt_candidate_optimizer import (
 def evidence_payload() -> dict:
     return {
         "total_events": 3,
-        "improvement_planner_prompt_signals": 2,
+        "planner_prompt_signals": 2,
         "credit_assignment": {"aggregate_hash": "sha256:credit"},
         "runtime_eval_cases": {"planner": 2},
     }
@@ -28,7 +28,7 @@ def test_dspy_unavailable_falls_back_without_import_failure(monkeypatch, tmp_pat
 
     candidate = generate_prompt_overlay_candidate(
         config={"_self_improvement_root": str(tmp_path / "self-improvement")},
-        role="improvement_planner",
+        role="planner",
         evidence=evidence_payload(),
     )
 
@@ -49,7 +49,7 @@ def test_fake_optimizer_can_produce_candidate_file(tmp_path):
         }
 
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    candidate = generate_prompt_overlay_candidate(config=config, role="improvement_planner", evidence=evidence_payload(), optimizer=fake_optimizer)
+    candidate = generate_prompt_overlay_candidate(config=config, role="planner", evidence=evidence_payload(), optimizer=fake_optimizer)
 
     path = Path(candidate["candidate_path"])
     assert path.exists()
@@ -70,7 +70,7 @@ def test_candidate_text_is_capped_and_redacted(tmp_path):
 
     candidate = generate_prompt_overlay_candidate(
         config={"_self_improvement_root": str(tmp_path / "self-improvement")},
-        role="improvement_planner",
+        role="planner",
         evidence=evidence_payload(),
         optimizer=noisy_optimizer,
         max_text_chars=80,
@@ -85,11 +85,11 @@ def test_full_replacement_output_is_rejected():
     with pytest.raises(ValueError, match="prompt_replacement_not_supported"):
         validate_prompt_overlay_candidate(
             {
-                "role": "improvement_planner",
+                "role": "planner",
                 "base_prompt_hash": "sha256:base",
                 "candidate_prompt": {"system_addendum": "ok", "replacement": "replace everything"},
             },
-            role="improvement_planner",
+            role="planner",
         )
 
 
@@ -97,17 +97,17 @@ def test_candidate_that_alters_allowed_tools_or_scope_is_rejected():
     with pytest.raises(ValueError, match="prompt_candidate_alters_safety_boundary"):
         validate_prompt_overlay_candidate(
             {
-                "role": "improvement_planner",
+                "role": "planner",
                 "base_prompt_hash": "sha256:base",
                 "candidate_prompt": {"system_addendum": "Use shell directly and change allowed tools for all targets.", "replacement": None},
             },
-            role="improvement_planner",
+            role="planner",
         )
 
 
 def test_generated_candidate_is_not_promoted_without_autonomous_evaluator(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
-    candidate = generate_prompt_overlay_candidate(config=config, role="improvement_planner", evidence=evidence_payload())
+    candidate = generate_prompt_overlay_candidate(config=config, role="planner", evidence=evidence_payload())
 
     assert candidate["promoted"] is False
     assert not (tmp_path / "self-improvement" / "evaluator" / "active-prompts.json").exists()
@@ -124,12 +124,12 @@ def test_fake_optimizer_can_produce_overlay_candidate_set(tmp_path):
             "baseline_score": 0.41,
             "candidate_score": 0.72,
             "targets": {
-                "improvement_planner_overlay": {
+                "planner_overlay": {
                     "change_status": "changed",
                     "candidate_prompt": {"system_addendum": "Require concrete evidence ids before mutate_skill.", "replacement": None},
                     "rationale": "Planner over-selected weak evidence.",
                 },
-                "skill_agent_overlay": {
+                "editor_overlay": {
                     "change_status": "changed",
                     "candidate_prompt": {"system_addendum": "Stop without mutation when target evidence is stale.", "replacement": None},
                     "rationale": "Editor should stop stale target tasks.",
@@ -169,14 +169,14 @@ def test_fake_optimizer_can_produce_overlay_candidate_set(tmp_path):
     assert candidate_set["gepa_result"] == "selected"
     assert candidate_set["baseline_score"] == 0.41
     assert candidate_set["candidate_score"] == 0.72
-    assert set(candidate_set["targets"]) == {"target_resolver_overlay", "improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay"}
+    assert set(candidate_set["targets"]) == {"planner_overlay", "planner_overlay", "editor_overlay", "editor_overlay", "evaluator_overlay"}
     assert {target["candidate_set_id"] for target in candidate_set["targets"].values()} == {candidate_set["candidate_set_id"]}
-    assert candidate_set["targets"]["improvement_planner_overlay"]["change_status"] == "changed"
-    assert candidate_set["targets"]["skill_agent_overlay"]["change_status"] == "changed"
+    assert candidate_set["targets"]["planner_overlay"]["change_status"] == "changed"
+    assert candidate_set["targets"]["editor_overlay"]["change_status"] == "changed"
     assert candidate_set["targets"]["evaluator_overlay"]["change_status"] == "unchanged"
     assert candidate_set["targets"]["evaluator_overlay"]["candidate_prompt"] == {"system_addendum": None, "user_addendum": None, "replacement": None}
     assert Path(candidate_set["candidate_set_path"]).exists()
-    assert set(seen["case_targets"]) == {"skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay", "improvement_planner_overlay"}
+    assert set(seen["case_targets"]) == {"editor_overlay", "editor_overlay", "evaluator_overlay", "planner_overlay"}
 
 
 def test_default_overlay_candidate_set_uses_gepa_adapter_when_enabled(monkeypatch, tmp_path):
@@ -185,7 +185,7 @@ def test_default_overlay_candidate_set_uses_gepa_adapter_when_enabled(monkeypatc
     calls = []
 
     def fake_build_cases(*, config, limit):
-        return [{"target": "improvement_planner_overlay", "case_hash": f"sha256:case-{index}"} for index in range(100)]
+        return [{"target": "planner_overlay", "case_hash": f"sha256:case-{index}"} for index in range(100)]
 
     def fake_optimize_overlay_candidate_set(*, config, evidence, cases):
         calls.append({"config": config, "evidence": evidence, "cases": cases})
@@ -195,8 +195,8 @@ def test_default_overlay_candidate_set_uses_gepa_adapter_when_enabled(monkeypatc
             "baseline_score": 0.3,
             "candidate_score": 0.7,
             "targets": {
-                "improvement_planner_overlay": {"change_status": "changed", "candidate_prompt": {"system_addendum": "Use GEPA guidance.", "replacement": None}},
-                "skill_agent_overlay": {"change_status": "unchanged", "candidate_prompt": {"replacement": None}},
+                "planner_overlay": {"change_status": "changed", "candidate_prompt": {"system_addendum": "Use GEPA guidance.", "replacement": None}},
+                "editor_overlay": {"change_status": "unchanged", "candidate_prompt": {"replacement": None}},
                 "evaluator_overlay": {"change_status": "unchanged", "candidate_prompt": {"replacement": None}},
             },
         }
@@ -220,12 +220,12 @@ def test_default_overlay_candidate_set_uses_gepa_adapter_when_enabled(monkeypatc
     assert candidate_set["source"] == "gepa"
     assert candidate_set["optimizer"] == "dspy.GEPA"
     assert candidate_set["gepa_result"] == "selected"
-    assert candidate_set["targets"]["improvement_planner_overlay"]["change_status"] == "changed"
+    assert candidate_set["targets"]["planner_overlay"]["change_status"] == "changed"
     assert candidate_set["selected_case_ids"][0] == "sha256:case-93"
-    assert candidate_set["selected_case_targets"] == ["improvement_planner_overlay"] * 7
+    assert candidate_set["selected_case_targets"] == ["planner_overlay"] * 7
     assert candidate_set["selected_case_signals"][0] == {
         "id": "sha256:case-93",
-        "target": "improvement_planner_overlay",
+        "target": "planner_overlay",
         "signal_score": 0,
         "source_key": "sha256:case-93",
         "source_episode_id": None,
@@ -245,7 +245,7 @@ def test_default_overlay_candidate_set_uses_five_optimizer_cases(monkeypatch, tm
     def fake_build_cases(*, config, limit):
         return [
             {
-                "target": "improvement_planner_overlay",
+                "target": "planner_overlay",
                 "case_hash": f"sha256:case-{index}",
                 "source_episode_id": f"episode-{index}",
                 "source": {"kind": "episode", "episode_id": f"episode-{index}"},

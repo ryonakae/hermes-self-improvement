@@ -22,16 +22,12 @@ def _term(*parts: str) -> str:
 FORBIDDEN_ACTIVE_TERMS = {
     _term('task="skills', '_hub"'): 'self-improvement LLM calls must use task="self_improvement"',
     _term("task='skills", "_hub'"): "self-improvement LLM calls must use task='self_improvement'",
-    _term("model.", "planner"): "use model.improvement_planner",
-    _term("model.", "editor"): "use model.skill_agent / model.memory_agent",
     _term("model.", "llm"): "retired model role",
     _term("model.", "mutation"): "retired model role",
     _term("model.", "gepa"): "retired model role",
     _term("llm", "_scorer", "_error"): "LLM scorer is retired",
-    _term("run", "_editor"): "use mutate_skill",
-    _term("editor", "_instructions"): "use skill_agent_instructions",
-    _term("selected", "_for", "_editor"): "use selected_for_skill_agent",
-    _term("planner", "_editor"): "use skill_agent",
+    _term("selected", "_for", "_editor"): "use selected_for_editor",
+    _term("planner", "_editor"): "use editor",
     _term("planner", "-editor"): "use skill-agent",
     _term("native", "_skill", "_tool", "_editor"): "use native_skill_tool",
     _term("patch", "_skill"): "use mutate_skill + maintenance_action=patch",
@@ -82,9 +78,9 @@ def test_operations_docs_define_current_llm_model_routing_contract():
         ]
     )
 
-    assert "model.memory_extractor" in docs
+    assert "model.planner" in docs
     assert "model.evaluator" in docs
     assert "DSPy/GEPA" in docs
-    assert "memory_extractor" in docs
+    assert "planner" in docs
     assert "tool-free" in docs or "no tools" in docs
     assert "constrained" in docs

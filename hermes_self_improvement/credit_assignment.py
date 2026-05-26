@@ -236,7 +236,7 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
         "episode_count": len(rows),
         "scored_episode_count": len(scored),
         "overall": _bucket_summary(rows),
-        "by_improvement_planner_prompt_hash": _group(rows, lambda row: row.get("improvement_planner_prompt_hash")),
+        "by_planner_prompt_hash": _group(rows, lambda row: row.get("planner_prompt_hash")),
         "by_skill_agent_prompt_hash": _group(rows, lambda row: row.get("skill_agent_prompt_hash")),
         "by_memory_agent_prompt_hash": _group(rows, lambda row: row.get("memory_agent_prompt_hash")),
         "by_evaluator_hash": _group(rows, lambda row: row.get("evaluator_hash")),

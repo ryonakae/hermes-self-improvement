@@ -101,7 +101,7 @@ def test_status_mentions_setup_when_prompt_overlays_invalid():
             "initialized": False,
             "reasons": ["active_prompt_overlays_invalid"],
             "active_evaluator": {"status": "ok"},
-            "active_prompt_overlays": {"status": "missing", "sources": {}, "roles": {"skill_agent": {"status": "missing"}}},
+            "active_prompt_overlays": {"status": "missing", "sources": {}, "roles": {"editor": {"status": "missing"}}},
             "default_assets": {"status": "ok"},
         },
     })
@@ -339,7 +339,7 @@ def test_run_improve_reconciles_memory_gap_adds_against_existing_memories(monkey
         captured["memory_evidence"] = kwargs["evidence_pack"].get("evidence") or []
         return {"status": "no_memory_evidence", "changed": 0, "changed_memories": [], "decisions": []}
 
-    monkeypatch.setattr(cli, "run_memory_extractor", fake_extractor)
+    monkeypatch.setattr(cli, "run_planner", fake_extractor)
     monkeypatch.setattr(cli, "run_memory_improvement_step", fake_memory_step)
 
     result = cli.run_improve(config=config, dry_run=True)
@@ -433,8 +433,8 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
         "target_resolution_digest": {"candidates": [{"target_fit_signals": {"recommendation": "unresolved"}}, {"target_fit_signals": {"recommendation": "attach_existing_skill"}}]},
         "artifact_path": "/tmp/run.json",
         "prompt_sources": {
-            "improvement_planner": {"overlay_active": True, "overlay_hash": "sha256:planner-overlay", "base_hash": "sha256:planner-base"},
-            "skill_agent": {"overlay_active": False, "base_hash": "sha256:skill_agent-base"},
+            "planner": {"overlay_active": True, "overlay_hash": "sha256:planner-overlay", "base_hash": "sha256:planner-base"},
+            "editor": {"overlay_active": False, "base_hash": "sha256:editor-base"},
         },
     })
 
@@ -446,7 +446,7 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "次に見る点:" in text
     assert "Skill improvements:" in text
     assert "- changed 2 skills" in text
-    assert "skill_agent stopped/rejected: skipped_superseded 1, submit_result_missing 2" in text
+    assert "editor stopped/rejected: skipped_superseded 1, submit_result_missing 2" in text
     assert "Verbose natural-language reason" not in text
     assert "Skill lifecycle:" in text
     assert "- archive candidates 1, would archive 1, archived 0, references rewritten 0, deferred references 0, blocked 0" in text
@@ -473,14 +473,14 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "- submit_result_missing: 2" in text
     assert "related lookups: completed 1" in text
     assert "private eval cases: 3 written" in text
-    assert "- improvement_planner: runtime overlay hash sha256:planner-overlay" in text
-    assert "- skill_agent: base hash sha256:skill_agent-base" in text
+    assert "- planner: runtime overlay hash sha256:planner-overlay" in text
+    assert "- editor: base hash sha256:editor-base" in text
     assert "human review" not in text.lower()
     assert "Artifact: /tmp/run.json" in text
     assert "ledger" not in text.lower()
 
 
-def test_improve_summary_reports_memory_agent_current_entry_visibility():
+def test_improve_summary_reports_editor_current_entry_visibility():
     cli = load_cli_module()
     text = cli._render_improve_summary({
         "dry_run": True,
@@ -490,7 +490,7 @@ def test_improve_summary_reports_memory_agent_current_entry_visibility():
             "skill": {"planner": {"summary": {}}, "decisions": []},
             "memory": {
                 "decisions": [],
-                "memory_agent": {
+                "editor": {
                     "status": "preview",
                     "current_entries_visible_count": 20,
                     "current_entries_count_by_target": {"memory": 14, "user": 6},
@@ -502,7 +502,7 @@ def test_improve_summary_reports_memory_agent_current_entry_visibility():
     })
 
     assert "Memory improvements:" in text
-    assert "- current entries visible to memory_agent: memory 14, user 6, omitted 8 (preview visibility)" in text
+    assert "- current entries visible to editor: memory 14, user 6, omitted 8 (preview visibility)" in text
 
 
 def test_improve_summary_reports_memory_to_skill_migrations():
@@ -622,7 +622,7 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
                 "decisions": [
                     {"decision": "accepted", "changed": True, "result": {"created_skills": ["timeout-workflow"], "created_skills_inferred_from_trace": True, "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True}}},
                     {"decision": "accepted", "changed": True, "result": {"changed_skills": ["sandbox-permission-workflow"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": False, "has_verification": True}}},
-                    {"decision": "rejected", "changed": False, "result": {"error": "skill_agent_post_validation_failed", "post_validation": {"status": "failed"}}},
+                    {"decision": "rejected", "changed": False, "result": {"error": "editor_post_validation_failed", "post_validation": {"status": "failed"}}},
                 ],
             },
             "memory": {"decisions": [
@@ -686,8 +686,8 @@ def test_render_status_summary_shows_calibration_thresholds():
         "enabled": True,
         "event_path": "/tmp/events.jsonl",
         "event_count_sample": 0,
-        "skill_agent_backend": {"available": False},
-        "memory_agent_backend": {"available": False},
+        "editor_backend": {"available": False},
+        "editor_backend": {"available": False},
         "autonomous_policy": {
             "calibrate_mutation_capable": True,
             "calibrate_requires": "autonomous_evaluator_promote",
@@ -716,7 +716,7 @@ def test_prompt_overlay_set_component_renders_generation_id_and_regression_statu
         "status": "promoted",
         "decision": "promote",
         "gepa_result": "selected",
-        "changed_targets": ["improvement_planner_overlay", "skill_agent_overlay"],
+        "changed_targets": ["planner_overlay", "editor_overlay"],
         "overlay_generation_id": "overlay-set-abc123",
         "regression": {"status": "passed", "cases": 4},
         "source": "candidate_set_artifact",
@@ -734,7 +734,7 @@ def test_prompt_overlay_set_component_renders_dry_run_would_promote_without_muta
         "status": "previewed",
         "decision": "promote",
         "gepa_result": "selected",
-        "changed_targets": ["improvement_planner_overlay"],
+        "changed_targets": ["planner_overlay"],
         "overlay_generation_id": "overlay-set-pending",
     })
 
@@ -799,7 +799,7 @@ def test_improve_summary_reports_quality_patch_candidates_and_quality_patched():
                         "changed": False,
                         "skill": "another-needs-patch",
                         "planner_decision": {"decision": "mutate_skill", "maintenance_action": "patch"},
-                        "result": {"error": "skill_agent_post_validation_failed", "post_validation": {"status": "failed"}},
+                        "result": {"error": "editor_post_validation_failed", "post_validation": {"status": "failed"}},
                     },
                 ],
             },
@@ -962,7 +962,7 @@ def test_status_summary_is_human_readable_not_json():
         "last_event_ts": "2026-04-30T00:00:00Z",
         "last_run_artifact": "/tmp/run.json",
         "dspy_available": False,
-        "skill_agent_backend": {"available": True},
+        "editor_backend": {"available": True},
         "runtime_setup": {"initialized": False, "active_evaluator": {"status": "missing"}, "default_assets": {"status": "missing"}},
         "curator_integration": {"skill_telemetry_source": "Hermes Curator", "hook_mode": "observation_only"},
         "curator_telemetry": {"available": True, "candidate_count": 7, "rejected_count": 3},

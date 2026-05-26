@@ -46,7 +46,7 @@ def episode_payload(
         "target_kind": target_kind,
         "target_id": target_id,
         "planner_prompt_hash": "sha256:planner",
-        "editor_prompt_hash": "sha256:skill_agent",
+        "editor_prompt_hash": "sha256:editor",
         "evaluator_hash": "sha256:evaluator",
         "decision": "mutate_skill" if target_kind == "skill" else "mutate_memory",
         "action": action,

@@ -373,7 +373,7 @@ def build_memory_extractor_messages(digest: dict[str, Any]) -> list[dict[str, An
 def _memory_extractor_model_config(config: dict[str, Any]) -> dict[str, Any]:
     raw_model = config.get("model")
     model_config = raw_model if isinstance(raw_model, dict) else {}
-    raw_value = model_config.get("memory_extractor")
+    raw_value = model_config.get("memory_extractor") or model_config.get("planner")
     value = raw_value if isinstance(raw_value, dict) else {}
     return value or {}
 
@@ -394,7 +394,7 @@ def _call_memory_extractor_llm(*, digest: dict[str, Any], config: dict[str, Any]
     from .llm_telemetry import record_llm_call
     from .prompt_cache import apply_caching
 
-    messages, cache_extras = apply_caching(messages, site="memory_extractor")
+    messages, cache_extras = apply_caching(messages, site="planner")
     extra_body = dict(configured_extra)
     extra_body.update(cache_extras)
     response = call_llm(
@@ -411,7 +411,7 @@ def _call_memory_extractor_llm(*, digest: dict[str, Any], config: dict[str, Any]
     )
     response_text = extract_content_or_reasoning(response)
     record_llm_call(
-        site="memory_extractor",
+        site="planner",
         messages=messages,
         response_text=response_text,
         config=config,

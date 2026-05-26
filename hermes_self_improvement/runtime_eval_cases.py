@@ -54,7 +54,7 @@ def _base_case(episode: dict[str, Any], *, case_type: str, role: str, expected: 
     case = {
         "schema_name": "self_improvement_runtime_eval_case",
         "schema_version": "1.0",
-        "case_family": "skill_agent",
+        "case_family": "editor",
         "case_type": case_type,
         "role": role,
         "source": {
@@ -72,9 +72,8 @@ def _base_case(episode: dict[str, Any], *, case_type: str, role: str, expected: 
             "evidence_ids": [str(item) for item in evidence_ids],
             "evidence_strength": _evidence_strength(episode),
             "reason": _reason(episode),
-            "improvement_planner_prompt_hash": episode.get("improvement_planner_prompt_hash"),
-            "skill_agent_prompt_hash": episode.get("skill_agent_prompt_hash"),
-            "memory_agent_prompt_hash": episode.get("memory_agent_prompt_hash"),
+            "planner_prompt_hash": episode.get("planner_prompt_hash"),
+            "editor_prompt_hash": episode.get("editor_prompt_hash"),
             "evaluator_hash": episode.get("evaluator_hash"),
         },
         "expected": expected,
@@ -101,9 +100,8 @@ def _overlay_input(episode: dict[str, Any]) -> dict[str, Any]:
         },
         "outcome": {"outcome": episode.get("outcome") or "unknown", "changed": bool(episode.get("changed")), "executed": bool(episode.get("executed"))},
         "overlay_generation_id": episode.get("overlay_generation_id"),
-        "improvement_planner_overlay_hash": episode.get("improvement_planner_overlay_hash") or episode.get("improvement_planner_prompt_hash"),
-        "skill_agent_overlay_hash": episode.get("skill_agent_overlay_hash") or episode.get("skill_agent_prompt_hash"),
-        "memory_agent_overlay_hash": episode.get("memory_agent_overlay_hash") or episode.get("memory_agent_prompt_hash"),
+        "planner_overlay_hash": episode.get("planner_overlay_hash") or episode.get("planner_prompt_hash"),
+        "editor_overlay_hash": episode.get("editor_overlay_hash") or episode.get("editor_prompt_hash"),
         "evaluator_overlay_hash": episode.get("evaluator_overlay_hash") or episode.get("evaluator_hash"),
     }
 
@@ -154,9 +152,9 @@ def _overlay_cases_from_episode(episode: dict[str, Any]) -> list[dict[str, Any]]
     if not _is_overlay_episode(episode):
         return []
     return [
-        _overlay_case(episode, target="improvement_planner_overlay", role="improvement_planner", expected={"decision": str(episode.get("decision") or "skip")}),
-        _overlay_case(episode, target="skill_agent_overlay", role="skill_agent", expected={"mutation": _mutation_expected(episode)}),
-        _overlay_case(episode, target="memory_agent_overlay", role="memory_agent", expected={"mutation": _mutation_expected(episode)}),
+        _overlay_case(episode, target="planner_overlay", role="planner", expected={"decision": str(episode.get("decision") or "skip")}),
+        _overlay_case(episode, target="editor_overlay", role="editor", expected={"mutation": _mutation_expected(episode)}),
+        _overlay_case(episode, target="editor_overlay", role="editor", expected={"mutation": _mutation_expected(episode)}),
         _overlay_case(episode, target="evaluator_overlay", role="evaluator", expected={"recommendation": _recommendation_expected(episode)}),
     ]
 
@@ -172,32 +170,32 @@ def _case_from_episode(episode: dict[str, Any]) -> dict[str, Any] | None:
     if decision == "mutate_skill" and action == "no_op" and "target mismatch" in reason.lower():
         return _base_case(
             episode,
-            case_type="skill_agent_target_mismatch_skip",
-            role="skill_agent",
+            case_type="editor_target_mismatch_skip",
+            role="editor",
             expected={"mutation": "skip", "reason_contains": "target_mismatch"},
         )
 
     if decision in {"defer", "skip"} and _unsafe_target(reason):
         return _base_case(
             episode,
-            case_type="improvement_planner_ambiguous_target_defer",
-            role="improvement_planner",
+            case_type="planner_ambiguous_target_defer",
+            role="planner",
             expected={"decision": "defer", "reason_contains": "target_provenance_unsafe"},
         )
 
     if strength == "weak":
         return _base_case(
             episode,
-            case_type="improvement_planner_weak_only_skip",
-            role="improvement_planner",
+            case_type="planner_weak_only_skip",
+            role="planner",
             expected={"decision": "skip", "allowed_decisions": ["skip", "defer"], "requires_evidence_ids": False},
         )
 
     if decision == "mutate_skill" and strength in {"strong", "exact"}:
         return _base_case(
             episode,
-            case_type="improvement_planner_exact_evidence_mutate_skill",
-            role="improvement_planner",
+            case_type="planner_exact_evidence_mutate_skill",
+            role="planner",
             expected={"decision": "mutate_skill", "requires_evidence_ids": True},
         )
 
@@ -384,8 +382,8 @@ def _improve_run_overlay_case(*, run: dict[str, Any], case_type: str, expected: 
         "schema_version": "1.0",
         "case_family": "overlay_set",
         "case_type": case_type,
-        "target": "improvement_planner_overlay",
-        "role": "improvement_planner",
+        "target": "planner_overlay",
+        "role": "planner",
         "source_episode_id": None,
         "source": {
             "kind": "improve_run_artifact",
@@ -398,7 +396,7 @@ def _improve_run_overlay_case(*, run: dict[str, Any], case_type: str, expected: 
     seed = {key: case[key] for key in ("case_family", "case_type", "target", "role", "input", "expected")}
     seed["source"] = {"kind": "improve_run_artifact", "run_id": run_id}
     case["case_hash"] = "sha256:" + _sha256_text(_stable_json(seed))
-    case["id"] = f"improvement_planner_overlay-{case['case_hash'].split(':', 1)[1][:12]}"
+    case["id"] = f"planner_overlay-{case['case_hash'].split(':', 1)[1][:12]}"
     return case
 
 
@@ -423,7 +421,7 @@ def _improve_run_overlay_cases(config: dict[str, Any], *, limit: int) -> list[di
         if unmatched_count > 0:
             cases.append(_improve_run_overlay_case(
                 run=payload,
-                case_type="improvement_planner_overlay_from_improve_unmatched_candidates",
+                case_type="planner_overlay_from_improve_unmatched_candidates",
                 expected={"decision": "defer", "allowed_decisions": ["apply", "defer"], "do_not_report_no_improvement": True},
                 input_payload={
                     "source_kind": "improve_unmatched_candidates",
@@ -435,7 +433,7 @@ def _improve_run_overlay_cases(config: dict[str, Any], *, limit: int) -> list[di
         if memory_gap_count > 0:
             cases.append(_improve_run_overlay_case(
                 run=payload,
-                case_type="improvement_planner_overlay_from_memory_gap",
+                case_type="planner_overlay_from_memory_gap",
                 expected={"decision": "apply", "target_kind": "memory", "allow_replace_or_add": True},
                 input_payload={
                     "source_kind": "memory_gap",
@@ -469,9 +467,9 @@ def _recurring_unmatched_overlay_cases(config: dict[str, Any], *, limit: int) ->
         if count < 3:
             continue
         cases.extend([
-            _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="improvement_planner_overlay", role="improvement_planner", expected={"decision": "defer"}, source_path=cluster_paths.get(cluster_id)),
-            _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="skill_agent_overlay", role="skill_agent", expected={"mutation": "skip"}, source_path=cluster_paths.get(cluster_id)),
-            _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="memory_agent_overlay", role="memory_agent", expected={"mutation": "skip"}, source_path=cluster_paths.get(cluster_id)),
+            _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="planner_overlay", role="planner", expected={"decision": "defer"}, source_path=cluster_paths.get(cluster_id)),
+            _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="editor_overlay", role="editor", expected={"mutation": "skip"}, source_path=cluster_paths.get(cluster_id)),
+            _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="editor_overlay", role="editor", expected={"mutation": "skip"}, source_path=cluster_paths.get(cluster_id)),
             _bootstrap_overlay_case(cluster_id=cluster_id, count=count, target="evaluator_overlay", role="evaluator", expected={"recommendation": "defer"}, source_path=cluster_paths.get(cluster_id)),
         ])
     return cases

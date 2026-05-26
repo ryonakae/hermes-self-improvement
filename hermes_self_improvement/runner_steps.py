@@ -10,12 +10,12 @@ from .skill_agent import run_skill_agent_task
 from .skill_agent_backend import build_skill_agent_backend
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_archive_operation
-from .memory_agent import run_memory_agent_task
+from .editor import build_editor_prompt, run_editor_task
 from .memory_context import build_related_memory_lookup_context
 from .observer import _redact_text
 from .improvement_planner import build_improvement_planner_digest, build_improvement_planner_quality_report, run_improvement_planner
 from .prompt_overlays import load_active_prompt_overlay
-from .prompts import base_prompt_hash, render_skill_agent_instructions
+from .prompts import base_prompt_hash, render_editor_instructions
 from .markdown_artifacts import render_candidate_markdown, render_memory_placement_markdown
 from .target_resolver import build_target_resolution_digest, run_target_resolver
 from .evidence import resolve_coverage_alias
@@ -187,7 +187,7 @@ def _dispatch_memory_agent(
     mutate: bool,
 ) -> dict[str, Any]:
     cfg = config or {}
-    backend = cfg.get("_memory_agent_backend")
+    backend = cfg.get("_editor_backend") if cfg.get("_editor_backend") is not None else cfg.get("_memory_agent_backend")
     if backend is None:
         return {"status": "skipped_no_backend"}
     candidates: list[dict[str, Any]] = []
@@ -218,7 +218,7 @@ def _dispatch_memory_agent(
             "candidates": candidates,
         }
     task = {
-        "type": "memory_agent_task",
+        "type": "editor_task",
         "task_kind": "memory_apply",
         "candidates": candidates,
         "current_entries": current_entries,
@@ -226,7 +226,10 @@ def _dispatch_memory_agent(
         "constraints": list(MEMORY_AGENT_CONSTRAINTS),
         "evidence_ids": [c.get("candidate_id") for c in candidates],
     }
-    result = run_memory_agent_task(task, config=config, backend=backend)
+    if cfg.get("_editor_backend") is not None:
+        result = backend.run(build_editor_prompt(task), task, config)
+    else:
+        result = run_editor_task(task, config=config, backend=backend)
     status = "completed" if result.get("success") else "rejected"
     return {
         "status": status,
@@ -257,10 +260,10 @@ def _memory_agent_result_decisions(memory_agent_result: dict[str, Any]) -> list[
         decisions.append({
             "evidence_id": memory_id,
             "decision": "accepted",
-            "reason": "memory_agent_applied",
+            "reason": "editor_applied",
             "changed": True,
-            "operation": {"operation": "memory_agent", "target": "memory"},
-            "result_source": "memory_agent",
+            "operation": {"operation": "editor", "target": "memory"},
+            "result_source": "editor",
         })
     existing = {decision["evidence_id"] for decision in decisions}
     for memory_id in _unique_nonempty_strings(list(memory_agent_result.get("removed_memories") or [])):
@@ -269,10 +272,10 @@ def _memory_agent_result_decisions(memory_agent_result: dict[str, Any]) -> list[
         decisions.append({
             "evidence_id": memory_id,
             "decision": "accepted",
-            "reason": "memory_agent_removed",
+            "reason": "editor_removed",
             "changed": True,
-            "operation": {"operation": "memory_agent_remove", "target": "memory"},
-            "result_source": "memory_agent",
+            "operation": {"operation": "editor_remove", "target": "memory"},
+            "result_source": "editor",
         })
     return decisions
 
@@ -905,7 +908,7 @@ def _format_json_section(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str, indent=2)
 
 
-def build_skill_agent_task(
+def build_editor_task(
     *,
     skill_name: str,
     evidence: list[dict[str, Any]],
@@ -921,8 +924,8 @@ def build_skill_agent_task(
         {**candidate_meta, "name": skill_name, "evidence_ids": [str(item.get("id") or "") for item in compact_evidence if isinstance(item, dict) and item.get("id")]},
         evidence_by_id,
     )
-    overlay = load_active_prompt_overlay(config or {}, role="skill_agent", base_hash=base_prompt_hash("skill_agent")) if config is not None else None
-    rendered = render_skill_agent_instructions(
+    overlay = load_active_prompt_overlay(config or {}, role="editor", base_hash=base_prompt_hash("editor")) if config is not None else None
+    rendered = render_editor_instructions(
         skill_name=skill_name,
         candidate=candidate_meta,
         planner_decision=planner_meta,
@@ -933,11 +936,15 @@ def build_skill_agent_task(
     instructions = rendered["instructions"]
     if planner_meta.get("skill_agent_instructions"):
         instructions = instructions + "\n\nPlanner maintenance instructions:\n" + str(planner_meta.get("skill_agent_instructions"))
+    if planner_meta.get("editor_instructions"):
+        instructions = instructions + "\n\nPlanner editor instructions:\n" + str(planner_meta.get("editor_instructions"))
     observed_problem = planner_meta.get("observed_problem") or planner_meta.get("change_intent") or planner_meta.get("rationale") or "Improve the target skill if current content confirms the attached evidence."
-    desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("skill_agent_instructions") or planner_meta.get("change_intent") or "A small reusable procedural improvement, or a non-mutating stop if already covered."
+    desired_outcome = planner_meta.get("desired_outcome") or planner_meta.get("editor_instructions") or planner_meta.get("skill_agent_instructions") or planner_meta.get("change_intent") or "A small reusable procedural improvement, or a non-mutating stop if already covered."
     suggested_focus = planner_meta.get("suggested_focus") if isinstance(planner_meta.get("suggested_focus"), list) else []
     if not suggested_focus and planner_meta.get("skill_agent_instructions"):
         suggested_focus = [planner_meta.get("skill_agent_instructions")]
+    if not suggested_focus and planner_meta.get("editor_instructions"):
+        suggested_focus = [planner_meta.get("editor_instructions")]
     non_goals = planner_meta.get("non_goals") if isinstance(planner_meta.get("non_goals"), list) else []
     if not non_goals:
         non_goals = [
@@ -949,7 +956,7 @@ def build_skill_agent_task(
     maintenance_action = str(planner_meta.get("maintenance_action") or "").strip().lower()
     merge_target_skill = str(planner_meta.get("target_skill") or planner_meta.get("successor") or "").strip()
     task: dict[str, Any] = {
-        "type": "skill_agent_task",
+        "type": "editor_task",
         "task_kind": "skill_improve",
         "targets": {"primary_skill": skill_name},
         "candidate": candidate_meta,
@@ -962,7 +969,7 @@ def build_skill_agent_task(
         "omitted_evidence_count": max(0, len(evidence) - MAX_EDITOR_EVIDENCE_ITEMS),
         "instructions": instructions,
         "llm_brief_markdown": llm_brief,
-        "prompt_source": {"skill_agent": rendered["prompt_source"]},
+        "prompt_source": {"editor": rendered["prompt_source"]},
         "constraints": [
             "Use only skills_list, skill_view, skill_manage.",
             "Do not use terminal/file/git/direct filesystem tools.",
@@ -982,6 +989,19 @@ def build_skill_agent_task(
         if maintenance_action == "merge" and merge_target_skill:
             task["targets"] = {"source_skill": skill_name, "target_skill": merge_target_skill}
             task["target_skill"] = merge_target_skill
+    return task
+
+
+def build_skill_agent_task(
+    **kwargs: Any,
+) -> dict[str, Any]:
+    task = build_editor_task(**kwargs)
+    return {**task, "type": "skill_agent_task"}
+
+
+def _skill_agent_task_for_execution(task: dict[str, Any]) -> dict[str, Any]:
+    if task.get("type") == "editor_task":
+        return {**task, "type": "skill_agent_task"}
     return task
 
 
@@ -1055,7 +1075,7 @@ def run_skill_improvement_step(
             "decisions": [],
         }
     model_cfg = (config or {}).get("model") if isinstance((config or {}).get("model"), dict) else {}
-    if not candidate_by_name and not callable((config or {}).get("_improvement_planner_func")) and not isinstance(model_cfg.get("improvement_planner"), dict):
+    if not candidate_by_name and not callable((config or {}).get("_improvement_planner_func")) and not callable((config or {}).get("_planner_func")) and not isinstance(model_cfg.get("planner"), dict):
         return {
             "status": "no_skill_candidates",
             "changed": 0,
@@ -1078,8 +1098,8 @@ def run_skill_improvement_step(
     decisions: list[dict[str, Any]] = []
     changed_skills: list[str] = []
     prompt_sources: dict[str, Any] = {}
-    if isinstance(planner.get("prompt_source"), dict) and isinstance(planner["prompt_source"].get("improvement_planner"), dict):
-        prompt_sources["improvement_planner"] = planner["prompt_source"]["improvement_planner"]
+    if isinstance(planner.get("prompt_source"), dict) and isinstance(planner["prompt_source"].get("planner"), dict):
+        prompt_sources["planner"] = planner["prompt_source"]["planner"]
     backend = build_skill_agent_backend(config) if mutate else None
 
     if planner.get("status") != "completed":
@@ -1151,7 +1171,7 @@ def run_skill_improvement_step(
                     "task": task,
                 })
                 continue
-            result = run_skill_agent_task(task, config=config, backend=backend)
+            result = run_skill_agent_task(_skill_agent_task_for_execution(task), config=config, backend=backend)
             changed = bool(result.get("success") and result.get("created_skills"))
             if changed:
                 changed_skills.extend(str(name) for name in (result.get("created_skills") or []))
@@ -1275,8 +1295,8 @@ def run_skill_improvement_step(
             continue
         task = build_skill_agent_task(skill_name=skill_name, evidence=attached_evidence, candidate=candidate, planner_decision=planner_decision, config=config)
         task_prompt_sources = task.get("prompt_source") if isinstance(task.get("prompt_source"), dict) else {}
-        if isinstance(task_prompt_sources.get("skill_agent"), dict):
-            prompt_sources.setdefault("skill_agent", task_prompt_sources["skill_agent"])
+        if isinstance(task_prompt_sources.get("editor"), dict):
+            prompt_sources.setdefault("editor", task_prompt_sources["editor"])
         if not mutate:
             decisions.append({
                 **base_decision,
@@ -1286,7 +1306,7 @@ def run_skill_improvement_step(
                 "task": task,
             })
             continue
-        result = run_skill_agent_task(task, config=config, backend=backend)
+        result = run_skill_agent_task(_skill_agent_task_for_execution(task), config=config, backend=backend)
         merge_archive_result = None
         if result.get("success") and str(planner_decision.get("maintenance_action") or "") == "merge":
             successor = str(planner_decision.get("target_skill") or "").strip()
@@ -1353,7 +1373,7 @@ def run_skill_improvement_step(
         decisions.append({
             **base_decision,
             "decision": "accepted" if result.get("success") else "rejected",
-            "reason": result.get("reason") or result.get("error") or result.get("outcome") or "skill_agent_completed",
+            "reason": (result.get("reason") or result.get("error") or result.get("outcome") or "skill_agent_completed").replace("invalid_skill_agent_task", "invalid_editor_task"),
             "changed": changed,
             **({"merge_archive_result": merge_archive_result} if merge_archive_result is not None else {}),
             "result": result,
@@ -1532,7 +1552,7 @@ def _memory_agent_skill_route_decision(*, result: dict[str, Any], memory_evidenc
         "old_text": old_text,
         "skill_route": skill_route,
         "content": content,
-        "reason": "memory_agent_convert_to_skill_proposal",
+        "reason": "editor_convert_to_skill_proposal",
     }
     return {
         "evidence_id": evidence_id,
@@ -1576,7 +1596,7 @@ def apply_memory_to_skill_migrations(*, memory_step: dict[str, Any], config: dic
         if not _memory_to_skill_old_text_is_current(cfg, target=str(base.get("source_target") or "memory"), old_text=str(base.get("old_text") or "")):
             decisions.append({**common, "decision": "rejected", "reason": "memory_to_skill_old_text_not_current", "changed": False, "task": task})
             continue
-        skill_result = run_skill_agent_task(task, config=cfg, backend=backend)
+        skill_result = run_skill_agent_task(_skill_agent_task_for_execution(task), config=cfg, backend=backend)
         if not _skill_result_has_validated_change(skill_result, str(base.get("skill_route") or "")):
             decisions.append({**common, "decision": "rejected", "reason": "memory_to_skill_skill_failed", "changed": False, "task": task, "skill_result": skill_result})
             continue
@@ -1874,5 +1894,6 @@ def run_memory_improvement_step(
         "changed": len(changed_memory_ids),
         "changed_memories": changed_memory_ids,
         "decisions": decisions,
+        "editor": memory_agent_block,
         "memory_agent": memory_agent_block,
     }

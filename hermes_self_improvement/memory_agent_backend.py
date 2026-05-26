@@ -13,7 +13,7 @@ from .native_tool_harness import (
 )
 from .role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
-ALLOWED_MEMORY_AGENT_TOOLS = ROLE_TOOL_PERMISSIONS["memory_agent"].allowed_tool_names
+ALLOWED_MEMORY_AGENT_TOOLS = frozenset({"memory"})
 ALLOWED_MEMORY_ACTIONS = {"add", "replace", "remove"}
 ALLOWED_MEMORY_TARGETS = {"memory", "user"}
 NON_MUTATING_AGENT_OUTCOMES = {
@@ -48,7 +48,7 @@ class MemoryAgentBackendLimits:
     def from_config(cls, config: dict[str, Any] | None = None) -> "MemoryAgentBackendLimits":
         mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
         model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
-        model_memory = model.get("memory_agent") if isinstance(model.get("memory_agent"), dict) else {}
+        model_memory = model.get("editor") if isinstance(model.get("editor"), dict) else {}
         return cls(
             max_tool_calls=max(0, _coerce_int(mutation.get("max_tool_calls"), cls.max_tool_calls)),
             timeout_seconds=max(1, _coerce_int(model_memory.get("timeout") or mutation.get("timeout_seconds"), cls.timeout_seconds)),
@@ -206,7 +206,7 @@ class NativeMemoryAgentBackend:
         if runner is None:
             from .constrained_agent import run_constrained_role_agent as runner
         result = runner(
-            role="memory_agent",
+            role="editor",
             user_message=user_context,
             system_message=system_message,
             config=config or {},
@@ -277,8 +277,8 @@ class UnavailableMemoryAgentBackend:
 
 
 def build_memory_agent_backend(config: dict[str, Any] | None = None) -> MemoryAgentBackend:
-    if isinstance(config, dict) and config.get("_memory_agent_backend") is not None:
-        backend = config.get("_memory_agent_backend")
+    if isinstance(config, dict) and (config.get("_memory_agent_backend") is not None or config.get("_editor_backend") is not None):
+        backend = config.get("_memory_agent_backend") if config.get("_memory_agent_backend") is not None else config.get("_editor_backend")
         if hasattr(backend, "run"):
             return backend
         if callable(backend):

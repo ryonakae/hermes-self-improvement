@@ -16,13 +16,6 @@ Skills are procedural how-to knowledge: multi-step workflows, tool-specific inst
 
 If it is about the person, prefer USER. If it is about the environment or operating facts, prefer MEMORY. If it is a repeatable procedure, prefer Skill."""
 
-TARGET_RESOLVER_SYSTEM_PROMPT = (
-    "You are resolving Hermes self-improvement observation targets. Return JSON only. "
-    "Your job is attachment only: attach an existing listed mutable skill, route durable facts to memory, keep useful gaps unresolved, or skip noise. "
-    "Do not decide skill creation, editing, archive, merge, deletion, or execution actions; the planner owns mutation decisions. "
-    "You may use only read-only skill inspection tools (`skills_list`, `skill_view`) to check existing skill coverage."
-)
-
 PLANNER_SYSTEM_PROMPT = (
     "You are the Hermes self-improvement planner. Read Markdown evidence as context, not as a machine protocol. "
     "You may use only read-only skill inspection tools (`skills_list`, `skill_view`) to check existing skill coverage; do not call mutation tools. "
@@ -41,7 +34,7 @@ PLANNER_USER_PREFIX = (
 )
 
 SKILL_AGENT_BASE_SECTIONS = [
-    "You are the Hermes self-improvement skill_agent.",
+    "You are the Hermes self-improvement editor.",
     "",
     "Role:",
     "- Execute only the planner-selected operation for the target skill.",
@@ -197,41 +190,34 @@ def skill_memory_classification_context() -> dict[str, str]:
 
 
 def base_prompt_spec(role: str) -> dict[str, Any]:
-    if role == "target_resolver":
+    if role == "planner":
         return {
             "schema_name": "self_improvement_base_prompt_spec",
             "schema_version": PROMPT_SCHEMA_VERSION,
-            "role": "target_resolver",
-            "system_prompt": TARGET_RESOLVER_SYSTEM_PROMPT,
-            "classification_guidance": SKILL_MEMORY_CLASSIFICATION_BLOCK,
-        }
-    if role == "improvement_planner":
-        return {
-            "schema_name": "self_improvement_base_prompt_spec",
-            "schema_version": PROMPT_SCHEMA_VERSION,
-            "role": "improvement_planner",
+            "role": "planner",
             "system_prompt": PLANNER_SYSTEM_PROMPT,
             "user_prefix": PLANNER_USER_PREFIX,
+            "classification_guidance": SKILL_MEMORY_CLASSIFICATION_BLOCK,
         }
-    if role == "skill_agent":
+    if role == "editor":
         return {
             "schema_name": "self_improvement_base_prompt_spec",
             "schema_version": PROMPT_SCHEMA_VERSION,
-            "role": "skill_agent",
-            "sections": SKILL_AGENT_BASE_SECTIONS + EDITOR_ALLOWED_TOOLS_AND_STOPS,
-        }
-    if role == "memory_agent":
-        return {
-            "schema_name": "self_improvement_base_prompt_spec",
-            "schema_version": PROMPT_SCHEMA_VERSION,
-            "role": "memory_agent",
-            "sections": MEMORY_AGENT_BASE_SECTIONS + MEMORY_AGENT_ALLOWED_TOOLS_AND_STOPS,
+            "role": "editor",
+            "sections": SKILL_AGENT_BASE_SECTIONS + EDITOR_ALLOWED_TOOLS_AND_STOPS + MEMORY_AGENT_BASE_SECTIONS + MEMORY_AGENT_ALLOWED_TOOLS_AND_STOPS,
         }
     if role == "evaluator":
         return {
             "schema_name": "self_improvement_base_prompt_spec",
             "schema_version": PROMPT_SCHEMA_VERSION,
             "role": "evaluator",
+            "classification_guidance": SKILL_MEMORY_CLASSIFICATION_BLOCK,
+        }
+    if role == "calibrator":
+        return {
+            "schema_name": "self_improvement_base_prompt_spec",
+            "schema_version": PROMPT_SCHEMA_VERSION,
+            "role": "calibrator",
             "classification_guidance": SKILL_MEMORY_CLASSIFICATION_BLOCK,
         }
     raise ValueError(f"unknown prompt role: {role}")
@@ -280,10 +266,10 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_content},
     ]
-    return {"messages": messages, "prompt_source": _prompt_source("improvement_planner", overlay)}
+    return {"messages": messages, "prompt_source": _prompt_source("planner", overlay)}
 
 
-def render_skill_agent_instructions(
+def render_editor_instructions(
     *,
     skill_name: str,
     candidate: dict[str, Any],
@@ -347,4 +333,8 @@ def render_skill_agent_instructions(
         }),
     ])
     sections.extend(EDITOR_ALLOWED_TOOLS_AND_STOPS)
-    return {"instructions": "\n".join(sections), "prompt_source": _prompt_source("skill_agent", overlay)}
+    return {"instructions": "\n".join(sections), "prompt_source": _prompt_source("editor", overlay)}
+
+
+# Backwards-internal alias during module migration; active prompt source remains editor.
+render_skill_agent_instructions = render_editor_instructions

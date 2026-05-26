@@ -23,6 +23,10 @@ Use the official Hermes boundary:
 
 If a fact is mostly about the user's preferred interaction style, put it in USER. If it is mostly about the user's environment, repo, runtime, or operational convention, put it in MEMORY. If it teaches a repeatable procedure, make or update a Skill.
 
+## Resolver responsibility
+
+Planner also owns target attachment. Use evidence index/detail records, deterministic target facts, and read-only skill inspection to choose an existing mutable target, route to memory/user profile, keep unresolved, or skip noise.
+
 ## Memory quality
 
 - Memory is not a log store.

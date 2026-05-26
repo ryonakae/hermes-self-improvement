@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from hermes_self_improvement.evidence import collect_skill_duplicate_lifecycle_candidates, make_knowledge_coverage_candidate
-from hermes_self_improvement.improvement_planner import build_improvement_planner_digest, run_improvement_planner
+from hermes_self_improvement.planner import build_planner_digest, run_planner
 
 
 def editable_skill(name: str, *, state: str = "active") -> dict[str, object]:
@@ -32,7 +32,7 @@ def test_existing_sandbox_skill_blocks_hermes_prefixed_duplicate_create():
             "decision_hint": "defer",
         }]},
     }
-    digest = build_improvement_planner_digest(pack)
+    digest = build_planner_digest(pack)
 
     def planner(*, digest, config):
         return {"decisions": [{
@@ -43,7 +43,7 @@ def test_existing_sandbox_skill_blocks_hermes_prefixed_duplicate_create():
             "existing_skill_gap": "same sandbox permission workflow",
         }]}
 
-    result = run_improvement_planner(digest, config={"_improvement_planner_func": planner})
+    result = run_planner(digest, config={"_planner_func": planner})
 
     decision = result["decisions"][0]
     assert decision["decision"] == "skip"
@@ -85,8 +85,8 @@ def test_duplicate_lifecycle_candidate_fallback_archives_duplicate_to_successor(
         ],
     }
 
-    digest = build_improvement_planner_digest(pack)
-    planner = run_improvement_planner(digest, config={})
+    digest = build_planner_digest(pack)
+    planner = run_planner(digest, config={})
     decisions = {item["skill"]: item for item in planner["decisions"]}
 
     duplicate = decisions["hermes-sandbox-permission-workflow"]
@@ -110,12 +110,12 @@ def test_duplicate_lifecycle_candidate_overrides_not_selected_skip_from_planner(
             {**editable_skill("hermes-sandbox-permission-workflow"), "active_reference_count": 1},
         ],
     }
-    digest = build_improvement_planner_digest(pack)
+    digest = build_planner_digest(pack)
 
     def planner(*, digest, config):
         return {"decisions": [{"skill": "hermes-sandbox-permission-workflow", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []}]}
 
-    result = run_improvement_planner(digest, config={"_improvement_planner_func": planner})
+    result = run_planner(digest, config={"_planner_func": planner})
     duplicate = {item["skill"]: item for item in result["decisions"]}["hermes-sandbox-permission-workflow"]
 
     assert duplicate["decision"] == "archive_skill"
@@ -136,12 +136,12 @@ def test_duplicate_lifecycle_candidate_is_not_silently_skipped_when_planner_omit
             {**editable_skill("hermes-sandbox-permission-workflow"), "active_reference_count": 1},
         ],
     }
-    digest = build_improvement_planner_digest(pack)
+    digest = build_planner_digest(pack)
 
     def planner(*, digest, config):
         return {"decisions": [{"skill": "sandbox-permission-workflow", "decision": "skip", "reason": "canonical_skill_kept", "evidence_ids": []}]}
 
-    result = run_improvement_planner(digest, config={"_improvement_planner_func": planner})
+    result = run_planner(digest, config={"_planner_func": planner})
     duplicate = {item["skill"]: item for item in result["decisions"]}["hermes-sandbox-permission-workflow"]
 
     assert duplicate["decision"] == "archive_skill"

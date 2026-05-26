@@ -14,7 +14,7 @@ from .native_tool_harness import (
 )
 from .role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
-ALLOWED_SKILL_AGENT_TOOLS = ROLE_TOOL_PERMISSIONS["skill_agent"].allowed_tool_names
+ALLOWED_SKILL_AGENT_TOOLS = frozenset({"skills_list", "skill_view", "skill_manage"})
 ALLOWED_SKILL_MANAGE_ACTIONS = {"create", "patch", "edit", "delete", "write_file", "remove_file"}
 NON_MUTATING_AGENT_OUTCOMES = {
     "skipped_superseded",
@@ -35,7 +35,7 @@ class SkillAgentBackendLimits:
     def from_config(cls, config: dict[str, Any] | None = None) -> "SkillAgentBackendLimits":
         mutation = config.get("mutation") if isinstance(config, dict) and isinstance(config.get("mutation"), dict) else {}
         model = config.get("model") if isinstance(config, dict) and isinstance(config.get("model"), dict) else {}
-        model_skill_agent = model.get("skill_agent") if isinstance(model.get("skill_agent"), dict) else {}
+        model_skill_agent = model.get("editor") if isinstance(model.get("editor"), dict) else {}
         return cls(
             max_tool_calls=max(0, _coerce_int(mutation.get("max_tool_calls"), cls.max_tool_calls)),
             timeout_seconds=max(1, _coerce_int(model_skill_agent.get("timeout") or mutation.get("timeout_seconds"), cls.timeout_seconds)),
@@ -504,7 +504,7 @@ class NativeSkillAgentBackend:
         if runner is None:
             from .constrained_agent import run_constrained_role_agent as runner
         result = runner(
-            role="skill_agent",
+            role="editor",
             user_message=user_context,
             system_message=system_message,
             config=config or {},
@@ -570,8 +570,8 @@ class UnavailableSkillAgentBackend:
 
 
 def build_skill_agent_backend(config: dict[str, Any] | None = None) -> SkillAgentBackend:
-    if isinstance(config, dict) and config.get("_skill_agent_backend") is not None:
-        backend = config.get("_skill_agent_backend")
+    if isinstance(config, dict) and (config.get("_skill_agent_backend") is not None or config.get("_editor_backend") is not None):
+        backend = config.get("_skill_agent_backend") if config.get("_skill_agent_backend") is not None else config.get("_editor_backend")
         if hasattr(backend, "run"):
             return backend
         if callable(backend):

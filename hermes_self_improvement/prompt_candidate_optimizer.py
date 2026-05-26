@@ -27,12 +27,10 @@ SAFETY_BOUNDARY_TERMS = (
 OptimizerFn = Callable[..., dict[str, Any]]
 OverlaySetOptimizerFn = Callable[..., dict[str, Any]]
 
-OVERLAY_TARGETS = ("target_resolver_overlay", "improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
+OVERLAY_TARGETS = ("planner_overlay", "editor_overlay", "evaluator_overlay")
 OVERLAY_TARGET_ROLES = {
-    "target_resolver_overlay": "target_resolver",
-    "improvement_planner_overlay": "improvement_planner",
-    "skill_agent_overlay": "skill_agent",
-    "memory_agent_overlay": "memory_agent",
+    "planner_overlay": "planner",
+    "editor_overlay": "editor",
     "evaluator_overlay": "evaluator",
 }
 VALID_CHANGE_STATUSES = {"changed", "unchanged"}
@@ -131,7 +129,7 @@ def _fallback_case_behaviors(role: str) -> dict[str, Any]:
             "memory_agent_duplicate_skip": {"mutation": "skip", "reason": "memory_duplicate_existing"},
             "memory_agent_sensitive_skip": {"mutation": "skip", "reason": "sensitive_memory_gap_candidate"},
         }
-    return {"skill_agent_target_mismatch_skip": {"mutation": "skip", "reason": "target_mismatch"}}
+    return {"editor_target_mismatch_skip": {"mutation": "skip", "reason": "target_mismatch"}}
 
 
 def _normalize_optimizer_output(

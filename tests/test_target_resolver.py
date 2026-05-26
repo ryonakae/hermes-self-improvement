@@ -1,29 +1,29 @@
 from hermes_self_improvement.evidence import make_knowledge_coverage_candidate
-from hermes_self_improvement.improvement_planner import build_improvement_planner_digest
+from hermes_self_improvement.planner import build_planner_digest
 from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from hermes_self_improvement.prompts import base_prompt_hash
-from hermes_self_improvement.target_resolver import (
+from hermes_self_improvement.planner import (
     TARGET_RESOLVER_SYSTEM,
     build_target_resolution_digest,
-    build_target_resolver_messages,
-    build_target_resolver_prompt,
-    normalize_target_resolver_payload,
-    run_target_resolver,
+    build_planner_messages,
+    build_planner_prompt,
+    normalize_planner_payload,
+    run_planner,
 )
 
 
-def test_target_resolver_includes_runtime_overlay_guidance(monkeypatch, tmp_path):
-    cfg = {"_self_improvement_root": str(tmp_path / "self-improvement"), "model": {"target_resolver": {"provider": "auto"}}}
+def test_planner_includes_runtime_overlay_guidance(monkeypatch, tmp_path):
+    cfg = {"_self_improvement_root": str(tmp_path / "self-improvement"), "model": {"planner": {"provider": "auto"}}}
     candidate_path = write_prompt_candidate(
         cfg,
-        role="target_resolver",
+        role="planner",
         candidate={
-            "role": "target_resolver",
-            "base_prompt_hash": base_prompt_hash("target_resolver"),
+            "role": "planner",
+            "base_prompt_hash": base_prompt_hash("planner"),
             "candidate_prompt": {"system_addendum": "Prefer no_existing_skill_fit when no current skill clearly fits."},
         },
     )
-    promote_prompt_candidate(cfg, role="target_resolver", candidate_path=candidate_path, regression={"status": "passed"})
+    promote_prompt_candidate(cfg, role="planner", candidate_path=candidate_path, regression={"status": "passed"})
     calls = {}
 
     def fake_run(*, role, system_message, user_message, config, **kwargs):
@@ -31,17 +31,17 @@ def test_target_resolver_includes_runtime_overlay_guidance(monkeypatch, tmp_path
         calls["system_message"] = system_message
         return {"final_response": '{"resolutions": []}'}
 
-    monkeypatch.setattr("hermes_self_improvement.target_resolver.run_constrained_role_agent", fake_run)
+    monkeypatch.setattr("hermes_self_improvement.planner.run_constrained_role_agent", fake_run)
 
-    result = run_target_resolver({"skill_targets": []}, config=cfg)
+    result = run_planner({"skill_targets": []}, config=cfg)
 
     assert result["resolutions"] == []
-    assert calls["role"] == "target_resolver"
+    assert calls["role"] == "planner"
     assert "Runtime-private operating guidance" in calls["system_message"]
     assert "no_existing_skill_fit" in calls["system_message"]
 
 
-def test_target_resolver_uses_read_only_skill_agent(monkeypatch):
+def test_planner_uses_read_only_editor(monkeypatch):
     calls = {}
 
     def fake_run(*, role, system_message, user_message, config, **kwargs):
@@ -50,28 +50,28 @@ def test_target_resolver_uses_read_only_skill_agent(monkeypatch):
         calls["user_message"] = user_message
         return {"final_response": '{"resolutions": []}'}
 
-    monkeypatch.setattr("hermes_self_improvement.target_resolver.run_constrained_role_agent", fake_run)
+    monkeypatch.setattr("hermes_self_improvement.planner.run_constrained_role_agent", fake_run)
 
-    result = run_target_resolver({"skill_targets": []}, config={"model": {"target_resolver": {"provider": "auto"}}})
+    result = run_planner({"skill_targets": []}, config={"model": {"planner": {"provider": "auto"}}})
 
-    assert calls["role"] == "target_resolver"
+    assert calls["role"] == "planner"
     assert "skills_list" in calls["system_message"]
     assert "skill_targets" in calls["user_message"]
     assert result["resolutions"] == []
 
 
-def test_target_resolver_empty_constrained_agent_response_fails_closed(monkeypatch):
+def test_planner_empty_constrained_agent_response_fails_closed(monkeypatch):
     monkeypatch.setattr(
-        "hermes_self_improvement.target_resolver.run_constrained_role_agent",
+        "hermes_self_improvement.planner.run_constrained_role_agent",
         lambda **kwargs: {"final_response": ""},
     )
 
-    result = run_target_resolver({"skill_targets": []}, config={"model": {"target_resolver": {"provider": "auto"}}})
+    result = run_planner({"skill_targets": []}, config={"model": {"planner": {"provider": "auto"}}})
 
     assert result["resolutions"] == []
 
 
-def test_normalize_target_resolver_payload_keeps_known_mutable_targets():
+def test_normalize_planner_payload_keeps_known_mutable_targets():
     payload = {
         "resolutions": [
             {
@@ -93,27 +93,27 @@ def test_normalize_target_resolver_payload_keeps_known_mutable_targets():
         }
     }
 
-    out = normalize_target_resolver_payload(payload, known_skill_targets=known)
+    out = normalize_planner_payload(payload, known_skill_targets=known)
 
     assert out["resolutions"][0]["target"] == "hermes-skill-management"
     assert out["resolutions"][0]["decision_hint"] == "apply"
     assert out["resolutions"][0]["confidence"] == "high"
 
 
-def test_normalize_target_resolver_payload_blocks_unknown_skill_target():
+def test_normalize_planner_payload_blocks_unknown_skill_target():
     payload = {
         "resolutions": [
             {"candidate_id": "u1", "target_kind": "skill", "target": "missing", "confidence": "high"}
         ]
     }
 
-    out = normalize_target_resolver_payload(payload, known_skill_targets={})
+    out = normalize_planner_payload(payload, known_skill_targets={})
 
     assert out["resolutions"][0]["decision_hint"] == "block"
     assert out["resolutions"][0]["block_reason"] == "unknown_target"
 
 
-def test_normalize_target_resolver_payload_keeps_attachment_only_resolution_kinds():
+def test_normalize_planner_payload_keeps_attachment_only_resolution_kinds():
     payload = {"resolutions": [
         {"candidate_id": "a", "resolution_kind": "attach_existing_skill", "target_kind": "skill", "target": "hermes-skill-management", "confidence": "high", "suggested_action": "apply"},
         {"candidate_id": "b", "resolution_kind": "unresolved", "unresolved_reason": "no_existing_skill_fit", "target_kind": "none", "target": "", "confidence": "medium", "suggested_action": "defer", "suggested_boundary": "patch tool workflow"},
@@ -122,7 +122,7 @@ def test_normalize_target_resolver_payload_keeps_attachment_only_resolution_kind
     ]}
     known = {"hermes-skill-management": {"mutable": True, "pinned": False, "state": "active", "provenance": "curator_agent_created"}}
 
-    out = normalize_target_resolver_payload(payload, known_skill_targets=known)
+    out = normalize_planner_payload(payload, known_skill_targets=known)
 
     assert [row["resolution_kind"] for row in out["resolutions"]] == [
         "attach_existing_skill",
@@ -137,7 +137,7 @@ def test_normalize_target_resolver_payload_keeps_attachment_only_resolution_kind
     assert out["resolutions"][3]["decision_hint"] == "skip"
 
 
-def test_normalize_target_resolver_payload_blocks_removed_legacy_resolution_kind():
+def test_normalize_planner_payload_blocks_removed_legacy_resolution_kind():
     payload = {"resolutions": [{
         "candidate_id": "u1",
         "resolution_kind": "create_new_skill",
@@ -148,7 +148,7 @@ def test_normalize_target_resolver_payload_blocks_removed_legacy_resolution_kind
         "reason": "recurring workflow with no existing skill fit",
     }]}
 
-    out = normalize_target_resolver_payload(payload, known_skill_targets={})
+    out = normalize_planner_payload(payload, known_skill_targets={})
     row = out["resolutions"][0]
 
     assert row["resolution_kind"] == "unresolved"
@@ -195,11 +195,11 @@ def test_planner_digest_attaches_llm_resolved_unmatched_candidate():
         },
     }
 
-    digest = build_improvement_planner_digest(evidence_pack)
+    digest = build_planner_digest(evidence_pack)
 
     row = digest["skill_candidates"][0]
     assert row["attached_evidence_count"] == 1
-    assert row["evidence_resolution"][0]["evidence_match"] == "llm_target_resolver"
+    assert row["evidence_resolution"][0]["evidence_match"] == "llm_planner"
     assert row["evidence_resolution"][0]["target_hint_confidence"] == "high"
 
 
@@ -236,7 +236,7 @@ def test_planner_digest_records_unresolved_no_existing_skill_fit_observations():
         },
     }
 
-    digest = build_improvement_planner_digest(evidence_pack)
+    digest = build_planner_digest(evidence_pack)
 
     row = digest["unresolved_observations"][0]
     assert row["evidence_id"] == "u1"
@@ -338,8 +338,8 @@ def test_target_fit_signals_mark_low_recurrence_as_skip_leaning():
     assert signals["recommendation"] == "skip_noise"
 
 
-def test_target_resolver_prompt_keeps_attachment_only_guidance():
-    prompt = build_target_resolver_prompt({"candidates": [], "skill_targets": []})
+def test_planner_prompt_keeps_attachment_only_guidance():
+    prompt = build_planner_prompt({"candidates": [], "skill_targets": []})
 
     assert "attach_existing_skill" in prompt
     assert "mutate_memory" in prompt
@@ -353,10 +353,10 @@ def test_target_resolver_prompt_keeps_attachment_only_guidance():
     assert "queue" not in prompt.lower()
 
 
-def test_build_target_resolver_messages_splits_system_and_user():
+def test_build_planner_messages_splits_system_and_user():
     digest = {"candidates": [{"id": "c1"}], "skill_targets": [{"name": "s1"}]}
 
-    messages = build_target_resolver_messages(digest)
+    messages = build_planner_messages(digest)
 
     assert [m["role"] for m in messages] == ["system", "user"]
     assert messages[0]["content"] == TARGET_RESOLVER_SYSTEM
@@ -400,7 +400,7 @@ def test_build_target_resolution_digest_splits_skill_targets_into_two_tiers():
     assert "patch-archived" not in other_names
 
 
-def test_run_target_resolver_accepts_attach_target_from_names_only_tier(monkeypatch):
+def test_run_planner_accepts_attach_target_from_names_only_tier(monkeypatch):
     digest = {
         "candidates": [{"id": "c1"}],
         "skill_targets": [],
@@ -421,19 +421,19 @@ def test_run_target_resolver_accepts_attach_target_from_names_only_tier(monkeypa
             ]
         }
 
-    from hermes_self_improvement.target_resolver import run_target_resolver
+    from hermes_self_improvement.planner import run_planner
 
-    result = run_target_resolver(digest, config={"_target_resolver_func": fake_resolver})
+    result = run_planner(digest, config={"_planner_func": fake_resolver})
 
     # The names-only tier still authorizes attachment (no block_reason).
     assert result["resolutions"][0]["decision_hint"] != "block"
 
 
-def test_build_target_resolver_messages_is_stable_across_runs():
+def test_build_planner_messages_is_stable_across_runs():
     digest = {"candidates": [], "skill_targets": []}
 
-    a = build_target_resolver_messages(digest)
-    b = build_target_resolver_messages(digest)
+    a = build_planner_messages(digest)
+    b = build_planner_messages(digest)
 
     assert a[0]["content"] == b[0]["content"]
     assert a[1]["content"] == b[1]["content"]
@@ -508,7 +508,7 @@ def test_target_resolution_digest_surfaces_local_unprotected_reference_as_editab
     assert signals["recommendation"] == "attach_existing_skill"
 
 
-def test_target_resolver_blocks_attach_to_reference_coverage_if_llm_tries():
+def test_planner_blocks_attach_to_reference_coverage_if_llm_tries():
     digest = {
         "candidates": [{"id": "coverage_timeout"}],
         "skill_targets": [],
@@ -516,7 +516,7 @@ def test_target_resolver_blocks_attach_to_reference_coverage_if_llm_tries():
         "reference_skill_coverage": [{"name": "timeout-workflow", "mutable": False, "provenance": "builtin", "state": "active"}],
     }
 
-    from hermes_self_improvement.target_resolver import run_target_resolver
+    from hermes_self_improvement.planner import run_planner
 
     def fake_resolver(*, digest, config):
         return {"resolutions": [{
@@ -528,7 +528,7 @@ def test_target_resolver_blocks_attach_to_reference_coverage_if_llm_tries():
             "suggested_action": "apply",
         }]}
 
-    result = run_target_resolver(digest, config={"_target_resolver_func": fake_resolver})
+    result = run_planner(digest, config={"_planner_func": fake_resolver})
 
     row = result["resolutions"][0]
     assert row["decision_hint"] == "block"

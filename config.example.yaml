@@ -11,32 +11,23 @@
 #   max_tool_calls: 12
 
 # Optional: customize models only when auto routing is not enough.
-# improvement_planner plans skill/memory proposals, target_resolver resolves
-# unmatched evidence to skill/memory targets, skill_agent / memory_agent power
-# the corresponding mutation agents, memory_extractor extracts memory-gap
-# candidates without tools, and evaluator powers DSPy/GEPA evaluator calibration.
+# planner reads evidence and produces transaction plans, editor executes skill
+# and memory mutations through official tools, evaluator scores results, and
+# calibrator runs prompt-overlay optimization for planner/editor/evaluator.
 # model:
-#   improvement_planner:
+#   planner:
 #     provider: openrouter
 #     model: anthropic/claude-sonnet-4
 #     api_key: ${OPENROUTER_API_KEY}
-#   target_resolver:
-#     provider: openrouter
-#     model: anthropic/claude-sonnet-4
-#     api_key: ${OPENROUTER_API_KEY}
-#   skill_agent:
-#     provider: openrouter
-#     model: anthropic/claude-sonnet-4
-#     api_key: ${OPENROUTER_API_KEY}
-#   memory_agent:
-#     provider: openrouter
-#     model: anthropic/claude-sonnet-4
-#     api_key: ${OPENROUTER_API_KEY}
-#   memory_extractor:
+#   editor:
 #     provider: openrouter
 #     model: anthropic/claude-sonnet-4
 #     api_key: ${OPENROUTER_API_KEY}
 #   evaluator:
+#     provider: openrouter
+#     model: anthropic/claude-sonnet-4
+#     api_key: ${OPENROUTER_API_KEY}
+#   calibrator:
 #     provider: openrouter
 #     model: anthropic/claude-sonnet-4
 #     api_key: ${OPENROUTER_API_KEY}

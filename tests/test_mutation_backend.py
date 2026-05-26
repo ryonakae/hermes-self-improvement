@@ -5,14 +5,14 @@ import sys
 import types
 from types import SimpleNamespace
 
-from hermes_self_improvement.skill_agent_backend import (
+from hermes_self_improvement.editor_backend import (
     ALLOWED_SKILL_AGENT_TOOLS,
     NativeSkillAgentBackend,
     SkillAgentBackendLimits,
     SkillToolExecutor,
-    build_skill_agent_backend,
+    build_editor_backend,
     check_skill_tool_executor_readiness,
-    skill_agent_backend_status,
+    editor_backend_status,
     validate_backend_success_result,
 )
 from hermes_self_improvement.role_tool_permissions import ROLE_TOOL_PERMISSIONS
@@ -45,21 +45,21 @@ def test_backend_contract_allows_only_skill_tools():
 
 
 def test_production_skill_tool_schemas_do_not_expose_submit_result_tool():
-    from hermes_self_improvement.skill_agent_backend import native_skill_agent_tool_schemas
+    from hermes_self_improvement.editor_backend import native_editor_tool_schemas
 
-    names = {schema["function"]["name"] for schema in native_skill_agent_tool_schemas()}
+    names = {schema["function"]["name"] for schema in native_editor_tool_schemas()}
 
-    assert names == {"skills_list", "skill_view", "skill_manage"}
+    assert names == {"skills_list", "skill_view", "skill_manage", "memory"}
     assert ("submit_" + "mutation_result") not in names
 
 
-def test_skill_agent_backend_allowed_tools_come_from_role_permission_matrix():
-    assert ALLOWED_SKILL_AGENT_TOOLS is ROLE_TOOL_PERMISSIONS["skill_agent"].allowed_tool_names
+def test_editor_backend_allowed_tools_are_subset_of_role_permission_matrix():
+    assert ALLOWED_SKILL_AGENT_TOOLS.issubset(ROLE_TOOL_PERMISSIONS["editor"].allowed_tool_names)
 
 
 def test_backend_contract_requires_success_schema_fields():
-    assert validate_backend_success_result({"ok": True})["error"] == "skill_agent_result_missing_success"
-    assert validate_backend_success_result({"success": True})["error"] == "skill_agent_result_used_tools_missing"
+    assert validate_backend_success_result({"ok": True})["error"] == "editor_result_missing_success"
+    assert validate_backend_success_result({"success": True})["error"] == "editor_result_used_tools_missing"
     ok = {
         "success": True,
         "used_tools": [],
@@ -139,7 +139,7 @@ def test_validate_create_skill_rejects_natural_language_outcome_without_created_
     )
 
     assert result["success"] is False
-    assert result["error"] == "skill_agent_result_created_skill_missing"
+    assert result["error"] == "editor_result_created_skill_missing"
     assert result["expected_target"] == "safe-patch-usage"
     assert result["created_skills"] == []
     assert result["used_tools"][0]["action"] == "patch"
@@ -166,7 +166,7 @@ def test_validate_create_skill_does_not_infer_created_skill_without_create_trace
     )
 
     assert result["success"] is False
-    assert result["error"] == "skill_agent_result_created_skill_missing"
+    assert result["error"] == "editor_result_created_skill_missing"
     assert result["expected_target"] == "timeout-workflow"
     assert result["created_skills"] == []
     assert result["used_tools"][1]["tool"] == "skill_view"
@@ -190,7 +190,7 @@ def test_validate_skill_improve_rejects_changed_outcome_without_target_change_tr
     )
 
     assert result["success"] is False
-    assert result["error"] == "skill_agent_result_changed_skill_missing"
+    assert result["error"] == "editor_result_changed_skill_missing"
 
 
 def test_validate_merge_skill_success_requires_target_patch_and_structured_merge_fields():
@@ -251,7 +251,7 @@ def test_validate_merge_skill_rejects_target_patch_without_reading_both_skills()
     )
 
     assert result["success"] is False
-    assert result["error"] == "skill_agent_result_merge_read_trace_missing"
+    assert result["error"] == "editor_result_merge_read_trace_missing"
 
 
 def test_validate_merge_skill_rejects_source_mutation_even_when_target_was_patched():
@@ -281,7 +281,7 @@ def test_validate_merge_skill_rejects_source_mutation_even_when_target_was_patch
     )
 
     assert result["success"] is False
-    assert result["error"] == "skill_agent_result_merge_source_change_forbidden"
+    assert result["error"] == "editor_result_merge_source_change_forbidden"
 
 
 def test_validate_merge_skill_rejects_successor_delete_trace():
@@ -310,7 +310,7 @@ def test_validate_merge_skill_rejects_successor_delete_trace():
     )
 
     assert result["success"] is False
-    assert result["error"] == "skill_agent_result_merge_target_patch_trace_missing"
+    assert result["error"] == "editor_result_merge_target_patch_trace_missing"
 
 
 def test_validate_merge_skill_rejects_source_as_own_successor():
@@ -338,7 +338,7 @@ def test_validate_merge_skill_rejects_source_as_own_successor():
     )
 
     assert result["success"] is False
-    assert result["error"] == "skill_agent_result_merge_self_successor_forbidden"
+    assert result["error"] == "editor_result_merge_self_successor_forbidden"
 
 
 def test_backend_limits_are_fail_closed():
@@ -347,7 +347,7 @@ def test_backend_limits_are_fail_closed():
     assert limits.check()["reasons"] == ["max_tool_calls_must_be_positive", "timeout_seconds_must_be_positive"]
 
 
-def test_skill_agent_limits_only_configures_tool_calls_and_timeout():
+def test_editor_limits_only_configures_tool_calls_and_timeout():
     limits = SkillAgentBackendLimits.from_config({"mutation": {"max_tool_calls": 12}})
 
     assert limits.max_tool_calls == 12
@@ -388,21 +388,21 @@ def test_skill_tool_executor_redacts_large_outputs():
 
 def test_skill_backend_has_no_auxiliary_or_injected_llm_loop_surface():
     import inspect
-    import hermes_self_improvement.skill_agent_backend as backend_module
+    import hermes_self_improvement.editor_backend as backend_module
 
     source = inspect.getsource(backend_module)
 
     assert not hasattr(backend_module, "_call_hermes_" + "auxiliary_native")
-    assert not hasattr(backend_module, "legacy_skill_agent_tool_schemas")
+    assert not hasattr(backend_module, "legacy_editor_tool_schemas")
     assert "agent.auxiliary_client" not in source
     assert "call_llm(" not in source
     assert "llm_call" not in source
-    assert "skill_agent_legacy_" + "loop_requires_injected_llm_call" not in source
+    assert "editor_legacy_" + "loop_requires_injected_llm_call" not in source
     assert ("submit_" + "mutation_result") not in source
 
 
-def test_build_skill_agent_backend_defaults_to_constrained_runner():
-    backend = build_skill_agent_backend({
+def test_build_editor_backend_defaults_to_constrained_runner():
+    backend = build_editor_backend({
         "_skill_tool_executor": SkillToolExecutor(
             skills_list_fn=lambda **_: {"success": True},
             skill_view_fn=lambda **_: {"success": True},
@@ -416,7 +416,7 @@ def test_build_skill_agent_backend_defaults_to_constrained_runner():
 
 def test_native_backend_can_validate_constrained_agent_result_with_tool_trace():
     def fake_constrained_agent(**kwargs):
-        assert kwargs["role"] == "skill_agent"
+        assert kwargs["role"] == "editor"
         assert "Task manifest summary" in kwargs["user_message"]
         assert ("submit_" + "mutation_result") not in kwargs["system_message"]
         assert "Final response must be a JSON object" in kwargs["system_message"]
@@ -448,7 +448,7 @@ def test_native_backend_can_validate_constrained_agent_result_with_tool_trace():
     result = backend.run(
         "prompt",
         {"task_kind": "skill_improve", "targets": {"primary_skill": "demo-skill"}},
-        {"model": {"skill_agent": {}}},
+        {"model": {"editor": {}}},
     )
 
     assert result["success"] is True
@@ -461,15 +461,15 @@ def test_native_backend_can_validate_constrained_agent_result_with_tool_trace():
     assert result["post_validation"]["status"] == "passed"
 
 
-def test_build_skill_agent_backend_normalizes_disabled_and_unknown():
-    assert build_skill_agent_backend({"mutation": {"enabled": False}}).run("p", {}, {})["error"] == "skill_agent_backend_disabled"
-    assert build_skill_agent_backend({"mutation": {"backend": "bogus"}}).run("p", {}, {})["reasons"] == ["skill_agent_backend_unknown"]
+def test_build_editor_backend_normalizes_disabled_and_unknown():
+    assert build_editor_backend({"mutation": {"enabled": False}}).run("p", {}, {})["error"] == "editor_backend_disabled"
+    assert build_editor_backend({"mutation": {"backend": "bogus"}}).run("p", {}, {})["reasons"] == ["editor_backend_unknown"]
 
 
 def test_runtime_skill_tool_resolver_reports_unavailable_without_core_hook():
-    status = skill_agent_backend_status({"mutation": {"backend": "disabled"}})
+    status = editor_backend_status({"mutation": {"backend": "disabled"}})
     assert status["available"] is False
-    assert status["reason"] == "skill_agent_backend_disabled"
+    assert status["reason"] == "editor_backend_disabled"
 
 
 def test_skill_tool_executor_readiness_reports_resolved_callables():
@@ -495,7 +495,7 @@ def test_skill_tool_executor_readiness_fails_when_one_callable_missing():
     assert "skill_manage" in readiness["missing_tools"]
 
 
-def test_skill_agent_backend_status_includes_tool_executor_source_and_readiness(monkeypatch):
+def test_editor_backend_status_includes_tool_executor_source_and_readiness(monkeypatch):
     fake_tools_pkg = types.ModuleType("tools")
     fake_skills_tool = types.ModuleType("tools.skills_tool")
     fake_skill_manager_tool = types.ModuleType("tools.skill_manager_tool")
@@ -506,7 +506,7 @@ def test_skill_agent_backend_status_includes_tool_executor_source_and_readiness(
     monkeypatch.setitem(sys.modules, "tools.skills_tool", fake_skills_tool)
     monkeypatch.setitem(sys.modules, "tools.skill_manager_tool", fake_skill_manager_tool)
 
-    status = skill_agent_backend_status({"mutation": {"enabled": True}})
+    status = editor_backend_status({"mutation": {"enabled": True}})
 
     assert status["available"] is True
     assert status["configured"] == "native_skill_tool"

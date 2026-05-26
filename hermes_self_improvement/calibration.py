@@ -150,10 +150,10 @@ def _prompt_overlay_summary(role: str, *, candidate: dict[str, Any] | None = Non
 
 
 def _empty_prompt_overlay_summary() -> dict[str, Any]:
-    return {role: _prompt_overlay_summary(role) for role in ("improvement_planner", "skill_agent")}
+    return {role: _prompt_overlay_summary(role) for role in ("planner", "editor", "evaluator")}
 
 
-OVERLAY_TARGET_TO_ROLE = {"target_resolver_overlay": "target_resolver", "improvement_planner_overlay": "improvement_planner", "skill_agent_overlay": "skill_agent", "memory_agent_overlay": "memory_agent", "evaluator_overlay": "evaluator"}
+OVERLAY_TARGET_TO_ROLE = {"planner_overlay": "planner", "editor_overlay": "editor", "evaluator_overlay": "evaluator"}
 
 
 def _signal_strength_summary(evidence: dict[str, Any], *, overlay_case_count: int) -> dict[str, Any]:

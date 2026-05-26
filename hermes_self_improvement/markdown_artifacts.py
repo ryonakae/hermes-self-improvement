@@ -240,7 +240,7 @@ def render_calibration_context_markdown(run_result: dict[str, Any], *, max_items
         "## Run summary",
         _json(run_result.get("summary") or {}, max_chars=800),
         "",
-        "## improvement_planner / skill_agent failures",
+        "## planner / editor failures",
     ]
     lines.extend(decisions or ["- n/a"])
     lines.extend([

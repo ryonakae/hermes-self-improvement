@@ -19,8 +19,8 @@ def episode_payload(episode_id: str, **extra):
         "episode_kind": "executed_mutation",
         "target_kind": "skill",
         "target_id": "demo-skill",
-        "improvement_planner_prompt_hash": "sha256:planner-a",
-        "skill_agent_prompt_hash": "sha256:skill_agent-a",
+        "planner_prompt_hash": "sha256:planner-a",
+        "editor_prompt_hash": "sha256:editor-a",
         "evaluator_hash": "sha256:evaluator-a",
         "decision": "mutate_skill",
         "action": "skill_patch",
@@ -57,7 +57,7 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
         "episode-2",
         target_id="weak-skill",
         overlay_generation_id="overlay-set-risky",
-        improvement_planner_prompt_hash="sha256:planner-b",
+        planner_prompt_hash="sha256:planner-b",
         decision="mutate_skill",
         action="no_op",
         executed=False,
@@ -80,8 +80,8 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
 
     assert aggregate["episode_count"] == 2
     assert aggregate["scored_episode_count"] == 2
-    assert aggregate["by_improvement_planner_prompt_hash"]["sha256:planner-a"]["mean_outcome_score"] > 0
-    assert aggregate["by_improvement_planner_prompt_hash"]["sha256:planner-b"]["mean_outcome_score"] < 0
+    assert aggregate["by_planner_prompt_hash"]["sha256:planner-a"]["mean_outcome_score"] > 0
+    assert aggregate["by_planner_prompt_hash"]["sha256:planner-b"]["mean_outcome_score"] < 0
     assert aggregate["by_decision"]["mutate_skill"]["episodes"] == 2
     assert aggregate["by_target_kind"]["skill"]["episodes"] == 2
     assert aggregate["by_overlay_generation_id"]["overlay-set-good"]["mean_outcome_score"] > 0
@@ -106,7 +106,7 @@ def test_credit_assignment_keeps_unobserved_and_ambiguous_links_low_confidence(t
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "e1.json", episode_payload(
         "episode-1",
-        improvement_planner_prompt_hash="sha256:planner-a",
+        planner_prompt_hash="sha256:planner-a",
         evidence_ids=[],
         evidence_strength="unknown",
         decision="defer",
@@ -119,8 +119,8 @@ def test_credit_assignment_keeps_unobserved_and_ambiguous_links_low_confidence(t
 
     assert aggregate["episode_count"] == 1
     assert aggregate["scored_episode_count"] == 0
-    assert aggregate["by_improvement_planner_prompt_hash"]["sha256:planner-a"]["mean_outcome_score"] is None
-    assert aggregate["by_improvement_planner_prompt_hash"]["sha256:planner-a"]["confidence"] == 0.0
+    assert aggregate["by_planner_prompt_hash"]["sha256:planner-a"]["mean_outcome_score"] is None
+    assert aggregate["by_planner_prompt_hash"]["sha256:planner-a"]["confidence"] == 0.0
     assert aggregate["by_decision"]["defer"]["episodes"] == 1
     assert aggregate["by_evidence_strength"]["unknown"]["episodes"] == 1
 

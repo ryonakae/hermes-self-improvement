@@ -262,8 +262,8 @@ def build_improvement_planner_digest(evidence_pack: dict[str, Any]) -> dict[str,
             attach(target, item, {
                 "raw_evidence_skill": target,
                 "normalized_skill": _bare_skill_name(target),
-                "evidence_match": "llm_target_resolver",
-                "target_hint_source": "llm_target_resolver",
+                "evidence_match": "llm_planner",
+                "target_hint_source": "llm_planner",
                 "target_hint_confidence": resolution.get("confidence"),
                 "target_hint_reason": resolution.get("reason"),
                 "decision_hint": resolution.get("decision_hint"),
@@ -494,7 +494,7 @@ def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
             decisions.append({"skill": name, "decision": "skip", "reason": "weak_only_evidence", "evidence_ids": []})
         else:
             decisions.append({"skill": name, "decision": "skip", "reason": "no_attached_evidence", "evidence_ids": []})
-    return _planner_result(decisions, digest=digest, status="completed", model_role="improvement_planner", planner_source="deterministic_fallback", prompt_source={"role": "improvement_planner", "base_hash": base_prompt_hash("improvement_planner"), "overlay_active": False, "overlay_hash": None, "overlay_path": None})
+    return _planner_result(decisions, digest=digest, status="completed", model_role="planner", planner_source="deterministic_fallback", prompt_source={"role": "planner", "base_hash": base_prompt_hash("planner"), "overlay_active": False, "overlay_hash": None, "overlay_path": None})
 
 
 def _planner_result(
@@ -502,7 +502,7 @@ def _planner_result(
     *,
     digest: dict[str, Any],
     status: str,
-    model_role: str = "improvement_planner",
+    model_role: str = "planner",
     planner_source: str = "llm",
     error: str | None = None,
     prompt_source: dict[str, Any] | None = None,
@@ -518,7 +518,7 @@ def _planner_result(
         "decisions": decisions,
     }
     if prompt_source:
-        result["prompt_source"] = {"improvement_planner": prompt_source}
+        result["prompt_source"] = {"planner": prompt_source}
     if error:
         result["error"] = _redacted_preview(error, max_chars=240)
     return result
@@ -680,7 +680,7 @@ def _normalize_decision(
     if raw.get("rationale") is not None:
         normalized["rationale"] = _redacted_preview(raw.get("rationale"), max_chars=600)
     if decision == "mutate_skill":
-        for key, max_chars in (("change_intent", 280), ("skill_agent_instructions", 900)):
+        for key, max_chars in (("change_intent", 280), ("skill_agent_instructions", 900), ("editor_instructions", 900)):
             if raw.get(key) is not None:
                 normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
     elif decision == "archive_skill":
@@ -789,11 +789,11 @@ def _message_content_to_text(content: Any) -> str:
 
 def _call_improvement_planner_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     model_config = config.get("model") if isinstance(config.get("model"), dict) else {}
-    planner_config = model_config.get("improvement_planner") if isinstance(model_config.get("improvement_planner"), dict) else {}
+    planner_config = model_config.get("planner") if isinstance(model_config.get("planner"), dict) else {}
     provider = planner_config.get("provider") or "auto"
     model = planner_config.get("model") or None
     max_tokens = _coerce_int(planner_config.get("max_tokens"), default=2200)
-    overlay = load_active_prompt_overlay(config, role="improvement_planner", base_hash=base_prompt_hash("improvement_planner"))
+    overlay = load_active_prompt_overlay(config, role="planner", base_hash=base_prompt_hash("planner"))
     rendered_prompt = render_planner_messages(digest=digest, overlay=overlay)
     messages = rendered_prompt["messages"]
     from .llm_telemetry import record_llm_call
@@ -806,14 +806,14 @@ def _call_improvement_planner_llm(*, digest: dict[str, Any], config: dict[str, A
     ]
     user_message = "\n\n".join(text for text in user_messages if text)
     result = run_constrained_role_agent(
-        role="improvement_planner",
+        role="planner",
         system_message=system_message,
         user_message=user_message,
         config=config,
     )
     response_text = str(result.get("final_response") or "")
     record_llm_call(
-        site="improvement_planner",
+        site="planner",
         messages=messages,
         response_text=response_text,
         config=config,
@@ -902,17 +902,17 @@ def build_improvement_planner_quality_report(
         "cluster_attached_candidate_count": len(cluster_attached_candidates),
         "cluster_selected_count": cluster_selected_count,
         "skill_agent_task_count": len(prompt_lengths),
-        "skill_agent_prompt_chars": {
+        "editor_prompt_chars": {
             "min": min(prompt_lengths) if prompt_lengths else 0,
             "max": max(prompt_lengths) if prompt_lengths else 0,
-            "total": sum(prompt_lengths),
+            "avg": int(sum(prompt_lengths) / len(prompt_lengths)) if prompt_lengths else 0,
         },
     }
 
 
 def run_improvement_planner(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or {}
-    planner_func = cfg.get("_improvement_planner_func") if isinstance(cfg, dict) else None
+    planner_func = cfg.get("_improvement_planner_func") or cfg.get("_planner_func") if isinstance(cfg, dict) else None
     used_llm = False
     try:
         if callable(planner_func):

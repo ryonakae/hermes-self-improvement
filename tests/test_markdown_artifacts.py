@@ -111,6 +111,6 @@ def test_render_calibration_context_markdown_includes_lessons():
     )
 
     assert "# Calibration context" in text
-    assert "## improvement_planner / skill_agent failures" in text
+    assert "## planner / editor failures" in text
     assert "mutation_agent_result_invalid_outcome" in text
     assert "memory_capacity_exceeded" in text

@@ -10,7 +10,7 @@ from .observer import _sha256_text, _stable_json
 DEFAULT_THRESHOLD = 0.1
 DEFAULT_MIN_CONFIDENCE = 0.6
 DEFAULT_MAX_PROMPT_CHARS = 6000
-OVERLAY_TARGETS = ("target_resolver_overlay", "improvement_planner_overlay", "skill_agent_overlay", "memory_agent_overlay", "evaluator_overlay")
+OVERLAY_TARGETS = ("planner_overlay", "editor_overlay", "evaluator_overlay")
 GEPA_PROMOTE_RESULTS = {"selected", "improved"}
 GEPA_KEEP_RESULTS = {"no_improvement", "tie", "insufficient_data"}
 GEPA_REJECT_RESULTS = {"invalid", "worse", "failed"}
@@ -29,9 +29,8 @@ def _identity_hash(identity: dict[str, Any], key: str) -> str:
 
 def _baseline(current_identity: dict[str, Any], outcome_aggregate: dict[str, Any] | None) -> dict[str, Any]:
     return {
-        "improvement_planner_prompt_hash": _identity_hash(current_identity, "improvement_planner_prompt_hash"),
-        "skill_agent_prompt_hash": _identity_hash(current_identity, "skill_agent_prompt_hash"),
-        "memory_agent_prompt_hash": _identity_hash(current_identity, "memory_agent_prompt_hash"),
+        "planner_prompt_hash": _identity_hash(current_identity, "planner_prompt_hash"),
+        "editor_prompt_hash": _identity_hash(current_identity, "editor_prompt_hash"),
         "evaluator_hash": _identity_hash(current_identity, "evaluator_hash"),
         "outcome_aggregate_hash": str((outcome_aggregate or {}).get("aggregate_hash") or "unavailable"),
     }
@@ -39,9 +38,8 @@ def _baseline(current_identity: dict[str, Any], outcome_aggregate: dict[str, Any
 
 def _candidate_identity(candidate_identity: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     return {
-        "improvement_planner_prompt_hash": _identity_hash(candidate_identity, "improvement_planner_prompt_hash"),
-        "skill_agent_prompt_hash": _identity_hash(candidate_identity, "skill_agent_prompt_hash"),
-        "memory_agent_prompt_hash": _identity_hash(candidate_identity, "memory_agent_prompt_hash"),
+        "planner_prompt_hash": _identity_hash(candidate_identity, "planner_prompt_hash"),
+        "editor_prompt_hash": _identity_hash(candidate_identity, "editor_prompt_hash"),
         "evaluator_hash": _identity_hash(candidate_identity, "evaluator_hash"),
         "candidate_hash": _candidate_hash(candidate),
     }

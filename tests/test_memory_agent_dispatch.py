@@ -14,7 +14,7 @@ def _conversation_candidate(candidate_id: str = "m1", routing_hint: str = "new")
     return {
         "id": candidate_id,
         "kind": "memory_gap_candidate",
-        "source": "memory_extractor",
+        "source": "planner",
         "likely_targets": [{"target": "memory", "weight": 0.9}],
         "memory": {
             "candidate_id": candidate_id,
@@ -102,7 +102,7 @@ def _success_payload(*, changed: list[str] | None = None, removed: list[str] | N
     }
 
 
-def test_run_memory_improvement_step_dispatches_to_memory_agent_when_backend_injected():
+def test_run_memory_improvement_step_dispatches_to_editor_when_backend_injected():
     received_tasks: list[dict] = []
 
     class FakeBackend:
@@ -113,19 +113,19 @@ def test_run_memory_improvement_step_dispatches_to_memory_agent_when_backend_inj
     candidate = _conversation_candidate()
     result = run_memory_improvement_step(
         evidence_pack=_pack([candidate]),
-        config={"_memory_agent_backend": FakeBackend()},
+        config={"_editor_backend": FakeBackend()},
         mutate=True,
     )
 
-    assert result["memory_agent"]["status"] == "completed"
+    assert result["editor"]["status"] == "completed"
     assert len(received_tasks) == 1
     handed = received_tasks[0]
-    assert handed["type"] == "memory_agent_task"
+    assert handed["type"] == "editor_task"
     assert handed["task_kind"] == "memory_apply"
     assert any(item.get("candidate_id") == "m1" for item in handed["candidates"])
 
 
-def test_run_memory_improvement_step_skips_memory_agent_dispatch_in_dry_run():
+def test_run_memory_improvement_step_skips_editor_dispatch_in_dry_run():
     received_tasks: list[dict] = []
 
     class FakeBackend:
@@ -136,15 +136,15 @@ def test_run_memory_improvement_step_skips_memory_agent_dispatch_in_dry_run():
     candidate = _conversation_candidate()
     result = run_memory_improvement_step(
         evidence_pack=_pack([candidate]),
-        config={"_memory_agent_backend": FakeBackend()},
+        config={"_editor_backend": FakeBackend()},
         mutate=False,
     )
 
     assert received_tasks == []
-    assert result.get("memory_agent", {}).get("status") in {"preview", None}
+    assert result.get("editor", {}).get("status") in {"preview", None}
 
 
-def test_memory_agent_preview_reports_current_entry_visibility_without_dispatch():
+def test_editor_preview_reports_current_entry_visibility_without_dispatch():
     received_tasks: list[dict] = []
 
     class FakeBackend:
@@ -169,19 +169,19 @@ def test_memory_agent_preview_reports_current_entry_visibility_without_dispatch(
 
     result = run_memory_improvement_step(
         evidence_pack=_pack([_conversation_candidate()]),
-        config={"_memory_agent_backend": FakeBackend(), "_memory_current_entries": current_entries},
+        config={"_editor_backend": FakeBackend(), "_memory_current_entries": current_entries},
         mutate=False,
     )
 
     assert received_tasks == []
-    agent_block = result["memory_agent"]
+    agent_block = result["editor"]
     assert agent_block["status"] == "preview"
     assert agent_block["current_entries_visible_count"] == 2
     assert agent_block["current_entries_count_by_target"] == {"memory": 1, "user": 1}
     assert agent_block["current_entries_omitted_count"] == 0
 
 
-def test_run_memory_improvement_step_does_not_invoke_memory_agent_for_skip_routing_hint():
+def test_run_memory_improvement_step_does_not_invoke_editor_for_skip_routing_hint():
     received_tasks: list[dict] = []
 
     class FakeBackend:
@@ -192,12 +192,12 @@ def test_run_memory_improvement_step_does_not_invoke_memory_agent_for_skip_routi
     skip_candidate = _conversation_candidate(routing_hint="skip_duplicate")
     result = run_memory_improvement_step(
         evidence_pack=_pack([skip_candidate]),
-        config={"_memory_agent_backend": FakeBackend()},
+        config={"_editor_backend": FakeBackend()},
         mutate=True,
     )
 
     assert received_tasks == []
-    assert result.get("memory_agent", {}).get("status") in {"no_candidates", None}
+    assert result.get("editor", {}).get("status") in {"no_candidates", None}
 
 
 def test_run_memory_improvement_step_reports_agent_result_in_decisions():
@@ -208,24 +208,24 @@ def test_run_memory_improvement_step_reports_agent_result_in_decisions():
     candidates = [_conversation_candidate("m1"), _conversation_candidate("m2")]
     result = run_memory_improvement_step(
         evidence_pack=_pack(candidates),
-        config={"_memory_agent_backend": FakeBackend()},
+        config={"_editor_backend": FakeBackend()},
         mutate=True,
     )
 
-    agent_block = result["memory_agent"]
+    agent_block = result["editor"]
     assert agent_block["status"] == "completed"
     assert agent_block["changed"] == 3
     assert agent_block["result"]["changed_memories"] == ["m1", "m2"]
     assert result["changed"] == 3
     assert result["changed_memories"] == ["m1", "m2", "m3"]
-    agent_decisions = [decision for decision in result["decisions"] if decision.get("result_source") == "memory_agent"]
+    agent_decisions = [decision for decision in result["decisions"] if decision.get("result_source") == "editor"]
     assert [decision["evidence_id"] for decision in agent_decisions] == ["m1", "m2", "m3"]
     assert all(decision["decision"] == "accepted" and decision["changed"] for decision in agent_decisions)
-    assert agent_decisions[0]["operation"] == {"operation": "memory_agent", "target": "memory"}
-    assert agent_decisions[-1]["operation"] == {"operation": "memory_agent_remove", "target": "memory"}
+    assert agent_decisions[0]["operation"] == {"operation": "editor", "target": "memory"}
+    assert agent_decisions[-1]["operation"] == {"operation": "editor_remove", "target": "memory"}
 
 
-def test_run_memory_improvement_step_turns_memory_agent_skill_route_result_into_bridge_decision():
+def test_run_memory_improvement_step_turns_editor_skill_route_result_into_bridge_decision():
     old_text = "Run `pytest tests -q` after editing."
 
     class FakeBackend:
@@ -245,7 +245,7 @@ def test_run_memory_improvement_step_turns_memory_agent_skill_route_result_into_
 
     result = run_memory_improvement_step(
         evidence_pack=_pack([_placement_candidate(old_text=old_text)]),
-        config={"_memory_agent_backend": FakeBackend(), "_memory_current_entries": [{"target": "memory", "old_text": old_text}]},
+        config={"_editor_backend": FakeBackend(), "_memory_current_entries": [{"target": "memory", "old_text": old_text}]},
         mutate=True,
     )
 
@@ -260,18 +260,18 @@ def test_run_memory_improvement_step_turns_memory_agent_skill_route_result_into_
         "old_text": old_text,
         "skill_route": "operations",
         "content": old_text,
-        "reason": "memory_agent_convert_to_skill_proposal",
+        "reason": "editor_convert_to_skill_proposal",
     }
 
 
-def test_run_memory_improvement_step_previews_inventory_candidates_for_memory_agent():
+def test_run_memory_improvement_step_previews_inventory_candidates_for_editor():
     result = run_memory_improvement_step(
         evidence_pack=_pack([_inventory_candidate()]),
-        config={"_memory_agent_backend": object()},
+        config={"_editor_backend": object()},
         mutate=False,
     )
 
-    agent_block = result["memory_agent"]
+    agent_block = result["editor"]
     assert agent_block["status"] == "preview"
     assert agent_block["candidate_count"] == 1
     handed = agent_block["candidates"][0]
@@ -283,7 +283,7 @@ def test_run_memory_improvement_step_previews_inventory_candidates_for_memory_ag
     assert not any(decision.get("evidence_id") == "memory_inv_1" and decision.get("reason") == "memory_inventory_needs_planner" for decision in result["decisions"])
 
 
-def test_run_memory_improvement_step_dispatches_inventory_candidates_to_memory_agent_when_mutating():
+def test_run_memory_improvement_step_dispatches_inventory_candidates_to_editor_when_mutating():
     received_tasks: list[dict] = []
 
     class FakeBackend:
@@ -293,11 +293,11 @@ def test_run_memory_improvement_step_dispatches_inventory_candidates_to_memory_a
 
     result = run_memory_improvement_step(
         evidence_pack=_pack([_inventory_candidate()]),
-        config={"_memory_agent_backend": FakeBackend()},
+        config={"_editor_backend": FakeBackend()},
         mutate=True,
     )
 
-    assert result["memory_agent"]["status"] == "completed"
+    assert result["editor"]["status"] == "completed"
     assert len(received_tasks) == 1
     handed = received_tasks[0]["candidates"][0]
     assert handed["candidate_kind"] == "memory_inventory_candidate"
@@ -305,14 +305,14 @@ def test_run_memory_improvement_step_dispatches_inventory_candidates_to_memory_a
     assert not any(decision.get("evidence_id") == "memory_inv_1" and decision.get("reason") == "memory_inventory_needs_planner" for decision in result["decisions"])
 
 
-def test_run_memory_improvement_step_previews_environment_fact_signals_for_memory_agent():
+def test_run_memory_improvement_step_previews_environment_fact_signals_for_editor():
     result = run_memory_improvement_step(
         evidence_pack=_pack([_environment_signal_candidate()]),
-        config={"_memory_agent_backend": object()},
+        config={"_editor_backend": object()},
         mutate=False,
     )
 
-    agent_block = result["memory_agent"]
+    agent_block = result["editor"]
     assert agent_block["status"] == "preview"
     handed = agent_block["candidates"][0]
     assert handed["candidate_id"] == "env_fact_1"
@@ -327,14 +327,14 @@ def test_run_memory_improvement_step_previews_environment_fact_signals_for_memor
     assert handed["support"]["success_after_correction"] is True
 
 
-def test_run_memory_improvement_step_previews_suspicious_placement_candidates_for_memory_agent():
+def test_run_memory_improvement_step_previews_suspicious_placement_candidates_for_editor():
     result = run_memory_improvement_step(
         evidence_pack=_pack([_placement_candidate()]),
-        config={"_memory_agent_backend": object()},
+        config={"_editor_backend": object()},
         mutate=False,
     )
 
-    agent_block = result["memory_agent"]
+    agent_block = result["editor"]
     assert agent_block["status"] == "preview"
     handed = agent_block["candidates"][0]
     assert handed["candidate_id"] == "memory_place_1"
@@ -344,14 +344,14 @@ def test_run_memory_improvement_step_previews_suspicious_placement_candidates_fo
     assert handed["suggested_route"] == "placement_review"
 
 
-def test_run_memory_improvement_step_previews_plain_user_preference_placement_candidates_for_memory_agent():
+def test_run_memory_improvement_step_previews_plain_user_preference_placement_candidates_for_editor():
     result = run_memory_improvement_step(
         evidence_pack=_pack([_placement_candidate(old_text="Ryo prefers concise reports.", current_store="memory")]),
-        config={"_memory_agent_backend": object()},
+        config={"_editor_backend": object()},
         mutate=False,
     )
 
-    agent_block = result["memory_agent"]
+    agent_block = result["editor"]
     assert agent_block["status"] == "preview"
     assert agent_block["candidate_counts_by_kind"] == {"memory_placement_candidate": 1}
     handed = agent_block["candidates"][0]
@@ -359,14 +359,14 @@ def test_run_memory_improvement_step_previews_plain_user_preference_placement_ca
     assert handed["placement_text"] == "Ryo prefers concise reports."
 
 
-def test_run_memory_improvement_step_previews_plain_environment_fact_placement_candidates_for_memory_agent():
+def test_run_memory_improvement_step_previews_plain_environment_fact_placement_candidates_for_editor():
     result = run_memory_improvement_step(
         evidence_pack=_pack([_placement_candidate(old_text="Hermes runtime root is ~/.hermes.", current_store="user")]),
-        config={"_memory_agent_backend": object()},
+        config={"_editor_backend": object()},
         mutate=False,
     )
 
-    agent_block = result["memory_agent"]
+    agent_block = result["editor"]
     assert agent_block["status"] == "preview"
     assert agent_block["candidate_counts_by_kind"] == {"memory_placement_candidate": 1}
     handed = agent_block["candidates"][0]
@@ -374,22 +374,22 @@ def test_run_memory_improvement_step_previews_plain_environment_fact_placement_c
     assert handed["placement_text"] == "Hermes runtime root is ~/.hermes."
 
 
-def test_memory_agent_preview_hands_off_all_prefiltered_candidates_without_per_kind_cap():
+def test_editor_preview_hands_off_all_prefiltered_candidates_without_per_kind_cap():
     candidates = [_conversation_candidate(f"m{i}") for i in range(8)]
     result = run_memory_improvement_step(
         evidence_pack=_pack(candidates),
-        config={"_memory_agent_backend": object()},
+        config={"_editor_backend": object()},
         mutate=False,
     )
 
-    agent_block = result["memory_agent"]
+    agent_block = result["editor"]
     assert agent_block["status"] == "preview"
     assert agent_block["candidate_count"] == 8
     assert agent_block["candidate_counts_by_kind"] == {"memory_gap_candidate": 8}
     assert agent_block["omitted_candidate_counts_by_kind"] == {}
 
 
-def test_memory_agent_task_caps_current_entries_and_reports_omitted_count():
+def test_editor_task_caps_current_entries_and_reports_omitted_count():
     received_tasks: list[dict] = []
 
     class FakeBackend:
@@ -404,11 +404,11 @@ def test_memory_agent_task_caps_current_entries_and_reports_omitted_count():
 
     result = run_memory_improvement_step(
         evidence_pack=_pack([_conversation_candidate()]),
-        config={"_memory_agent_backend": FakeBackend(), "_memory_current_entries": current_entries},
+        config={"_editor_backend": FakeBackend(), "_memory_current_entries": current_entries},
         mutate=True,
     )
 
-    assert result["memory_agent"]["status"] == "completed"
+    assert result["editor"]["status"] == "completed"
     task_payload = received_tasks[0]
     assert len(task_payload["current_entries"]) == 20
     assert task_payload["current_entries_omitted_count"] == 5
@@ -422,5 +422,5 @@ def test_run_memory_improvement_step_no_op_without_backend_injection():
         mutate=True,
     )
 
-    # backend が無いときは memory_agent dispatch は実行されない (fail-closed)
-    assert result.get("memory_agent", {}).get("status") in {"skipped_no_backend", None}
+    # backend が無いときは editor dispatch は実行されない (fail-closed)
+    assert result.get("editor", {}).get("status") in {"skipped_no_backend", None}
