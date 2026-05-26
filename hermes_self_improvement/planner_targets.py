@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
-
 from .observer import _redact_text
 from .evidence import resolve_coverage_alias
 from .llm_utils import _coerce_int, _extract_json_object
@@ -361,7 +361,11 @@ def _call_resolver_llm(*, digest: dict[str, Any], config: dict[str, Any]) -> dic
         task="self_improvement",
         max_tokens=max_tokens,
     )
-    return _extract_json_object(response_text)
+    try:
+        return _extract_json_object(response_text)
+    except (json.JSONDecodeError, ValueError):
+        logging.warning("resolver LLM returned invalid JSON, falling back to empty resolutions")
+        return {"resolutions": []}
 
 
 def run_planner_targets(digest: dict[str, Any], *, config: dict[str, Any] | None = None) -> dict[str, Any]:
