@@ -2342,20 +2342,16 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "last_run_artifact": str(_latest_run_artifact(config)) if _latest_run_artifact(config) else None,
             "trace_artifacts": _turn_trace_artifact_summary(config),
             "cluster_artifacts": {
-                **_artifact_summary(_reports_dir(config) / "clusters", pattern="cluster-summary-*.json"),
+                **(cluster_summary_summary := _artifact_summary(_reports_dir(config) / "clusters", pattern="cluster-summary-*.json")),
                 "latest_path": _relative_artifact_path(
-                    Path(_artifact_summary(_reports_dir(config) / "clusters", pattern="cluster-summary-*.json")["latest_path"])
-                    if _artifact_summary(_reports_dir(config) / "clusters", pattern="cluster-summary-*.json")["latest_path"]
-                    else None,
+                    Path(cluster_summary_summary["latest_path"]) if cluster_summary_summary["latest_path"] else None,
                     base=_reports_dir(config),
                 ),
             },
             "evidence_index_artifacts": {
-                **_artifact_summary(_reports_dir(config) / "clusters", pattern="evidence-index-*.json"),
+                **(evidence_index_summary := _artifact_summary(_reports_dir(config) / "clusters", pattern="evidence-index-*.json")),
                 "latest_path": _relative_artifact_path(
-                    Path(_artifact_summary(_reports_dir(config) / "clusters", pattern="evidence-index-*.json")["latest_path"])
-                    if _artifact_summary(_reports_dir(config) / "clusters", pattern="evidence-index-*.json")["latest_path"]
-                    else None,
+                    Path(evidence_index_summary["latest_path"]) if evidence_index_summary["latest_path"] else None,
                     base=_reports_dir(config),
                 ),
             },
