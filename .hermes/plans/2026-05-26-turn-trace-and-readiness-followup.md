@@ -57,6 +57,9 @@ This plan is therefore **not another naming cleanup**. It is the remaining execu
 
 ### Slice A — Persist canonical turn-trace artifacts
 
+Detailed execution plan:
+- `.hermes/plans/2026-05-26-slice-a-turn-trace-persistence.md`
+
 **Objective:** Make per-turn trace artifacts the canonical persisted observation unit instead of relying on `events.jsonl` as the source of truth.
 
 **Scope:**
