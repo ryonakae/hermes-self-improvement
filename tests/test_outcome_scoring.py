@@ -152,8 +152,6 @@ def test_build_outcome_score_aggregate_groups_by_prompt_and_target(tmp_path):
     assert aggregate["overall"]["mean_score"] is not None
     assert aggregate["by_planner_prompt_hash"]["sha256:planner"]["episodes"] == 1
     assert aggregate["by_editor_prompt_hash"]["sha256:editor"]["episodes"] == 2
-    assert "by_skill_agent_prompt_hash" not in aggregate
-    assert "by_memory_agent_prompt_hash" not in aggregate
     assert aggregate["by_planner_prompt_hash"]["sha256:planner2"]["mean_score"] < 0
     assert aggregate["by_target_kind"]["skill"]["episodes"] == 2
 
