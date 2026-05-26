@@ -2,11 +2,17 @@
 
 ## Current source of truth
 
+Update note (2026-05-26): when implementation slices land, update this index and the parent roadmap immediately. The current state is easy to misread otherwise because the plugin is now structurally migrated and runtime-healthy, but the deeper observation-model redesign is still incomplete.
+
 As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`
-  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, with operational dogfood and final readiness as the remaining source of truth.
-  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 8.6合目. The active work is scheduled-run dogfood, compact final readiness reporting, and small hardening fixes found by real runs.
+  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, but operational dogfood/final readiness and the deeper observation-model replacement remain unfinished.
+  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 8.8合目. The active work is scheduled-run dogfood, compact final readiness reporting, and replacing event-centric observation persistence with the intended turn-trace/evidence-index model.
+
+- `2026-05-25-self-improvement-role-redesign.md`
+  - **Status:** active redesign/status ledger.
+  - This is the clearest source for the new four-role architecture (`planner / editor / evaluator / calibrator`) and now explicitly records what is complete in code vs what remains incomplete in the turn-trace/evidence-index redesign.
 
 The current active hardening plans are:
 

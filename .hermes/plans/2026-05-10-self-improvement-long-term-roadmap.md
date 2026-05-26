@@ -36,9 +36,20 @@ The key product promise is not “make many changes.” It is:
 
 ---
 
-## Current Position — 2026-05-10
+## Current Position — 2026-05-26
 
-Overall: **about 8.6合目** (code-side; operational dogfood + final readiness report still pending).
+Overall: **about 8.8合目** for the original long-term roadmap if we count structural migration and runtime stabilization, but still **not complete** because the observation-model redesign and final steady-state proof are unfinished.
+
+### What changed since the earlier 2026-05-10 snapshot
+
+- The active runtime surface is now `planner / editor / evaluator / calibrator`; old role/module naming has been removed from runtime/status/report/internal module names.
+- Runtime is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
+- `improve --dry-run --json` now completes cleanly and writes evidence packs, run artifacts, and episodes under the new naming.
+- Full test baseline is green (`779 passed, 2 skipped`).
+
+### Important caveat
+
+The newer role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That part is **not complete yet**. The runtime still persists canonical observation data as `state/events.jsonl` and reconstructs compact windows/digests from events before handing them to planner. So the plugin is operational and structurally migrated, but the deeper observation-model replacement is still in progress.
 
 ### Strong areas
 
