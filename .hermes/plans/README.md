@@ -16,6 +16,10 @@ As of 2026-05-10, the long-term roadmap is:
 
 The current active hardening plans are:
 
+- `2026-05-26-turn-trace-and-readiness-followup.md`
+  - **Status:** active next-step plan.
+  - Breaks the remaining redesign work into concrete slices: (A) persist canonical turn-trace artifacts, (B) build deterministic cluster summary + evidence index/detail artifacts, (C) migrate planner handoff to the index/detail model, (D) retune decision quality on the new substrate, and (E) finish steady-state dogfood plus final readiness reporting.
+
 - `2026-05-24-memory-hygiene-simplification-and-doc-alignment.md`
   - **Status:** implemented / reviewed / validated.
   - Follow-up to the USER/MEMORY current-entry and memory-to-skill work. Aligns prompt/docs with official USER/MEMORY/Skill boundaries, removes stale remove-before-add overlay guidance, stops over-filtering placement candidates before `memory_agent`, surfaces memory-agent mutations in decisions/summaries/episodes, and splits the built-in memory read-path refactor into a separate proof plan. Validation: focused suite `131 passed`; full suite `779 passed, 2 skipped`; `git diff --check` ok; `hermes self-improvement status` ok; `improve --dry-run --json` produced `run-20260524T162647Z`; Codex blocker review PASS.
