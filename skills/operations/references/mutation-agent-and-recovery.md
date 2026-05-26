@@ -4,7 +4,7 @@ This reference defines the boundary between forward mutation and rollback recove
 
 ## Forward mutation
 
-Forward skill mutation is represented as a semantic `skill_agent_task`. The plugin prepares the bounded task intent, target set, constraints, expected outcome, and verification contract. A mutation agent may execute the task only with official Hermes skill tools:
+Forward skill mutation is represented as a semantic `editor_task`. The plugin prepares the bounded task intent, target set, constraints, expected outcome, and verification contract. The editor may execute the task only with official Hermes skill tools:
 
 - `skills_list`
 - `skill_view`

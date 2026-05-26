@@ -30,9 +30,9 @@ from .diagnostic_signals import build_diagnostic_signals, normalize_report_diagn
 from .evidence import build_evidence_pack, write_evidence_pack
 from .episodes import record_run_episodes
 from .editor import run_editor_task
-from .editor_backend import build_editor_backend
-from .skill_agent_backend import build_skill_agent_backend, skill_agent_backend_status
-from .memory_agent_backend import build_memory_agent_backend, memory_agent_backend_status
+from .editor_backend import build_editor_backend, editor_backend_status
+from .skill_agent_backend import build_skill_agent_backend
+from .memory_agent_backend import build_memory_agent_backend
 from .skill_agent import run_skill_agent_task
 from .next_actions import render_next_actions
 from .runner_steps import (
@@ -1157,8 +1157,7 @@ def _latest_run_artifact(config: dict[str, Any]) -> Path | None:
 
 
 def _render_status_summary(payload: dict[str, Any]) -> str:
-    skill_agent_backend_payload = payload.get("skill_agent_backend") if isinstance(payload.get("skill_agent_backend"), dict) else {}
-    memory_agent_backend_payload = payload.get("memory_agent_backend") if isinstance(payload.get("memory_agent_backend"), dict) else {}
+    editor_backend_payload = payload.get("editor_backend") if isinstance(payload.get("editor_backend"), dict) else {}
     curator_integration = payload.get("curator_integration") if isinstance(payload.get("curator_integration"), dict) else {}
     policy = payload.get("autonomous_policy") if isinstance(payload.get("autonomous_policy"), dict) else {}
     lines = [
@@ -1166,8 +1165,7 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         "",
         "Readiness:",
         f"- plugin enabled: {bool(payload.get('enabled'))}",
-        f"- skill agent backend: {'available' if skill_agent_backend_payload.get('available') else 'unavailable'}",
-        f"- memory agent backend: {'available' if memory_agent_backend_payload.get('available') else 'unavailable'}",
+        f"- editor backend: {'available' if editor_backend_payload.get('available') else 'unavailable'}",
         f"- DSPy available: {bool(payload.get('dspy_available'))}",
         "Autonomous policy:",
         f"- calibrate: {'mutation-capable' if policy.get('calibrate_mutation_capable') else 'read-only'}, requires {policy.get('calibrate_requires') or 'unknown'}",
@@ -2015,11 +2013,11 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- Would apply: {int(action_summary.get('apply') or 0)}, Deferred: {int(action_summary.get('defer') or 0)}, Skipped: {int(action_summary.get('skip') or 0)}, Blocked: {int(action_summary.get('block') or 0)}",
         "Skill planner:",
         f"- source: {planner.get('planner_source') or 'unknown'}, status: {planner.get('status') or skill_step.get('status') or 'unknown'}",
-        f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for skill_agent: {int(planner_summary.get('mutate_skill_count') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}",
+        f"- candidates: {int(planner_summary.get('candidate_count') or 0)}, selected for editor: {int(planner_summary.get('mutate_skill_count') or 0)}, skipped: {int(planner_summary.get('skipped') or 0)}, deferred: {int(planner_summary.get('deferred') or 0)}",
         f"- proof: attached candidates {int(planner_quality.get('attached_candidate_count') or 0)}, unmatched evidence {int(planner_quality.get('unmatched_evidence_count') or 0)}, selected with evidence {int(planner_quality.get('selected_with_evidence') or 0)}, action-like skips {int(planner_quality.get('action_like_skips') or 0)}",
         f"- target hints: hint-attached evidence {int(planner_quality.get('hint_attached_evidence_count') or 0)}, hint-attached candidates {int(planner_quality.get('hint_attached_candidate_count') or 0)}, cluster evidence {int(planner_quality.get('cluster_evidence_count') or 0)}",
         f"- evidence strength: strong {strong_count}, medium {medium_count}, weak {weak_count}, weak-only selected {int(planner_quality.get('weak_only_selected_count') or 0)}",
-        f"- skill_agent prompts: tasks {int(planner_quality.get('skill_agent_task_count') or 0)}, max chars {int(editor_prompt_chars.get('max') or 0)}",
+        f"- editor prompts: tasks {int(planner_quality.get('editor_task_count') or planner_quality.get('skill_agent_task_count') or 0)}, max chars {int(editor_prompt_chars.get('max') or 0)}",
         "Prompt sources:",
         "- LLM context: Markdown briefs/reports; program control state: JSON manifests/run records/tool results",
         f"- planner: {planner_prompt.get('overlay_source') or ('runtime overlay' if planner_prompt.get('overlay_active') else 'base')} hash {planner_prompt.get('overlay_hash') or planner_prompt.get('active_hash') or planner_prompt.get('base_hash') or 'unknown'}",
@@ -2110,7 +2108,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     if skill_agent_stop_counts:
         lines.append("- editor stopped/rejected: " + ", ".join(f"{reason} {count}" for reason, count in sorted(skill_agent_stop_counts.items())))
     if selected_preview:
-        lines.append("Selected for skill_agent:")
+        lines.append("Selected for editor:")
         for item in selected_preview:
             lines.append(f"- {item.get('skill')}: {item.get('change_intent') or item.get('rationale') or item.get('reason') or 'planned'}")
     if result.get("artifact_path"):
@@ -2259,8 +2257,7 @@ def _handle_cli(args: argparse.Namespace) -> None:
             "last_event_ts": events[-1].get("ts") if events else None,
             "gepa_evaluator_mode": (config.get("gepa_evaluator") or {}).get("mode") if isinstance(config.get("gepa_evaluator"), dict) else None,
             "dspy_available": importlib.util.find_spec("dspy") is not None,
-            "skill_agent_backend": skill_agent_backend_status(config),
-            "memory_agent_backend": memory_agent_backend_status(config),
+            "editor_backend": editor_backend_status(config),
             "merge_verifier": merge_verifier_status(config),
             "memory_rollback": memory_rollback_status(config),
             "runtime_setup": check_runtime_setup(config),

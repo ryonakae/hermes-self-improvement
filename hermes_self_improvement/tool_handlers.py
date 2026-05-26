@@ -8,7 +8,7 @@ from .autonomous_policy import build_autonomous_operation_policy, summarize_auto
 from .calibration import run_calibration
 from .cli import run_improve, run_pipeline
 from .config import DEFAULT_RETENTION_DAYS, load_config
-from .skill_agent_backend import skill_agent_backend_status
+from .editor_backend import editor_backend_status
 from .observer import _event_path, _load_events
 from .recovery_engine import memory_rollback_status
 from .setup_runtime import check_runtime_setup
@@ -351,7 +351,7 @@ def _handle_self_improvement_status_tool(args: dict[str, Any] | None = None, **_
         "retention_days": int(config.get("retention_days", DEFAULT_RETENTION_DAYS)),
         "event_count_sample": len(events),
         "last_event_ts": events[-1].get("ts") if events else None,
-        "skill_agent_backend": skill_agent_backend_status(config),
+        "editor_backend": editor_backend_status(config),
         "merge_verifier": merge_verifier_status(config),
         "memory_rollback": memory_rollback_status(config),
         "runtime_setup": check_runtime_setup(config),
