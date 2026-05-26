@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 from collections import Counter
@@ -9,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from . import config as si_config
-from .observer import _analysis_events, _redact_text, _sha256_text
+from .observer import _analysis_events, _redact_text, _reports_dir, _sha256_text
 from .target_hints import extract_target_hints
 SCHEMA_NAME = "self_improvement_evidence_pack"
 SCHEMA_VERSION = "1.0"
+CLUSTER_SUMMARY_SCHEMA_NAME = "self_improvement_cluster_summary"
+EVIDENCE_INDEX_SCHEMA_NAME = "self_improvement_evidence_index"
 LIKELY_TARGETS = {"skill", "memory", "evaluator"}
 SECRET_MARKERS = (
     "api_key",
@@ -592,6 +595,388 @@ def _cluster_id(tool_name: str, error_kind: str) -> str:
     safe_tool = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in tool_name).strip("-") or "tool"
     safe_kind = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in error_kind).strip("-") or "error"
     return f"cluster_{safe_tool}_{safe_kind}_{_sha256_text(safe_tool + ':' + safe_kind)[:8]}"
+
+
+def _parse_trace_time(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _cluster_summary_cluster_id(tool_name: str, error_kind: str) -> str:
+    return "c_" + hashlib.sha256(f"{tool_name}:{error_kind}".encode("utf-8")).hexdigest()[:12]
+
+
+def _cluster_target_hints(tool_name: str, error_kind: str) -> list[dict[str, Any]]:
+    tool = str(tool_name or "")
+    kind = str(error_kind or "")
+    candidates: list[dict[str, Any]] = []
+    mapping = [
+        (("patch",), ("validation_failed", "unknown_error", "not_found", "nonzero_exit"), "safe-patch-usage"),
+        (("terminal",), ("timeout",), "timeout-workflow"),
+        (("terminal",), ("permission_denied",), "sandbox-permission-workflow"),
+        (("skill_manage", "skill_view", "skills_list"), ("permission_denied", "timeout", "nonzero_exit", "unknown_error"), "hermes-skill-management"),
+        (("memory", "hindsight_retain", "hindsight_recall", "hindsight_reflect", "honcho_conclude", "mem0_conclude", "brv_curate", "viking_remember", "fact_store", "retaindb_remember", "supermemory_store"), ("timeout", "permission_denied", "memory_unavailable", "nonzero_exit"), "hermes-memory-and-live-context"),
+    ]
+    for tool_names, error_kinds, target_skill in mapping:
+        if tool in tool_names and (kind in error_kinds or not error_kinds):
+            candidates.append({
+                "target_skill": target_skill,
+                "confidence": "medium",
+                "source": "proposal_cluster",
+            })
+            break
+    if not candidates and tool in {"patch", "terminal", "skill_manage"}:
+        fallback = {
+            "patch": "safe-patch-usage",
+            "terminal": "timeout-workflow" if kind == "timeout" else "hermes-runtime-recovery",
+            "skill_manage": "hermes-skill-management",
+        }.get(tool)
+        if fallback:
+            candidates.append({
+                "target_skill": fallback,
+                "confidence": "medium",
+                "source": "proposal_cluster",
+            })
+    return candidates
+
+
+def _trace_error_steps(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    steps = trace.get("steps") if isinstance(trace.get("steps"), list) else []
+    out: list[dict[str, Any]] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        if str(step.get("kind") or "") != "tool":
+            continue
+        if str(step.get("event") or "") and str(step.get("event") or "") != "post_tool_call":
+            continue
+        status = str(step.get("status") or "").lower()
+        if status not in {"error", "warning", "failed", "failure"}:
+            continue
+        out.append(step)
+    return out
+
+
+def _trace_step_preview(step: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "step_index": int(step.get("step_index") or 0),
+        "kind": str(step.get("kind") or ""),
+        "tool_name": str(step.get("tool_name") or ""),
+        "status": str(step.get("status") or ""),
+        "error_kind": step.get("error_kind"),
+        "args_preview": step.get("args_preview") if isinstance(step.get("args_preview"), dict) else step.get("args_preview"),
+        "result_preview": step.get("result_preview"),
+    }
+
+
+def _trace_summary(trace: dict[str, Any]) -> dict[str, Any]:
+    summary = trace.get("summary") if isinstance(trace.get("summary"), dict) else {}
+    steps = trace.get("steps") if isinstance(trace.get("steps"), list) else []
+    tool_count = summary.get("tool_count")
+    if tool_count is None:
+        tool_count = sum(1 for step in steps if isinstance(step, dict) and str(step.get("kind") or "") == "tool")
+    tool_error_count = summary.get("tool_error_count")
+    if tool_error_count is None:
+        tool_error_count = sum(1 for step in steps if isinstance(step, dict) and str(step.get("kind") or "") == "tool" and str(step.get("status") or "").lower() in {"error", "warning", "failed", "failure"})
+    api_call_count = summary.get("api_call_count")
+    if api_call_count is None:
+        api_call_count = sum(1 for step in steps if isinstance(step, dict) and str(step.get("kind") or "") == "api")
+    finish_reasons = summary.get("finish_reasons") if isinstance(summary.get("finish_reasons"), list) else []
+    final_error_kinds = summary.get("final_error_kinds") if isinstance(summary.get("final_error_kinds"), list) else []
+    return {
+        "tool_count": int(tool_count or 0),
+        "tool_error_count": int(tool_error_count or 0),
+        "api_call_count": int(api_call_count or 0),
+        "finish_reasons": list(finish_reasons)[:8],
+        "final_error_kinds": [str(item) for item in final_error_kinds if str(item)][:8],
+    }
+
+
+def _cluster_evidence_sample_kinds(trace: dict[str, Any]) -> list[str]:
+    kinds: list[str] = []
+    summary = trace.get("summary") if isinstance(trace.get("summary"), dict) else {}
+    steps = trace.get("steps") if isinstance(trace.get("steps"), list) else []
+    if any(isinstance(step, dict) and str(step.get("kind") or "") == "tool" and str(step.get("status") or "").lower() in {"ok", "success", "completed"} for step in steps):
+        kinds.append("tool_success_trace")
+    if int(summary.get("api_call_count") or 0) > 0 or any(isinstance(step, dict) and str(step.get("kind") or "") == "api" for step in steps):
+        kinds.append("llm_api_evidence")
+    if summary.get("finish_reasons"):
+        kinds.append("llm_completion")
+    if not kinds:
+        kinds.append("completed_trace")
+    return kinds
+
+
+def build_cluster_summary(traces: list[dict[str, Any]], config: dict[str, Any] | None = None) -> dict[str, Any]:
+    config = config if isinstance(config, dict) else {}
+    trace_items = [trace for trace in traces if isinstance(trace, dict)]
+    trace_count = len(trace_items)
+    parsed_times = [(_parse_trace_time(trace.get("created_at")), trace) for trace in trace_items]
+    valid_times = [item for item in parsed_times if item[0] is not None]
+    earliest = min((item[0] for item in valid_times), default=None)
+    latest = max((item[0] for item in valid_times), default=None)
+
+    clusters: dict[tuple[str, str], dict[str, Any]] = {}
+    total_step_count = 0
+    total_error_count = 0
+    unclustered_count = 0
+    for trace in trace_items:
+        steps = trace.get("steps") if isinstance(trace.get("steps"), list) else []
+        total_step_count += len([step for step in steps if isinstance(step, dict)])
+        trace_error_steps = []
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            if str(step.get("kind") or "") != "tool":
+                continue
+            if str(step.get("event") or "") and str(step.get("event") or "") != "post_tool_call":
+                continue
+            status = str(step.get("status") or "").lower()
+            if status not in {"error", "warning", "failed", "failure"}:
+                continue
+            total_error_count += 1
+            trace_error_steps.append(step)
+            tool_name = str(step.get("tool_name") or "unknown")
+            error_kind = str(step.get("error_kind") or "unknown")
+            key = (tool_name, error_kind)
+            bucket = clusters.setdefault(key, {
+                "cluster_id": _cluster_summary_cluster_id(tool_name, error_kind),
+                "group_key": {"tool_name": tool_name, "error_kind": error_kind},
+                "count": 0,
+                "traces_affected": [],
+                "representative_trace_ids": [],
+                "severity": "low",
+                "rate": 0.0,
+                "error_kinds": [],
+                "tools": [],
+                "outcome_summary": {"completed": 0, "failed": 0},
+                "target_hints": _cluster_target_hints(tool_name, error_kind),
+                "_trace_refs": [],
+            })
+            bucket["count"] += 1
+            bucket["_trace_refs"].append(trace)
+        if not trace_error_steps:
+            unclustered_count += 1
+
+    cluster_list = []
+    for bucket in clusters.values():
+        trace_refs = bucket.pop("_trace_refs", [])
+        trace_order = sorted(
+            ((str(trace.get("created_at") or ""), str(trace.get("turn_id") or ""), trace) for trace in trace_refs),
+            key=lambda item: (item[0], item[1]),
+        )
+        affected_ids = []
+        for _created_at, _turn_id, trace in trace_order:
+            turn_id = str(trace.get("turn_id") or "")
+            if turn_id and turn_id not in affected_ids:
+                affected_ids.append(turn_id)
+        bucket["traces_affected"] = affected_ids
+        bucket["representative_trace_ids"] = affected_ids[:3]
+        bucket["error_kinds"] = sorted({str(step.get("error_kind") or "unknown") for trace in trace_refs for step in _trace_error_steps(trace) if str(step.get("tool_name") or "unknown") == bucket["group_key"]["tool_name"] and str(step.get("error_kind") or "unknown") == bucket["group_key"]["error_kind"]}) or [bucket["group_key"]["error_kind"]]
+        bucket["tools"] = sorted({str(step.get("tool_name") or "unknown") for trace in trace_refs for step in _trace_error_steps(trace) if str(step.get("tool_name") or "unknown") == bucket["group_key"]["tool_name"]}) or [bucket["group_key"]["tool_name"]]
+        completed = sum(1 for trace in trace_refs if str(trace.get("turn_status") or "") == "completed")
+        failed = sum(1 for trace in trace_refs if str(trace.get("turn_status") or "") not in {"", "completed"})
+        bucket["outcome_summary"] = {"completed": completed, "failed": failed}
+        rate = bucket["count"] / max(total_step_count, 1)
+        bucket["rate"] = rate
+        bucket["severity"] = "low" if rate < 0.1 else "medium" if rate < 0.4 else "high"
+        cluster_list.append(bucket)
+
+    cluster_list.sort(key=lambda item: (-int(item.get("count") or 0), str(item.get("group_key", {}).get("tool_name") or ""), str(item.get("group_key", {}).get("error_kind") or "")))
+    cluster_ids_sorted = sorted(str(item.get("cluster_id") or "") for item in cluster_list)
+    summary_basis = "".join(cluster_ids_sorted) + str(unclustered_count) + str(total_step_count)
+    summary_id = "cs_" + hashlib.sha256(summary_basis.encode("utf-8")).hexdigest()[:12]
+    return {
+        "schema_name": "self_improvement_cluster_summary",
+        "schema_version": "1.0",
+        "summary_id": summary_id,
+        "generated_at": _iso(datetime.now(timezone.utc)),
+        "trace_count": trace_count,
+        "trace_range": {
+            "earliest": _iso(earliest) if earliest else None,
+            "latest": _iso(latest) if latest else None,
+        },
+        "clusters": [
+            {
+                "cluster_id": item["cluster_id"],
+                "group_key": item["group_key"],
+                "count": item["count"],
+                "traces_affected": item["traces_affected"],
+                "representative_trace_ids": item["representative_trace_ids"],
+                "severity": item["severity"],
+                "rate": item["rate"],
+                "error_kinds": item["error_kinds"],
+                "tools": item["tools"],
+                "outcome_summary": item["outcome_summary"],
+                "target_hints": item["target_hints"],
+            }
+            for item in cluster_list
+        ],
+        "unclustered_count": unclustered_count,
+        "total_step_count": total_step_count,
+        "total_error_count": total_error_count,
+    }
+
+
+def build_evidence_index(cluster_summary: dict[str, Any], config: dict[str, Any] | None = None) -> dict[str, Any]:
+    config = config if isinstance(config, dict) else {}
+    clusters = cluster_summary.get("clusters") if isinstance(cluster_summary.get("clusters"), list) else []
+    entries = []
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        hints = cluster.get("target_hints") if isinstance(cluster.get("target_hints"), list) else []
+        first_hint = next((hint for hint in hints if isinstance(hint, dict) and hint.get("target_skill")), {})
+        entries.append({
+            "cluster_id": cluster.get("cluster_id"),
+            "group_key": cluster.get("group_key") if isinstance(cluster.get("group_key"), dict) else {"tool_name": "", "error_kind": ""},
+            "count": int(cluster.get("count") or 0),
+            "severity": str(cluster.get("severity") or "low"),
+            "target_skill": first_hint.get("target_skill") if isinstance(first_hint, dict) else None,
+            "target_confidence": first_hint.get("confidence") if isinstance(first_hint, dict) else None,
+            "has_detail": int(cluster.get("count") or 0) >= 1,
+        })
+    unclustered_count = int(cluster_summary.get("unclustered_count") or 0)
+    total_evidence_count = sum(int(cluster.get("count") or 0) for cluster in clusters if isinstance(cluster, dict)) + unclustered_count
+    sample_kinds: list[str] = []
+    if unclustered_count:
+        sample_kinds.append("completed_trace")
+        if cluster_summary.get("trace_count") and unclustered_count < int(cluster_summary.get("trace_count") or 0):
+            sample_kinds.append("tool_success_trace")
+    return {
+        "schema_name": "self_improvement_evidence_index",
+        "schema_version": "1.0",
+        "generated_at": _iso(datetime.now(timezone.utc)),
+        "source_summary_id": str(cluster_summary.get("summary_id") or ""),
+        "cluster_count": len(entries),
+        "total_evidence_count": total_evidence_count,
+        "entries": entries,
+        "unclustered_summary": {
+            "count": unclustered_count,
+            "sample_kinds": sample_kinds[:6],
+        },
+    }
+
+
+def build_evidence_detail(cluster_id: str, cluster_summary: dict[str, Any], traces: list[dict[str, Any]], config: dict[str, Any] | None = None) -> dict[str, Any]:
+    config = config if isinstance(config, dict) else {}
+    clusters = cluster_summary.get("clusters") if isinstance(cluster_summary.get("clusters"), list) else []
+    cluster = next((item for item in clusters if isinstance(item, dict) and str(item.get("cluster_id") or "") == str(cluster_id or "")), None)
+    if not cluster:
+        return {
+            "schema_name": "self_improvement_evidence_detail",
+            "schema_version": "1.0",
+            "generated_at": _iso(datetime.now(timezone.utc)),
+            "cluster_id": str(cluster_id or ""),
+            "source_summary_id": str(cluster_summary.get("summary_id") or ""),
+            "group_key": {},
+            "count": 0,
+            "traces": [],
+            "representative_trace_id": "",
+            "target_hints": [],
+        }
+    group_key = cluster.get("group_key") if isinstance(cluster.get("group_key"), dict) else {"tool_name": "", "error_kind": ""}
+    tool_name = str(group_key.get("tool_name") or "")
+    error_kind = str(group_key.get("error_kind") or "")
+    matching: list[dict[str, Any]] = []
+    for trace in traces:
+        if not isinstance(trace, dict):
+            continue
+        if str(trace.get("turn_id") or "") not in set(str(item) for item in cluster.get("traces_affected") or []):
+            continue
+        steps = trace.get("steps") if isinstance(trace.get("steps"), list) else []
+        matching_steps = []
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            if str(step.get("kind") or "") != "tool":
+                continue
+            if str(step.get("event") or "") and str(step.get("event") or "") != "post_tool_call":
+                continue
+            if str(step.get("tool_name") or "") != tool_name:
+                continue
+            if str(step.get("error_kind") or "") != error_kind:
+                continue
+            if str(step.get("status") or "").lower() not in {"error", "warning", "failed", "failure"}:
+                continue
+            matching_steps.append(step)
+        if not matching_steps:
+            continue
+        matching.append(trace)
+
+    matching.sort(key=lambda trace: (str(trace.get("created_at") or ""), str(trace.get("turn_id") or "")))
+    max_traces = int(config.get("max_detail_traces") or 5)
+    max_steps = int(config.get("max_detail_steps") or 10)
+    detail_traces = []
+    for trace in matching[:max_traces]:
+        steps = trace.get("steps") if isinstance(trace.get("steps"), list) else []
+        compact_steps = []
+        for step in steps[:max_steps]:
+            if not isinstance(step, dict):
+                continue
+            compact_steps.append(_trace_step_preview(step))
+        detail_traces.append({
+            "turn_id": str(trace.get("turn_id") or ""),
+            "session_id": str(trace.get("session_id") or ""),
+            "platform": str(trace.get("platform") or ""),
+            "created_at": str(trace.get("created_at") or ""),
+            "steps": compact_steps,
+            "summary": _trace_summary(trace),
+        })
+    rep_ids = cluster.get("representative_trace_ids") if isinstance(cluster.get("representative_trace_ids"), list) else []
+    return {
+        "schema_name": "self_improvement_evidence_detail",
+        "schema_version": "1.0",
+        "generated_at": _iso(datetime.now(timezone.utc)),
+        "cluster_id": str(cluster_id or ""),
+        "source_summary_id": str(cluster_summary.get("summary_id") or ""),
+        "group_key": group_key,
+        "count": int(cluster.get("count") or 0),
+        "traces": detail_traces,
+        "representative_trace_id": str(rep_ids[0]) if rep_ids else "",
+        "target_hints": cluster.get("target_hints") if isinstance(cluster.get("target_hints"), list) else [],
+    }
+
+
+def cluster_artifact_root(config: dict[str, Any] | None) -> Path:
+    return _reports_dir(config if isinstance(config, dict) else {}) / "clusters"
+
+
+def _artifact_timestamp(payload: dict[str, Any], *, field: str = "generated_at") -> str:
+    parsed = _parse_trace_time(payload.get(field))
+    if parsed is None:
+        parsed = datetime.now(timezone.utc)
+    return parsed.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _write_json_artifact(path: Path, payload: dict[str, Any]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    tmp_path.replace(path)
+    return path
+
+
+def write_cluster_summary(summary: dict[str, Any], config: dict[str, Any] | None = None) -> Path:
+    root = cluster_artifact_root(config)
+    path = root / f"cluster-summary-{_artifact_timestamp(summary)}.json"
+    return _write_json_artifact(path, summary)
+
+
+def write_evidence_index(index: dict[str, Any], config: dict[str, Any] | None = None) -> Path:
+    root = cluster_artifact_root(config)
+    path = root / f"evidence-index-{_artifact_timestamp(index)}.json"
+    return _write_json_artifact(path, index)
 
 
 def _cluster_findings_from_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:

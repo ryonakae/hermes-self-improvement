@@ -27,7 +27,14 @@ from .planner import (
 )
 from .curator_telemetry import load_curator_telemetry, preview_curator_lifecycle
 from .diagnostic_signals import build_diagnostic_signals, normalize_report_diagnostic_signals
-from .evidence import build_evidence_pack, write_evidence_pack
+from .evidence import (
+    build_cluster_summary,
+    build_evidence_index,
+    build_evidence_pack,
+    write_cluster_summary,
+    write_evidence_index,
+    write_evidence_pack,
+)
 from .episodes import record_run_episodes
 from .editor import run_editor_task
 from .editor_backend import build_editor_backend, editor_backend_status
@@ -44,7 +51,7 @@ from .runner_steps import (
     run_skill_improvement_step,
 )
 from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
-from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json, _turn_trace_artifact_summary
+from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json, _turn_trace_artifact_summary, _turn_trace_root
 from .prompt_overlays import DEFAULT_PROMPT_SEED_ROLES
 from .recovery_engine import memory_rollback_status
 from .scoring import score_proposals_impl
@@ -213,6 +220,56 @@ def _load_report_json(path: Path) -> dict[str, Any] | None:
     except Exception:
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def _parse_artifact_time(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _artifact_summary(root: Path, *, pattern: str = "*.json") -> dict[str, Any]:
+    paths = sorted((path for path in root.glob(pattern) if path.is_file()), key=lambda path: path.stat().st_mtime) if root.exists() else []
+    latest = paths[-1] if paths else None
+    return {
+        "root": str(root),
+        "count": len(paths),
+        "latest_path": str(latest) if latest else None,
+    }
+
+
+def _relative_artifact_path(path: Path | None, *, base: Path) -> str | None:
+    if path is None:
+        return None
+    try:
+        return str(path.relative_to(base))
+    except Exception:
+        return str(path)
+
+
+def _load_turn_traces_for_window(*, config: dict[str, Any], since: datetime, until: datetime) -> list[dict[str, Any]]:
+    root = _turn_trace_root(config)
+    if not root.exists():
+        return []
+    traces: list[dict[str, Any]] = []
+    for path in sorted((path for path in root.glob("*/*.json") if path.is_file()), key=lambda path: path.stat().st_mtime):
+        payload = _load_report_json(path)
+        if not payload or payload.get("schema_name") != "self_improvement_turn_trace":
+            continue
+        created_at = _parse_artifact_time(payload.get("created_at"))
+        if created_at is not None and (created_at < since or created_at > until):
+            continue
+        traces.append(payload)
+    return traces
 
 
 def _summarize_run_skill_lifecycle(payload: dict[str, Any]) -> dict[str, Any]:
@@ -956,6 +1013,11 @@ def run_improve(
     active_references = build_active_skill_references(config, candidate_names=candidate_names)
     evidence_pack = attach_active_skill_references(evidence_pack, active_references)
     evidence_path = write_evidence_pack(evidence_pack, _reports_dir(config))
+    turn_traces = _load_turn_traces_for_window(config=config, since=since, until=until)
+    cluster_summary = build_cluster_summary(turn_traces, config=config)
+    cluster_summary_path = write_cluster_summary(cluster_summary, config=config)
+    evidence_index = build_evidence_index(cluster_summary, config=config)
+    evidence_index_path = write_evidence_index(evidence_index, config=config)
     pipeline = run_pipeline(
         config,
         since_hours=int(since_hours),
@@ -1009,6 +1071,8 @@ def run_improve(
             "reference_skill_coverage": evidence_pack.get("reference_skill_coverage"),
             "curator_telemetry_summary": evidence_pack.get("curator_telemetry_summary"),
         },
+        "cluster_summary_path": str(cluster_summary_path),
+        "evidence_index_path": str(evidence_index_path),
         **({"source_report": source_report_context} if source_report_context else {}),
         "step_decisions": step_decisions_payload,
         "action_summary": action_summary,
@@ -1204,6 +1268,8 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         f"- last event: {payload.get('last_event_ts') or 'none'}",
         f"- turn traces: {int(trace_artifacts.get('count') or 0)}",
         f"- latest trace: {trace_artifacts.get('latest_path') or 'none'}",
+        f"- cluster summaries: {int((payload.get('cluster_artifacts') or {}).get('count') or 0)} / latest: {(payload.get('cluster_artifacts') or {}).get('latest_path') or 'none'}",
+        f"- evidence indexes: {int((payload.get('evidence_index_artifacts') or {}).get('count') or 0)} / latest: {(payload.get('evidence_index_artifacts') or {}).get('latest_path') or 'none'}",
         f"- last run: {payload.get('last_run_artifact') or 'none'}",
         "Curator integration:",
         f"- skill telemetry source: {curator_integration.get('skill_telemetry_source') or 'unknown'}",
@@ -2275,6 +2341,24 @@ def _handle_cli(args: argparse.Namespace) -> None:
             },
             "last_run_artifact": str(_latest_run_artifact(config)) if _latest_run_artifact(config) else None,
             "trace_artifacts": _turn_trace_artifact_summary(config),
+            "cluster_artifacts": {
+                **_artifact_summary(_reports_dir(config) / "clusters", pattern="cluster-summary-*.json"),
+                "latest_path": _relative_artifact_path(
+                    Path(_artifact_summary(_reports_dir(config) / "clusters", pattern="cluster-summary-*.json")["latest_path"])
+                    if _artifact_summary(_reports_dir(config) / "clusters", pattern="cluster-summary-*.json")["latest_path"]
+                    else None,
+                    base=_reports_dir(config),
+                ),
+            },
+            "evidence_index_artifacts": {
+                **_artifact_summary(_reports_dir(config) / "clusters", pattern="evidence-index-*.json"),
+                "latest_path": _relative_artifact_path(
+                    Path(_artifact_summary(_reports_dir(config) / "clusters", pattern="evidence-index-*.json")["latest_path"])
+                    if _artifact_summary(_reports_dir(config) / "clusters", pattern="evidence-index-*.json")["latest_path"]
+                    else None,
+                    base=_reports_dir(config),
+                ),
+            },
             "curator_integration": {
                 "skill_telemetry_source": "Hermes Curator",
                 "hook_mode": "observation_only",
