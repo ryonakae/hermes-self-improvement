@@ -251,3 +251,60 @@ def render_calibration_context_markdown(run_result: dict[str, Any], *, max_items
         "- Keep Markdown as context and structured artifacts as program-owned control state.",
     ])
     return "\n".join(lines).rstrip() + "\n"
+
+
+def render_cluster_evidence_section(cluster_evidence: dict[str, Any]) -> str:
+    """Render cluster evidence as a Markdown section for the planner prompt."""
+    if not cluster_evidence or not isinstance(cluster_evidence, dict):
+        return ""
+    entries = cluster_evidence.get("entries") if isinstance(cluster_evidence.get("entries"), list) else []
+    detail_entries = cluster_evidence.get("detail_entries") if isinstance(cluster_evidence.get("detail_entries"), list) else []
+    if not entries and not detail_entries:
+        return ""
+    lines = [
+        "## Cluster evidence (from turn-trace analysis)",
+        "",
+        f"- cluster_count: {cluster_evidence.get('cluster_count', 0)}",
+        f"- total_evidence_count: {cluster_evidence.get('total_evidence_count', 0)}",
+        f"- unclustered_count: {cluster_evidence.get('unclustered_count', 0)}",
+        "",
+        "### Cluster index",
+        "",
+        "| severity | tool | error_kind | count | target_skill |",
+        "|----------|------|-------------|-------|--------------|",
+    ]
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        gk = entry.get("group_key") if isinstance(entry.get("group_key"), dict) else {}
+        lines.append(
+            f"| {entry.get('severity', '?')} "
+            f"| {gk.get('tool_name', '?')} "
+            f"| {gk.get('error_kind', '?')} "
+            f"| {entry.get('count', 0)} "
+            f"| {entry.get('target_skill') or '-'} |"
+        )
+    if detail_entries:
+        lines.extend(["", "### Cluster detail (high/medium severity)"])
+        for detail in detail_entries:
+            if not isinstance(detail, dict):
+                continue
+            gk = detail.get("group_key") if isinstance(detail.get("group_key"), dict) else {}
+            trace_count = len(detail.get("traces") or [])
+            lines.extend([
+                f"**Cluster {detail.get('cluster_id', '?')}** "
+                f"({gk.get('tool_name', '?')}/{gk.get('error_kind', '?')}, "
+                f"severity={detail.get('severity', '?')}, count={detail.get('count', 0)}, "
+                f"traces_shown={trace_count}):",
+            ])
+            for trace in (detail.get("traces") or [])[:3]:
+                if not isinstance(trace, dict):
+                    continue
+                steps_summary = "; ".join(
+                    f"{s.get('tool_name', '?')}->{s.get('error_kind', s.get('status', '?'))}"
+                    for s in (trace.get("steps") or [])[:3]
+                    if isinstance(s, dict)
+                ) or "n/a"
+                lines.append(f"  - {trace.get('turn_id', '?')} ({trace.get('platform', '?')}): {steps_summary}")
+    lines.extend(["", ""])
+    return "\n".join(lines)

@@ -127,6 +127,8 @@ Detailed execution plan:
 
 **Objective:** Replace the current event/window-derived planner handoff with the new evidence-index/detail model.
 
+**Status:** ✅ Complete (2026-05-26). Planner now accepts cluster_summary/evidence_index/turn_traces, renders cluster evidence as Markdown in planner prompt, skill improvement step wires cluster artifacts through.
+
 **Scope:**
 - Change planner digest builder to read the new evidence index.
 - Add bounded detail-view selection for high-value clusters.

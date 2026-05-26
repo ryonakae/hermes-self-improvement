@@ -9,7 +9,7 @@
 
 **Goal:** Make the planner LLM read the evidence index first and drill into details only for selected clusters, replacing the current event-window-first handoff.
 
-**Status — 2026-05-26:** Not started. Design complete, ready for TDD.
+**Status — 2026-05-26:** ✅ Complete. PlannerRuntimeDigest accepts cluster artifacts, cluster_evidence section in digest, planner prompt renders cluster evidence as Markdown, skill improvement step wired. 825 tests passing.
 
 **Architecture:** The current planner path is `events.jsonl → build_evidence_pack → build_planner_runtime_digest → render_planner_messages → LLM`. The new path adds `cluster_summary → evidence_index → evidence_detail` as the planner's primary context source, while keeping the evidence pack available as a compatibility/audit layer.
 

@@ -4,7 +4,7 @@ import hashlib
 import json
 from typing import Any
 
-from .markdown_artifacts import render_candidate_markdown, render_evidence_markdown
+from .markdown_artifacts import render_evidence_markdown, render_candidate_markdown, render_cluster_evidence_section
 
 PROMPT_SCHEMA_VERSION = "1.0"
 
@@ -247,6 +247,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
         render_evidence_markdown(digest, max_items=20),
         _render_knowledge_maintenance_section(digest),
         *([quality_section] if quality_section else []),
+        render_cluster_evidence_section(digest.get("cluster_evidence") or {}),
         "## Planner candidate briefs",
         *(candidate_sections or ["- n/a\n"]),
         "## Program-owned digest summary",
