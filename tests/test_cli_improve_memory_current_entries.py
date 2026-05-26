@@ -100,7 +100,7 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     monkeypatch.setattr(cli, "write_evidence_pack", lambda evidence_pack, reports_dir: evidence_path)
     monkeypatch.setattr(cli, "_reports_dir", lambda config: tmp_path)
     monkeypatch.setattr(cli, "run_pipeline", lambda config, *, since_hours, write_report: {"proposals": []})
-    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda *, evidence_pack, config, mutate: {"changed": 0, "changed_skills": []})
+    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda *, evidence_pack, config, mutate, **kwargs: {"changed": 0, "changed_skills": []})
     monkeypatch.setattr(cli, "build_editor_backend", lambda config: FakeBackend())
     monkeypatch.setattr(cli, "_write_run_artifact", lambda payload, config: artifact_path)
     monkeypatch.setattr(cli, "record_run_episodes", lambda *, config, run_result: {"recorded": 0})

@@ -1062,6 +1062,9 @@ def run_skill_improvement_step(
     evidence_pack: dict[str, Any],
     config: dict[str, Any] | None = None,
     mutate: bool = False,
+    cluster_summary: dict[str, Any] | None = None,
+    evidence_index: dict[str, Any] | None = None,
+    turn_traces: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     candidates = evidence_pack.get("skill_candidates") if isinstance(evidence_pack.get("skill_candidates"), list) else []
     candidate_by_name = {str(item.get("name") or ""): item for item in candidates if isinstance(item, dict) and str(item.get("name") or "")}
@@ -1090,7 +1093,12 @@ def run_skill_improvement_step(
     )
     target_resolutions = run_planner_targets(target_resolution_digest, config=config)
     evidence_pack = {**evidence_pack, "target_resolutions": target_resolutions}
-    digest = build_planner_runtime_digest(evidence_pack)
+    digest = build_planner_runtime_digest(
+        evidence_pack,
+        cluster_summary=cluster_summary,
+        evidence_index=evidence_index,
+        turn_traces=turn_traces,
+    )
     planner = run_planner_runtime(digest, config=config)
     all_evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
     evidence_by_id = {str(item.get("id") or ""): item for item in all_evidence if isinstance(item, dict)}

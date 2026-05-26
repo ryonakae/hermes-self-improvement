@@ -1025,7 +1025,14 @@ def run_improve(
     )
     proposals = pipeline.get("proposals") if isinstance(pipeline.get("proposals"), list) else []
     decisions_summary = _summarize_runner_decisions(proposals)
-    skill_step = run_skill_improvement_step(evidence_pack=evidence_pack, config=config, mutate=mutate)
+    skill_step = run_skill_improvement_step(
+        evidence_pack=evidence_pack,
+        config=config,
+        mutate=mutate,
+        cluster_summary=cluster_summary,
+        evidence_index=evidence_index,
+        turn_traces=turn_traces,
+    )
     memory_config = dict(config) if isinstance(config, dict) else {}
     memory_config["_memory_current_entries"] = existing_memories
     memory_config.setdefault("_hermes_home", str(get_hermes_home()))
@@ -1073,6 +1080,13 @@ def run_improve(
         },
         "cluster_summary_path": str(cluster_summary_path),
         "evidence_index_path": str(evidence_index_path),
+        "cluster_evidence": (
+            skill_step.get("cluster_evidence")
+            if isinstance(skill_step.get("cluster_evidence"), dict)
+            else skill_step.get("planner_digest", {}).get("cluster_evidence")
+            if isinstance(skill_step.get("planner_digest"), dict)
+            else None
+        ),
         **({"source_report": source_report_context} if source_report_context else {}),
         "step_decisions": step_decisions_payload,
         "action_summary": action_summary,

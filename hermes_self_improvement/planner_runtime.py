@@ -5,7 +5,13 @@ import re
 from typing import Any
 
 from .autonomous_loop import normalize_autonomous_decision
-from .evidence import compute_coverage_fit_for_name, filter_llm_skill_candidates, resolve_coverage_alias, _canonical_skill_name_for_duplicate
+from .evidence import (
+    build_evidence_detail,
+    compute_coverage_fit_for_name,
+    filter_llm_skill_candidates,
+    resolve_coverage_alias,
+    _canonical_skill_name_for_duplicate,
+)
 from .observer import _redact_text
 from .llm_utils import _coerce_int, _extract_json_object
 from .constrained_agent import run_constrained_role_agent
@@ -181,7 +187,12 @@ def _coverage_adjusted_maintenance_affordance(affordance: dict[str, Any], covera
     return adjusted
 
 
-def build_planner_runtime_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+def build_planner_runtime_digest(
+    evidence_pack: dict[str, Any],
+    cluster_summary: dict[str, Any] | None = None,
+    evidence_index: dict[str, Any] | None = None,
+    turn_traces: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
     skill_ids = [str(item) for item in views.get("skill", [])]
     skill_evidence = _evidence_by_ids(evidence_pack, skill_ids)
@@ -435,6 +446,67 @@ def build_planner_runtime_digest(evidence_pack: dict[str, Any]) -> dict[str, Any
             "New skill creation is one option, not the default; prefer patch/merge/archive when evidence supports it.",
         ],
     }
+    cluster_evidence: dict[str, Any] | None = None
+    if cluster_summary is not None:
+        cluster_source: dict[str, Any] = cluster_summary if isinstance(cluster_summary, dict) else {}
+        index_source: dict[str, Any] = evidence_index if isinstance(evidence_index, dict) else {}
+        clusters_raw: Any = cluster_source.get("clusters")
+        clusters: list[dict[str, Any]] = clusters_raw if isinstance(clusters_raw, list) else []
+        index_entries_raw: Any = index_source.get("entries")
+        index_entries: list[dict[str, Any]] = index_entries_raw if isinstance(index_entries_raw, list) else []
+        copied_entries: list[dict[str, Any]] = []
+        entries_by_cluster_id: dict[str, dict[str, Any]] = {}
+        for entry in index_entries:
+            if not isinstance(entry, dict):
+                continue
+            copied_entry = dict(entry)
+            cluster_id = str(copied_entry.get("cluster_id") or "")
+            if cluster_id:
+                entries_by_cluster_id[cluster_id] = copied_entry
+            copied_entries.append(copied_entry)
+
+        selected_clusters = [
+            cluster
+            for cluster in clusters
+            if isinstance(cluster, dict) and str(cluster.get("severity") or "") in {"high", "medium"}
+        ]
+        selected_clusters.sort(
+            key=lambda item: (
+                0 if str(item.get("severity") or "") == "high" else 1,
+                -int(item.get("count") or 0),
+                str(item.get("cluster_id") or ""),
+            )
+        )
+        detail_entries: list[dict[str, Any]] = []
+        for cluster in selected_clusters[:3]:
+            cluster_id = str(cluster.get("cluster_id") or "")
+            if not cluster_id:
+                continue
+            evidence_detail = build_evidence_detail(
+                cluster_id,
+                cluster_source,
+                turn_traces or [],
+                config={"max_detail_traces": 5, "max_detail_steps": 10},
+            )
+            detail_entries.append({
+                "cluster_id": cluster_id,
+                "group_key": cluster.get("group_key") if isinstance(cluster.get("group_key"), dict) else {"tool_name": "", "error_kind": ""},
+                "count": int(cluster.get("count") or 0),
+                "severity": str(cluster.get("severity") or "low"),
+                "traces": evidence_detail.get("traces") if isinstance(evidence_detail, dict) else [],
+            })
+            if cluster_id in entries_by_cluster_id:
+                entries_by_cluster_id[cluster_id]["detail_data"] = evidence_detail
+        if copied_entries:
+            copied_entries = [entries_by_cluster_id.get(str(entry.get("cluster_id") or ""), entry) for entry in copied_entries]
+        cluster_evidence = {
+            "cluster_count": int(index_source.get("cluster_count") or len(copied_entries)),
+            "total_evidence_count": int(index_source.get("total_evidence_count") or int(cluster_source.get("total_error_count") or 0) + int(cluster_source.get("unclustered_count") or 0)),
+            "source_summary_id": str(index_source.get("source_summary_id") or cluster_source.get("summary_id") or ""),
+            "entries": copied_entries,
+            "detail_entries": detail_entries,
+            "unclustered_count": int(cluster_source.get("unclustered_count") or 0),
+        }
     return {
         "schema_name": "self_improvement_skill_planner_digest",
         "schema_version": "1.0",
@@ -455,6 +527,7 @@ def build_planner_runtime_digest(evidence_pack: dict[str, Any]) -> dict[str, Any
             "defer_for": [],
             "defer_for": ["ambiguous", "destructive", "sensitive", "target_uncertain", "delete", "merge"],
         },
+        **({"cluster_evidence": cluster_evidence} if cluster_evidence is not None else {}),
     }
 
 
