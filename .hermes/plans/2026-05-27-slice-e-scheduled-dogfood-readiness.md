@@ -9,7 +9,13 @@
 
 **Goal:** Confirm the D4 readiness handoff under scheduled runtime conditions, then write the final readiness report for this redesign pass.
 
-**Status — 2026-05-27:** Planned / waiting for scheduled dogfood. Slice D D1/D2/D3/D4 are implemented. Current readiness decision is `acceptable_with_scheduled_dogfood`.
+**Status — 2026-05-27:** Planned / partially observed via manual dogfood. Slice D D1/D2/D3/D4 are implemented. Current readiness decision is `acceptable_with_scheduled_dogfood`, but the manual calibrate run showed cron-timeout risk.
+
+**Manual dogfood observation — 2026-05-27 evening:**
+- `self-improvement-calibrate.sh` was run directly in the plugin workdir and completed successfully, but only after exceeding the old 600s cron timeout budget (observed still running past 630s; final completion notification arrived later with exit code 0).
+- Calibrate result: `Calibration: partial_update`; prompt overlay set promoted; evaluator skipped as `candidate_not_concrete`; candidate-set artifact `/Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260527T111022Z-3e2a0ec82de3.json`.
+- `self-improvement-maintenance.sh` was run directly and completed successfully, writing `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T111533Z.json`.
+- Manual maintenance artifact included `skip_class_counts` and showed `actionability_loss 0` (`benign 45`, `needs_follow_up 2`).
 
 ---
 
@@ -18,8 +24,8 @@
 **Objective:** Prove the new cron split works in real scheduler execution.
 
 Expected schedule:
-- `self-improvement-calibrate`: daily `03:00`, local delivery, no-agent script.
-- `self-improvement-autonomous-maintenance`: daily `04:00`, local delivery, no-agent script.
+- `self-improvement-calibrate`: daily `03:00`, local delivery, no-agent script, current global script timeout `1200s`.
+- `self-improvement-autonomous-maintenance`: daily `04:00`, local delivery, no-agent script, current global script timeout `1200s`.
 
 Acceptance criteria:
 - Calibrate completes or exits with a safe `no_improvement` result; active prompt overlays remain readable.

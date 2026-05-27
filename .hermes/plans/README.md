@@ -122,7 +122,7 @@ The latest completed implementation plan is:
 
 - `2026-05-13-self-improvement-cron-no-agent.md`
   - **Status:** implemented / awaiting next 04:00 full scheduled run.
-  - Converts `self-improvement-autonomous-maintenance` (`1d8bff2395e2`) from an outer agent-prompt cron into a script-only `no_agent` job using `~/.hermes/scripts/self-improvement-maintenance.sh` and the canonical `hermes self-improvement ...` commands. Sets `cron.script_timeout_seconds: 3600`; read-only `status` / `report` smoke passed. The mutating full script was intentionally not run manually.
+  - Converts `self-improvement-autonomous-maintenance` (`1d8bff2395e2`) from an outer agent-prompt cron into a script-only `no_agent` job using `~/.hermes/scripts/self-improvement-maintenance.sh` and the canonical `hermes self-improvement ...` commands. Current cron runtime uses `cron.script_timeout_seconds: 1200`; manual dogfood later confirmed maintenance fits while calibrate can exceed the old 600s budget. Read-only `status` / `report` smoke passed, and later manual full-script dogfood wrote `run-20260527T111533Z.json` successfully.
 
 The previous completed implementation plan is:
 

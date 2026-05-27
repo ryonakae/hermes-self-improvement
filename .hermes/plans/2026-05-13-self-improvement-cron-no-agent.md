@@ -38,8 +38,9 @@ Out of scope:
    - Print compact section headers and run the four canonical commands.
    - Do not print secrets or full JSON payloads.
 2. Make it executable.
-3. Configure `cron.script_timeout_seconds` to `3600` unless an equal-or-larger value already exists.
+3. Configure `cron.script_timeout_seconds` to at least `1200` for the current split self-improvement cron setup.
    - This matters because no-agent script jobs use the script timeout, not `HERMES_CRON_TIMEOUT`.
+   - Historical note: an earlier 3600s value was used during the first no-agent conversion, but current manual dogfood justified a smaller explicit bound: maintenance fits, while calibrate can exceed the old 600s budget.
 4. Update existing cron job `1d8bff2395e2` with:
    - `script: self-improvement-maintenance.sh`
    - `no_agent: true`
@@ -65,7 +66,7 @@ Completed on 2026-05-13.
 
 - Created `~/.hermes/scripts/self-improvement-maintenance.sh`.
 - Set executable bit and verified shell syntax with `bash -n`.
-- Set `cron.script_timeout_seconds: 3600` in `~/.hermes/config.yaml`.
+- Set `cron.script_timeout_seconds: 1200` in `~/.hermes/config.yaml`.
 - Updated cron job `1d8bff2395e2`:
   - `script: self-improvement-maintenance.sh`
   - `no_agent: true`
