@@ -91,7 +91,9 @@ hermes curator status
 最初は `--dry-run` で動作を確認してから cron に入れます。
 日次 maintenance は LLM agent を挟まず、`--no-agent` の script-only job として `hermes self-improvement ...` を直接実行するのが安定です。
 
-`~/.hermes/scripts/self-improvement-maintenance.sh` に薄い wrapper を置きます。
+`~/.hermes/scripts/self-improvement-maintenance.sh` に薄い wrapper を置きます。重い `calibrate` は maintenance と分離し、別の script/job にしておく方が運用しやすいです。
+
+`~/.hermes/scripts/self-improvement-maintenance.sh`
 
 ```bash
 #!/usr/bin/env bash
@@ -99,15 +101,30 @@ set -euo pipefail
 
 cd "$HOME/.hermes/plugins/hermes-self-improvement"
 hermes self-improvement status >/dev/null
-hermes self-improvement calibrate
 hermes self-improvement improve
 hermes self-improvement report --since-hours 24
 ```
 
-cron job はこの script を `--no-agent` で登録します。`calibrate` は GEPA / overlay 評価で数分かかることがあるため、Hermes cron の script timeout は 600 秒にしておきます。stdout がそのまま local output に保存されるため、script 側の出力は短い要約とアーティファクトのパスだけにしてください。
+cron job はこの script を `--no-agent` で登録します。manual dogfood では `improve + report` の maintenance は正常終了し、別実行の `calibrate` は旧 600 秒 budget を超えました。いまは `calibrate` を別 job に分離し、Hermes cron の global `script_timeout_seconds` は 1200 秒にしてあります。stdout がそのまま local output に保存されるため、script 側の出力は短い要約とアーティファクトのパスだけにしてください。
+
+`calibrate` 用には別 script を置きます。
 
 ```bash
-hermes config set cron.script_timeout_seconds 600
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$HOME/.hermes/plugins/hermes-self-improvement"
+hermes self-improvement calibrate
+```
+
+```bash
+hermes config set cron.script_timeout_seconds 1200
+
+hermes cron create '0 3 * * *' \
+  --name self-improvement-calibrate \
+  --deliver local \
+  --script self-improvement-calibrate.sh \
+  --no-agent
 
 hermes cron create '0 4 * * *' \
   --name self-improvement-maintenance \
