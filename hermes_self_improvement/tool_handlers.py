@@ -161,12 +161,18 @@ def _compact_skill_lifecycle(decisions: Any) -> dict[str, Any]:
 def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     evidence_pack = result.get("evidence_pack") if isinstance(result.get("evidence_pack"), dict) else {}
     evidence_summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
-    step_decisions = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
-    decision_summary = step_decisions.get("summary") if isinstance(step_decisions.get("summary"), dict) else {}
-    skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
-    planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
-    planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
-    planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
+    raw_step_decisions = result.get("step_decisions")
+    step_decisions: dict[str, Any] = raw_step_decisions if isinstance(raw_step_decisions, dict) else {}
+    raw_decision_summary = step_decisions.get("summary")
+    decision_summary: dict[str, Any] = raw_decision_summary if isinstance(raw_decision_summary, dict) else {}
+    raw_skill_step = step_decisions.get("skill")
+    skill_step: dict[str, Any] = raw_skill_step if isinstance(raw_skill_step, dict) else {}
+    raw_planner = skill_step.get("planner")
+    planner: dict[str, Any] = raw_planner if isinstance(raw_planner, dict) else {}
+    raw_planner_summary = planner.get("summary")
+    planner_summary: dict[str, Any] = raw_planner_summary if isinstance(raw_planner_summary, dict) else {}
+    raw_planner_quality = skill_step.get("planner_quality")
+    planner_quality: dict[str, Any] = raw_planner_quality if isinstance(raw_planner_quality, dict) else {}
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
@@ -234,6 +240,12 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
                     "attachments_by_match_kind": planner_quality.get("attachments_by_match_kind") if isinstance(planner_quality.get("attachments_by_match_kind"), dict) else {},
                     "evidence_strength_counts": planner_quality.get("evidence_strength_counts") if isinstance(planner_quality.get("evidence_strength_counts"), dict) else {},
                     "selected_by_strength": planner_quality.get("selected_by_strength") if isinstance(planner_quality.get("selected_by_strength"), dict) else {},
+                    "skip_class_counts": planner_quality.get("skip_class_counts") if isinstance(planner_quality.get("skip_class_counts"), dict) else {},
+                    "skip_reasons_by_class": planner_quality.get("skip_reasons_by_class") if isinstance(planner_quality.get("skip_reasons_by_class"), dict) else {},
+                    "benign_skip_count": int(planner_quality.get("benign_skip_count") or 0),
+                    "safe_stop_count": int(planner_quality.get("safe_stop_count") or 0),
+                    "actionability_loss_count": int(planner_quality.get("actionability_loss_count") or 0),
+                    "needs_follow_up_skip_count": int(planner_quality.get("needs_follow_up_skip_count") or 0),
                     "editor_prompt_chars": planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {},
                 },
             },

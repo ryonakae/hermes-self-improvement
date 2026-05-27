@@ -9,7 +9,7 @@
 
 **Goal:** Make the new turn-trace → cluster summary → evidence index/detail substrate observable enough to tune planner behavior from real runs, then improve only the evidence/actionability boundaries that are proven too weak or too conservative.
 
-**Status — 2026-05-27:** Active. D1 implemented and D2 observed. Planner quality counters now count first-class `cluster_evidence` entries and target-skill attachments from the index, not only legacy `evidence_resolution` rows. Latest dry-run (`run-20260527T070120Z`) shows the all-skip result is mostly legitimate duplicate/noise/diagnostic handling plus one safe no-evidence stop; do not relax mutation guards just to raise apply count. Validation: full suite `826 passed, 2 skipped`.
+**Status — 2026-05-27:** D1/D2/D3 implemented. Planner quality counters now count first-class `cluster_evidence` entries and target-skill attachments from the index, not only legacy `evidence_resolution` rows. Skip/readiness classification now separates benign duplicate/inventory skips, safety stops, actionability loss, and needs-follow-up in planner quality, CLI summaries, and compact tool payloads. Latest dry-run (`run-20260527T090040Z`) wrote `skip_class_counts` to the run artifact; CLI smoke showed `benign 43`, `safe-stop 1`, `actionability-loss 0`, `needs-follow-up 2` for the skill planner path. Do not relax mutation guards just to raise apply count. Validation: full suite `827 passed, 2 skipped`.
 
 ---
 
@@ -83,19 +83,39 @@ Interpretation:
 
 ---
 
-## D3 — Tune only proven handoff/threshold defects
+## D3 — Skip/readiness classification
 
-**Objective:** Improve decision quality without unsafe scope widening.
+**Status:** Implemented.
 
-Allowed changes:
-- Fix missing attachment between cluster evidence and existing mutable/reference coverage when the index has a concrete `target_skill`.
-- Improve reporting so legitimate duplicate/noise skips are separated from actionability loss.
-- Adjust deterministic thresholds only when artifact evidence shows the current threshold hides a durable, reusable procedural gap.
+**Objective:** Improve decision quality visibility without unsafe scope widening.
 
-Not allowed:
-- Create changes merely to reduce skip count.
-- Treat generic terminal failures as actionable without workflow boundary or representative context.
-- Add new roles, queues, approval lanes, or mutation targets.
+Implemented changes:
+- `planner_quality` now records `skip_class_counts`, `skip_reasons_by_class`, and per-class counters for `benign`, `safe_stop`, `actionability_loss`, and `needs_follow_up`.
+- CLI `improve` summaries now print skip classification lines before the Skill planner section.
+- Compact improve tool payloads expose the same skip classification fields under `steps.skill_planner.quality`.
+
+Allowed / preserved boundaries:
+- No changes were made merely to reduce skip count.
+- Generic terminal failures are not treated as actionable without workflow boundary or representative context.
+- No new roles, queues, approval lanes, or mutation targets were added.
+
+Classification policy:
+- Duplicate / existing-coverage / unselected inventory skips are benign.
+- No-attached-evidence mutation attempts are safety stops.
+- Action-like skipped plans or medium/high/critical cluster target skips are actionability loss.
+- Other skips are needs-follow-up rather than silently benign.
+
+**TDD / verification:**
+- RED/GREEN: `tests/test_skill_planner.py::test_planner_quality_report_classifies_skip_readiness`.
+- RED/GREEN: `tests/test_cli_surface.py::test_improve_summary_is_curator_style_and_mentions_private_eval_cases` for CLI rendering.
+- RED/GREEN: `tests/test_plugin_tools.py::test_improve_tool_returns_compact_llm_facing_summary` for tool payload propagation.
+- Related suite: `tests/test_skill_planner.py tests/test_cli_surface.py tests/test_plugin_tools.py` → `87 passed`.
+- Full suite: `PY=${PYTHON:-.venv/bin/python}; $PY -m pytest tests -q` → `827 passed, 2 skipped`.
+- Compile/check: `py_compile` and `git diff --check` passed.
+
+**Runtime smoke:**
+- JSON dry-run wrote `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T090040Z.json` with `action_summary {'apply': 0, 'block': 0, 'defer': 0, 'skip': 70}` and `planner_quality.skip_class_counts {'benign': 46}`.
+- CLI smoke later showed `Skipped: 65` with `benign 43`, `safe-stop 1`, `actionability-loss 0`, `needs-follow-up 2`, proving the human-facing report separates healthy skips from follow-up signals.
 
 ---
 

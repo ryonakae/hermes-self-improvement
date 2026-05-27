@@ -7,8 +7,8 @@ Update note (2026-05-26): when implementation slices land, update this index and
 As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`
-  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, and Slice D quality retuning is active.
-  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 9合目. The active work is Slice D quality retuning, scheduled-run dogfood, and compact final readiness reporting.
+  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, and Slice D quality retuning is in readiness-handoff stage after D3.
+  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 9合目. The active work is D4 readiness handoff, scheduled-run dogfood, and compact final readiness reporting.
 
 - `2026-05-25-self-improvement-role-redesign.md`
   - **Status:** active redesign/status ledger.
@@ -17,12 +17,12 @@ As of 2026-05-10, the long-term roadmap is:
 The current active hardening plans are:
 
 - `2026-05-26-turn-trace-and-readiness-followup.md`
-  - **Status:** active follow-up plan; Slices A/B/C implemented, Slice D quality retuning is active.
+  - **Status:** active follow-up plan; Slices A/B/C implemented, Slice D D1/D2/D3 implemented, D4 readiness handoff remains.
   - Breaks the remaining redesign work into concrete slices: (A) persist canonical turn-trace artifacts, (B) build deterministic cluster summary + evidence index/detail artifacts, (C) migrate planner handoff to the index/detail model, (D) retune decision quality on the new substrate, and (E) finish steady-state dogfood plus final readiness reporting.
 
 - `2026-05-27-slice-d-quality-retuning.md`
-  - **Status:** active Slice D child plan; D1/D2 implemented.
-  - Tracks the current all-skip dry-run investigation. Planner-quality/readiness metrics now observe first-class `cluster_evidence`; latest dry-run shows the current all-skip outcome is mostly legitimate duplicate/noise/diagnostic handling plus one safe no-evidence stop, so the next work should target readiness/reporting classification or wait for stronger observed evidence rather than relaxing mutation guards.
+  - **Status:** active Slice D child plan; D1/D2/D3 implemented.
+  - Tracks the current all-skip dry-run investigation. Planner-quality/readiness metrics now observe first-class `cluster_evidence`; skip/readiness classification separates benign skips, safety stops, actionability loss, and needs-follow-up in planner quality, CLI summaries, and compact tool payloads. Latest validation: full suite `827 passed, 2 skipped`; latest D3 smoke artifact `run-20260527T090040Z`. Next work is D4 readiness handoff plus scheduled dogfood observation, not relaxing mutation guards.
 
 - `2026-05-26-slice-a-turn-trace-persistence.md`
   - **Status:** implemented / validated.

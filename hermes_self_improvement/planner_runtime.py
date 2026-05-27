@@ -900,6 +900,79 @@ def _call_planner_runtime_llm(*, digest: dict[str, Any], config: dict[str, Any])
     return payload
 
 
+def _skip_reason(decision: dict[str, Any]) -> str:
+    return str(decision.get("reason") or decision.get("planner_reason") or "unknown")
+
+
+def _reason_is_benign_skip(reason: str) -> bool:
+    lowered = reason.lower()
+    return any(token in lowered for token in (
+        "duplicate",
+        "covered_by_existing_skill",
+        "coverage_fit",
+        "not_selected_by_planner",
+    ))
+
+
+def _reason_is_safe_stop(reason: str) -> bool:
+    return reason in {
+        "insufficient_attached_evidence",
+        "planner_defer_without_attached_evidence",
+        "create_skill_without_attached_evidence",
+        "mutate_skill_without_attached_evidence",
+    }
+
+
+def _cluster_actionability_targets(digest: dict[str, Any]) -> set[str]:
+    raw_cluster_evidence = digest.get("cluster_evidence")
+    cluster_evidence = raw_cluster_evidence if isinstance(raw_cluster_evidence, dict) else {}
+    targets: set[str] = set()
+    for entry in cluster_evidence.get("entries") or []:
+        if not isinstance(entry, dict):
+            continue
+        severity = str(entry.get("severity") or "").lower()
+        if severity not in {"medium", "high", "critical"}:
+            continue
+        target = str(entry.get("target_skill") or "").strip()
+        if target:
+            targets.add(target)
+    return targets
+
+
+def _classify_skill_skip(decision: dict[str, Any], *, cluster_actionability_targets: set[str]) -> str:
+    reason = _skip_reason(decision)
+    if _reason_is_safe_stop(reason):
+        return "safe_stop"
+    if decision.get("change_intent") or decision.get("skill_editor_instructions") or decision.get("editor_instructions"):
+        return "actionability_loss"
+    skill = str(decision.get("skill") or "").strip()
+    if skill and skill in cluster_actionability_targets:
+        return "actionability_loss"
+    if _reason_is_benign_skip(reason):
+        return "benign"
+    return "needs_follow_up"
+
+
+def _skip_classification_report(*, digest: dict[str, Any], skipped: list[dict[str, Any]]) -> dict[str, Any]:
+    class_counts: dict[str, int] = {}
+    reasons_by_class: dict[str, dict[str, int]] = {}
+    cluster_actionability_targets = _cluster_actionability_targets(digest)
+    for decision in skipped:
+        skip_class = _classify_skill_skip(decision, cluster_actionability_targets=cluster_actionability_targets)
+        reason = _skip_reason(decision)
+        class_counts[skip_class] = class_counts.get(skip_class, 0) + 1
+        bucket = reasons_by_class.setdefault(skip_class, {})
+        bucket[reason] = bucket.get(reason, 0) + 1
+    return {
+        "skip_class_counts": class_counts,
+        "skip_reasons_by_class": reasons_by_class,
+        "benign_skip_count": int(class_counts.get("benign") or 0),
+        "safe_stop_count": int(class_counts.get("safe_stop") or 0),
+        "actionability_loss_count": int(class_counts.get("actionability_loss") or 0),
+        "needs_follow_up_skip_count": int(class_counts.get("needs_follow_up") or 0),
+    }
+
+
 def build_planner_runtime_quality_report(
     *,
     digest: dict[str, Any],
@@ -962,6 +1035,7 @@ def build_planner_runtime_quality_report(
     selected_skills = {str(item.get("skill") or "") for item in selected}
     cluster_selected_count = sum(1 for skill in selected_skills if skill in cluster_attached_candidates)
     weak_only_selected_count = sum(1 for skill in selected_skills if skill in weak_only_candidates)
+    skip_classification = _skip_classification_report(digest=digest, skipped=skipped)
     return {
         "candidate_count": len(candidates),
         "attached_candidate_count": sum(1 for item in candidates if int(item.get("attached_evidence_count") or 0) > 0),
@@ -991,6 +1065,7 @@ def build_planner_runtime_quality_report(
             "max": max(prompt_lengths) if prompt_lengths else 0,
             "avg": int(sum(prompt_lengths) / len(prompt_lengths)) if prompt_lengths else 0,
         },
+        **skip_classification,
     }
 
 

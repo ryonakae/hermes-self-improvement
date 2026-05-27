@@ -45,12 +45,12 @@ Overall: **about 9合目** for the original long-term roadmap. Structural migrat
 - The active runtime surface is now `planner / editor / evaluator / calibrator`; old role/module naming has been removed from runtime/status/report/internal module names.
 - Runtime is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
 - `improve --dry-run --json` now completes cleanly and writes evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes under the new naming.
-- Full test baseline is green (`825 passed, 2 skipped`).
-- Slices A/B/C of the turn-trace/index redesign are implemented; Slice D quality retuning is active.
+- Full test baseline is green (`827 passed, 2 skipped`).
+- Slices A/B/C of the turn-trace/index redesign are implemented; Slice D D1/D2/D3 are implemented and D4 readiness handoff remains.
 
 ### Important caveat
 
-The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, but dry-run `run-20260527T064547Z` still produced `apply=0 / skip=63`. The current work is no longer materializing the substrate; it is tuning quality/readiness metrics and thresholds so legitimate duplicate/noise skips are separated from structural handoff gaps before final dogfood.
+The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. Latest smoke `run-20260527T090040Z` still has no apply candidates, but the visible classification keeps this from being misread as planner failure. The current work is D4 readiness handoff, scheduled dogfood proof, and final readiness reporting rather than loosening mutation guards.
 
 ### Strong areas
 

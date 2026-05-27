@@ -1388,6 +1388,29 @@ def _top_count_map(counts: dict[str, int], *, limit: int = 3) -> dict[str, int]:
     return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit])
 
 
+def _skill_skip_classification_lines(planner_quality: dict[str, Any]) -> list[str]:
+    raw_counts = planner_quality.get("skip_class_counts")
+    if not isinstance(raw_counts, dict) or not raw_counts:
+        return []
+    counts = {str(key): int(value or 0) for key, value in raw_counts.items()}
+    labels = [
+        ("benign", "benign"),
+        ("safe_stop", "safe-stop"),
+        ("actionability_loss", "actionability-loss"),
+        ("needs_follow_up", "needs-follow-up"),
+    ]
+    lines = ["- skip classification: " + ", ".join(f"{label} {counts.get(key, 0)}" for key, label in labels if counts.get(key, 0) or key in {"benign", "safe_stop", "actionability_loss"})]
+    raw_reasons_by_class = planner_quality.get("skip_reasons_by_class")
+    reasons_by_class = raw_reasons_by_class if isinstance(raw_reasons_by_class, dict) else {}
+    for key, label in labels:
+        raw_reasons = reasons_by_class.get(key)
+        if isinstance(raw_reasons, dict) and raw_reasons:
+            top_reasons = _top_count_map({str(reason): int(count or 0) for reason, count in raw_reasons.items()})
+            reason_text = ", ".join(f"{reason} {count}" for reason, count in top_reasons.items()) or "none"
+            lines.append(f"- {label} reasons: {reason_text}")
+    return lines
+
+
 def _maintenance_source_bucket(item: dict[str, Any]) -> str:
     values = [
         str(item.get("source") or ""),
@@ -1909,19 +1932,25 @@ def _target_resolution_summary_lines(candidates: list[dict[str, Any]]) -> list[s
 
 def _render_improve_summary(result: dict[str, Any]) -> str:
     summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
-    step_decisions = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
-    decision_summary = step_decisions.get("summary") if isinstance(step_decisions.get("summary"), dict) else {}
+    raw_step_decisions = result.get("step_decisions")
+    step_decisions: dict[str, Any] = raw_step_decisions if isinstance(raw_step_decisions, dict) else {}
+    raw_decision_summary = step_decisions.get("summary")
+    decision_summary: dict[str, Any] = raw_decision_summary if isinstance(raw_decision_summary, dict) else {}
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
     evidence_pack = result.get("evidence_pack") if isinstance(result.get("evidence_pack"), dict) else {}
     source_report = result.get("source_report") if isinstance(result.get("source_report"), dict) else {}
     evidence_summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
-    skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
-    planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
-    planner_summary = planner.get("summary") if isinstance(planner.get("summary"), dict) else {}
-    planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
+    raw_skill_step = step_decisions.get("skill")
+    skill_step = raw_skill_step if isinstance(raw_skill_step, dict) else {}
+    raw_planner = skill_step.get("planner")
+    planner: dict[str, Any] = raw_planner if isinstance(raw_planner, dict) else {}
+    raw_planner_summary = planner.get("summary")
+    planner_summary: dict[str, Any] = raw_planner_summary if isinstance(raw_planner_summary, dict) else {}
+    raw_planner_quality = skill_step.get("planner_quality")
+    planner_quality: dict[str, Any] = raw_planner_quality if isinstance(raw_planner_quality, dict) else {}
     editor_prompt_chars = planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {}
-    planner_decisions = planner.get("decisions") if isinstance(planner.get("decisions"), list) else []
-    skill_decisions = skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []
+    planner_decisions: list[dict[str, Any]] = [item for item in (planner.get("decisions") if isinstance(planner.get("decisions"), list) else []) if isinstance(item, dict)]
+    skill_decisions: list[dict[str, Any]] = [item for item in (skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []) if isinstance(item, dict)]
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "mutate_skill"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
     memory_to_skill_step = step_decisions.get("memory_to_skill") if isinstance(step_decisions.get("memory_to_skill"), dict) else {}
@@ -2134,6 +2163,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     maintenance_lines = _knowledge_maintenance_summary_lines(planner_decisions, maintenance_candidates)
     memory_placement_lines = _memory_placement_summary_lines(memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [])
     action_bucket_lines = _action_bucket_lines(step_decisions)
+    skip_classification_lines = _skill_skip_classification_lines(planner_quality)
     actual_result_lines = _actual_result_summary_lines(
         summary=summary,
         skill_decisions=skill_decisions,
@@ -2168,6 +2198,9 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     if action_bucket_lines:
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = action_bucket_lines
+    if skip_classification_lines:
+        insert_at = lines.index("Skill planner:")
+        lines[insert_at:insert_at] = skip_classification_lines
     if outcome_lines:
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = outcome_lines

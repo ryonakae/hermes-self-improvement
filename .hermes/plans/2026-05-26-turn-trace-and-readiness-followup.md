@@ -231,6 +231,6 @@ Minimum status fields to update:
 
 ## Current next slice
 
-**Continue with Slice D — quality retuning on the new substrate.**
+**Continue with Slice D — readiness handoff on the new substrate.**
 
-Slices A/B/C are complete enough to provide turn traces, cluster/index/detail artifacts, and planner handoff. Slice D now uses dry-run artifacts to distinguish legitimate duplicate/noise skips from structural handoff gaps. `.hermes/plans/2026-05-27-slice-d-quality-retuning.md` records D1/D2: planner quality metrics now count first-class `cluster_evidence`, and dry-run `run-20260527T070120Z` shows the current all-skip outcome is mostly legitimate duplicate/noise/diagnostic handling plus one safe no-evidence stop. Do not relax mutation guards just to raise apply count; next work should target readiness/reporting classification or wait for stronger observed evidence.
+Slices A/B/C are complete enough to provide turn traces, cluster/index/detail artifacts, and planner handoff. Slice D now has D1/D2/D3 implemented: planner quality metrics count first-class `cluster_evidence`, dry-run artifacts distinguish safe no-evidence stops from ordinary skips, and CLI/tool summaries expose `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` skip classes. Latest validation: full suite `827 passed, 2 skipped`; latest D3 smoke artifact: `run-20260527T090040Z`. Do not relax mutation guards just to raise apply count. Next work should be D4 readiness handoff plus scheduled dogfood observation, not another threshold change unless new evidence shows a real actionability loss.

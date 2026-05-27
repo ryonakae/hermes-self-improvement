@@ -587,6 +587,38 @@ def test_planner_quality_report_counts_evidence_and_action_like_skips():
     assert report["editor_prompt_chars"]["max"] == 5
 
 
+def test_planner_quality_report_classifies_skip_readiness():
+    digest = build_planner_digest(pack())
+    digest["cluster_evidence"] = {
+        "entries": [
+            {"cluster_id": "cluster_high", "target_skill": "unused-skill", "severity": "high"},
+            {"cluster_id": "cluster_low", "target_skill": "demo-skill", "severity": "low"},
+        ]
+    }
+    planner = {
+        "decisions": [
+            {"skill": "demo-skill", "decision": "skip", "reason": "Exact duplicate coverage_fit already exists.", "evidence_ids": ["ev1"]},
+            {"skill": "unused-skill", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []},
+            {"skill": "missing-proof", "decision": "skip", "reason": "mutate_skill_without_attached_evidence", "evidence_ids": []},
+            {"skill": "tempting", "decision": "skip", "reason": "planner_skip", "change_intent": "patch target", "evidence_ids": []},
+        ]
+    }
+
+    report = build_planner_quality_report(digest=digest, planner=planner, runner_decisions=[])
+
+    assert report["skip_class_counts"] == {
+        "actionability_loss": 2,
+        "benign": 1,
+        "safe_stop": 1,
+    }
+    assert report["benign_skip_count"] == 1
+    assert report["safe_stop_count"] == 1
+    assert report["actionability_loss_count"] == 2
+    assert report["skip_reasons_by_class"]["benign"] == {"Exact duplicate coverage_fit already exists.": 1}
+    assert report["skip_reasons_by_class"]["safe_stop"] == {"mutate_skill_without_attached_evidence": 1}
+    assert report["skip_reasons_by_class"]["actionability_loss"] == {"not_selected_by_planner": 1, "planner_skip": 1}
+
+
 def test_planner_digest_attaches_tool_class_hints_to_existing_candidate():
     pack_data = {
         "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},

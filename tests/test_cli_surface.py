@@ -409,6 +409,13 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
             "summary": {"total": 4},
             "skill": {
                 "planner": {"summary": {"archive_skill_count": 1, "candidate_count": 4, "mutate_skill_count": 1, "skipped": 1, "deferred": 1}},
+                "planner_quality": {
+                    "skip_class_counts": {"benign": 3, "safe_stop": 1, "actionability_loss": 0},
+                    "skip_reasons_by_class": {
+                        "benign": {"not_selected_by_planner": 2, "duplicate_coverage": 1},
+                        "safe_stop": {"mutate_skill_without_attached_evidence": 1},
+                    },
+                },
                 "decisions": [
                     {"decision": "archive_skill_preview"},
                     {"decision": "rejected", "reason": "Verbose natural-language reason that should not become a counter key", "result": {"outcome": "skipped_superseded"}, "planner_decision": {"decision": "mutate_skill"}},
@@ -466,6 +473,9 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "- recommendations: attach_existing_skill 1, unresolved 1" in text
     assert "Action summary:" in text
     assert "- Would apply: 2, Deferred: 1, Skipped: 1, Blocked: 1" in text
+    assert "- skip classification: benign 3, safe-stop 1, actionability-loss 0" in text
+    assert "- benign reasons: not_selected_by_planner 2, duplicate_coverage 1" in text
+    assert "- safe-stop reasons: mutate_skill_without_attached_evidence 1" in text
     assert "Would apply details:" in text
     assert "Executed:" in text
     assert "- changed: 3, valid no-op: 0, rejected: 3" in text
