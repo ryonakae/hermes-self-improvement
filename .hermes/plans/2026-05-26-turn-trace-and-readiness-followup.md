@@ -231,14 +231,15 @@ Minimum status fields to update:
 
 ## Current next slice
 
-**Continue with Slice E — scheduled dogfood and final readiness reporting.**
+**Slice E is complete. Scheduled dogfood final readiness decision: `ready`.**
 
-Slices A/B/C are complete enough to provide turn traces, cluster/index/detail artifacts, and planner handoff. Slice D D1/D2/D3/D4 are implemented: planner quality metrics count first-class `cluster_evidence`, dry-run artifacts distinguish safe no-evidence stops from ordinary skips, CLI/tool summaries expose `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` skip classes, and the D4 readiness decision is `acceptable_with_scheduled_dogfood`. Latest validation: full suite `827 passed, 2 skipped`; latest D4 evidence artifact: `run-20260527T090319Z` with `actionability_loss 0`.
+Slices A/B/C are complete enough to provide turn traces, cluster/index/detail artifacts, and planner handoff. Slice D D1/D2/D3/D4 are implemented: planner quality metrics count first-class `cluster_evidence`, dry-run artifacts distinguish safe no-evidence stops from ordinary skips, CLI/tool summaries expose `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` skip classes, and the D4 readiness decision was validated by scheduled Slice E dogfood.
 
-Tomorrow's concrete work:
-- read the next `03:00` calibrate cron output and check whether `1200s` was sufficient,
-- read the next `04:00` maintenance cron output and newest run artifact,
-- verify `skip_class_counts` is present and `actionability_loss_count` stays zero unless there is a concrete cluster-backed follow-up,
-- then write the final Slice E readiness decision (`ready`, `acceptable_with_follow_up`, or `blocked`).
+Scheduled evidence:
+- `self-improvement-calibrate` (`1f7b37aef65a`) ran at `2026-05-28 03:03:41`, status `ok`, under the `1200s` script timeout.
+- `self-improvement-autonomous-maintenance` (`1d8bff2395e2`) ran at `2026-05-28 04:03:11`, status `ok`, without script timeout.
+- Latest scheduled artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json`.
+- `skip_class_counts` present: `benign 47`; `actionability_loss_count 0`, `safe_stop_count 0`, `needs_follow_up_skip_count 0`.
+- Action summary: `apply 0 / defer 0 / skip 70 / block 0`; actual mutations `skill 0`, `memory 0`.
 
-Do not change thresholds first unless the scheduled dogfood shows concrete actionability loss or calibrate still overruns `1200s`.
+Do not change thresholds or mutation guards. Future work should only reopen this readiness slice if scheduled artifacts show concrete `actionability_loss_count > 0`, repeated same-theme `needs_follow_up`, or a new cron timeout.

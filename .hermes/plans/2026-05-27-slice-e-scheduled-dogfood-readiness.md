@@ -9,13 +9,21 @@
 
 **Goal:** Confirm the D4 readiness handoff under scheduled runtime conditions, then write the final readiness report for this redesign pass.
 
-**Status — 2026-05-27:** Planned / partially observed via manual dogfood. Slice D D1/D2/D3/D4 are implemented. Current readiness decision is `acceptable_with_scheduled_dogfood`, but the manual calibrate run showed cron-timeout risk.
+**Status — 2026-05-28:** Implemented / ready. Slice D D1/D2/D3/D4 are implemented, and scheduled dogfood confirmed the split `03:00` calibrate / `04:00` maintenance flow under the current `1200s` cron script timeout. Final readiness decision: `ready`.
 
 **Manual dogfood observation — 2026-05-27 evening:**
 - `self-improvement-calibrate.sh` was run directly in the plugin workdir and completed successfully, but only after exceeding the old 600s cron timeout budget (observed still running past 630s; final completion notification arrived later with exit code 0).
 - Calibrate result: `Calibration: partial_update`; prompt overlay set promoted; evaluator skipped as `candidate_not_concrete`; candidate-set artifact `/Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260527T111022Z-3e2a0ec82de3.json`.
 - `self-improvement-maintenance.sh` was run directly and completed successfully, writing `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T111533Z.json`.
 - Manual maintenance artifact included `skip_class_counts` and showed `actionability_loss 0` (`benign 45`, `needs_follow_up 2`).
+
+**Scheduled dogfood observation — 2026-05-28 morning:**
+- `self-improvement-calibrate` (`1f7b37aef65a`) ran at `2026-05-28 03:03:41` and completed with cron status `ok`, well within the `1200s` script timeout.
+- Calibrate result: `Calibration: partial_update`; GEPA trigger yes; prompt overlay set promoted; changed 3; evaluator skipped safely as `candidate_not_concrete`; candidate-set artifact `/Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260527T180339Z-2e99cd503818.json`.
+- `self-improvement-autonomous-maintenance` (`1d8bff2395e2`) ran at `2026-05-28 04:03:11` and completed with cron status `ok`, without script timeout.
+- Maintenance wrote `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json`.
+- Scheduled maintenance artifact included `skip_class_counts` and showed `actionability_loss_count 0`, `safe_stop_count 0`, `needs_follow_up_skip_count 0`; skip classes were benign-only (`benign 47`, `not_selected_by_planner 47`).
+- Action summary was `apply 0 / defer 0 / skip 70 / block 0`, with actual mutations `skill 0`, `memory 0`, and prompt overlay/evaluator unchanged during maintenance.
 
 ---
 
@@ -85,13 +93,10 @@ Final report should state:
 
 ## Current next action
 
-Tomorrow morning, after the next scheduled `03:00` / `04:00` run pair:
+Slice E scheduled dogfood is complete and the final readiness decision is `ready`.
 
-1. Inspect `self-improvement-calibrate` cron output and confirm whether `1200s` is enough for a clean completion.
-2. Inspect `self-improvement-autonomous-maintenance` cron output and confirm it still completes cleanly after the split.
-3. Open the newest maintenance run artifact and verify:
-   - `step_decisions.skill.planner_quality.skip_class_counts` is present,
-   - `actionability_loss_count == 0` unless there is a concrete cluster-backed skill to inspect,
-   - the summary is still understandable as benign/safe-stop/needs-follow-up rather than opaque all-skip noise.
-4. If both jobs complete and the maintenance artifact stays non-actionable, update Slice E / parent plan / roadmap / README with the final readiness decision.
-5. If calibrate still exceeds `1200s`, do not touch planner thresholds first; decide between a further timeout increase and stricter calibrate trigger/gating based on the new cron evidence.
+No planner threshold or mutation-guard change is indicated by the scheduled evidence. Continue normal daily split operation:
+- `self-improvement-calibrate`: `0 3 * * *`
+- `self-improvement-autonomous-maintenance`: `0 4 * * *`
+
+Only reopen this slice if a future scheduled artifact shows concrete `actionability_loss_count > 0`, repeated same-theme `needs_follow_up`, or a new cron timeout.

@@ -38,7 +38,7 @@ The key product promise is not “make many changes.” It is:
 
 ## Current Position — 2026-05-27
 
-Overall: **about 9合目** for the original long-term roadmap. Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, and planner cluster handoff are implemented. Still **not complete** because decision-quality/readiness tuning, scheduled dogfood proof, and final readiness reporting are unfinished.
+Overall: **about 9.5合目** for the original long-term roadmap. Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, scheduled dogfood proof, and final readiness reporting are implemented. Remaining work is steady-state observation and future follow-up only if real scheduled artifacts show concrete actionability loss, repeated same-theme follow-up, or cron timeout regression.
 
 ### What changed since the earlier 2026-05-10 snapshot
 
@@ -46,11 +46,11 @@ Overall: **about 9合目** for the original long-term roadmap. Structural migrat
 - Runtime is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
 - `improve --dry-run --json` now completes cleanly and writes evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes under the new naming.
 - Full test baseline is green (`827 passed, 2 skipped`).
-- Slices A/B/C of the turn-trace/index redesign are implemented; Slice D D1/D2/D3/D4 are implemented and Slice E scheduled dogfood/final readiness reporting remains.
+- Slices A/B/C of the turn-trace/index redesign are implemented; Slice D D1/D2/D3/D4 and Slice E scheduled dogfood/final readiness reporting are implemented.
 
 ### Important caveat
 
-The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. D4 concludes the current state is `acceptable_with_scheduled_dogfood`: latest smoke `run-20260527T090319Z` has `actionability_loss 0`, so no mutation guard should be loosened. The current work is Slice E scheduled dogfood proof and final readiness reporting. Tomorrow's first check is whether the separated `03:00` calibrate cron now fits within the raised `1200s` global script timeout before the `04:00` maintenance run is judged.
+The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. D4's `acceptable_with_scheduled_dogfood` handoff is now validated: `self-improvement-calibrate` and `self-improvement-autonomous-maintenance` both completed successfully in the scheduled 2026-05-28 morning cron window, and latest maintenance artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json` has `actionability_loss_count 0`. No mutation guard should be loosened.
 
 ### Strong areas
 

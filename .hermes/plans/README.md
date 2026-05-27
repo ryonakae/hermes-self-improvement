@@ -7,8 +7,8 @@ Update note (2026-05-26): when implementation slices land, update this index and
 As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`
-  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, and Slice D is complete through readiness handoff.
-  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 9合目. The active work is Slice E scheduled-run dogfood and compact final readiness reporting.
+  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, and Slice D/E readiness work is complete.
+  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 9.5合目. Continue steady-state observation; reopen readiness only if scheduled artifacts show concrete actionability loss, repeated same-theme follow-up, or cron timeout regression.
 
 - `2026-05-25-self-improvement-role-redesign.md`
   - **Status:** active redesign/status ledger.
@@ -17,16 +17,16 @@ As of 2026-05-10, the long-term roadmap is:
 The current active hardening plans are:
 
 - `2026-05-26-turn-trace-and-readiness-followup.md`
-  - **Status:** active follow-up plan; Slices A/B/C implemented, Slice D D1/D2/D3/D4 implemented, Slice E remains.
-  - Breaks the remaining redesign work into concrete slices: (A) persist canonical turn-trace artifacts, (B) build deterministic cluster summary + evidence index/detail artifacts, (C) migrate planner handoff to the index/detail model, (D) retune decision quality on the new substrate, and (E) finish steady-state dogfood plus final readiness reporting.
+  - **Status:** active follow-up plan; Slices A/B/C implemented, Slice D D1/D2/D3/D4 implemented, Slice E implemented with final readiness `ready`.
+  - Breaks the remaining redesign work into concrete slices: (A) persist canonical turn-trace artifacts, (B) build deterministic cluster summary + evidence index/detail artifacts, (C) migrate planner handoff to the index/detail model, (D) retune decision quality on the new substrate, and (E) finish steady-state dogfood plus final readiness reporting. Latest scheduled evidence: `self-improvement-calibrate` and `self-improvement-autonomous-maintenance` both completed on 2026-05-28 morning; `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json` has `skip_class_counts` and `actionability_loss_count 0`.
 
 - `2026-05-27-slice-d-quality-retuning.md`
   - **Status:** implemented Slice D child plan; D4 decision is `acceptable_with_scheduled_dogfood`.
   - Tracks the all-skip dry-run investigation. Planner-quality/readiness metrics now observe first-class `cluster_evidence`; skip/readiness classification separates benign skips, safety stops, actionability loss, and needs-follow-up in planner quality, CLI summaries, and compact tool payloads. Latest validation: full suite `827 passed, 2 skipped`; latest D4 evidence artifact `run-20260527T090319Z` showed `actionability_loss 0`.
 
 - `2026-05-27-slice-e-scheduled-dogfood-readiness.md`
-  - **Status:** planned / partially observed via manual dogfood.
-  - Defines the next proof: observe separated 03:00 calibrate / 04:00 maintenance cron runs, verify maintenance writes a new artifact with `skip_class_counts`, and then close final readiness reporting without changing thresholds unless scheduled artifacts show concrete actionability loss. Tomorrow's explicit checklist is: confirm whether calibrate fits within `1200s`, confirm maintenance still completes cleanly, inspect the newest artifact for `skip_class_counts` + `actionability_loss_count`, then write the final readiness decision.
+  - **Status:** implemented / ready.
+  - Scheduled dogfood confirmed the split cron flow: `self-improvement-calibrate` (`03:00`) and `self-improvement-autonomous-maintenance` (`04:00`) both completed with status `ok` under the current `1200s` script timeout on 2026-05-28 morning. Latest maintenance artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json` has readable `skip_class_counts` (`benign 47`) and `actionability_loss_count 0`; no threshold or mutation-guard change is indicated.
 
 - `2026-05-26-slice-a-turn-trace-persistence.md`
   - **Status:** implemented / validated.

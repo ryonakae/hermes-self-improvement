@@ -20,21 +20,20 @@
 - `improve --dry-run --json` completes and writes evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes.
 - Current validation baseline: full suite passes (`827 passed, 2 skipped`).
 - Slices A/B/C of the observation-model redesign are implemented: turn traces persist, cluster/index/detail artifacts are materialized, and planner handoff includes cluster evidence.
-- Slice D D1/D2/D3/D4 are implemented: cluster evidence is counted in planner quality, dry-run artifacts distinguish safe stops from ordinary skips, CLI/tool summaries expose skip/readiness classes, and readiness is handed off as `acceptable_with_scheduled_dogfood`.
+- Slice D D1/D2/D3/D4 and Slice E are implemented: cluster evidence is counted in planner quality, dry-run artifacts distinguish safe stops from ordinary skips, CLI/tool summaries expose skip/readiness classes, and scheduled dogfood validated final readiness as `ready`.
 
 ### Partially complete
 
 - Planner/editor/evaluator/calibrator naming migration is complete enough for release-facing/runtime-facing surfaces, but older roadmap text and some historical milestone docs still describe the superseded resolver / planner / agent split and need periodic maintenance when touched.
-- Evidence handoff is index-aware and structured; Slice E still needs to confirm the D4 handoff through scheduled dogfood and write final readiness reporting.
+- Evidence handoff is index-aware and structured. Slice E confirmed the D4 handoff through scheduled dogfood: both split cron jobs completed under the current timeout and the scheduled maintenance artifact was benign-only with `actionability_loss_count 0`.
 
 ### Not yet complete
 
-- The redesign's quality goal is only partly met until scheduled dogfood confirms the new classification over real cron runs; D4 accepts the current state only with that scheduled dogfood proof.
-- Outcome attribution remains mostly `unknown`; steady-state dogfood and final readiness reporting are still pending.
+- Outcome attribution remains mostly `unknown`; this is expected while observation windows mature, not a readiness blocker after Slice E.
 
 ### Current practical reading
 
-Treat this redesign as **structural migration done, runtime healthy, observation-model handoff implemented, Slice D readiness handoff complete, scheduled dogfood/final reporting still incomplete**.
+Treat this redesign as **structural migration done, runtime healthy, observation-model handoff implemented, Slice D readiness handoff validated by scheduled Slice E dogfood, final readiness `ready`**.
 
 ## Decisions
 
