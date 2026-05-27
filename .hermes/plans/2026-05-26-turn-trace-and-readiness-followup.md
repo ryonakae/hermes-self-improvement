@@ -16,18 +16,19 @@
 
 ## Why this follow-up exists
 
-As of 2026-05-26:
+As of 2026-05-27:
 
 - Structural migration is mostly done.
 - Runtime is healthy.
-- Full suite is green (`787 passed, 2 skipped`).
-- `improve --dry-run --json` produces evidence packs, run artifacts, and episodes.
-- Slice A is implemented: completed turns now persist canonical turn-trace artifacts alongside `events.jsonl`, with status visibility for trace count/latest path.
+- Full suite is green (`825 passed, 2 skipped`).
+- `improve --dry-run --json` produces evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes.
+- Slices A/B/C are implemented: completed turns persist canonical turn-trace artifacts, deterministic cluster/index/detail artifacts are written, and planner handoff consumes cluster evidence.
+- Slice D is active: dry-run `run-20260527T064547Z` still produced `apply=0 / skip=63`; D1 fixed planner-quality counters so first-class `cluster_evidence` entries are now visible in readiness metrics.
 
 But the redesign is still incomplete because:
 
-1. Canonical observation persistence is still `state/events.jsonl`.
-2. Planner still receives event-derived compact digests instead of a first-class evidence index/detail model.
+1. Canonical observation persistence is transitioning: turn traces and cluster/index artifacts now exist, while `state/events.jsonl` remains a compatibility/input source during migration.
+2. Planner receives first-class cluster evidence, but decision-quality/readiness metrics and thresholds still need dogfood-driven tuning on that substrate.
 3. Recent dry-runs still skew heavily toward `skip`, and outcome maturity is still mostly `unknown`.
 4. Steady-state readiness is not yet proven by dogfood evidence.
 
@@ -230,6 +231,6 @@ Minimum status fields to update:
 
 ## Current next slice
 
-**Start with Slice B — Build deterministic cluster summary + evidence index/detail artifacts.**
+**Continue with Slice D — quality retuning on the new substrate.**
 
-Slice A is complete enough to provide stable trace artifacts. Slice B should consume those traces mechanically, without adding an LLM summarizer or making planner read raw trace bodies.
+Slices A/B/C are complete enough to provide turn traces, cluster/index/detail artifacts, and planner handoff. Slice D now uses dry-run artifacts to distinguish legitimate duplicate/noise skips from structural handoff gaps. `.hermes/plans/2026-05-27-slice-d-quality-retuning.md` records D1/D2: planner quality metrics now count first-class `cluster_evidence`, and dry-run `run-20260527T070120Z` shows the current all-skip outcome is mostly legitimate duplicate/noise/diagnostic handling plus one safe no-evidence stop. Do not relax mutation guards just to raise apply count; next work should target readiness/reporting classification or wait for stronger observed evidence.

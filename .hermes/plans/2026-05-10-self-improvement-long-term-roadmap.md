@@ -36,20 +36,21 @@ The key product promise is not “make many changes.” It is:
 
 ---
 
-## Current Position — 2026-05-26
+## Current Position — 2026-05-27
 
-Overall: **about 8.9合目** for the original long-term roadmap if we count structural migration, runtime stabilization, and Slice A turn-trace persistence, but still **not complete** because cluster/index/detail artifacts, planner handoff migration, and final steady-state proof are unfinished.
+Overall: **about 9合目** for the original long-term roadmap. Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, and planner cluster handoff are implemented. Still **not complete** because decision-quality/readiness tuning, scheduled dogfood proof, and final readiness reporting are unfinished.
 
 ### What changed since the earlier 2026-05-10 snapshot
 
 - The active runtime surface is now `planner / editor / evaluator / calibrator`; old role/module naming has been removed from runtime/status/report/internal module names.
 - Runtime is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
-- `improve --dry-run --json` now completes cleanly and writes evidence packs, run artifacts, and episodes under the new naming.
-- Full test baseline is green (`787 passed, 2 skipped`).
+- `improve --dry-run --json` now completes cleanly and writes evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes under the new naming.
+- Full test baseline is green (`825 passed, 2 skipped`).
+- Slices A/B/C of the turn-trace/index redesign are implemented; Slice D quality retuning is active.
 
 ### Important caveat
 
-The newer role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. Slice A is now complete: completed observed turns persist first-class turn-trace artifacts alongside `state/events.jsonl`. The remaining gap is Slice B/C: materialize cluster/index/detail artifacts from traces and migrate planner handoff away from event-window-derived digests. So the plugin is operational and structurally migrated, but the deeper observation-model replacement is still in progress.
+The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, but dry-run `run-20260527T064547Z` still produced `apply=0 / skip=63`. The current work is no longer materializing the substrate; it is tuning quality/readiness metrics and thresholds so legitimate duplicate/noise skips are separated from structural handoff gaps before final dogfood.
 
 ### Strong areas
 

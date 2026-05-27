@@ -266,6 +266,34 @@ class TestPlannerRuntimeDigestClusterEvidence:
         assert "available_skill_evidence_ids" in digest
         assert digest.get("schema_name") in ("self_improvement_planner.digest", "self_improvement_skill_planner_digest")
 
+    def test_quality_report_counts_index_cluster_evidence(self):
+        """Planner quality should count first-class index/detail cluster evidence.
+
+        Slice D starts by making the quality/readiness counters observe the new
+        cluster_evidence substrate, not only legacy evidence_resolution rows.
+        """
+        planner_runtime = _load_module("hermes_self_improvement.planner_runtime")
+        evidence_pack = _make_evidence_pack(skill_candidates=[
+            {"name": "timeout-workflow", "attached_evidence_count": 0},
+        ])
+        cluster_summary = _make_cluster_summary(cluster_count=2)
+        evidence_index = _make_evidence_index(cluster_summary)
+
+        digest = planner_runtime.build_planner_runtime_digest(
+            evidence_pack,
+            cluster_summary=cluster_summary,
+            evidence_index=evidence_index,
+        )
+        report = planner_runtime.build_planner_runtime_quality_report(
+            digest=digest,
+            planner={"decisions": [{"decision": "mutate_skill", "skill": "timeout-workflow", "evidence_ids": ["c_test000000000001"]}]},
+            runner_decisions=[],
+        )
+
+        assert report["cluster_evidence_count"] == 2
+        assert report["cluster_attached_candidate_count"] == 1
+        assert report["cluster_selected_count"] == 1
+
 
 # ---------------------------------------------------------------------------
 # Test: run_skill_improvement_step passes cluster artifacts

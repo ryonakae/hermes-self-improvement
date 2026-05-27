@@ -10,30 +10,30 @@
 
 ---
 
-## Execution status — 2026-05-26
+## Execution status — 2026-05-27
 
 ### Completed in code
 
 - The public/runtime role surface has been collapsed to `planner / editor / evaluator / calibrator`.
 - Old role/module naming has been removed from active runtime surfaces, status/report output, internal module filenames, symbol names, and primary artifact keys.
 - Runtime setup is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
-- `improve --dry-run --json` completes and writes evidence packs, run artifacts, and episodes.
-- Current validation baseline: full suite passes (`787 passed, 2 skipped`).
+- `improve --dry-run --json` completes and writes evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes.
+- Current validation baseline: full suite passes (`825 passed, 2 skipped`).
+- Slices A/B/C of the observation-model redesign are implemented: turn traces persist, cluster/index/detail artifacts are materialized, and planner handoff includes cluster evidence.
 
 ### Partially complete
 
 - Planner/editor/evaluator/calibrator naming migration is complete enough for release-facing/runtime-facing surfaces, but older roadmap text and some historical milestone docs still describe the superseded resolver / planner / agent split and need periodic maintenance when touched.
-- Evidence handoff is compact and structured, and completed observed turns now persist first-class turn-trace artifacts alongside `state/events.jsonl`; cluster summary and evidence index/detail artifacts are still pending.
+- Evidence handoff is index-aware and structured, but quality/readiness metrics and planner thresholds are still being tuned from dry-run artifacts.
 
 ### Not yet complete
 
-- The plan's intended canonical observation model is partially implemented: `turn trace` persistence exists, but `cluster summary -> evidence index/detail` is not yet the primary persisted runtime model.
-- Planner still receives compact digests rebuilt from events/windows rather than a first-class evidence-index/detail store with planner drilldown requests.
-- The redesign's quality goal is only partly met: the loop is operational, but recent dry-runs still skew heavily toward `skip` and outcome attribution remains mostly `unknown`, so decision quality and outcome maturity still need dogfood-driven improvement.
+- The redesign's quality goal is only partly met: dry-run `run-20260527T064547Z` still skewed heavily toward `skip`, so Slice D is separating legitimate duplicate/noise skips from structural handoff gaps.
+- Outcome attribution remains mostly `unknown`; steady-state dogfood and final readiness reporting are still pending.
 
 ### Current practical reading
 
-Treat this redesign as **structural migration mostly done, runtime healthy, observation-model redesign still incomplete**.
+Treat this redesign as **structural migration done, runtime healthy, observation-model handoff implemented, decision-quality/readiness tuning still incomplete**.
 
 ## Decisions
 

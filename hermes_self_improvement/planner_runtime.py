@@ -926,6 +926,17 @@ def build_planner_runtime_quality_report(
     weak_only_candidates: set[str] = set()
     candidate_strengths: dict[str, set[str]] = {}
     cluster_evidence_ids: set[str] = set()
+    cluster_evidence = digest.get("cluster_evidence")
+    if not isinstance(cluster_evidence, dict):
+        cluster_evidence = {}
+    cluster_entries = [item for item in cluster_evidence.get("entries") or [] if isinstance(item, dict)]
+    for entry in cluster_entries:
+        cluster_id = str(entry.get("cluster_id") or "")
+        if cluster_id:
+            cluster_evidence_ids.add(cluster_id)
+        target_skill = str(entry.get("target_skill") or "")
+        if target_skill:
+            cluster_attached_candidates.add(target_skill)
     for row in candidates:
         name = str(row.get("name") or "")
         strengths_for_candidate: set[str] = set()
