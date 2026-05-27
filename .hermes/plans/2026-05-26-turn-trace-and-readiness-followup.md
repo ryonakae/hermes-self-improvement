@@ -233,4 +233,12 @@ Minimum status fields to update:
 
 **Continue with Slice E — scheduled dogfood and final readiness reporting.**
 
-Slices A/B/C are complete enough to provide turn traces, cluster/index/detail artifacts, and planner handoff. Slice D D1/D2/D3/D4 are implemented: planner quality metrics count first-class `cluster_evidence`, dry-run artifacts distinguish safe no-evidence stops from ordinary skips, CLI/tool summaries expose `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` skip classes, and the D4 readiness decision is `acceptable_with_scheduled_dogfood`. Latest validation: full suite `827 passed, 2 skipped`; latest D4 evidence artifact: `run-20260527T090319Z` with `actionability_loss 0`. Next work is Slice E: observe the separated `03:00` calibrate and `04:00` maintenance cron runs, then write final readiness reporting. Do not change thresholds unless scheduled dogfood produces concrete actionability loss.
+Slices A/B/C are complete enough to provide turn traces, cluster/index/detail artifacts, and planner handoff. Slice D D1/D2/D3/D4 are implemented: planner quality metrics count first-class `cluster_evidence`, dry-run artifacts distinguish safe no-evidence stops from ordinary skips, CLI/tool summaries expose `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` skip classes, and the D4 readiness decision is `acceptable_with_scheduled_dogfood`. Latest validation: full suite `827 passed, 2 skipped`; latest D4 evidence artifact: `run-20260527T090319Z` with `actionability_loss 0`.
+
+Tomorrow's concrete work:
+- read the next `03:00` calibrate cron output and check whether `1200s` was sufficient,
+- read the next `04:00` maintenance cron output and newest run artifact,
+- verify `skip_class_counts` is present and `actionability_loss_count` stays zero unless there is a concrete cluster-backed follow-up,
+- then write the final Slice E readiness decision (`ready`, `acceptable_with_follow_up`, or `blocked`).
+
+Do not change thresholds first unless the scheduled dogfood shows concrete actionability loss or calibrate still overruns `1200s`.

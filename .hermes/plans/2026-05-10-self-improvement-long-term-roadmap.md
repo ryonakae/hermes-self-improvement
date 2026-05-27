@@ -50,7 +50,7 @@ Overall: **about 9合目** for the original long-term roadmap. Structural migrat
 
 ### Important caveat
 
-The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. D4 concludes the current state is `acceptable_with_scheduled_dogfood`: latest smoke `run-20260527T090319Z` has `actionability_loss 0`, so no mutation guard should be loosened. The current work is Slice E scheduled dogfood proof and final readiness reporting.
+The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. D4 concludes the current state is `acceptable_with_scheduled_dogfood`: latest smoke `run-20260527T090319Z` has `actionability_loss 0`, so no mutation guard should be loosened. The current work is Slice E scheduled dogfood proof and final readiness reporting. Tomorrow's first check is whether the separated `03:00` calibrate cron now fits within the raised `1200s` global script timeout before the `04:00` maintenance run is judged.
 
 ### Strong areas
 

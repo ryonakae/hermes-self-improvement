@@ -85,4 +85,13 @@ Final report should state:
 
 ## Current next action
 
-Wait for the next scheduled `03:00` / `04:00` dogfood run, then inspect cron outputs and the new run artifact before changing code.
+Tomorrow morning, after the next scheduled `03:00` / `04:00` run pair:
+
+1. Inspect `self-improvement-calibrate` cron output and confirm whether `1200s` is enough for a clean completion.
+2. Inspect `self-improvement-autonomous-maintenance` cron output and confirm it still completes cleanly after the split.
+3. Open the newest maintenance run artifact and verify:
+   - `step_decisions.skill.planner_quality.skip_class_counts` is present,
+   - `actionability_loss_count == 0` unless there is a concrete cluster-backed skill to inspect,
+   - the summary is still understandable as benign/safe-stop/needs-follow-up rather than opaque all-skip noise.
+4. If both jobs complete and the maintenance artifact stays non-actionable, update Slice E / parent plan / roadmap / README with the final readiness decision.
+5. If calibrate still exceeds `1200s`, do not touch planner thresholds first; decide between a further timeout increase and stricter calibrate trigger/gating based on the new cron evidence.

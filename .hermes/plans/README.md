@@ -25,8 +25,8 @@ The current active hardening plans are:
   - Tracks the all-skip dry-run investigation. Planner-quality/readiness metrics now observe first-class `cluster_evidence`; skip/readiness classification separates benign skips, safety stops, actionability loss, and needs-follow-up in planner quality, CLI summaries, and compact tool payloads. Latest validation: full suite `827 passed, 2 skipped`; latest D4 evidence artifact `run-20260527T090319Z` showed `actionability_loss 0`.
 
 - `2026-05-27-slice-e-scheduled-dogfood-readiness.md`
-  - **Status:** planned / waiting for scheduled dogfood.
-  - Defines the next proof: observe separated 03:00 calibrate / 04:00 maintenance cron runs, verify maintenance writes a new artifact with `skip_class_counts`, and then close final readiness reporting without changing thresholds unless scheduled artifacts show concrete actionability loss.
+  - **Status:** planned / partially observed via manual dogfood.
+  - Defines the next proof: observe separated 03:00 calibrate / 04:00 maintenance cron runs, verify maintenance writes a new artifact with `skip_class_counts`, and then close final readiness reporting without changing thresholds unless scheduled artifacts show concrete actionability loss. Tomorrow's explicit checklist is: confirm whether calibrate fits within `1200s`, confirm maintenance still completes cleanly, inspect the newest artifact for `skip_class_counts` + `actionability_loss_count`, then write the final readiness decision.
 
 - `2026-05-26-slice-a-turn-trace-persistence.md`
   - **Status:** implemented / validated.
