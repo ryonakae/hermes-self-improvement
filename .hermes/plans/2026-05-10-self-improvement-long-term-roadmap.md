@@ -46,11 +46,11 @@ Overall: **about 9合目** for the original long-term roadmap. Structural migrat
 - Runtime is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
 - `improve --dry-run --json` now completes cleanly and writes evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes under the new naming.
 - Full test baseline is green (`827 passed, 2 skipped`).
-- Slices A/B/C of the turn-trace/index redesign are implemented; Slice D D1/D2/D3 are implemented and D4 readiness handoff remains.
+- Slices A/B/C of the turn-trace/index redesign are implemented; Slice D D1/D2/D3/D4 are implemented and Slice E scheduled dogfood/final readiness reporting remains.
 
 ### Important caveat
 
-The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. Latest smoke `run-20260527T090040Z` still has no apply candidates, but the visible classification keeps this from being misread as planner failure. The current work is D4 readiness handoff, scheduled dogfood proof, and final readiness reporting rather than loosening mutation guards.
+The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. D4 concludes the current state is `acceptable_with_scheduled_dogfood`: latest smoke `run-20260527T090319Z` has `actionability_loss 0`, so no mutation guard should be loosened. The current work is Slice E scheduled dogfood proof and final readiness reporting.
 
 ### Strong areas
 

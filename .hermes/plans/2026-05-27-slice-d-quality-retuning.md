@@ -9,7 +9,7 @@
 
 **Goal:** Make the new turn-trace → cluster summary → evidence index/detail substrate observable enough to tune planner behavior from real runs, then improve only the evidence/actionability boundaries that are proven too weak or too conservative.
 
-**Status — 2026-05-27:** D1/D2/D3 implemented. Planner quality counters now count first-class `cluster_evidence` entries and target-skill attachments from the index, not only legacy `evidence_resolution` rows. Skip/readiness classification now separates benign duplicate/inventory skips, safety stops, actionability loss, and needs-follow-up in planner quality, CLI summaries, and compact tool payloads. Latest dry-run (`run-20260527T090040Z`) wrote `skip_class_counts` to the run artifact; CLI smoke showed `benign 43`, `safe-stop 1`, `actionability-loss 0`, `needs-follow-up 2` for the skill planner path. Do not relax mutation guards just to raise apply count. Validation: full suite `827 passed, 2 skipped`.
+**Status — 2026-05-27:** D1/D2/D3/D4 implemented. Planner quality counters now count first-class `cluster_evidence` entries and target-skill attachments from the index, not only legacy `evidence_resolution` rows. Skip/readiness classification now separates benign duplicate/inventory skips, safety stops, actionability loss, and needs-follow-up in planner quality, CLI summaries, and compact tool payloads. D4 readiness decision is `acceptable_with_scheduled_dogfood`: do not relax mutation guards; use the separated `03:00` calibrate / `04:00` maintenance cron run as the next proof point. Latest dry-run (`run-20260527T090319Z`) showed `actionability_loss 0` with only benign/safe-stop/needs-follow-up skip classes. Validation: full suite `827 passed, 2 skipped`.
 
 ---
 
@@ -121,7 +121,41 @@ Classification policy:
 
 ## D4 — Readiness handoff
 
-After D2/D3 are validated, update the parent follow-up plan, role redesign plan, roadmap, and README with:
-- latest validation result,
-- latest dry-run artifact path,
-- whether remaining skip/unknown behavior is acceptable, blocked, or needs another focused D-slice.
+**Status:** Implemented as documentation / operating handoff.
+
+**Readiness decision:** `acceptable_with_scheduled_dogfood`.
+
+D1/D2/D3 are sufficient for this Slice D pass:
+- The new trace/index substrate is observable in planner quality.
+- Skip-heavy runs are no longer opaque: D3 separates benign skips, safety stops, actionability loss, and needs-follow-up.
+- Latest D3 artifacts show no current actionability-loss signal that justifies loosening mutation guards.
+- Remaining `unknown` outcome volume is an outcome-observation/dogfood maturity issue, not a reason to force planner/editor mutations.
+
+Latest evidence:
+- Runtime healthy: plugin enabled, editor backend available, DSPy available, active evaluator ready, prompt overlays ready.
+- Latest status sample: `turn traces: 213`, cluster summaries/indexes: `7`, latest run `run-20260527T090319Z.json`.
+- D3 JSON smoke: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T090040Z.json` with `apply=0`, `skip=70`, `skip_class_counts {'benign': 46}`.
+- D3 CLI smoke: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T090319Z.json` with `apply=0`, `skip=65`, `benign 43`, `safe_stop 1`, `actionability_loss 0`, `needs_follow_up 2`.
+- Cron schedule is now separated: `self-improvement-calibrate` at `03:00` daily and `self-improvement-autonomous-maintenance` at `04:00` daily.
+
+Interpretation:
+- `actionability_loss=0` means there is no current evidence that planner is dropping a concrete, actionable cluster-backed mutation.
+- `safe_stop=1` is acceptable because it preserves the no-attached-evidence guard.
+- `needs_follow_up=2` is acceptable for now because the examples are already-covered workflow references; they should be watched, not forced into mutation.
+- The old maintenance timeout remains in cron history but is explained by the pre-split GEPA/maintenance coupling. The next scheduled run is the proof point.
+
+Dogfood acceptance criteria for the next scheduled run:
+- `self-improvement-calibrate` completes at `03:00` without corrupting active prompt overlays; `no_improvement` is acceptable.
+- `self-improvement-autonomous-maintenance` completes at `04:00` without script timeout.
+- The maintenance run writes a new run artifact with `skip_class_counts` present under `step_decisions.skill.planner_quality`.
+- If `actionability_loss_count > 0`, inspect the concrete skill/cluster before changing thresholds.
+- If the run only shows benign skips / safe stops / already-covered needs-follow-up, proceed to Slice E final steady-state dogfood/reporting.
+
+Do not do next:
+- Do not relax mutation guards to reduce skip count.
+- Do not classify generic terminal failures as actionable without concrete workflow boundary evidence.
+- Do not add roles, queues, approval lanes, or mutation targets.
+
+**Verification for D4 docs-only handoff:**
+- D4 uses the already-validated D3 code path: full suite `827 passed, 2 skipped`, `py_compile` OK, `git diff --check` OK.
+- Additional D4 runtime checks: `hermes self-improvement status`, latest run artifact inspection, `cronjob list`, and `hermes self-improvement report --since-hours 12`.

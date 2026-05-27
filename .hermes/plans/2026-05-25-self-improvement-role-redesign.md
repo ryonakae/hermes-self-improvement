@@ -20,21 +20,21 @@
 - `improve --dry-run --json` completes and writes evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes.
 - Current validation baseline: full suite passes (`827 passed, 2 skipped`).
 - Slices A/B/C of the observation-model redesign are implemented: turn traces persist, cluster/index/detail artifacts are materialized, and planner handoff includes cluster evidence.
-- Slice D D1/D2/D3 are implemented: cluster evidence is counted in planner quality, dry-run artifacts distinguish safe stops from ordinary skips, and CLI/tool summaries expose skip/readiness classes.
+- Slice D D1/D2/D3/D4 are implemented: cluster evidence is counted in planner quality, dry-run artifacts distinguish safe stops from ordinary skips, CLI/tool summaries expose skip/readiness classes, and readiness is handed off as `acceptable_with_scheduled_dogfood`.
 
 ### Partially complete
 
 - Planner/editor/evaluator/calibrator naming migration is complete enough for release-facing/runtime-facing surfaces, but older roadmap text and some historical milestone docs still describe the superseded resolver / planner / agent split and need periodic maintenance when touched.
-- Evidence handoff is index-aware and structured; D4 still needs to turn D1/D2/D3 observations into the final readiness handoff and scheduled dogfood criteria.
+- Evidence handoff is index-aware and structured; Slice E still needs to confirm the D4 handoff through scheduled dogfood and write final readiness reporting.
 
 ### Not yet complete
 
-- The redesign's quality goal is only partly met until scheduled dogfood confirms the new classification over real cron runs; D3 now separates benign skips, safe stops, actionability loss, and needs-follow-up so all-skip runs are no longer opaque.
+- The redesign's quality goal is only partly met until scheduled dogfood confirms the new classification over real cron runs; D4 accepts the current state only with that scheduled dogfood proof.
 - Outcome attribution remains mostly `unknown`; steady-state dogfood and final readiness reporting are still pending.
 
 ### Current practical reading
 
-Treat this redesign as **structural migration done, runtime healthy, observation-model handoff implemented, D3 skip/readiness classification implemented, scheduled dogfood/readiness handoff still incomplete**.
+Treat this redesign as **structural migration done, runtime healthy, observation-model handoff implemented, Slice D readiness handoff complete, scheduled dogfood/final reporting still incomplete**.
 
 ## Decisions
 

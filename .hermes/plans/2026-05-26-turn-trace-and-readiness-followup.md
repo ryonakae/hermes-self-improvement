@@ -231,6 +231,6 @@ Minimum status fields to update:
 
 ## Current next slice
 
-**Continue with Slice D — readiness handoff on the new substrate.**
+**Continue with Slice E — scheduled dogfood and final readiness reporting.**
 
-Slices A/B/C are complete enough to provide turn traces, cluster/index/detail artifacts, and planner handoff. Slice D now has D1/D2/D3 implemented: planner quality metrics count first-class `cluster_evidence`, dry-run artifacts distinguish safe no-evidence stops from ordinary skips, and CLI/tool summaries expose `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` skip classes. Latest validation: full suite `827 passed, 2 skipped`; latest D3 smoke artifact: `run-20260527T090040Z`. Do not relax mutation guards just to raise apply count. Next work should be D4 readiness handoff plus scheduled dogfood observation, not another threshold change unless new evidence shows a real actionability loss.
+Slices A/B/C are complete enough to provide turn traces, cluster/index/detail artifacts, and planner handoff. Slice D D1/D2/D3/D4 are implemented: planner quality metrics count first-class `cluster_evidence`, dry-run artifacts distinguish safe no-evidence stops from ordinary skips, CLI/tool summaries expose `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` skip classes, and the D4 readiness decision is `acceptable_with_scheduled_dogfood`. Latest validation: full suite `827 passed, 2 skipped`; latest D4 evidence artifact: `run-20260527T090319Z` with `actionability_loss 0`. Next work is Slice E: observe the separated `03:00` calibrate and `04:00` maintenance cron runs, then write final readiness reporting. Do not change thresholds unless scheduled dogfood produces concrete actionability loss.
