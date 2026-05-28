@@ -123,6 +123,8 @@ Legacy planner actions normalize as follows before they reach the editor:
 
 ## Slice 1: Introduce canonical transaction schema helpers
 
+**Status:** completed. Added deterministic `normalize_knowledge_transaction(...)` helpers and RED/GREEN coverage for canonical stores, legacy action mapping, deterministic ids, non-executable classifications, and blocked invalid apply transactions.
+
 **Objective:** Add a small deterministic schema/normalization layer before changing orchestration.
 
 **Files:**
