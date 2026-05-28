@@ -111,6 +111,21 @@ The editor receives a validated transaction plan and executes only that plan.
 
 ### Slice 1 — Honest artifact/report visibility for matched-but-not-selected and routed evidence
 
+**Status:** completed 2026-05-28.
+
+**Validation:**
+- Focused tests: `tests/test_skill_planner.py::test_planner_quality_report_exposes_matched_but_not_selected_reasons`, `tests/test_skill_planner.py::test_planner_quality_report_classifies_weak_matched_noop_separately`, `tests/test_memory_to_skill_migration.py::test_knowledge_routing_summary_reports_memory_to_skill_drop`, `tests/test_memory_to_skill_migration.py::test_knowledge_routing_summary_counts_memory_to_skill_preview_as_selected`, `tests/test_cli_surface.py::test_improve_summary_is_curator_style_and_mentions_private_eval_cases`, `tests/test_cli_surface.py::test_improve_summary_reports_memory_to_skill_migrations`, `tests/test_plugin_tools.py::test_improve_tool_returns_compact_llm_facing_summary` — passed.
+- Related tests: `tests/test_skill_planner.py tests/test_memory_to_skill_migration.py tests/test_cli_surface.py tests/test_plugin_tools.py` — `102 passed`.
+- Full suite: `831 passed, 2 skipped`.
+- Dry-run smoke artifact: `~/.hermes/self-improvement/runs/run-20260528T023127Z.json`.
+  - `matched_candidate_count: 10`
+  - `matched_but_not_selected_count: 9`
+  - `matched_but_not_selected_by_reason: {"Exact duplicate": 2, "not_selected_by_planner": 7}`
+  - `matched_noop_class_counts: {"matched_existing_coverage": 2, "matched_needs_planner_rationale": 5, "matched_weak_or_generic": 2}`
+  - `knowledge_routing.memory_routed_to_skill_count: 6`
+  - `knowledge_routing.memory_routed_to_skill_dropped_count: 6`
+  - `knowledge_routing.memory_routed_to_skill_dropped_by_reason: {"not_memory_workflow_to_skill": 6}`
+
 **Objective:** Make the current loss modes visible before changing behavior.
 
 **Files:**

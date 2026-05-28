@@ -306,7 +306,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                         "summary": {"candidate_count": 2, "mutate_skill_count": 1, "archive_skill_count": 1, "skipped": 1, "deferred": 0, "mutate_memory_count": 0, "calibrate_evaluator_count": 0},
                         "decisions": [{"skill": "a", "decision": "mutate_skill", "editor_instructions": large_instruction}],
                     },
-                    "planner_quality": {"attached_candidate_count": 1, "unmatched_evidence_count": 2, "selected_with_evidence": 1, "action_like_skips": 0, "hint_attached_evidence_count": 1, "hint_attached_candidate_count": 1, "cluster_evidence_count": 0, "attachments_by_match_kind": {"hint_tool_class": 1}, "skip_class_counts": {"benign": 1, "safe_stop": 1, "actionability_loss": 0}, "skip_reasons_by_class": {"benign": {"one_off_noise": 1}, "safe_stop": {"mutate_skill_without_attached_evidence": 1}}, "editor_task_count": 1, "editor_prompt_chars": {"max": 500, "min": 500, "total": 500}},
+                    "planner_quality": {"attached_candidate_count": 1, "unmatched_evidence_count": 2, "selected_with_evidence": 1, "action_like_skips": 0, "hint_attached_evidence_count": 1, "hint_attached_candidate_count": 1, "cluster_evidence_count": 0, "attachments_by_match_kind": {"hint_tool_class": 1}, "skip_class_counts": {"benign": 1, "safe_stop": 1, "actionability_loss": 0}, "skip_reasons_by_class": {"benign": {"one_off_noise": 1}, "safe_stop": {"mutate_skill_without_attached_evidence": 1}}, "matched_candidate_count": 1, "matched_but_not_selected_count": 1, "matched_but_not_selected_by_reason": {"not_selected_by_planner": 1}, "matched_noop_class_counts": {"matched_needs_planner_rationale": 1}, "editor_task_count": 1, "editor_prompt_chars": {"max": 500, "min": 500, "total": 500}},
                     "decisions": [
                         {"skill": "a", "decision": "mutate_skill_preview", "reason": "planner_mutate_skill_preview", "task": {"instructions": large_instruction}},
                         {"skill": "b", "decision": "defer", "reason": "target_uncertain"},
@@ -317,6 +317,8 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
                     {"evidence_id": "m1", "decision": "accepted", "reason": "dry_run_would_execute_memory_tool", "related_memory_lookup": {"status": "completed"}},
                     {"evidence_id": "m2", "decision": "rejected", "reason": "memory_sensitive_text", "related_memory_lookup": {"status": "skipped"}},
                 ]},
+                "memory_to_skill": {"status": "preview", "changed": 0, "decisions": [{"evidence_id": "m3", "decision": "memory_to_skill_preview"}]},
+                "knowledge_routing": {"memory_routed_to_skill_count": 1, "memory_routed_to_skill_selected_count": 1, "memory_routed_to_skill_dropped_count": 0, "cross_store_candidate_count": 1},
                 "evaluator": {"status": "calibration_only", "changed": 0},
             },
             "next_actions": [{"kind": "run_mutating_improve", "command": "hermes self-improvement improve"}],
@@ -348,11 +350,16 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["steps"]["skill_planner"]["quality"]["hint_attached_evidence_count"] == 1
     assert payload["steps"]["skill_planner"]["quality"]["attachments_by_match_kind"] == {"hint_tool_class": 1}
     assert payload["steps"]["skill_planner"]["quality"]["skip_class_counts"] == {"benign": 1, "safe_stop": 1, "actionability_loss": 0}
+    assert payload["steps"]["skill_planner"]["quality"]["matched_candidate_count"] == 1
+    assert payload["steps"]["skill_planner"]["quality"]["matched_but_not_selected_count"] == 1
+    assert payload["steps"]["skill_planner"]["quality"]["matched_but_not_selected_by_reason"] == {"not_selected_by_planner": 1}
+    assert payload["steps"]["skill_planner"]["quality"]["matched_noop_class_counts"] == {"matched_needs_planner_rationale": 1}
     assert payload["steps"]["skill_planner"]["quality"]["skip_reasons_by_class"]["benign"] == {"one_off_noise": 1}
     assert payload["steps"]["skill_planner"]["quality"]["editor_prompt_chars"]["max"] == 500
     assert payload["steps"]["memory"]["related_lookups"]["completed"] == 1
-    assert payload["action_summary"] == {"apply": 2, "defer": 1, "skip": 1, "block": 1}
-    assert payload["actionable"]["mutation_ready_count"] == 2
+    assert payload["steps"]["knowledge_routing"] == {"memory_routed_to_skill_count": 1, "memory_routed_to_skill_selected_count": 1, "memory_routed_to_skill_dropped_count": 0, "cross_store_candidate_count": 1}
+    assert payload["action_summary"] == {"apply": 3, "defer": 1, "skip": 1, "block": 1}
+    assert payload["actionable"]["mutation_ready_count"] == 3
     assert payload["actionable"]["blocked_count"] == 1
     assert payload["actionable"]["deferred_count"] == 1
     assert payload["actionable"]["skipped_count"] == 1

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hermes_self_improvement.runner_steps import apply_memory_to_skill_migrations
+from hermes_self_improvement.runner_steps import apply_memory_to_skill_migrations, build_knowledge_routing_summary
 
 
 def write_skill(root, name="hermes-memory-and-live-context"):
@@ -53,6 +53,40 @@ def success_payload(name="hermes-memory-and-live-context"):
         "verification_notes": ["patched target skill"],
         "rollback_hints": [],
     }
+
+
+def test_knowledge_routing_summary_reports_memory_to_skill_drop():
+    memory_step = memory_step_with_skill_route()
+    memory_to_skill_step = {"status": "no_candidates", "decisions": []}
+
+    summary = build_knowledge_routing_summary(memory_step=memory_step, memory_to_skill_step=memory_to_skill_step)
+
+    assert summary["memory_routed_to_skill_count"] == 1
+    assert summary["memory_routed_to_skill_selected_count"] == 0
+    assert summary["memory_routed_to_skill_dropped_count"] == 1
+    assert summary["cross_store_candidate_count"] == 1
+    assert summary["memory_routed_to_skill_dropped_by_reason"] == {"memory_convert_to_skill_update": 1}
+
+
+def test_knowledge_routing_summary_counts_memory_to_skill_preview_as_selected():
+    memory_step = memory_step_with_skill_route()
+    memory_to_skill_step = {
+        "status": "preview",
+        "decisions": [
+            {
+                "evidence_id": "memory-place-skill",
+                "decision": "memory_to_skill_preview",
+                "reason": "dry_run_would_update_skill_then_remove_memory",
+            }
+        ],
+    }
+
+    summary = build_knowledge_routing_summary(memory_step=memory_step, memory_to_skill_step=memory_to_skill_step)
+
+    assert summary["memory_routed_to_skill_count"] == 1
+    assert summary["memory_routed_to_skill_selected_count"] == 1
+    assert summary["memory_routed_to_skill_dropped_count"] == 0
+    assert summary["cross_store_candidate_count"] == 1
 
 
 def test_memory_to_skill_migration_patches_skill_before_removing_memory(tmp_path):

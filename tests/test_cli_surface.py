@@ -415,6 +415,10 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
                         "benign": {"not_selected_by_planner": 2, "duplicate_coverage": 1},
                         "safe_stop": {"mutate_skill_without_attached_evidence": 1},
                     },
+                    "matched_candidate_count": 4,
+                    "matched_but_not_selected_count": 2,
+                    "matched_but_not_selected_by_reason": {"not_selected_by_planner": 2},
+                    "matched_noop_class_counts": {"matched_needs_planner_rationale": 1, "matched_weak_or_generic": 1},
                 },
                 "decisions": [
                     {"decision": "archive_skill_preview"},
@@ -474,6 +478,9 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "Action summary:" in text
     assert "- Would apply: 2, Deferred: 1, Skipped: 1, Blocked: 1" in text
     assert "- skip classification: benign 3, safe-stop 1, actionability-loss 0" in text
+    assert "- matched evidence: candidates 4, not selected 2" in text
+    assert "- matched no-op classes: matched_needs_planner_rationale 1, matched_weak_or_generic 1" in text
+    assert "- matched not-selected reasons: not_selected_by_planner 2" in text
     assert "- benign reasons: not_selected_by_planner 2, duplicate_coverage 1" in text
     assert "- safe-stop reasons: mutate_skill_without_attached_evidence 1" in text
     assert "Would apply details:" in text
@@ -528,11 +535,20 @@ def test_improve_summary_reports_memory_to_skill_migrations():
                 {"decision": "memory_to_skill_preview", "skill_route": "operations", "reason": "dry_run_would_update_skill_then_remove_memory"},
                 {"decision": "defer", "skill_route": "", "reason": "memory_to_skill_missing_skill_route"},
             ]},
+            "knowledge_routing": {
+                "memory_routed_to_skill_count": 3,
+                "memory_routed_to_skill_selected_count": 1,
+                "memory_routed_to_skill_dropped_count": 2,
+                "cross_store_candidate_count": 3,
+                "memory_routed_to_skill_dropped_by_reason": {"not_memory_workflow_to_skill": 2},
+            },
         },
         "evidence_pack": {"summary": {}},
     })
 
     assert "- memory-to-skill migrations: applied 0, preview 1, deferred 1" in text
+    assert "- memory routed to skill: total 3, selected 1, dropped 2" in text
+    assert "- memory routed drop reasons: not_memory_workflow_to_skill 2" in text
     assert "- Would apply: 1, Deferred: 1, Skipped: 0, Blocked: 0" in text
 
 

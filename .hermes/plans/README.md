@@ -11,7 +11,7 @@ As of 2026-05-10, the long-term roadmap is:
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is runtime-healthy but architecturally incomplete for cross-store skill/memory transactions.
 
 - `2026-05-28-knowledge-transaction-unification.md`
-  - **Status:** active top-priority implementation plan.
+  - **Status:** active top-priority implementation plan; Slice 1 visibility completed, Slice 2 replacement of split planner outputs is next.
   - Completes the unfinished planner/editor redesign: honest matched-but-not-selected reporting, replacement of split skill/memory planner outputs with unified knowledge transactions across skill/builtin-user/builtin-memory/external-memory targets, mixed skill+memory editor execution with add-before-remove semantics, removal of split skill/memory editor schema leaks, and no compatibility shims for old split runtime contracts.
 
 - `2026-05-25-self-improvement-role-redesign.md`

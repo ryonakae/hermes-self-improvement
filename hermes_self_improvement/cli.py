@@ -47,6 +47,7 @@ from .runner_steps import (
     _execute_memory_move_operation,
     _external_memory_provider,
     apply_memory_to_skill_migrations,
+    build_knowledge_routing_summary,
     run_memory_improvement_step,
     run_skill_improvement_step,
 )
@@ -1041,6 +1042,7 @@ def run_improve(
     memory_step = run_memory_improvement_step(evidence_pack=evidence_pack, config=memory_config, mutate=mutate)
     memory_to_skill_config = dict(memory_config)
     memory_to_skill_step = apply_memory_to_skill_migrations(memory_step=memory_step, config=memory_to_skill_config, mutate=mutate)
+    knowledge_routing = build_knowledge_routing_summary(memory_step=memory_step, memory_to_skill_step=memory_to_skill_step)
     combined_skill_changes = sorted(set([*(skill_step.get("changed_skills") or []), *(memory_to_skill_step.get("changed_skills") or [])]))
     combined_memory_changes = [*(memory_step.get("changed_memories") or []), *(memory_to_skill_step.get("removed_memories") or [])]
     step_decisions_payload = {
@@ -1049,6 +1051,7 @@ def run_improve(
         "skill": skill_step,
         "memory": memory_step,
         "memory_to_skill": memory_to_skill_step,
+        "knowledge_routing": knowledge_routing,
         "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
     }
     action_summary = _action_summary_from_result({}, step_decisions_payload)
@@ -1400,6 +1403,18 @@ def _skill_skip_classification_lines(planner_quality: dict[str, Any]) -> list[st
         ("needs_follow_up", "needs-follow-up"),
     ]
     lines = ["- skip classification: " + ", ".join(f"{label} {counts.get(key, 0)}" for key, label in labels if counts.get(key, 0) or key in {"benign", "safe_stop", "actionability_loss"})]
+    matched_count = int(planner_quality.get("matched_candidate_count") or 0)
+    matched_not_selected = int(planner_quality.get("matched_but_not_selected_count") or 0)
+    if matched_count or matched_not_selected:
+        lines.append(f"- matched evidence: candidates {matched_count}, not selected {matched_not_selected}")
+    raw_matched_classes = planner_quality.get("matched_noop_class_counts")
+    if isinstance(raw_matched_classes, dict) and raw_matched_classes:
+        matched_classes = _top_count_map({str(key): int(value or 0) for key, value in raw_matched_classes.items()})
+        lines.append("- matched no-op classes: " + ", ".join(f"{key} {value}" for key, value in matched_classes.items()))
+    raw_matched_reasons = planner_quality.get("matched_but_not_selected_by_reason")
+    if isinstance(raw_matched_reasons, dict) and raw_matched_reasons:
+        matched_reasons = _top_count_map({str(key): int(value or 0) for key, value in raw_matched_reasons.items()})
+        lines.append("- matched not-selected reasons: " + ", ".join(f"{key} {value}" for key, value in matched_reasons.items()))
     raw_reasons_by_class = planner_quality.get("skip_reasons_by_class")
     reasons_by_class = raw_reasons_by_class if isinstance(raw_reasons_by_class, dict) else {}
     for key, label in labels:
@@ -1954,6 +1969,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "mutate_skill"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
     memory_to_skill_step = step_decisions.get("memory_to_skill") if isinstance(step_decisions.get("memory_to_skill"), dict) else {}
+    raw_knowledge_routing = step_decisions.get("knowledge_routing")
+    knowledge_routing: dict[str, Any] = raw_knowledge_routing if isinstance(raw_knowledge_routing, dict) else {}
     memory_to_skill_decisions = [item for item in (memory_to_skill_step.get("decisions") or []) if isinstance(item, dict)]
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
@@ -2037,6 +2054,16 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     memory_to_skill_preview = sum(1 for item in memory_to_skill_decisions if item.get("decision") == "memory_to_skill_preview")
     memory_to_skill_deferred = sum(1 for item in memory_to_skill_decisions if item.get("decision") in {"defer", "rejected"})
     memory_to_skill_line = f"- memory-to-skill migrations: applied {memory_to_skill_applied}, preview {memory_to_skill_preview}, deferred {memory_to_skill_deferred}" if memory_to_skill_decisions else ""
+    memory_routing_lines: list[str] = []
+    routed_to_skill = int(knowledge_routing.get("memory_routed_to_skill_count") or 0)
+    if routed_to_skill:
+        memory_routing_lines.append(
+            f"- memory routed to skill: total {routed_to_skill}, selected {int(knowledge_routing.get('memory_routed_to_skill_selected_count') or 0)}, dropped {int(knowledge_routing.get('memory_routed_to_skill_dropped_count') or 0)}"
+        )
+        raw_drop_reasons = knowledge_routing.get("memory_routed_to_skill_dropped_by_reason")
+        if isinstance(raw_drop_reasons, dict) and raw_drop_reasons:
+            drop_reasons = _top_count_map({str(key): int(value or 0) for key, value in raw_drop_reasons.items()})
+            memory_routing_lines.append("- memory routed drop reasons: " + ", ".join(f"{key} {value}" for key, value in drop_reasons.items()))
     for decision in memory_step.get("decisions") or []:
         if isinstance(decision, dict):
             lookup = decision.get("related_memory_lookup") if isinstance(decision.get("related_memory_lookup"), dict) else {}
@@ -2143,6 +2170,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         f"- changed {int(summary.get('memory_changes') or 0)} memories",
         *([memory_current_entries_line] if memory_current_entries_line else []),
         *([memory_to_skill_line] if memory_to_skill_line else []),
+        *memory_routing_lines,
         f"- related lookups: completed {lookup_counts['completed']}, unavailable {lookup_counts['unavailable']}, failed {lookup_counts['failed']}, skipped {lookup_counts['skipped']}",
         "Episodes:",
         f"- recorded {int(episodes.get('count') or 0)} episodes at {episodes.get('path') or 'n/a'}",

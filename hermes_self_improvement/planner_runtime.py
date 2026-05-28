@@ -973,6 +973,50 @@ def _skip_classification_report(*, digest: dict[str, Any], skipped: list[dict[st
     }
 
 
+def _matched_noop_class(decision: dict[str, Any], *, strengths: set[str], cluster_actionability_targets: set[str]) -> str:
+    reason = _skip_reason(decision)
+    if _classify_skill_skip(decision, cluster_actionability_targets=cluster_actionability_targets) == "actionability_loss":
+        return "matched_actionability_loss"
+    if _reason_is_benign_skip(reason) and reason != "not_selected_by_planner":
+        return "matched_existing_coverage"
+    if strengths == {"weak"}:
+        return "matched_weak_or_generic"
+    return "matched_needs_planner_rationale"
+
+
+def _matched_noop_report(*, digest: dict[str, Any], skipped: list[dict[str, Any]], selected_skills: set[str], candidate_strengths: dict[str, set[str]], cluster_actionability_targets: set[str]) -> dict[str, Any]:
+    candidates = [item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)]
+    matched_candidates = {
+        str(item.get("name") or "")
+        for item in candidates
+        if str(item.get("name") or "") and int(item.get("attached_evidence_count") or 0) > 0
+    }
+    skipped_by_skill = {str(item.get("skill") or ""): item for item in skipped if str(item.get("skill") or "")}
+    matched_but_not_selected = [
+        skipped_by_skill[name]
+        for name in sorted(matched_candidates - selected_skills)
+        if name in skipped_by_skill
+    ]
+    by_reason: dict[str, int] = {}
+    class_counts: dict[str, int] = {}
+    for decision in matched_but_not_selected:
+        reason = _skip_reason(decision)
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+        skill = str(decision.get("skill") or "")
+        noop_class = _matched_noop_class(
+            decision,
+            strengths=candidate_strengths.get(skill, set()),
+            cluster_actionability_targets=cluster_actionability_targets,
+        )
+        class_counts[noop_class] = class_counts.get(noop_class, 0) + 1
+    return {
+        "matched_candidate_count": len(matched_candidates),
+        "matched_but_not_selected_count": len(matched_but_not_selected),
+        "matched_but_not_selected_by_reason": by_reason,
+        "matched_noop_class_counts": class_counts,
+    }
+
+
 def build_planner_runtime_quality_report(
     *,
     digest: dict[str, Any],
@@ -1035,7 +1079,15 @@ def build_planner_runtime_quality_report(
     selected_skills = {str(item.get("skill") or "") for item in selected}
     cluster_selected_count = sum(1 for skill in selected_skills if skill in cluster_attached_candidates)
     weak_only_selected_count = sum(1 for skill in selected_skills if skill in weak_only_candidates)
+    cluster_actionability_targets = _cluster_actionability_targets(digest)
     skip_classification = _skip_classification_report(digest=digest, skipped=skipped)
+    matched_noop = _matched_noop_report(
+        digest=digest,
+        skipped=skipped,
+        selected_skills=selected_skills,
+        candidate_strengths=candidate_strengths,
+        cluster_actionability_targets=cluster_actionability_targets,
+    )
     return {
         "candidate_count": len(candidates),
         "attached_candidate_count": sum(1 for item in candidates if int(item.get("attached_evidence_count") or 0) > 0),
@@ -1066,6 +1118,7 @@ def build_planner_runtime_quality_report(
             "avg": int(sum(prompt_lengths) / len(prompt_lengths)) if prompt_lengths else 0,
         },
         **skip_classification,
+        **matched_noop,
     }
 
 

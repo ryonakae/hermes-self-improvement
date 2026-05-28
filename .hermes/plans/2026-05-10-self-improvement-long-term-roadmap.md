@@ -48,6 +48,7 @@ Overall: **runtime-healthy but not final-ready** for the original long-term road
 - Full test baseline from the observation/readiness slices is green (`827 passed, 2 skipped`).
 - Slices A/B/C of the turn-trace/index redesign are implemented; Slice D D1/D2/D3/D4 and Slice E scheduled dogfood/readiness reporting are implemented for observation/readiness visibility.
 - New active completion plan: `2026-05-28-knowledge-transaction-unification.md`, covering matched-but-not-selected reporting, replacement of split skill/memory planner outputs with unified knowledge transactions, mixed skill+memory editor execution, removal of split editor schema leaks, and no compatibility shims for old split runtime contracts.
+- Slice 1 visibility is implemented and dogfooded: latest dry-run artifact exposes matched-but-not-selected counts and memory-routed-to-skill drops instead of hiding them under generic benign skips. The remaining blocker is Slice 2+: replacing the split planner contract and editor execution path.
 
 ### Important caveat
 

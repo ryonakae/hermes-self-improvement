@@ -1576,6 +1576,33 @@ def _memory_editor_skill_route_decision(*, result: dict[str, Any], memory_eviden
     }
 
 
+def build_knowledge_routing_summary(*, memory_step: dict[str, Any], memory_to_skill_step: dict[str, Any]) -> dict[str, Any]:
+    memory_decisions = [item for item in (memory_step.get("decisions") or []) if isinstance(item, dict)]
+    routed = [
+        item
+        for item in memory_decisions
+        if item.get("suggested_route") == "skill" or item.get("reason") in {"not_memory_workflow_to_skill", "memory_convert_to_skill_update"}
+    ]
+    selected_ids = {
+        str(item.get("evidence_id") or "")
+        for item in (memory_to_skill_step.get("decisions") or [])
+        if isinstance(item, dict) and item.get("decision") in {"memory_to_skill_preview", "accepted"}
+    }
+    selected = [item for item in routed if str(item.get("evidence_id") or "") in selected_ids]
+    dropped = [item for item in routed if item not in selected]
+    dropped_by_reason: dict[str, int] = {}
+    for item in dropped:
+        reason = str(item.get("reason") or "unknown")
+        dropped_by_reason[reason] = dropped_by_reason.get(reason, 0) + 1
+    return {
+        "memory_routed_to_skill_count": len(routed),
+        "memory_routed_to_skill_selected_count": len(selected),
+        "memory_routed_to_skill_dropped_count": len(dropped),
+        "memory_routed_to_skill_dropped_by_reason": dropped_by_reason,
+        "cross_store_candidate_count": len(routed),
+    }
+
+
 def apply_memory_to_skill_migrations(*, memory_step: dict[str, Any], config: dict[str, Any] | None = None, mutate: bool = False, replay_preview_only: bool = False) -> dict[str, Any]:
     cfg = config or {}
     candidates = _memory_to_skill_candidates(memory_step, replay_preview_only=replay_preview_only)

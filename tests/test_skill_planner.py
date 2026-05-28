@@ -696,6 +696,49 @@ def test_planner_digest_marks_explicit_path_and_cluster_strengths():
     assert by_name["hermes-development-maintenance"]["evidence_match"] == "hint_proposal_cluster"
 
 
+def test_planner_quality_report_exposes_matched_but_not_selected_reasons():
+    digest = build_planner_digest(pack())
+    planner = {
+        "decisions": [
+            {"skill": "demo-skill", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": ["ev1"]},
+            {"skill": "unused-skill", "decision": "skip", "reason": "covered_by_existing_skill", "evidence_ids": []},
+        ]
+    }
+
+    report = build_planner_quality_report(digest=digest, planner=planner, runner_decisions=[])
+
+    assert report["matched_candidate_count"] == 1
+    assert report["matched_but_not_selected_count"] == 1
+    assert report["matched_but_not_selected_by_reason"] == {"not_selected_by_planner": 1}
+    assert report["matched_noop_class_counts"] == {"matched_needs_planner_rationale": 1}
+
+
+def test_planner_quality_report_classifies_weak_matched_noop_separately():
+    pack_data = {
+        "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},
+        "evidence": [
+            {
+                "id": "ev_patch",
+                "kind": "tool_failure_evidence",
+                "event": {"tool_name": "patch", "status": "error", "error_kind": "unknown_error", "result_preview": "validation failed"},
+                "likely_targets": [{"target": "skill", "weight": 0.5}],
+            }
+        ],
+        "views": {"skill": ["ev_patch"], "memory": [], "evaluator": []},
+        "skill_candidates": [{"name": "hermes-development-maintenance", "state": "active", "source": "curator", "usage": {}}],
+    }
+    digest = build_planner_digest(pack_data)
+    report = build_planner_quality_report(
+        digest=digest,
+        planner={"decisions": [{"skill": "hermes-development-maintenance", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": ["ev_patch"]}]},
+        runner_decisions=[],
+    )
+
+    assert report["matched_candidate_count"] == 1
+    assert report["matched_but_not_selected_count"] == 1
+    assert report["matched_noop_class_counts"] == {"matched_weak_or_generic": 1}
+
+
 def test_planner_quality_report_counts_hint_attachment_match_kinds():
     pack_data = {
         "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},
