@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hermes_self_improvement.runner_steps import apply_memory_to_skill_migrations, build_knowledge_routing_summary, build_knowledge_transactions
+from hermes_self_improvement.runner_steps import apply_memory_to_skill_migrations, build_knowledge_routing_summary, build_knowledge_transactions, execute_knowledge_transaction
 
 
 def write_skill(root, name="hermes-memory-and-live-context"):
@@ -53,6 +53,84 @@ def success_payload(name="hermes-memory-and-live-context"):
         "verification_notes": ["patched target skill"],
         "rollback_hints": [],
     }
+
+
+def transaction_with_memory_to_skill(*, old_text="Use these exact steps for live context cleanup.", target_skill="hermes-memory-and-live-context", source_store="builtin_memory"):
+    return {
+        "transaction_id": "txn-memory-place-skill",
+        "transaction_kind": "memory_to_skill",
+        "decision": "apply",
+        "source_store": source_store,
+        "target_store": "skill",
+        "source_evidence_id": "memory-place-skill",
+        "target_skill": target_skill,
+        "source_old_text": old_text,
+        "skill_task": {
+            "type": "skill_editor_task",
+            "task_kind": "mutate_skill",
+            "targets": {"primary_skill": target_skill},
+            "instructions": "Move reusable memory cleanup guidance into the skill.",
+        },
+    }
+
+
+def test_execute_knowledge_transaction_patches_skill_then_removes_memory(tmp_path):
+    root = tmp_path / "skills"
+    write_skill(root)
+    calls = []
+
+    def fake_backend(prompt, task, config=None):
+        calls.append(("skill", task))
+        return success_payload()
+
+    def fake_memory(**args):
+        calls.append(("memory", args))
+        return {"success": True, "changed": True}
+
+    result = execute_knowledge_transaction(
+        transaction_with_memory_to_skill(),
+        config={"_memory_tool_fn": fake_memory, "_editor_backend": fake_backend, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
+        mutate=True,
+    )
+
+    assert result == {
+        "success": True,
+        "outcome": "applied",
+        "transaction_id": "txn-memory-place-skill",
+        "transaction_kind": "memory_to_skill",
+        "changed_skills": ["hermes-memory-and-live-context"],
+        "created_skills": [],
+        "changed_memories": [],
+        "removed_memories": ["memory-place-skill"],
+        "executed_steps": [
+            {"step": "skill_patch", "status": "applied", "target": "hermes-memory-and-live-context"},
+            {"step": "memory_remove", "status": "applied", "target": "memory"},
+        ],
+        "verification_notes": ["patched target skill", "source memory removed after skill verification"],
+        "rollback_hints": [],
+    }
+    assert calls[0][0] == "skill"
+    assert calls[1] == ("memory", {"action": "remove", "target": "memory", "old_text": "Use these exact steps for live context cleanup."})
+
+
+def test_execute_knowledge_transaction_keeps_memory_when_skill_patch_fails(tmp_path):
+    root = tmp_path / "skills"
+    write_skill(root)
+    memory_calls = []
+
+    result = execute_knowledge_transaction(
+        transaction_with_memory_to_skill(),
+        config={"_memory_tool_fn": lambda **args: memory_calls.append(args), "_editor_backend": lambda *args, **kwargs: {"success": False, "error": "editor_failed"}, "_mutable_local_skill_roots": [root], "_memory_current_entries": current_entries()},
+        mutate=True,
+    )
+
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+    assert result["reason"] == "knowledge_transaction_skill_step_failed"
+    assert result["changed_skills"] == []
+    assert result["removed_memories"] == []
+    assert result["executed_steps"] == [{"step": "skill_patch", "status": "failed", "target": "hermes-memory-and-live-context"}]
+    assert memory_calls == []
 
 
 def test_knowledge_transactions_include_memory_to_skill_cross_store_candidate():
@@ -145,6 +223,10 @@ def test_memory_to_skill_migration_patches_skill_before_removing_memory(tmp_path
     assert calls[0][1]["targets"] == {"primary_skill": "hermes-memory-and-live-context"}
     assert calls[1] == ("memory", {"action": "remove", "target": "memory", "old_text": "Use these exact steps for live context cleanup."})
     assert result["decisions"][0]["decision"] == "accepted"
+    assert result["decisions"][0]["transaction_result"]["executed_steps"] == [
+        {"step": "skill_patch", "status": "applied", "target": "hermes-memory-and-live-context"},
+        {"step": "memory_remove", "status": "applied", "target": "memory"},
+    ]
 
 
 def test_memory_to_skill_migration_keeps_memory_when_skill_fails(tmp_path):

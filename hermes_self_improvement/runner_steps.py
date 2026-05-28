@@ -1614,6 +1614,121 @@ def build_knowledge_transactions(*, skill_step: dict[str, Any], memory_step: dic
     return transactions
 
 
+def _knowledge_transaction_source_target(source_store: str) -> str:
+    return "user" if source_store == "builtin_user" else "memory"
+
+
+def _base_knowledge_transaction_result(transaction: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "transaction_id": transaction.get("transaction_id"),
+        "transaction_kind": transaction.get("transaction_kind"),
+        "changed_skills": [],
+        "created_skills": [],
+        "changed_memories": [],
+        "removed_memories": [],
+        "executed_steps": [],
+        "verification_notes": [],
+        "rollback_hints": [],
+    }
+
+
+def _knowledge_transaction_skill_task(raw_task: dict[str, Any], target_skill: str) -> dict[str, Any]:
+    task = dict(raw_task)
+    task["type"] = "skill_editor_task"
+    if task.get("task_kind") in {"mutate_skill", "patch_skill", "skill_patch"}:
+        task["task_kind"] = "skill_improve"
+    raw_targets = task.get("targets")
+    targets: dict[str, Any] = raw_targets if isinstance(raw_targets, dict) else {}
+    if not targets.get("primary_skill"):
+        task["targets"] = {**targets, "primary_skill": target_skill}
+    constraints = task.get("constraints") if isinstance(task.get("constraints"), list) else []
+    if not constraints:
+        task["constraints"] = [
+            "Use only skills_list, skill_view, skill_manage.",
+            "Do not use terminal/file/git/direct filesystem tools.",
+            "Operate only on mutable local skills resolved by the plugin.",
+        ]
+    return task
+
+
+def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[str, Any] | None = None, mutate: bool = False) -> dict[str, Any]:
+    cfg = config or {}
+    result = _base_knowledge_transaction_result(transaction)
+    if transaction.get("transaction_kind") != "memory_to_skill":
+        return {**result, "success": False, "outcome": "blocked", "reason": "unsupported_knowledge_transaction_kind"}
+    target_skill = str(transaction.get("target_skill") or "")
+    old_text = str(transaction.get("source_old_text") or "")
+    source_target = _knowledge_transaction_source_target(str(transaction.get("source_store") or "builtin_memory"))
+    if not target_skill or not old_text:
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    if not mutate:
+        return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+    if not _memory_to_skill_old_text_is_current(cfg, target=source_target, old_text=old_text):
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_source_old_text_not_current"}
+    skill_task = transaction.get("skill_task") if isinstance(transaction.get("skill_task"), dict) else None
+    if skill_task is None:
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_skill_task"}
+    backend = cfg.get("_skill_editor_backend") if cfg.get("_skill_editor_backend") is not None else build_skill_editor_backend(cfg)
+    skill_result = run_skill_editor_task(_knowledge_transaction_skill_task(skill_task, target_skill), config=cfg, backend=backend)
+    skill_step = {"step": "skill_patch", "target": target_skill}
+    if not _skill_result_has_validated_change(skill_result, target_skill):
+        return {
+            **result,
+            "success": False,
+            "outcome": "blocked",
+            "reason": "knowledge_transaction_skill_step_failed",
+            "executed_steps": [{**skill_step, "status": "failed"}],
+            "skill_result": skill_result,
+        }
+    changed_skills = sorted({str(item) for item in (skill_result.get("changed_skills") or []) if str(item)})
+    created_skills = sorted({str(item) for item in (skill_result.get("created_skills") or []) if str(item)})
+    external_provider = _external_memory_provider(cfg)
+    remove_operation = {"operation": "memory_delete", "target": source_target, "old_text": old_text}
+    context = build_memory_mutation_context(provider=external_provider, operation=remove_operation)
+    if not context.get("execution_enabled"):
+        reason = (context.get("reasons") or ["knowledge_transaction_memory_remove_not_executable"])[0]
+        return {
+            **result,
+            "success": False,
+            "outcome": "partial",
+            "reason": reason,
+            "changed_skills": changed_skills,
+            "created_skills": created_skills,
+            "executed_steps": [{**skill_step, "status": "applied"}, {"step": "memory_remove", "status": "blocked", "target": source_target}],
+            "verification_notes": list(skill_result.get("verification_notes") or []),
+            "rollback_hints": ["source memory still present; review whether skill change should be kept"],
+            "skill_result": skill_result,
+            "memory_remove_context": context,
+        }
+    remove_result = _execute_memory_context(context, cfg, operation=remove_operation, external_provider=external_provider)
+    if not remove_result.get("success"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "partial",
+            "reason": remove_result.get("error") or "knowledge_transaction_memory_remove_failed",
+            "changed_skills": changed_skills,
+            "created_skills": created_skills,
+            "executed_steps": [{**skill_step, "status": "applied"}, {"step": "memory_remove", "status": "failed", "target": source_target}],
+            "verification_notes": list(skill_result.get("verification_notes") or []),
+            "rollback_hints": ["source memory still present; review whether skill change should be kept"],
+            "skill_result": skill_result,
+            "memory_remove_result": remove_result,
+        }
+    evidence_id = str(transaction.get("source_evidence_id") or transaction.get("transaction_id") or "memory_to_skill")
+    return {
+        **result,
+        "success": True,
+        "outcome": "applied",
+        "changed_skills": changed_skills,
+        "created_skills": created_skills,
+        "removed_memories": [evidence_id],
+        "executed_steps": [{**skill_step, "status": "applied"}, {"step": "memory_remove", "status": "applied", "target": source_target}],
+        "verification_notes": [*list(skill_result.get("verification_notes") or []), "source memory removed after skill verification"],
+        "rollback_hints": list(skill_result.get("rollback_hints") or []),
+    }
+
+
 def build_knowledge_routing_summary(*, memory_step: dict[str, Any], memory_to_skill_step: dict[str, Any]) -> dict[str, Any]:
     memory_decisions = [item for item in (memory_step.get("decisions") or []) if isinstance(item, dict)]
     routed = [
@@ -1649,8 +1764,6 @@ def apply_memory_to_skill_migrations(*, memory_step: dict[str, Any], config: dic
     decisions: list[dict[str, Any]] = []
     changed_skills: list[str] = []
     removed_memories: list[str] = []
-    backend = cfg.get("_skill_editor_backend") if cfg.get("_skill_editor_backend") is not None else build_skill_editor_backend(cfg)
-    external_provider = _external_memory_provider(cfg)
     for decision in candidates:
         task, base, reject_reason = _build_memory_to_skill_task(decision, config=cfg)
         common = {
@@ -1669,25 +1782,31 @@ def apply_memory_to_skill_migrations(*, memory_step: dict[str, Any], config: dic
         if not _memory_to_skill_old_text_is_current(cfg, target=str(base.get("source_target") or "memory"), old_text=str(base.get("old_text") or "")):
             decisions.append({**common, "decision": "rejected", "reason": "memory_to_skill_old_text_not_current", "changed": False, "task": task})
             continue
-        skill_result = run_skill_editor_task(_skill_editor_task_for_execution(task), config=cfg, backend=backend)
-        if not _skill_result_has_validated_change(skill_result, str(base.get("skill_route") or "")):
-            decisions.append({**common, "decision": "rejected", "reason": "memory_to_skill_skill_failed", "changed": False, "task": task, "skill_result": skill_result})
+        transaction = {
+            "transaction_id": f"txn_{base.get('evidence_id') or 'memory_to_skill'}",
+            "transaction_kind": "memory_to_skill",
+            "decision": "apply",
+            "source_store": _memory_transaction_source_store(str(base.get("source_target") or "memory")),
+            "target_store": "skill",
+            "source_evidence_id": base.get("evidence_id"),
+            "target_skill": base.get("skill_route"),
+            "source_old_text": base.get("old_text"),
+            "skill_task": task,
+        }
+        transaction_result = execute_knowledge_transaction(transaction, config=cfg, mutate=True)
+        for skill_name in transaction_result.get("changed_skills") or []:
+            if skill_name:
+                changed_skills.append(str(skill_name))
+        for evidence_id in transaction_result.get("removed_memories") or []:
+            if evidence_id:
+                removed_memories.append(str(evidence_id))
+        if transaction_result.get("success"):
+            decisions.append({**common, "decision": "accepted", "reason": "memory_to_skill_completed", "changed": True, "task": task, "transaction_result": transaction_result})
             continue
-        skill_name = str(base.get("skill_route") or "")
-        if skill_name:
-            changed_skills.append(skill_name)
-        remove_operation = {"operation": "memory_delete", "target": str(base.get("source_target") or "memory"), "old_text": str(base.get("old_text") or "")}
-        context = build_memory_mutation_context(provider=external_provider, operation=remove_operation)
-        if not context.get("execution_enabled"):
-            decisions.append({**common, "decision": "rejected", "reason": (context.get("reasons") or ["memory_to_skill_memory_remove_not_executable"])[0], "changed": False, "task": task, "skill_result": skill_result, "memory_remove_context": context})
-            continue
-        remove_result = _execute_memory_context(context, cfg, operation=remove_operation, external_provider=external_provider)
-        if not remove_result.get("success"):
-            decisions.append({**common, "decision": "rejected", "reason": remove_result.get("error") or "memory_to_skill_memory_remove_failed", "changed": False, "task": task, "skill_result": skill_result, "memory_remove_result": remove_result})
-            continue
-        evidence_id = str(base.get("evidence_id") or "memory_to_skill")
-        removed_memories.append(evidence_id)
-        decisions.append({**common, "decision": "accepted", "reason": "memory_to_skill_completed", "changed": True, "task": task, "skill_result": skill_result, "memory_remove_result": remove_result})
+        reason = str(transaction_result.get("reason") or "memory_to_skill_transaction_failed")
+        if reason == "knowledge_transaction_skill_step_failed":
+            reason = "memory_to_skill_skill_failed"
+        decisions.append({**common, "decision": "rejected", "reason": reason, "changed": False, "task": task, "transaction_result": transaction_result})
     return {
         "status": "completed" if mutate else "preview",
         "changed": len(removed_memories),

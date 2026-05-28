@@ -225,6 +225,19 @@ The editor receives a validated transaction plan and executes only that plan.
 
 ### Slice 3 — Unified editor execution for mixed knowledge transactions
 
+**Status:** partially completed 2026-05-28; `memory_to_skill` now has a single knowledge-transaction executor with add-before-remove semantics, unified result fields, and the existing migration runner records `transaction_result` instead of only split `skill_result` / `memory_remove_result` details. Remaining work is to make all skill-only, memory-only, and cross-store execution use this editor contract as the only runtime path and remove split schema leakage from reports/prompts.
+
+**Validation completed for memory-to-skill transaction execution:**
+- RED/GREEN tests added for direct mixed transaction execution and runner wiring: `tests/test_memory_to_skill_migration.py::test_execute_knowledge_transaction_patches_skill_then_removes_memory`, `tests/test_memory_to_skill_migration.py::test_execute_knowledge_transaction_keeps_memory_when_skill_patch_fails`, `tests/test_memory_to_skill_migration.py::test_memory_to_skill_migration_patches_skill_before_removing_memory`.
+- Related focused tests: `tests/test_memory_to_skill_migration.py tests/test_report_improve_connection.py tests/test_memory_inventory_planner.py tests/test_memory_agent_dispatch.py tests/test_runner_steps.py` — `105 passed`.
+- Full suite: `839 passed, 2 skipped`.
+- Static checks: `python -m py_compile __init__.py hermes_self_improvement/*.py` and `git diff --check` passed.
+- Dry-run smoke artifact: `~/.hermes/self-improvement/runs/run-20260528T051420Z.json`.
+  - `knowledge_transactions` present.
+  - `transaction_count: 45`.
+  - `memory_to_skill_count: 0` and `memory_to_skill.status: no_candidates` in this live dry-run, so add-before-remove transaction execution is covered by deterministic tests rather than dogfood data.
+  - top-level legacy `decisions` absent from the run artifact.
+
 **Objective:** Make the editor execute transaction plans across skills and memory instead of dispatching two independent editor contracts.
 
 **Files:**
