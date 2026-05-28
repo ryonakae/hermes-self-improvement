@@ -164,7 +164,7 @@ The editor receives a validated transaction plan and executes only that plan.
 
 ### Slice 2 — Replace split planner decisions with knowledge transaction planning
 
-**Status:** partially completed 2026-05-28; planner runtime now emits and consumes `knowledge_transactions` as the canonical planner output, while full cross-store transaction planning remains for the next slice of work.
+**Status:** partially completed 2026-05-28; planner runtime now emits and consumes `knowledge_transactions` as the canonical planner output, and same-run artifacts now expose memory-to-skill cross-store candidates under top-level `knowledge_transactions`. Full planner-owned cross-store selection and unified editor execution remain for the next slice of work.
 
 **Validation completed for planner-runtime contract:**
 - RED/GREEN tests added for canonical planner output and quality-report consumption: `tests/test_skill_planner.py::test_planner_emits_knowledge_transactions_without_legacy_decisions_key`, `tests/test_skill_planner.py::test_planner_quality_report_reads_knowledge_transactions_as_canonical_contract`, `tests/test_skill_planner.py::test_render_planner_messages_requests_knowledge_transactions_contract`, `tests/test_runner_steps.py::test_skill_step_consumes_planner_knowledge_transactions_without_legacy_decisions`.
@@ -176,6 +176,17 @@ The editor receives a validated transaction plan and executes only that plan.
   - `planner_has_legacy_decisions: false`
   - `planner_status: completed`
   - `transaction_count: 45`
+
+**Validation completed for cross-store artifact visibility:**
+- RED/GREEN tests added for canonical memory-to-skill transaction surfacing: `tests/test_memory_to_skill_migration.py::test_knowledge_transactions_include_memory_to_skill_cross_store_candidate`, `tests/test_report_improve_connection.py::test_run_improve_exposes_cross_store_knowledge_transactions`.
+- Related focused tests: `tests/test_memory_to_skill_migration.py tests/test_report_improve_connection.py tests/test_skill_planner.py tests/test_runner_steps.py tests/test_markdown_artifacts.py tests/test_cli_surface.py` — `153 passed`.
+- Full suite: `837 passed, 2 skipped`.
+- Static checks: `python -m py_compile __init__.py hermes_self_improvement/*.py` and `git diff --check` passed.
+- Dry-run smoke artifact: `~/.hermes/self-improvement/runs/run-20260528T041611Z.json`.
+  - `knowledge_transactions` present in stdout and run artifact.
+  - `transaction_count: 45`
+  - `memory_to_skill_count: 0` in this live dry-run, so the cross-store behavior is covered by deterministic tests rather than dogfood data.
+  - top-level legacy `decisions` absent from the run artifact.
 
 **Objective:** Delete the split skill/memory planning contract as the canonical path and make one knowledge transaction plan the only planner output consumed by execution.
 

@@ -1576,6 +1576,44 @@ def _memory_editor_skill_route_decision(*, result: dict[str, Any], memory_eviden
     }
 
 
+def _memory_transaction_source_store(source_target: str) -> str:
+    return "builtin_user" if source_target == "user" else "builtin_memory"
+
+
+def build_knowledge_transactions(*, skill_step: dict[str, Any], memory_step: dict[str, Any], memory_to_skill_step: dict[str, Any]) -> list[dict[str, Any]]:
+    transactions: list[dict[str, Any]] = []
+    planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
+    for item in planner.get("knowledge_transactions") or []:
+        if isinstance(item, dict):
+            transactions.append({**item, "transaction_kind": item.get("transaction_kind") or "planner_skill"})
+    memory_by_id = {
+        str(item.get("evidence_id") or ""): item
+        for item in (memory_step.get("decisions") or [])
+        if isinstance(item, dict) and str(item.get("evidence_id") or "")
+    }
+    for item in memory_to_skill_step.get("decisions") or []:
+        if not isinstance(item, dict) or item.get("decision") not in {"memory_to_skill_preview", "accepted"}:
+            continue
+        evidence_id = str(item.get("evidence_id") or "")
+        source = memory_by_id.get(evidence_id) or {}
+        task = item.get("task") if isinstance(item.get("task"), dict) else {}
+        targets = task.get("targets") if isinstance(task.get("targets"), dict) else {}
+        target_skill = str(item.get("skill_route") or source.get("skill_route") or targets.get("primary_skill") or "")
+        source_target = str(item.get("source_target") or source.get("source_target") or "memory")
+        old_text = str(item.get("old_text") or source.get("old_text") or ((source.get("operation") or {}).get("old_text") if isinstance(source.get("operation"), dict) else "") or "")
+        transactions.append({
+            "transaction_kind": "memory_to_skill",
+            "decision": item.get("decision"),
+            "source_store": _memory_transaction_source_store(source_target),
+            "target_store": "skill",
+            "source_evidence_id": evidence_id,
+            "target_skill": target_skill,
+            "source_old_text": old_text,
+            "reason": item.get("reason"),
+        })
+    return transactions
+
+
 def build_knowledge_routing_summary(*, memory_step: dict[str, Any], memory_to_skill_step: dict[str, Any]) -> dict[str, Any]:
     memory_decisions = [item for item in (memory_step.get("decisions") or []) if isinstance(item, dict)]
     routed = [

@@ -80,6 +80,32 @@ def test_run_pipeline_writes_json_report_artifact_with_diagnostic_signals(monkey
     assert str(latest_json) in out["report_paths"]
 
 
+def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp_path):
+    import hermes_self_improvement.cli as cli
+
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "completed", "changed": 0, "changed_skills": [], "planner": {"knowledge_transactions": []}, "decisions": []})
+    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "completed", "changed": 0, "changed_memories": [], "decisions": [{"evidence_id": "memory-place-skill", "decision": "skip", "reason": "memory_convert_to_skill_update", "suggested_route": "skill", "skill_route": "hermes-memory-and-live-context", "old_text": "Use these exact steps for live context cleanup.", "source_target": "memory"}]})
+    monkeypatch.setattr(cli, "apply_memory_to_skill_migrations", lambda **kwargs: {"status": "preview", "changed": 0, "changed_skills": [], "removed_memories": [], "decisions": [{"evidence_id": "memory-place-skill", "decision": "memory_to_skill_preview", "reason": "dry_run_would_update_skill_then_remove_memory", "task": {"targets": {"primary_skill": "hermes-memory-and-live-context"}}}]})
+
+    result = cli.run_improve(config=config, dry_run=True)
+
+    assert result["knowledge_transactions"] == [{
+        "transaction_kind": "memory_to_skill",
+        "decision": "memory_to_skill_preview",
+        "source_store": "builtin_memory",
+        "target_store": "skill",
+        "source_evidence_id": "memory-place-skill",
+        "target_skill": "hermes-memory-and-live-context",
+        "source_old_text": "Use these exact steps for live context cleanup.",
+        "reason": "dry_run_would_update_skill_then_remove_memory",
+    }]
+
+
 def test_run_improve_from_report_adds_reference_only_diagnostic_evidence(monkeypatch, tmp_path):
     import hermes_self_improvement.cli as cli
 

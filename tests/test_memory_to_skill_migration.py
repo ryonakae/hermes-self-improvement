@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from hermes_self_improvement.runner_steps import apply_memory_to_skill_migrations, build_knowledge_routing_summary
+from hermes_self_improvement.runner_steps import apply_memory_to_skill_migrations, build_knowledge_routing_summary, build_knowledge_transactions
 
 
 def write_skill(root, name="hermes-memory-and-live-context"):
@@ -53,6 +53,36 @@ def success_payload(name="hermes-memory-and-live-context"):
         "verification_notes": ["patched target skill"],
         "rollback_hints": [],
     }
+
+
+def test_knowledge_transactions_include_memory_to_skill_cross_store_candidate():
+    memory_step = memory_step_with_skill_route()
+    memory_to_skill_step = {
+        "status": "preview",
+        "decisions": [
+            {
+                "evidence_id": "memory-place-skill",
+                "decision": "memory_to_skill_preview",
+                "reason": "dry_run_would_update_skill_then_remove_memory",
+                "task": {"targets": {"primary_skill": "hermes-memory-and-live-context"}},
+            }
+        ],
+    }
+
+    transactions = build_knowledge_transactions(skill_step={"planner": {"knowledge_transactions": []}}, memory_step=memory_step, memory_to_skill_step=memory_to_skill_step)
+
+    assert transactions == [
+        {
+            "transaction_kind": "memory_to_skill",
+            "decision": "memory_to_skill_preview",
+            "source_store": "builtin_memory",
+            "target_store": "skill",
+            "source_evidence_id": "memory-place-skill",
+            "target_skill": "hermes-memory-and-live-context",
+            "source_old_text": "Use these exact steps for live context cleanup.",
+            "reason": "dry_run_would_update_skill_then_remove_memory",
+        }
+    ]
 
 
 def test_knowledge_routing_summary_reports_memory_to_skill_drop():
