@@ -212,6 +212,8 @@ git diff --check
 
 ## Slice 3: Add `run_knowledge_improvement_step` behind tests
 
+**Status:** completed. Added `run_knowledge_improvement_step(...)` dry-run orchestration over one knowledge planner digest/runtime, canonical transaction normalization, preview/defer/skip/block result summaries, and regression coverage proving split skill/memory runner steps are not called.
+
 **Objective:** Introduce the new orchestration function without yet deleting old helper code.
 
 **Files:**

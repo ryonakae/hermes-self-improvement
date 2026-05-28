@@ -8,6 +8,7 @@ from typing import Any
 
 from .editor_skill import run_skill_editor_task
 from .editor_backend_skill import build_skill_editor_backend
+from .knowledge_transactions import normalize_knowledge_transaction
 from .mutation_policy import build_memory_mutation_context, normalize_memory_provider, normalize_memory_target
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_archive_operation
 from .editor import build_editor_prompt, run_editor_task
@@ -1685,6 +1686,89 @@ def _memory_editor_skill_route_decision(*, result: dict[str, Any], memory_eviden
         "old_text": old_text,
         "source_target": source_target,
         "content": content,
+    }
+
+
+def _knowledge_transaction_dry_run_result(transaction: dict[str, Any]) -> dict[str, Any]:
+    base = _base_knowledge_transaction_result(transaction)
+    decision = str(transaction.get("decision") or "")
+    if decision == "defer":
+        return {**base, "success": True, "outcome": "deferred", "reason": transaction.get("reason") or "knowledge_transaction_deferred"}
+    if decision == "skip":
+        return {**base, "success": True, "outcome": "skipped", "reason": transaction.get("reason") or "knowledge_transaction_skipped"}
+    if decision == "block":
+        return {**base, "success": False, "outcome": "blocked", "reason": transaction.get("reason") or "knowledge_transaction_blocked"}
+    return {**base, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+
+
+def _knowledge_transaction_result_summary(results: list[dict[str, Any]]) -> dict[str, int]:
+    summary: dict[str, int] = {}
+    for result in results:
+        outcome = str(result.get("outcome") or "unknown")
+        summary[outcome] = summary.get(outcome, 0) + 1
+    return summary
+
+
+def run_knowledge_improvement_step(
+    *,
+    evidence_pack: dict[str, Any],
+    config: dict[str, Any] | None = None,
+    mutate: bool = False,
+    cluster_summary: dict[str, Any] | None = None,
+    evidence_index: dict[str, Any] | None = None,
+    turn_traces: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    digest = build_knowledge_planner_digest(
+        evidence_pack,
+        cluster_summary=cluster_summary,
+        evidence_index=evidence_index,
+        turn_traces=turn_traces,
+        config=config,
+    )
+    planner = run_planner_runtime(digest, config=config)
+    prompt_sources: dict[str, Any] = {}
+    if isinstance(planner.get("prompt_source"), dict) and isinstance(planner["prompt_source"].get("planner"), dict):
+        prompt_sources["planner"] = planner["prompt_source"]["planner"]
+    if planner.get("status") != "completed":
+        return {
+            "status": "planner_error",
+            "planner": planner,
+            "planner_digest": digest,
+            "knowledge_transactions": [],
+            "transaction_results": [],
+            "changed_skills": [],
+            "changed_memories": [],
+            "editor_validation": {"summary": {}},
+            "prompt_sources": prompt_sources,
+        }
+    transactions = [
+        normalize_knowledge_transaction(item)
+        for item in (planner.get("knowledge_transactions") or [])
+        if isinstance(item, dict)
+    ]
+    transaction_results: list[dict[str, Any]] = []
+    changed_skills: list[str] = []
+    changed_memories: list[str] = []
+    for transaction in transactions:
+        if mutate and transaction.get("decision") == "apply":
+            result = execute_knowledge_transaction(transaction, config=config, mutate=True)
+        else:
+            result = _knowledge_transaction_dry_run_result(transaction)
+        transaction_results.append(result)
+        changed_skills.extend(str(item) for item in (result.get("changed_skills") or []) if str(item))
+        changed_skills.extend(str(item) for item in (result.get("created_skills") or []) if str(item))
+        changed_memories.extend(str(item) for item in (result.get("changed_memories") or []) if str(item))
+        changed_memories.extend(str(item) for item in (result.get("removed_memories") or []) if str(item))
+    return {
+        "status": "completed",
+        "planner": planner,
+        "planner_digest": digest,
+        "knowledge_transactions": transactions,
+        "transaction_results": transaction_results,
+        "changed_skills": _unique_nonempty_strings(changed_skills),
+        "changed_memories": _unique_nonempty_strings(changed_memories),
+        "editor_validation": {"summary": _knowledge_transaction_result_summary(transaction_results)},
+        "prompt_sources": prompt_sources,
     }
 
 

@@ -299,19 +299,18 @@ def test_planner_accepts_memory_to_skill_knowledge_transaction_for_maintenance_c
 
     result = run_planner(digest, config={"_planner_func": planner})
 
-    assert result["knowledge_transactions"] == [{
-        "transaction_kind": "memory_to_skill",
-        "decision": "apply",
-        "source_store": "builtin_memory",
-        "target_store": "skill",
-        "source_evidence_id": candidate["id"],
-        "target_skill": "local-patch-workflow",
-        "source_old_text": "Patch tool workflow guidance belongs in a skill, not memory.",
-        "skill_task": {"task_kind": "mutate_skill", "targets": {"primary_skill": "local-patch-workflow"}},
-        "reason": "planner_selected_cross_store_skill_route",
-        "risk": "medium",
-        "priority": "medium",
-    }]
+    transaction = result["knowledge_transactions"][0]
+    assert transaction["transaction_kind"] == "memory_to_skill"
+    assert transaction["decision"] == "apply"
+    assert transaction["source_store"] == "builtin_memory"
+    assert transaction["target_store"] == "skill"
+    assert transaction["target_id"] == "local-patch-workflow"
+    assert transaction["source_id"] == candidate["id"]
+    assert transaction["source_old_text"] == "Patch tool workflow guidance belongs in a skill, not memory."
+    assert transaction["operation"] == "move"
+    assert transaction["editor_task"] == {"task_kind": "mutate_skill", "targets": {"primary_skill": "local-patch-workflow"}}
+    assert transaction["reason"] == "planner_selected_cross_store_skill_route"
+    assert transaction["transaction_id"].startswith("kt_")
 
 
 def test_planner_defaults_unanswered_maintenance_candidate_to_canonical_defer():

@@ -14,6 +14,7 @@ from .evidence import (
 )
 from .observer import _redact_text
 from .llm_utils import _coerce_int, _extract_json_object
+from .knowledge_transactions import normalize_knowledge_transaction
 from .constrained_agent import run_constrained_role_agent
 from .target_hints import extract_target_hints
 from .prompt_overlays import load_active_prompt_overlay
@@ -844,6 +845,18 @@ def _normalize_decision(
     return normalized
 
 
+def _is_canonical_knowledge_transaction(raw: dict[str, Any]) -> bool:
+    target_store = str(raw.get("target_store") or "")
+    transaction_kind = str(raw.get("transaction_kind") or "")
+    if target_store in {"builtin_user", "builtin_memory", "external_memory", "unresolved", "none"}:
+        return True
+    if transaction_kind in {"memory", "placement_move", "unresolved", "none"}:
+        return True
+    if transaction_kind == "memory_to_skill" and target_store == "skill":
+        return True
+    return False
+
+
 def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("planner_response_not_object")
@@ -879,7 +892,9 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     for raw in raw_transactions:
         if not isinstance(raw, dict):
             continue
-        if str(raw.get("transaction_kind") or "") == "memory_to_skill":
+        if _is_canonical_knowledge_transaction(raw):
+            item = normalize_knowledge_transaction(raw)
+        elif str(raw.get("transaction_kind") or "") == "memory_to_skill":
             item = _normalize_memory_to_skill_transaction(raw, candidate_names=candidate_names, available_evidence_ids=available_evidence_ids)
         elif str(raw.get("decision") or "") == "create_skill":
             item = _normalize_create_skill_decision(raw, candidate_names=candidate_names, available_evidence_ids=available_evidence_ids, reference_skill_names=reference_skill_names)

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from hermes_self_improvement.prompts import base_prompt_hash
-from hermes_self_improvement.runner_steps import build_editor_task, run_memory_improvement_step, run_skill_improvement_step
+from hermes_self_improvement.runner_steps import build_editor_task, run_knowledge_improvement_step, run_memory_improvement_step, run_skill_improvement_step
 
 
 def write_skill(root, name="demo-skill"):
@@ -1016,3 +1016,71 @@ def test_memory_step_extracts_external_target_from_provider_tool_evidence():
     decision = result["decisions"][0]
     assert decision["operation"]["target"] == "external_memory"
     assert decision["context"]["tool_name"] == "hindsight_retain"
+
+def test_run_knowledge_improvement_step_dry_run_returns_canonical_transactions(monkeypatch, tmp_path):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("split runner must not be called")
+
+    import hermes_self_improvement.runner_steps as runner_steps
+
+    monkeypatch.setattr(runner_steps, "run_skill_improvement_step", forbidden)
+    monkeypatch.setattr(runner_steps, "run_memory_improvement_step", forbidden)
+
+    def fake_planner(*, digest, config):
+        assert digest["schema_name"] == "self_improvement_knowledge_planner_digest"
+        assert [row["candidate_id"] for row in digest["memory_candidates"]] == ["m1"]
+        return {
+            "knowledge_transactions": [
+                {"decision": "mutate_skill", "skill": "demo-skill", "evidence_ids": ["ev1"]},
+                {"decision": "mutate_memory", "target_store": "builtin_user", "target_id": "user", "operation": "memory_add", "evidence_ids": ["m1"]},
+                {"decision": "mutate_memory", "target_store": "builtin_memory", "target_id": "memory", "operation": "memory_replace", "source_store": "builtin_memory", "source_id": "mem-entry", "source_old_text": "old memory", "evidence_ids": ["m1"]},
+                {"decision": "mutate_memory", "target_store": "external_memory", "target_id": "hindsight", "operation": "memory_add", "evidence_ids": ["m1"]},
+                {"transaction_kind": "memory_to_skill", "decision": "apply", "source_store": "builtin_user", "source_evidence_id": "m1", "source_old_text": "old user pref", "target_store": "skill", "target_skill": "demo-skill", "evidence_ids": ["m1"]},
+                {"target_store": "unresolved", "reason": "target_uncertain", "evidence_ids": ["m1"]},
+                {"target_store": "none", "reason": "noise", "evidence_ids": ["m1"]},
+            ]
+        }
+
+    pack = evidence_pack_for(
+        "demo-skill",
+        candidates=[{"name": "demo-skill", "state": "active", "source": "curator", "usage": {}}],
+    )
+    pack["evidence"].append({
+        "id": "m1",
+        "kind": "memory_gap_candidate",
+        "memory": {"candidate_id": "m1", "target": "memory", "candidate_fact": "new durable fact"},
+    })
+    result = run_knowledge_improvement_step(
+        evidence_pack=pack,
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_planner_runtime_func": fake_planner},
+        mutate=False,
+    )
+
+    assert result["status"] == "completed"
+    assert result["changed_skills"] == []
+    assert result["changed_memories"] == []
+    transactions = result["knowledge_transactions"]
+    assert [item["target_store"] for item in transactions] == [
+        "skill",
+        "builtin_user",
+        "builtin_memory",
+        "external_memory",
+        "skill",
+        "unresolved",
+        "none",
+    ]
+    assert {item["transaction_kind"] for item in transactions} >= {"skill", "memory", "memory_to_skill", "unresolved", "none"}
+    assert all(item.get("transaction_id") for item in transactions)
+    assert transactions[5]["decision"] == "defer"
+    assert transactions[5]["editor_task"] is None
+    assert transactions[6]["decision"] == "skip"
+    assert transactions[6]["editor_task"] is None
+    result_by_id = {item["transaction_id"]: item for item in result["transaction_results"]}
+    assert result_by_id[transactions[0]["transaction_id"]]["outcome"] == "preview"
+    assert result_by_id[transactions[1]["transaction_id"]]["outcome"] == "preview"
+    assert result_by_id[transactions[4]["transaction_id"]]["outcome"] == "preview"
+    assert result_by_id[transactions[5]["transaction_id"]]["outcome"] == "deferred"
+    assert result_by_id[transactions[6]["transaction_id"]]["outcome"] == "skipped"
+    assert result["editor_validation"]["summary"]["preview"] == 5
+    assert result["editor_validation"]["summary"]["deferred"] == 1
+    assert result["editor_validation"]["summary"]["skipped"] == 1
