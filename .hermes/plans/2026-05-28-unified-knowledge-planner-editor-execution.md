@@ -19,6 +19,22 @@ The 2026-05-28 bridge/reporting work is valuable but incomplete:
 - Latest dogfood artifact `run-20260528T070041Z.json` proves legacy split `step_decisions.skill` / `memory` / `memory_to_skill` lanes are absent from the final artifact and routed-to-skill drops are zero, but it does not prove unified planner/editor execution. Its transaction summary is `by_kind: {'planner_skill': 48}` and `cross_store: 0`.
 - Therefore the system is **bridge/reporting complete**, not **unified planner/editor execution complete**.
 
+## Review updates — 2026-05-28
+
+Independent review found two blockers that this plan must guard against:
+
+1. Artifact assertions alone are insufficient. The existing bridge/reporting implementation can already produce final artifacts without split `step_decisions.skill` / `memory` / `memory_to_skill`; Slice 5 must prove `run_improve` no longer calls `run_skill_improvement_step`, `run_memory_improvement_step`, or `apply_memory_to_skill_migrations` as top-level source-of-truth lanes.
+2. Repo plan/docs updates are manual developer-maintenance work, not self-improvement mutation targets. The planner/editor being built here must never treat plugin README / AGENTS / config / plans / bundled docs as knowledge assets to mutate through `improve`.
+
+Additional review refinements incorporated below:
+
+- canonical transaction schema fields and legacy action mapping are explicit;
+- `unresolved` and `none` are planner classifications that produce non-executable `defer` / `skip` transactions, not stores the editor can mutate;
+- external-memory behavior needs provider-capability tests, not only `write_only_unverified` smoke;
+- skill archive/merge and protected-target safety need explicit tests;
+- dogfood closure needs deterministic/injected proof for memory stores when live evidence happens to be skill-only;
+- every code slice ends with full `pytest tests -q`, `py_compile`, `hermes self-improvement status`, and `git diff --check` before commit.
+
 ## Non-goals
 
 - Do not loosen mutation guards to make `apply` counts go up.
@@ -40,12 +56,51 @@ This plan is complete only when all of the following are true:
    - memory-to-skill add-before-remove;
    - USER/MEMORY placement moves as add-before-remove.
 5. Old split runner outputs are not the source of truth for artifacts, episodes, CLI summaries, compact tool results, or reports.
-6. Full test suite passes and a dry-run dogfood artifact proves canonical transactions across both skill and memory surfaces without split-lane leakage.
+6. Full test suite passes and a dry-run dogfood artifact plus deterministic fixture-backed integration proof show canonical transactions across skill, `builtin_user`, `builtin_memory`, `external_memory`, and `memory_to_skill` surfaces without split-lane leakage.
 7. A mutating dogfood is run only if the dry-run selects a low-risk transaction with current exact source text and official-tool executable targets.
+
+## Canonical transaction contract
+
+All planner/editor handoff records should normalize to this small shape before execution or reporting:
+
+```python
+{
+    "transaction_id": "stable deterministic id",
+    "decision": "apply" | "defer" | "skip" | "block",
+    "transaction_kind": "skill" | "memory" | "memory_to_skill" | "placement_move" | "none" | "unresolved",
+    "target_store": "skill" | "builtin_user" | "builtin_memory" | "external_memory" | "none" | "unresolved",
+    "target_id": "skill name, memory target key, provider target, or empty for none/unresolved",
+    "source_store": "skill" | "builtin_user" | "builtin_memory" | "external_memory" | None,
+    "source_id": "stable source id when available",
+    "source_old_text": "exact current old_text only when required for replace/remove/move",
+    "operation": "create_skill" | "mutate_skill" | "archive_skill" | "merge_skill" | "memory_add" | "memory_replace" | "memory_remove" | "move" | "none",
+    "editor_task": {...} | None,
+    "evidence_ids": [...],
+    "reason": "compact_reason",
+}
+```
+
+Legacy planner actions normalize as follows before they reach the editor:
+
+| Legacy/current action | Canonical transaction |
+| --- | --- |
+| `create_skill` | `decision=apply`, `target_store=skill`, `operation=create_skill`, `transaction_kind=skill` |
+| `mutate_skill` with `maintenance_action=patch` | `decision=apply`, `target_store=skill`, `operation=mutate_skill`, `transaction_kind=skill` |
+| `archive_skill` | `decision=apply`, `target_store=skill`, `operation=archive_skill`, `transaction_kind=skill` |
+| merge/absorb semantics | `decision=apply`, `target_store=skill`, `operation=merge_skill`, `transaction_kind=skill`, with successor/source validation |
+| `mutate_memory` add/replace/remove | `decision=apply`, `target_store=builtin_user|builtin_memory|external_memory`, `operation=memory_add|memory_replace|memory_remove`, `transaction_kind=memory` |
+| `memory_to_skill` | `decision=apply`, `source_store=builtin_user|builtin_memory`, `target_store=skill`, `operation=move`, `transaction_kind=memory_to_skill` |
+| USER/MEMORY placement move | `decision=apply`, `source_store=builtin_user|builtin_memory`, `target_store=builtin_user|builtin_memory`, `operation=move`, `transaction_kind=placement_move` |
+| unresolved evidence | `decision=defer`, `target_store=unresolved`, `operation=none`, `editor_task=None` |
+| noise/no durable target | `decision=skip`, `target_store=none`, `operation=none`, `editor_task=None` |
+
+`unresolved` and `none` are not mutable stores. They are planner classifications that must never produce executable editor tasks.
 
 ---
 
 ## Slice 0: Correct plan state before coding
+
+**Status:** completed in commit `994e91a`, then review-tightened in the follow-up docs commit.
 
 **Objective:** Stop future agents from treating the bridge/reporting slice as full unified execution.
 
@@ -82,14 +137,19 @@ This plan is complete only when all of the following are true:
    - `external_memory`
    - `unresolved`
    - `none`
-2. Non-apply decisions clear editor execution fields:
+2. `normalize_knowledge_transaction` maps existing planner/editor actions to the canonical contract table above.
+3. Stable transaction ids are deterministic for identical input and do not depend on list ordering outside the transaction's own evidence/source fields.
+4. Non-apply decisions clear editor execution fields:
    - `decision != apply` implies no executable `editor_task`.
-3. Invalid apply transactions are blocked with compact reasons:
+5. `target_store=unresolved` always normalizes to `decision=defer`, `operation=none`, `editor_task=None` unless already blocked by schema validation.
+6. `target_store=none` always normalizes to `decision=skip`, `operation=none`, `editor_task=None` unless already blocked by schema validation.
+7. Invalid apply transactions are blocked with compact reasons:
    - missing target store;
    - missing target id for mutation;
    - replace/remove/move missing source store or source id/old_text;
-   - unsupported target store.
-4. Legacy planner keys normalize but do not become canonical output:
+   - unsupported target store;
+   - editor task present for `none` / `unresolved`.
+8. Legacy planner keys normalize but do not become canonical output:
    - `skill` / `proposed_skill_name` may fill `target_id` for skill transactions;
    - final normalized object uses `target_store` / `target_id` / `transaction_kind`.
 
@@ -102,6 +162,8 @@ This plan is complete only when all of the following are true:
 ```bash
 python -m pytest tests/test_knowledge_transactions.py -q
 python -m py_compile __init__.py hermes_self_improvement/*.py
+python -m pytest tests -q
+hermes self-improvement status
 git diff --check
 ```
 
@@ -135,6 +197,8 @@ git diff --check
 ```bash
 python -m pytest tests/test_runner_steps.py tests/test_knowledge_planner_digest.py -q
 python -m py_compile __init__.py hermes_self_improvement/*.py
+python -m pytest tests -q
+hermes self-improvement status
 git diff --check
 ```
 
@@ -155,8 +219,10 @@ git diff --check
 2. It does not call separate skill and memory planner outputs as source-of-truth.
 3. Planner transactions for `target_store=skill` become skill editor previews in dry-run.
 4. Planner transactions for `target_store=builtin_memory` / `builtin_user` become memory editor previews in dry-run.
-5. `target_store=unresolved|none` produces `defer|skip` and no editor task.
-6. Existing memory-to-skill candidate becomes one canonical transaction, not a separate bridge result.
+5. Planner transactions for `target_store=external_memory` become provider-capability-aware previews in dry-run.
+6. `target_store=unresolved|none` produces `defer|skip` and no editor task.
+7. Existing memory-to-skill candidate becomes one canonical transaction, not a separate bridge result.
+8. Fixture input containing one transaction for each store (`skill`, `builtin_user`, `builtin_memory`, `external_memory`, `memory_to_skill`) returns all five as canonical transactions with stable ids.
 
 **Implementation notes:**
 - Old `run_skill_improvement_step` and `run_memory_improvement_step` may remain as internal compatibility helpers during this slice, but `run_knowledge_improvement_step` must not assemble final truth from their public step payloads.
@@ -180,6 +246,10 @@ git diff --check
 ```bash
 python -m pytest tests/test_runner_steps.py::test_run_knowledge_improvement_step_dry_run_returns_canonical_transactions -q
 python -m pytest tests/test_runner_steps.py -q
+python -m py_compile __init__.py hermes_self_improvement/*.py
+python -m pytest tests -q
+hermes self-improvement status
+git diff --check
 ```
 
 **Commit:** `feat(self-improvement): add unified knowledge improvement step`
@@ -199,12 +269,16 @@ python -m pytest tests/test_runner_steps.py -q
 **RED tests:**
 1. Skill patch transaction executes through the existing skill editor backend and reports changed skill names.
 2. Skill create transaction executes through official skill tool path and reports created skill names.
-3. Built-in memory add/replace/remove transaction executes through official memory tool path and reports changed/removed memories.
-4. External memory transaction is marked `applied_unverified` or `write_only_unverified` when provider is write-only, matching existing memory semantics.
-5. Memory-to-skill transaction patches/creates skill first, verifies skill result, then removes source memory.
-6. If skill step fails, source memory is not removed.
-7. USER/MEMORY placement move adds to target store before removing source store.
-8. Unsupported or unsafe transaction returns `blocked`, not `skip`, and carries compact `reason`.
+3. Skill archive transaction respects existing official archive semantics and reports archive/preview status separately from delete.
+4. Skill merge transaction validates source/successor targets, blocks pinned/archived/built-in/hub/plugin-bundled/external-dir/ambiguous targets, and plans active-reference rewrites only through existing official lifecycle helpers.
+5. Built-in memory add/replace/remove transaction executes through official memory tool path and reports changed/removed memories.
+6. External memory add transaction executes only when the active provider exposes an official provider tool; otherwise it blocks with provider-capability reason.
+7. External memory write-only execution is marked `applied_unverified` or `write_only_unverified`, matching existing memory semantics.
+8. External memory replace/remove is blocked unless the provider has an explicit safe capability for that operation.
+9. Memory-to-skill transaction patches/creates skill first, verifies skill result, then removes source memory.
+10. If skill step fails, source memory is not removed.
+11. USER/MEMORY placement move adds to target store before removing source store.
+12. Unsupported or unsafe transaction returns `blocked`, not `skip`, and carries compact `reason`.
 
 **Implementation notes:**
 - Keep official-tool-only boundary.
@@ -217,6 +291,8 @@ python -m pytest tests/test_runner_steps.py -q
 python -m pytest tests/test_memory_to_skill_migration.py tests/test_knowledge_transactions.py -q
 python -m pytest tests/test_cli_improve_memory_current_entries.py -q
 python -m py_compile __init__.py hermes_self_improvement/*.py
+python -m pytest tests -q
+hermes self-improvement status
 git diff --check
 ```
 
@@ -238,10 +314,11 @@ git diff --check
 
 **RED tests:**
 1. `run_improve(..., dry_run=True)` artifact has `step_decisions.knowledge_transactions` and no split `skill` / `memory` / `memory_to_skill` keys.
-2. `action_summary` derives from canonical transaction results only.
-3. Episode ledger records skill, memory, and memory-to-skill transactions from canonical transaction results.
-4. Compact tool result exposes bounded `knowledge_transactions` summary and does not expose split step payloads.
-5. CLI human summary distinguishes:
+2. `run_improve` uses `run_knowledge_improvement_step` as the only planner/editor source of truth: monkeypatch `run_skill_improvement_step`, `run_memory_improvement_step`, and `apply_memory_to_skill_migrations` to raise, then assert dry-run still succeeds through the unified path.
+3. `action_summary` derives from canonical transaction results only.
+4. Episode ledger records skill, memory, and memory-to-skill transactions from canonical transaction results.
+5. Compact tool result exposes bounded `knowledge_transactions` summary and does not expose split step payloads.
+6. CLI human summary distinguishes:
    - transactions applied;
    - previewed/deferred/skipped/blocked;
    - memory write-only unverified;
@@ -256,6 +333,8 @@ git diff --check
 ```bash
 python -m pytest tests/test_report_improve_connection.py tests/test_plugin_tools.py tests/test_episode_ledger.py -q
 python -m py_compile __init__.py hermes_self_improvement/*.py
+python -m pytest tests -q
+hermes self-improvement status
 git diff --check
 ```
 
@@ -271,13 +350,13 @@ git diff --check
 - Modify: `hermes_self_improvement/runner_steps.py`
 - Modify: `hermes_self_improvement/cli.py`
 - Modify tests that still assert split `skill` / `memory` step truth.
-- Update docs: `.hermes/plans/README.md`, parent roadmap, this plan progress.
+- Update docs manually as developer-maintenance, not through the self-improvement planner/editor: `.hermes/plans/README.md`, parent roadmap, this plan progress.
 
 **RED/guard tests:**
 1. No final run artifact exposes split `step_decisions.skill` / `memory` / `memory_to_skill`.
 2. No runtime-facing reason uses `skill_editor_result_*` / `memory_editor_result_*` for unified editor failures.
 3. Grep-style guards are narrow: assert public contract absence, not broad historical text absence in archived docs.
-4. Planner prompt/docs describe one transaction model.
+4. Planner prompt/runtime-private overlay guidance describes one transaction model. Repo README / AGENTS / config / plans / bundled docs are not planner/editor mutation targets; any source-tree doc updates happen only through the developer workflow outside `improve`.
 
 **Implementation notes:**
 - Do not preserve split compatibility for unreleased internal artifacts.
@@ -287,8 +366,9 @@ git diff --check
 **Verification commands:**
 ```bash
 python -m pytest tests/test_report_improve_connection.py tests/test_cli_surface.py tests/test_plugin_tools.py tests/test_episode_ledger.py -q
-python -m pytest tests -q
 python -m py_compile __init__.py hermes_self_improvement/*.py
+python -m pytest tests -q
+hermes self-improvement status
 git diff --check
 ```
 
@@ -316,20 +396,25 @@ hermes self-improvement improve --dry-run --json > /tmp/self-improvement-unified
 
 2. Inspect the saved run artifact and verify:
    - canonical `knowledge_transactions` are present;
-   - both skill and memory candidate surfaces are represented in planner digest or explicit omitted counters;
+   - live planner digest represents both skill and memory candidate surfaces, or explicitly records omitted counters for absent live evidence;
    - no split `step_decisions.skill` / `memory` / `memory_to_skill` keys;
    - `unsupported_knowledge_transaction_kind` is absent for supported transaction kinds;
    - cross-store transactions, if present, carry source/target stores and add-before-remove preconditions;
    - no unexplained cross-store drops.
 
-3. If dry-run selects a low-risk executable mutation, run mutating dogfood once:
+3. Run deterministic fixture-backed integration proof even if live dry-run evidence is skill-only:
+   - inject or fixture planner output with one transaction each for `skill`, `builtin_user`, `builtin_memory`, `external_memory`, and `memory_to_skill`;
+   - assert all five flow through `run_knowledge_improvement_step`, `run_improve` artifact construction, action summary, compact tool result, and episode creation without split-lane fallback;
+   - assert old top-level split runner functions can be monkeypatched to raise without breaking the unified test path.
+
+4. If dry-run selects a low-risk executable mutation, run mutating dogfood once:
 
 ```bash
 hermes self-improvement improve --json > /tmp/self-improvement-unified-knowledge-mutate.json
 ```
 
-4. If dry-run selects no mutation, do not force one. Record that the unified path produced a healthy no-op and wait for scheduled dogfood evidence.
-5. Run full verification:
+5. If dry-run selects no mutation, do not force one. Record that the unified path produced a healthy no-op and wait for scheduled dogfood evidence.
+6. Run full verification:
 
 ```bash
 python -m py_compile __init__.py hermes_self_improvement/*.py
@@ -338,7 +423,7 @@ hermes self-improvement status
 git diff --check
 ```
 
-6. Update plan/index/roadmap with:
+7. Update plan/index/roadmap manually through developer workflow with:
    - exact artifact path;
    - transaction counts by store/kind;
    - apply/defer/skip/block counts;
