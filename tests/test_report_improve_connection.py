@@ -141,6 +141,68 @@ def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp
     assert artifact["step_decisions"]["knowledge_quality"]["unmatched_evidence_count"] == 2
 
 
+def test_run_improve_fixture_proves_all_canonical_transaction_stores_without_split_lanes(monkeypatch, tmp_path):
+    import hermes_self_improvement.cli as cli
+    import hermes_self_improvement.runner_steps as runner_steps
+    import hermes_self_improvement.tool_handlers as tools
+
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "_hermes_home": str(tmp_path / "hermes-home")}
+    planner_transactions = [
+        {"decision": "mutate_skill", "target_skill": "safe-patch-usage", "reason": "skill evidence"},
+        {"decision": "apply", "transaction_kind": "memory", "target_store": "builtin_user", "target_id": "user", "operation": "memory_add", "reason": "user memory"},
+        {"decision": "apply", "transaction_kind": "memory", "target_store": "builtin_memory", "target_id": "memory", "operation": "memory_add", "reason": "project memory"},
+        {"decision": "apply", "transaction_kind": "memory", "target_store": "external_memory", "target_id": "provider", "operation": "memory_add", "reason": "provider memory"},
+        {
+            "decision": "apply",
+            "transaction_kind": "memory_to_skill",
+            "source_store": "builtin_memory",
+            "source_id": "mem-route-1",
+            "source_old_text": "Use these exact steps for canonical routing.",
+            "target_store": "skill",
+            "target_skill": "workflow-skill",
+            "reason": "move procedure to skill",
+        },
+    ]
+
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+    monkeypatch.setattr(cli, "build_editor_backend", lambda config: object())
+    monkeypatch.setattr(runner_steps, "run_planner_runtime", lambda digest, config=None: {"status": "completed", "knowledge_transactions": planner_transactions})
+    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: (_ for _ in ()).throw(AssertionError("split skill lane called")), raising=False)
+    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: (_ for _ in ()).throw(AssertionError("split memory lane called")), raising=False)
+    monkeypatch.setattr(cli, "apply_memory_to_skill_migrations", lambda **kwargs: (_ for _ in ()).throw(AssertionError("split memory-to-skill lane called")))
+
+    result = cli.run_improve(config=config, dry_run=True)
+    artifact = json.loads(Path(result["artifact_path"]).read_text(encoding="utf-8"))
+    compact = tools._compact_improve_tool_result(result)
+
+    assert result["action_summary"] == {"apply": 5, "defer": 0, "skip": 0, "block": 0}
+    assert result["step_decisions"]["knowledge_transactions"] == {
+        "total": 5,
+        "apply": 5,
+        "defer": 0,
+        "skip": 0,
+        "block": 0,
+        "by_kind": {"memory": 3, "memory_to_skill": 1, "skill": 1},
+        "cross_store": 1,
+    }
+    assert result["step_decisions"]["knowledge_routing"]["memory_routed_to_skill_selected_count"] == 1
+    assert result["step_decisions"]["knowledge_routing"]["unexplained_cross_store_drop_count"] == 0
+    assert {item["target_store"] for item in result["knowledge_transactions"]} == {"skill", "builtin_user", "builtin_memory", "external_memory"}
+    assert {item["transaction_kind"] for item in result["knowledge_transactions"]} == {"skill", "memory", "memory_to_skill"}
+    assert all(item["decision"] == "apply" for item in result["knowledge_transactions"])
+    assert all(item.get("transaction_result", {}).get("outcome") == "preview" for item in result["knowledge_transactions"])
+    assert result["episodes"]["count"] == 5
+    assert compact["action_summary"] == {"apply": 5, "defer": 0, "skip": 0, "block": 0}
+    assert compact["steps"]["knowledge_transactions"]["cross_store"] == 1
+    assert "skill" not in artifact["step_decisions"]
+    assert "memory" not in artifact["step_decisions"]
+    assert "memory_to_skill" not in artifact["step_decisions"]
+
+
+
 def test_run_improve_from_report_adds_reference_only_diagnostic_evidence(monkeypatch, tmp_path):
     import hermes_self_improvement.cli as cli
 

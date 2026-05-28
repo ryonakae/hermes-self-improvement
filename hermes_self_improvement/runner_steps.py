@@ -1758,6 +1758,7 @@ def run_knowledge_improvement_step(
             result = execute_knowledge_transaction(transaction, config=config, mutate=True)
         else:
             result = _knowledge_transaction_dry_run_result(transaction)
+        transaction["transaction_result"] = result
         transaction_results.append(result)
         changed_skills.extend(str(item) for item in (result.get("changed_skills") or []) if str(item))
         changed_skills.extend(str(item) for item in (result.get("created_skills") or []) if str(item))
@@ -2163,7 +2164,7 @@ def build_knowledge_routing_summary(
         if isinstance(item, dict) and item.get("decision") in {"memory_to_skill_preview", "accepted"}
     }
     selected_ids.update(
-        str(item.get("source_evidence_id") or "")
+        str(item.get("source_evidence_id") or item.get("source_id") or "")
         for item in (knowledge_transactions or [])
         if isinstance(item, dict) and item.get("transaction_kind") == "memory_to_skill" and item.get("decision") in {"apply", "memory_to_skill_preview", "accepted"}
     )
@@ -2189,6 +2190,15 @@ def build_knowledge_routing_summary(
         for representative_id in representative_ids_by_coverage.get(coverage_id, []):
             selected_ids.add(representative_id)
     selected = [item for item in routed if str(item.get("evidence_id") or "") in selected_ids]
+    routed_ids = {str(item.get("evidence_id") or "") for item in routed if str(item.get("evidence_id") or "")}
+    direct_memory_to_skill_selected_count = sum(
+        1
+        for item in (knowledge_transactions or [])
+        if isinstance(item, dict)
+        and item.get("transaction_kind") == "memory_to_skill"
+        and item.get("decision") in {"apply", "memory_to_skill_preview", "accepted"}
+        and str(item.get("source_evidence_id") or item.get("source_id") or "") not in routed_ids
+    )
     dropped = [item for item in routed if item not in selected]
     dropped_by_reason: dict[str, int] = {}
     unexplained_dropped_by_reason: dict[str, int] = {}
@@ -2197,13 +2207,13 @@ def build_knowledge_routing_summary(
         dropped_by_reason[reason] = dropped_by_reason.get(reason, 0) + 1
         unexplained_dropped_by_reason[reason] = unexplained_dropped_by_reason.get(reason, 0) + 1
     return {
-        "memory_routed_to_skill_count": len(routed),
-        "memory_routed_to_skill_selected_count": len(selected),
+        "memory_routed_to_skill_count": len(routed) + direct_memory_to_skill_selected_count,
+        "memory_routed_to_skill_selected_count": len(selected) + direct_memory_to_skill_selected_count,
         "memory_routed_to_skill_dropped_count": len(dropped),
         "memory_routed_to_skill_dropped_by_reason": dropped_by_reason,
         "unexplained_cross_store_drop_count": sum(unexplained_dropped_by_reason.values()),
         "unexplained_cross_store_drop_by_reason": unexplained_dropped_by_reason,
-        "cross_store_candidate_count": len(routed),
+        "cross_store_candidate_count": len(routed) + direct_memory_to_skill_selected_count,
     }
 
 

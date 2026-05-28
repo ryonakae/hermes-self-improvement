@@ -335,12 +335,12 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
     target_store = str(transaction.get("target_store") or "")
     if transaction_kind == "memory_to_skill":
         target_kind = "skill"
-        target_id = str(transaction.get("target_skill") or "").strip()
+        target_id = str(transaction.get("target_skill") or transaction.get("target_id") or "").strip()
         normalized_decision = "mutate_skill" if decision != "skip" else "skip"
         action = "skill_patch" if executed and changed else "no_op"
     elif target_store == "skill" or transaction.get("target_skill") or transaction.get("skill"):
         target_kind = "skill"
-        target_id = str(transaction.get("target_skill") or transaction.get("skill") or transaction.get("proposed_skill_name") or "").strip()
+        target_id = str(transaction.get("target_skill") or transaction.get("skill") or transaction.get("proposed_skill_name") or transaction.get("target_id") or "").strip()
         if decision in {"mutate_skill", "create_skill", "archive_skill", "defer", "skip"}:
             normalized_decision = decision
         else:

@@ -2,16 +2,16 @@
 
 ## Current source of truth
 
-Update note (2026-05-28): the 2026-05-28 scheduled dogfood looked benign at the shallow readiness layer, and deeper artifact review found cross-store planner/editor gaps. The bridge/reporting work has now dogfooded canonical `knowledge_transactions`, zero routed-to-skill drops, unified `editor_*` errors, and no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes in final `run_improve` artifacts. Full unified planner/editor execution remains the active implementation target.
+Update note (2026-05-28): unified planner/editor execution is now code-complete and dogfood-readiness closed for dry-run. Latest dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T104450Z.json` uses canonical `knowledge_transactions` / `knowledge_quality` / `knowledge_routing`, has no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, reports `apply:0 / defer:6 / skip:43 / block:0`, and has zero unexplained cross-store drops. A deterministic fixture-backed integration proof covers `skill`, `builtin_user`, `builtin_memory`, `external_memory`, and `memory_to_skill` through `run_improve`, compact tool summaries, and episode creation without split-lane fallback. No mutating dogfood was run because the live dry-run selected no low-risk executable mutation.
 
 As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`
-  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, Slice D/E readiness work is complete at the observation/readiness layer, and 2026-05-28 bridge/reporting work has dogfooded canonical run artifacts with no routed-to-skill drops or split decision lanes. Remaining architecture work is tracked in `2026-05-28-unified-knowledge-planner-editor-execution.md`.
+  - **Status:** active long-term source of truth; code-side milestones are implemented through unified planner/editor execution, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, Slice D/E readiness work is complete at the observation/readiness layer, and 2026-05-28 unified knowledge execution has dogfooded canonical dry-run artifacts with no split decision lanes or unexplained cross-store drops. Remaining work is operational scheduled observation until a low-risk mutation appears naturally.
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly.
 
 - `2026-05-28-unified-knowledge-planner-editor-execution.md`
-  - **Status:** active top-priority implementation plan; Slices 4–5 executor expansion and `run_improve` unified-path wiring implemented/verified, Slice 6 split-lane cleanup is next.
+  - **Status:** implemented / dogfood-readiness closed for dry-run. Slices 4–7 are implemented/verified; latest live dry-run artifact is `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T104450Z.json`. No mutating dogfood ran because the dry-run selected no low-risk executable mutation.
   - Replaces the current bridge-style orchestration (`run_skill_improvement_step` + `run_memory_improvement_step` + `apply_memory_to_skill_migrations`) with one planner/editor transaction path: `run_knowledge_improvement_step`, canonical transactions for skill/builtin-user/builtin-memory/external-memory/memory-to-skill, unified editor execution, split-lane removal, and dogfood readiness closure.
 
 - `2026-05-28-knowledge-transaction-unification.md`

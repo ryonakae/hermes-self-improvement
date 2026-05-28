@@ -14,10 +14,10 @@
 
 The 2026-05-28 bridge/reporting work is valuable but incomplete:
 
-- Slices 4–6 now implement the code-side unified executor, `run_improve` wiring, and runtime-facing split-lane cleanup. Final artifacts and compact tool summaries use canonical `knowledge_transactions` / `knowledge_quality` / `knowledge_routing` instead of split `skill` / `memory` / `memory_to_skill` source-of-truth lanes.
+- Slices 4–7 now implement the code-side unified executor, `run_improve` wiring, runtime-facing split-lane cleanup, and dry-run dogfood readiness closure. Final artifacts and compact tool summaries use canonical `knowledge_transactions` / `knowledge_quality` / `knowledge_routing` instead of split `skill` / `memory` / `memory_to_skill` source-of-truth lanes.
 - Slice 4 extends `execute_knowledge_transaction(...)` to execute supported `skill`, `memory`, `memory_to_skill`, and `placement_move` transactions through official skill/memory/provider helpers.
-- Latest dogfood artifact `run-20260528T070041Z.json` predates Slices 5–6. It proved bridge/reporting visibility (`by_kind: {'planner_skill': 48}`, `cross_store: 0`) but not the new unified `run_improve` path.
-- Therefore code-side unified execution is implemented and verified by tests/status, while dogfood readiness closure remains pending in Slice 7.
+- Latest dogfood artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T104450Z.json` was produced after Slices 5–7. It proves the new unified `run_improve` path at dry-run readiness: canonical `knowledge_transactions` are present, split `step_decisions.skill` / `memory` / `memory_to_skill` keys are absent, action summary is `apply:0 / defer:6 / skip:43 / block:0`, and unexplained cross-store drops are zero.
+- The live dry-run did not naturally select memory/cross-store mutations, so deterministic fixture-backed integration proof covers `skill`, `builtin_user`, `builtin_memory`, `external_memory`, and `memory_to_skill` end-to-end through `run_improve`, compact tool summaries, and episode creation. No mutating dogfood was run because no low-risk executable mutation appeared.
 
 ## Review updates — 2026-05-28
 
@@ -390,6 +390,8 @@ git diff --check
 
 ## Slice 7: Dogfood and readiness closure
 
+**Status:** Implemented 2026-05-28. Latest dry-run dogfood artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T104450Z.json` is healthy for readiness closure: canonical transaction summaries are present, split lanes are absent, action summary is `apply:0 / defer:6 / skip:43 / block:0`, unexplained cross-store drops are zero, and no mutating dogfood was run because no low-risk executable mutation was selected. Added deterministic fixture-backed integration proof for `skill`, `builtin_user`, `builtin_memory`, `external_memory`, and `memory_to_skill` through `run_improve`, compact tool summaries, and episode creation.
+
 **Objective:** Prove the new path with real runtime artifacts before marking the roadmap ready.
 
 **Files:**
@@ -442,7 +444,9 @@ git diff --check
    - whether mutation ran;
    - remaining evidence-driven follow-up, if any.
 
-**Commit:** `docs(self-improvement): close unified knowledge execution readiness`
+**Readiness result:** dry-run readiness closed. Continue scheduled observation; run mutating dogfood only when a future dry-run naturally selects a low-risk executable transaction with exact current source text and official-tool support.
+
+**Commit:** `test(self-improvement): close unified knowledge readiness`
 
 ---
 
