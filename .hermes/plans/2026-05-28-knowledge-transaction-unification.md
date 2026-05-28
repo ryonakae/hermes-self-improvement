@@ -1,6 +1,6 @@
 # Knowledge Transaction Unification Implementation Plan
 
-> **For Hermes:** Implement this plan completely, in small TDD slices. Do not stop after visibility-only counters if planner/editor still route skill and memory independently.
+> **For Hermes:** Implemented and dogfooded on 2026-05-28. Future work should not reopen split skill/memory lanes unless a new artifact shows concrete actionability loss.
 
 **Goal:** Finish the `planner / editor` redesign so skills and memory are handled as one knowledge transaction system, not two parallel runners with weak handoff.
 
@@ -32,14 +32,14 @@ This is not a request to loosen mutation gates or inflate apply counts. It is a 
 
 ## Non-negotiable completion criteria
 
-This plan is not complete until all four outcomes below are true:
+Completion status as of `run-20260528T070041Z.json`: all four outcomes below are implemented and dogfooded.
 
 1. Artifacts honestly expose matched-but-not-selected and memory-to-skill routing outcomes.
 2. Planner produces one knowledge transaction plan rather than independently losing skill/memory handoffs.
 3. Editor can execute mixed skill/memory transactions with official tools and add-before-remove semantics.
 4. Old split schema/reporting leaks are gone enough that memory editor failures cannot appear as `skill_editor_result_*`, and prompt/runtime naming no longer implies two independent editors.
 
-Partial visibility-only work may be committed as an intermediate slice, but the parent roadmap must remain **not ready** until all four are implemented and dogfooded.
+Do not mark future regressions as readiness-complete without a dogfood artifact showing zero unexplained cross-store drops and no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes.
 
 ## Compatibility and runtime reset policy
 
@@ -338,6 +338,10 @@ The editor receives a validated transaction plan and executes only that plan.
     - `knowledge_transactions.total: 48`, with `apply: 0`, `defer: 3`, `skip: 45`, `block: 0`, `by_kind: {'planner_skill': 48}`.
     - `knowledge_routing.memory_routed_to_skill_count: 6`, `memory_routed_to_skill_selected_count: 6`, `memory_routed_to_skill_dropped_count: 0`, `unexplained_cross_store_drop_count: 0`.
     - Saved artifact text contains none of `not_memory_workflow_to_skill`, `skill_editor_result`, `memory_editor_result`, `invalid_skill_editor_task`, `invalid_memory_editor_task`, `skill_editor_unavailable`, or `memory_editor_unavailable`.
+  - Runtime setup validation after non-destructive `hermes self-improvement setup --json`.
+    - `status_initialized: True`.
+    - `reasons: []`.
+    - `prompt_overlays: ready` for planner/editor/evaluator default seed overlays.
 
 **Objective:** Finish the migration so future agents cannot think the redesign is complete while skill/memory are still separate lanes.
 
@@ -425,4 +429,4 @@ Use separate commits so review can stop safely without hiding an incomplete arch
 4. `feat(self-improvement): execute unified knowledge editor transactions`
 5. `docs(self-improvement): mark knowledge transaction readiness`
 
-If implementation must pause after commit 2 or 3, leave the roadmap status as **not ready / transaction unification incomplete**. Do not mark readiness complete until Slice 4 dogfood passes.
+If implementation must pause after a future regression fix, leave the roadmap status as **not ready / transaction unification regressed** until a dogfood artifact again proves the canonical contract.

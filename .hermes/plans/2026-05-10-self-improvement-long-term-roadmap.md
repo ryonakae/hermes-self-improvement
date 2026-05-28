@@ -38,7 +38,7 @@ The key product promise is not “make many changes.” It is:
 
 ## Current Position — 2026-05-28
 
-Overall: **runtime-healthy but not final-ready** for the original long-term roadmap. Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, scheduled dogfood proof, canonical transaction reporting, and final `run_improve` artifact split-lane removal are implemented. Remaining readiness work is a final report/readiness wording review and closure of `2026-05-28-knowledge-transaction-unification.md`.
+Overall: **runtime-healthy and architecturally complete for the 2026-05-28 knowledge-transaction blocker**. Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, scheduled dogfood proof, canonical transaction reporting, unified editor error normalization, and final `run_improve` artifact split-lane removal are implemented. Future roadmap work should be driven by new dogfood evidence, outcome windows, or concrete actionability loss rather than the now-closed split skill/memory transaction blocker.
 
 ### What changed since the earlier 2026-05-10 snapshot
 
@@ -52,7 +52,7 @@ Overall: **runtime-healthy but not final-ready** for the original long-term road
 
 ### Important caveat
 
-The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail -> knowledge transaction plan -> unified editor execution** the canonical model. The observation substrate and planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. D4's `acceptable_with_scheduled_dogfood` handoff was validated for observation/readiness: `self-improvement-calibrate` and `self-improvement-autonomous-maintenance` both completed successfully in the scheduled 2026-05-28 morning cron window, and latest maintenance artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json` has `actionability_loss_count 0`. But that artifact also proved the remaining blocker: skill and memory can still be treated as separate lanes, with memory workflow candidates routed to skill and then dropped by skill-side `not_selected_by_planner`. No mutation guard should be loosened; the fix is knowledge transaction unification.
+The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail -> knowledge transaction plan -> unified editor execution** the canonical model. The observation substrate and planner handoff exist, D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries, and the follow-up knowledge-transaction unification dogfood closed the 2026-05-28 split-lane blocker: routed workflow evidence is selected/handled, `memory_routed_to_skill_dropped_count` is 0, editor errors are normalized to `editor_*`, and final `run_improve` artifacts no longer expose split `step_decisions.skill` / `memory` / `memory_to_skill` lanes. No mutation guard should be loosened; future changes need fresh evidence.
 
 ### Strong areas
 

@@ -2,21 +2,21 @@
 
 ## Current source of truth
 
-Update note (2026-05-28): the 2026-05-28 scheduled dogfood looked benign at the shallow readiness layer, but deeper artifact review found that planner/editor integration is still incomplete for cross-store knowledge work. Treat the system as runtime-healthy but **not final-ready** until `2026-05-28-knowledge-transaction-unification.md` is implemented and dogfooded.
+Update note (2026-05-28): the 2026-05-28 scheduled dogfood looked benign at the shallow readiness layer, and deeper artifact review initially found cross-store planner/editor gaps. The active unification work has now dogfooded canonical `knowledge_transactions`, zero routed-to-skill drops, unified `editor_*` errors, and no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes in final `run_improve` artifacts.
 
 As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`
-  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, and Slice D/E readiness work is complete at the observation/readiness layer. However, 2026-05-28 artifact review found planner/editor knowledge-transaction integration is still incomplete, so the roadmap is **not final-ready** until the knowledge transaction unification plan lands.
-  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is runtime-healthy but architecturally incomplete for cross-store skill/memory transactions.
+  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, Slice D/E readiness work is complete at the observation/readiness layer, and 2026-05-28 knowledge-transaction unification has dogfooded canonical run artifacts with no routed-to-skill drops or split decision lanes. Remaining work should be driven by new evidence/outcomes rather than this specific cross-store architecture blocker.
+  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly.
 
 - `2026-05-28-knowledge-transaction-unification.md`
   - **Status:** active top-priority implementation plan; Slice 1 visibility completed, Slice 2 planner-runtime canonical `knowledge_transactions` output completed, memory-to-skill cross-store candidates now surface in top-level run `knowledge_transactions`, `memory_to_skill` execution now uses a single add-before-remove transaction result, episode/CLI/tool summary plus CLI detail surfaces now consume canonical transactions when present, planner normalization accepts canonical `memory_to_skill`, planner prompts document the cross-store transaction shape, and knowledge routing now exposes unexplained cross-store drops while counting explicit planner-selected skill transactions and selected coverage representatives as handled routed evidence. Latest dogfood shows routed-to-skill drops at zero, active runtime producers now use `memory_convert_to_skill_update` instead of the old terminal workflow-skip reason, unified backend errors are normalized to `editor_*`, and final `run_improve` artifacts no longer expose legacy split `step_decisions.skill` / `memory` / `memory_to_skill` lanes. Remaining work is final readiness/report wording review and closure.
   - Completes the unfinished planner/editor redesign: honest matched-but-not-selected reporting, replacement of split skill/memory planner outputs with unified knowledge transactions across skill/builtin-user/builtin-memory/external-memory targets, mixed skill+memory editor execution with add-before-remove semantics, removal of split skill/memory editor schema leaks, and no compatibility shims for old split runtime contracts.
 
 - `2026-05-25-self-improvement-role-redesign.md`
-  - **Status:** active redesign/status ledger; needs correction after 2026-05-28 artifact review.
-  - This is the clearest source for the intended four-role architecture (`planner / editor / evaluator / calibrator`). Its earlier “ready” reading applied to structural role naming and observation/readiness layers, not to true cross-store planner/editor transaction semantics. The active child plan `2026-05-28-knowledge-transaction-unification.md` must complete before this redesign can be called final-ready.
+  - **Status:** implemented for the planned four-role architecture and corrected after 2026-05-28 artifact review.
+  - This is the clearest source for the intended four-role architecture (`planner / editor / evaluator / calibrator`). Its earlier “ready” reading applied only to structural role naming and observation/readiness layers; the follow-up unification plan now supplies the missing canonical transaction/reporting proof.
 
 The current active hardening plans are:
 
