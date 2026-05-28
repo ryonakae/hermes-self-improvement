@@ -1360,31 +1360,60 @@ def _format_count_map(counts: dict[str, Any]) -> str:
 
 def _describe_decision_item(item: dict[str, Any], *, kind: str) -> str:
     if kind == "skill":
-        target = item.get("skill") or item.get("candidate_source") or "skill"
-        detail = item.get("change_intent") or item.get("rationale") or item.get("reason") or item.get("decision") or "planned"
+        target = item.get("target_skill") or item.get("skill") or item.get("candidate_source") or item.get("proposed_skill_name") or "skill"
+        detail = item.get("decision") if item.get("target_skill") else item.get("change_intent") or item.get("rationale") or item.get("reason") or item.get("decision") or "planned"
         detail_text = str(detail)
         if len(detail_text) > 80 or detail_text.count(" ") > 5:
             detail_text = str(item.get("decision") or "planned")
         return f"{target}: {detail_text}"
     if kind == "memory_to_skill":
-        target = item.get("skill_route") or "skill"
+        target = item.get("target_skill") or item.get("skill_route") or "skill"
         detail = item.get("reason") or item.get("decision") or "memory_to_skill"
         return f"memory_to_skill: {target}: {detail}"
-    operation = item.get("operation") if isinstance(item.get("operation"), dict) else {}
-    target = operation.get("target") or item.get("evidence_id") or "memory"
+    raw_operation = item.get("operation")
+    operation: dict[str, Any] = raw_operation if isinstance(raw_operation, dict) else {}
+    target = operation.get("target") or item.get("source_evidence_id") or item.get("evidence_id") or "memory"
+    if target not in {"memory", "user"} and not str(target).startswith("memory:"):
+        target = f"memory:{target}"
     op = operation.get("operation") or item.get("reason") or item.get("decision") or "memory"
+    if item.get("target_store") and item.get("source_evidence_id"):
+        return f"{target}: {op}"
     return f"{op}: {target}"
 
 
-def _action_bucket_lines(step_decisions: dict[str, Any], *, limit: int = 3) -> list[str]:
+def _transaction_display_kind(item: dict[str, Any]) -> str:
+    transaction_kind = str(item.get("transaction_kind") or "")
+    if transaction_kind == "memory_to_skill":
+        return "memory_to_skill"
+    target_store = str(item.get("target_store") or "")
+    if target_store == "skill" or item.get("target_skill") or item.get("skill"):
+        return "skill"
+    return "memory"
+
+
+def _action_bucket_lines(
+    step_decisions: dict[str, Any],
+    *,
+    limit: int = 3,
+    knowledge_transactions: list[dict[str, Any]] | None = None,
+) -> list[str]:
     buckets: dict[str, list[str]] = {"apply": [], "defer": [], "skip": [], "block": []}
-    for kind in ("skill", "memory", "memory_to_skill"):
-        step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
-        for item in step.get("decisions") or []:
+    if knowledge_transactions:
+        for item in knowledge_transactions:
             if not isinstance(item, dict):
                 continue
+            kind = _transaction_display_kind(item)
             action = _semantic_action_from_runner_decision(item, kind=kind)
             buckets.setdefault(action, []).append(_describe_decision_item(item, kind=kind))
+    else:
+        for kind in ("skill", "memory", "memory_to_skill"):
+            raw_step = step_decisions.get(kind)
+            step: dict[str, Any] = raw_step if isinstance(raw_step, dict) else {}
+            for item in step.get("decisions") or []:
+                if not isinstance(item, dict):
+                    continue
+                action = _semantic_action_from_runner_decision(item, kind=kind)
+                buckets.setdefault(action, []).append(_describe_decision_item(item, kind=kind))
     labels = {"apply": "Would apply", "defer": "Deferred", "skip": "Skipped", "block": "Blocked"}
     lines: list[str] = []
     for bucket in ("apply", "defer", "skip", "block"):
@@ -1979,6 +2008,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     editor_prompt_chars = planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {}
     raw_planner_transactions = planner.get("knowledge_transactions")
     planner_decisions: list[dict[str, Any]] = [item for item in raw_planner_transactions if isinstance(item, dict)] if isinstance(raw_planner_transactions, list) else []
+    raw_result_transactions = result.get("knowledge_transactions")
+    knowledge_transactions: list[dict[str, Any]] = [item for item in raw_result_transactions if isinstance(item, dict)] if isinstance(raw_result_transactions, list) else []
     skill_decisions: list[dict[str, Any]] = [item for item in (skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []) if isinstance(item, dict)]
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "mutate_skill"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}
@@ -2204,7 +2235,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     maintenance_candidates = [item for item in (knowledge_maintenance.get("maintenance_candidates") or []) if isinstance(item, dict)]
     maintenance_lines = _knowledge_maintenance_summary_lines(planner_decisions, maintenance_candidates)
     memory_placement_lines = _memory_placement_summary_lines(memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [])
-    action_bucket_lines = _action_bucket_lines(step_decisions)
+    action_bucket_lines = _action_bucket_lines(step_decisions, knowledge_transactions=knowledge_transactions)
     skip_classification_lines = _skill_skip_classification_lines(planner_quality)
     actual_result_lines = _actual_result_summary_lines(
         summary=summary,

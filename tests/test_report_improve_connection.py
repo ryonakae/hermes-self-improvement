@@ -243,6 +243,24 @@ def test_cli_action_summary_counts_canonical_knowledge_transactions_without_spli
     assert summary == {"apply": 2, "defer": 1, "skip": 1, "block": 0}
 
 
+def test_cli_action_bucket_lines_describe_canonical_knowledge_transactions_without_split_steps():
+    import hermes_self_improvement.cli as cli
+
+    lines = cli._action_bucket_lines({}, knowledge_transactions=[
+        {"decision": "mutate_skill", "target_store": "skill", "target_skill": "safe-patch-usage", "reason": "clear evidence"},
+        {"decision": "memory_to_skill_preview", "transaction_kind": "memory_to_skill", "target_skill": "workflow-skill", "reason": "move procedure"},
+        {"decision": "defer", "target_store": "builtin_memory", "source_evidence_id": "mem1", "reason": "needs review"},
+    ])
+
+    assert lines == [
+        "Would apply details:",
+        "- safe-patch-usage: mutate_skill",
+        "- memory_to_skill: workflow-skill: move procedure",
+        "Deferred details:",
+        "- memory:mem1: needs review",
+    ]
+
+
 def test_cli_action_summary_counts_mutate_skill_preview_as_apply():
     import hermes_self_improvement.cli as cli
 

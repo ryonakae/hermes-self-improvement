@@ -279,11 +279,11 @@ The editor receives a validated transaction plan and executes only that plan.
 
 ### Slice 4 — Remove old split semantics from prompts, summaries, readiness, and roadmap state
 
-**Status:** partially completed 2026-05-28; episode recording, CLI action summaries, and compact tool results now read top-level canonical `knowledge_transactions` when present instead of requiring split `step_decisions.skill/memory/memory_to_skill`. Compact tool results now expose `steps.knowledge_transactions.total/apply/defer/skip/block/by_kind/cross_store`. Remaining work is to remove the rest of split prompt/report/readiness wording and complete dry-run dogfood verification for old cross-store drop modes.
+**Status:** partially completed 2026-05-28; episode recording, CLI action summaries, human-facing CLI action detail lines, and compact tool results now read top-level canonical `knowledge_transactions` when present instead of requiring split `step_decisions.skill/memory/memory_to_skill`. Compact tool results now expose `steps.knowledge_transactions.total/apply/defer/skip/block/by_kind/cross_store`. Remaining work is to remove the rest of split prompt/report/readiness wording and complete dry-run dogfood verification for old cross-store drop modes.
 
 **Validation completed for canonical summary/episode surfaces:**
 - RED/GREEN tests added for canonical-only episode recording: `tests/test_episode_ledger.py::test_record_run_episodes_uses_canonical_knowledge_transactions_without_split_steps`.
-- RED/GREEN tests added for canonical-only CLI/tool summaries: `tests/test_report_improve_connection.py::test_cli_action_summary_counts_canonical_knowledge_transactions_without_split_steps`, `tests/test_report_improve_connection.py::test_compact_tool_result_summarizes_canonical_knowledge_transactions_without_split_steps`.
+- RED/GREEN tests added for canonical-only CLI/tool summaries: `tests/test_report_improve_connection.py::test_cli_action_summary_counts_canonical_knowledge_transactions_without_split_steps`, `tests/test_report_improve_connection.py::test_cli_action_bucket_lines_describe_canonical_knowledge_transactions_without_split_steps`, `tests/test_report_improve_connection.py::test_compact_tool_result_summarizes_canonical_knowledge_transactions_without_split_steps`.
 - Related focused tests: `tests/test_episode_ledger.py tests/test_report_improve_connection.py tests/test_memory_to_skill_migration.py tests/test_runner_steps.py` — `78 passed`.
 - Full suite: `842 passed, 2 skipped`.
 - Static checks: `python -m py_compile __init__.py hermes_self_improvement/*.py` and `git diff --check` passed.
