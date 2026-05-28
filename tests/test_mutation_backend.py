@@ -410,7 +410,7 @@ def test_build_editor_backend_defaults_to_constrained_runner():
         )
     })
 
-    assert isinstance(backend, NativeSkillEditorBackend)
+    assert isinstance(backend.inner, NativeSkillEditorBackend)
     assert backend.constrained_agent_runner is not None
 
 
@@ -464,6 +464,15 @@ def test_native_backend_can_validate_constrained_agent_result_with_tool_trace():
 def test_build_editor_backend_normalizes_disabled_and_unknown():
     assert build_editor_backend({"mutation": {"enabled": False}}).run("p", {}, {})["error"] == "editor_backend_disabled"
     assert build_editor_backend({"mutation": {"backend": "bogus"}}).run("p", {}, {})["reasons"] == ["editor_backend_unknown"]
+
+
+def test_build_editor_backend_normalizes_native_skill_unavailable_errors():
+    backend = build_editor_backend({"_skill_tool_executor": SkillToolExecutor(source="empty")})
+
+    result = backend.run("prompt", {"type": "editor_task", "task_kind": "mutate_skill"}, {})
+
+    assert result["error"] == "editor_unavailable"
+    assert "skill_editor" not in json.dumps(result)
 
 
 def test_runtime_skill_tool_resolver_reports_unavailable_without_core_hook():

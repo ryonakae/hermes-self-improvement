@@ -34,11 +34,22 @@ def _normalize_editor_error(result: dict[str, Any]) -> dict[str, Any]:
     converted = dict(result)
     error = converted.get("error")
     if isinstance(error, str):
-        converted["error"] = error.replace("skill_editor_result", "editor_result").replace("memory_editor_result", "editor_result").replace("skill_editor_backend", "editor_backend").replace("memory_editor_backend", "editor_backend")
+        converted["error"] = error.replace("skill_editor", "editor").replace("memory_editor", "editor")
     reasons = converted.get("reasons")
     if isinstance(reasons, list):
-        converted["reasons"] = [str(item).replace("skill_editor_backend", "editor_backend").replace("memory_editor_backend", "editor_backend") for item in reasons]
+        converted["reasons"] = [str(item).replace("skill_editor", "editor").replace("memory_editor", "editor") for item in reasons]
     return converted
+
+
+class EditorBackendAdapter:
+    def __init__(self, inner: Any):
+        self.inner = inner
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.inner, name)
+
+    def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None):
+        return _normalize_editor_error(self.inner.run(prompt, task, config))
 
 
 def validate_backend_success_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -65,16 +76,7 @@ def build_editor_backend(config: dict[str, Any] | None = None, kind: str | None 
     if injected is not None:
         return injected
     backend = build_memory_editor_backend(cfg) if kind == "memory" or "_memory_tool_executor" in cfg else build_skill_editor_backend(cfg)
-    if backend.__class__.__name__.startswith("Unavailable"):
-        class EditorBackendAdapter:
-            def __init__(self, inner: Any):
-                self.inner = inner
-
-            def run(self, prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None):
-                return _normalize_editor_error(self.inner.run(prompt, task, config))
-
-        return EditorBackendAdapter(backend)
-    return backend
+    return EditorBackendAdapter(backend)
 
 
 def editor_backend_status(config: dict[str, Any] | None = None, kind: str | None = None) -> dict[str, Any]:

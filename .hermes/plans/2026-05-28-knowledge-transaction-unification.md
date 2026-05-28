@@ -279,7 +279,7 @@ The editor receives a validated transaction plan and executes only that plan.
 
 ### Slice 4 — Remove old split semantics from prompts, summaries, readiness, and roadmap state
 
-**Status:** partially completed 2026-05-28; episode recording, CLI action summaries, human-facing CLI action detail lines, and compact tool results now read top-level canonical `knowledge_transactions` when present instead of requiring split `step_decisions.skill/memory/memory_to_skill`. Compact tool results now expose `steps.knowledge_transactions.total/apply/defer/skip/block/by_kind/cross_store`. Planner normalization now accepts canonical `memory_to_skill` transactions, the planner prompt documents the cross-store transaction shape, and knowledge routing treats canonical `memory_to_skill` plus explicit planner skill transactions as selected evidence. Unanswered maintenance candidates now become canonical deferred planner transactions instead of silently dropped routed evidence, selected coverage candidates mark their representative unmatched evidence as handled, and active runtime producers now use `memory_convert_to_skill_update` rather than the old terminal `not_memory_workflow_to_skill` reason. Knowledge routing also exposes `unexplained_cross_store_drop_count` / `unexplained_cross_store_drop_by_reason` and the CLI summary renders those drops so readiness cannot look benign when memory-to-skill work was silently dropped. Remaining work is to remove the rest of split prompt/report/readiness wording.
+**Status:** partially completed 2026-05-28; episode recording, CLI action summaries, human-facing CLI action detail lines, and compact tool results now read top-level canonical `knowledge_transactions` when present instead of requiring split `step_decisions.skill/memory/memory_to_skill`. Compact tool results now expose `steps.knowledge_transactions.total/apply/defer/skip/block/by_kind/cross_store`. Planner normalization now accepts canonical `memory_to_skill` transactions, the planner prompt documents the cross-store transaction shape, and knowledge routing treats canonical `memory_to_skill` plus explicit planner skill transactions as selected evidence. Unanswered maintenance candidates now become canonical deferred planner transactions instead of silently dropped routed evidence, selected coverage candidates mark their representative unmatched evidence as handled, and active runtime producers now use `memory_convert_to_skill_update` rather than the old terminal `not_memory_workflow_to_skill` reason. Unified `build_editor_backend` now normalizes native skill/memory backend errors to `editor_*` so runtime-facing backend failures do not leak `skill_editor_*` / `memory_editor_*` schema names. Knowledge routing also exposes `unexplained_cross_store_drop_count` / `unexplained_cross_store_drop_by_reason` and the CLI summary renders those drops so readiness cannot look benign when memory-to-skill work was silently dropped. Remaining work is to remove the rest of split prompt/report/readiness wording.
 
 **Validation completed for canonical summary/episode surfaces:**
 - RED/GREEN tests added for canonical-only episode recording: `tests/test_episode_ledger.py::test_record_run_episodes_uses_canonical_knowledge_transactions_without_split_steps`.
@@ -287,8 +287,8 @@ The editor receives a validated transaction plan and executes only that plan.
 - RED/GREEN tests added for unexplained cross-store drop visibility: `tests/test_memory_to_skill_migration.py::test_knowledge_routing_summary_reports_memory_to_skill_drop`, `tests/test_cli_surface.py::test_improve_summary_reports_memory_to_skill_migrations`.
 - RED/GREEN tests added for planner-owned cross-store selection and routing accounting: `tests/test_knowledge_maintenance_planner.py::test_planner_accepts_memory_to_skill_knowledge_transaction_for_maintenance_candidate`, `tests/test_knowledge_maintenance_planner.py::test_planner_prompt_exposes_knowledge_maintenance_candidates`, `tests/test_memory_to_skill_migration.py::test_knowledge_routing_summary_counts_planner_memory_to_skill_transaction_as_selected`, `tests/test_memory_to_skill_migration.py::test_knowledge_routing_summary_counts_explicit_planner_skill_decision_as_selected`.
 - RED/GREEN tests added for maintenance-candidate fallback handling: `tests/test_knowledge_maintenance_planner.py::test_planner_defaults_unanswered_maintenance_candidate_to_canonical_defer`, `tests/test_memory_to_skill_migration.py::test_knowledge_routing_summary_counts_maintenance_representatives_as_selected`.
-- Related focused tests: `tests/test_episode_ledger.py tests/test_report_improve_connection.py tests/test_memory_to_skill_migration.py tests/test_runner_steps.py` — `78 passed`; cross-store routing focused slice — `18 passed`; planner/routing surface focused slice — `86 passed`; latest planner/routing/CLI focused slice — `89 passed`.
-- Full suite: `848 passed, 2 skipped`.
+- Related focused tests: `tests/test_episode_ledger.py tests/test_report_improve_connection.py tests/test_memory_to_skill_migration.py tests/test_runner_steps.py` — `78 passed`; cross-store routing focused slice — `18 passed`; planner/routing surface focused slice — `86 passed`; latest planner/routing/CLI focused slice — `89 passed`; editor backend schema leak slice — `62 passed, 1 skipped`.
+- Full suite: latest `850 passed, 2 skipped`.
 - Static checks: `python -m py_compile __init__.py hermes_self_improvement/*.py` and `git diff --check` passed.
 - Dry-run smoke artifacts:
   - `~/.hermes/self-improvement/runs/run-20260528T053715Z.json`.
@@ -325,6 +325,13 @@ The editor receives a validated transaction plan and executes only that plan.
     - `memory_routed_to_skill_dropped_count: 0`.
     - `unexplained_cross_store_drop_count: 0`.
     - Saved artifact text no longer contains `not_memory_workflow_to_skill`; active producers now emit `memory_convert_to_skill_update` for workflow-shaped memory facts routed to skill.
+  - `~/.hermes/self-improvement/runs/run-20260528T064220Z.json`.
+    - `transaction_count: 46`.
+    - `knowledge_routing.memory_routed_to_skill_count: 6`.
+    - `memory_routed_to_skill_selected_count: 6`.
+    - `memory_routed_to_skill_dropped_count: 0`.
+    - `unexplained_cross_store_drop_count: 0`.
+    - Saved artifact text contains none of `not_memory_workflow_to_skill`, `skill_editor_result`, `memory_editor_result`, `invalid_skill_editor_task`, `invalid_memory_editor_task`, `skill_editor_unavailable`, or `memory_editor_unavailable`.
 
 **Objective:** Finish the migration so future agents cannot think the redesign is complete while skill/memory are still separate lanes.
 

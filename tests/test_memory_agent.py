@@ -296,10 +296,19 @@ def test_memory_backend_has_no_auxiliary_or_injected_llm_loop_surface():
 def test_build_editor_backend_defaults_to_constrained_runner():
     backend = build_editor_backend({
         "_memory_tool_executor": MemoryToolExecutor(memory_tool_fn=lambda **args: json.dumps({"success": True}))
-    })
+    }, kind="memory")
 
-    assert isinstance(backend, NativeMemoryEditorBackend)
+    assert isinstance(backend.inner, NativeMemoryEditorBackend)
     assert backend.constrained_agent_runner is not None
+
+
+def test_build_editor_backend_normalizes_native_memory_unavailable_errors():
+    backend = build_editor_backend({"_memory_tool_executor": MemoryToolExecutor(source="empty")}, kind="memory")
+
+    result = backend.run("prompt", task(), {})
+
+    assert result["error"] == "editor_unavailable"
+    assert "memory_editor" not in json.dumps(result)
 
 
 def test_native_memory_backend_accepts_constrained_agent_result_through_existing_validation():
