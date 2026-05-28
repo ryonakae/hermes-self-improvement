@@ -2,7 +2,9 @@
 
 ## Current source of truth
 
-Update note (2026-05-28): unified planner/editor execution is now code-complete and dogfood-readiness closed for dry-run. Latest dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T104450Z.json` uses canonical `knowledge_transactions` / `knowledge_quality` / `knowledge_routing`, has no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, reports `apply:0 / defer:6 / skip:43 / block:0`, and has zero unexplained cross-store drops. A deterministic fixture-backed integration proof covers `skill`, `builtin_user`, `builtin_memory`, `external_memory`, and `memory_to_skill` through `run_improve`, compact tool summaries, and episode creation without split-lane fallback. No mutating dogfood was run because the live dry-run selected no low-risk executable mutation.
+Update note (2026-05-29): planner evidence-gate hardening is implemented and verified. The unified planner/editor handoff now keeps the unattended mutation evidence gate fail-closed while allowing valid editable-skill `mutate_skill` decisions backed by deterministic maintenance-candidate / coverage-fit / representative-evidence relationships. Canonical skill transactions retain executable editor tasks, inventory-only no-ops keep skill identity as `inventory_not_selected_by_planner`, and dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T165936Z.json` has no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes.
+
+Previous readiness note: unified planner/editor execution dogfood-readiness was closed for dry-run. Latest dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T104450Z.json` uses canonical `knowledge_transactions` / `knowledge_quality` / `knowledge_routing`, has no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, reports `apply:0 / defer:6 / skip:43 / block:0`, and has zero unexplained cross-store drops. A deterministic fixture-backed integration proof covers `skill`, `builtin_user`, `builtin_memory`, `external_memory`, and `memory_to_skill` through `run_improve`, compact tool summaries, and episode creation without split-lane fallback. No mutating dogfood was run because the live dry-run selected no low-risk executable mutation.
 
 As of 2026-05-10, the long-term roadmap is:
 
@@ -11,7 +13,7 @@ As of 2026-05-10, the long-term roadmap is:
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly.
 
 - `2026-05-28-unified-knowledge-planner-editor-execution.md`
-  - **Status:** implemented / dogfood-readiness closed for dry-run. Slices 4–7 are implemented/verified; latest live dry-run artifact is `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T104450Z.json`. No mutating dogfood ran because the dry-run selected no low-risk executable mutation.
+  - **Status:** implemented / dogfood-readiness closed for dry-run, with follow-up evidence-gate hardening completed. Slices 4–7 are implemented/verified; latest hardening dry-run artifact is `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T165936Z.json`. No forced mutating dogfood was run; verification stayed dry-run based.
   - Replaces the current bridge-style orchestration (`run_skill_improvement_step` + `run_memory_improvement_step` + `apply_memory_to_skill_migrations`) with one planner/editor transaction path: `run_knowledge_improvement_step`, canonical transactions for skill/builtin-user/builtin-memory/external-memory/memory-to-skill, unified editor execution, split-lane removal, and dogfood readiness closure.
 
 - `2026-05-28-knowledge-transaction-unification.md`
@@ -23,6 +25,10 @@ As of 2026-05-10, the long-term roadmap is:
   - This is the clearest source for the intended four-role architecture (`planner / editor / evaluator / calibrator`). Its earlier “ready” reading applied only to structural role naming and observation/readiness layers; the follow-up unification plan now supplies the missing canonical transaction/reporting proof.
 
 The current active hardening plans are:
+
+- `2026-05-28-planner-evidence-gate-hardening.md`
+  - **Status:** implemented / verified / smoke-tested.
+  - Hardens the unified planner/editor handoff after live dogfood showed raw planner `mutate_skill` selections could be stopped by an evidence gate that only recognized direct editable-skill evidence. The implementation preserves the unattended mutation safety gate, expands allowed evidence only through deterministic maintenance-candidate / coverage-fit / representative-evidence relationships, preserves executable skill editor tasks through canonical transactions, and clarifies inventory-only `not_selected_by_planner` reporting. Validation: focused touched suite `61 passed`, full suite `873 passed, 2 skipped`, `py_compile`, `git diff --check`, `status`, and dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T165936Z.json` passed.
 
 - `2026-05-26-turn-trace-and-readiness-followup.md`
   - **Status:** implemented for turn-trace/index/readiness visibility; superseded for planner/editor completion by `2026-05-28-knowledge-transaction-unification.md`.

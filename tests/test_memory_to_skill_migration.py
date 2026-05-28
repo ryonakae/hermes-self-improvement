@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from hermes_self_improvement.knowledge_transactions import normalize_knowledge_transaction
 from hermes_self_improvement.runner_steps import apply_memory_to_skill_migrations, build_knowledge_routing_summary, build_knowledge_transactions, execute_knowledge_transaction
 
 
@@ -545,6 +546,37 @@ def test_execute_knowledge_transaction_runs_skill_patch_transaction_through_edit
     assert result["changed_skills"] == ["safe-patch-usage"]
     assert result["executed_steps"] == [{"step": "skill_mutate", "status": "applied", "target": "safe-patch-usage"}]
     assert calls[0]["targets"] == {"primary_skill": "safe-patch-usage"}
+
+
+def test_execute_knowledge_transaction_runs_normalized_planner_skill_task_through_editor_backend(tmp_path):
+    root = tmp_path / "skills"
+    write_skill(root, "local-patch-workflow")
+    calls = []
+
+    def fake_backend(prompt, task, config=None):
+        calls.append(task)
+        return success_payload("local-patch-workflow")
+
+    transaction = normalize_knowledge_transaction({
+        "skill": "local-patch-workflow",
+        "decision": "mutate_skill",
+        "evidence_ids": ["coverage_patch"],
+        "skill_task": {
+            "task_kind": "mutate_skill",
+            "targets": {"primary_skill": "local-patch-workflow"},
+            "instructions": "Add bounded retry guidance.",
+        },
+    })
+    result = execute_knowledge_transaction(
+        transaction,
+        config={"_editor_backend": fake_backend, "_mutable_local_skill_roots": [root]},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result.get("reason") != "knowledge_transaction_missing_required_fields"
+    assert calls[0]["targets"] == {"primary_skill": "local-patch-workflow"}
 
 
 def test_execute_knowledge_transaction_runs_builtin_memory_add_replace_remove():

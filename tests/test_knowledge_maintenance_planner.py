@@ -267,6 +267,130 @@ def test_planner_accepts_canonical_maintenance_decisions():
     assert decisions["old-patch-workflow"]["target_skill"] == "local-patch-workflow"
 
 
+def test_planner_allows_mutate_skill_with_matching_maintenance_candidate_evidence():
+    candidate = make_knowledge_coverage_candidate(
+        gap_kind="recurring_workflow_without_skill",
+        evidence_ids=["unmatched_patch"],
+        evidence_count=6,
+        workflow_boundary="patch tool workflow",
+        resolution_kind="unresolved",
+        rationale="Patch tool workflow needs a bounded local skill patch.",
+    )
+    evidence_pack = {
+        "summary": {"event_count": 6, "evidence_count": 1, "ignored_count": 0},
+        "views": {"skill": [candidate["id"]]},
+        "evidence": [candidate],
+        "skill_candidates": [{"name": "local-patch-workflow", "mutable": True, "state": "active", "provenance": "agent_created"}],
+    }
+    digest = build_planner_digest(evidence_pack)
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": [{
+            "skill": "local-patch-workflow",
+            "decision": "mutate_skill",
+            "maintenance_action": "patch",
+            "evidence_ids": [candidate["id"], "unmatched_patch"],
+            "risk": "low",
+            "editor_instructions": "Add bounded retry guidance.",
+        }]}
+
+    result = run_planner(digest, config={"_planner_func": planner})
+    decision = result["knowledge_transactions"][0]
+
+    assert decision["decision"] == "mutate_skill"
+    assert decision["evidence_ids"] == [candidate["id"], "unmatched_patch"]
+    assert decision.get("reason") != "mutate_skill_without_attached_evidence"
+    assert decision["skill_task"]["task_kind"] == "mutate_skill"
+    assert decision["skill_task"]["targets"] == {"primary_skill": "local-patch-workflow"}
+
+
+def test_planner_blocks_mutate_skill_with_unrelated_maintenance_evidence():
+    candidate = make_knowledge_coverage_candidate(
+        gap_kind="recurring_workflow_without_skill",
+        evidence_ids=["unmatched_patch"],
+        evidence_count=6,
+        workflow_boundary="patch tool workflow",
+        resolution_kind="unresolved",
+        rationale="Patch tool workflow needs a bounded local skill patch.",
+    )
+    evidence_pack = {
+        "summary": {"event_count": 6, "evidence_count": 1, "ignored_count": 0},
+        "views": {"skill": [candidate["id"]]},
+        "evidence": [candidate],
+        "skill_candidates": [{"name": "local-patch-workflow", "mutable": True, "state": "active", "provenance": "agent_created"}],
+    }
+    digest = build_planner_digest(evidence_pack)
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": [{
+            "skill": "local-patch-workflow",
+            "decision": "mutate_skill",
+            "evidence_ids": ["unrelated_evidence"],
+            "risk": "low",
+            "editor_instructions": "Add bounded retry guidance.",
+        }]}
+
+    result = run_planner(digest, config={"_planner_func": planner})
+    decision = result["knowledge_transactions"][0]
+
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "mutate_skill_without_attached_evidence"
+    assert decision["evidence_ids"] == []
+
+
+def test_planner_does_not_use_reference_only_coverage_as_mutable_skill_evidence():
+    candidate = make_knowledge_coverage_candidate(
+        gap_kind="recurring_workflow_without_skill",
+        evidence_ids=["coverage_reference"],
+        evidence_count=5,
+        workflow_boundary="safe-patch-usage",
+        resolution_kind="unresolved",
+        rationale="Reference skill coverage must not become a mutable target.",
+    )
+    evidence_pack = {
+        "summary": {"event_count": 5, "evidence_count": 1, "ignored_count": 0},
+        "views": {"skill": [candidate["id"]]},
+        "evidence": [candidate],
+        "skill_candidates": [{"name": "safe-patch-usage", "mutable": False, "state": "active", "provenance": "builtin"}],
+    }
+    digest = build_planner_digest(evidence_pack)
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": [{
+            "skill": "safe-patch-usage",
+            "decision": "mutate_skill",
+            "evidence_ids": [candidate["id"], "coverage_reference"],
+            "risk": "low",
+            "editor_instructions": "Patch the built-in reference skill.",
+        }]}
+
+    result = run_planner(digest, config={"_planner_func": planner})
+
+    assert all(row.get("skill") != "safe-patch-usage" or row["decision"] != "mutate_skill" for row in result["knowledge_transactions"])
+
+
+def test_planner_defaults_unanswered_inventory_candidate_to_skill_skip_identity():
+    evidence_pack = {
+        "summary": {"event_count": 0, "evidence_count": 0, "ignored_count": 0},
+        "views": {"skill": []},
+        "evidence": [],
+        "skill_candidates": [{"name": "timeout-workflow", "mutable": True, "state": "active", "provenance": "agent_created"}],
+    }
+    digest = build_planner_digest(evidence_pack)
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": []}
+
+    result = run_planner(digest, config={"_planner_func": planner})
+    decision = result["knowledge_transactions"][0]
+
+    assert decision["transaction_kind"] == "skill"
+    assert decision["target_store"] == "skill"
+    assert decision["target_id"] == "timeout-workflow"
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "inventory_not_selected_by_planner"
+
+
 def test_planner_accepts_memory_to_skill_knowledge_transaction_for_maintenance_candidate():
     candidate = make_knowledge_coverage_candidate(
         gap_kind="recurring_workflow_without_skill",
@@ -336,7 +460,9 @@ def test_planner_defaults_unanswered_maintenance_candidate_to_canonical_defer():
     result = run_planner(digest, config={"_planner_func": planner})
 
     maintenance_decision = next(row for row in result["knowledge_transactions"] if candidate["id"] in row.get("evidence_ids", []))
-    assert maintenance_decision["transaction_kind"] == "planner_skill"
+    assert maintenance_decision["transaction_kind"] == "skill"
+    assert maintenance_decision["target_store"] == "skill"
+    assert maintenance_decision["target_id"] == "patch-tool-workflow"
     assert maintenance_decision["decision"] == "defer"
     assert maintenance_decision["reason"] == "maintenance_candidate_not_selected_by_planner"
     assert maintenance_decision["evidence_ids"] == [candidate["id"], "unmatched_patch"]

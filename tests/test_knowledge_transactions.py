@@ -98,6 +98,25 @@ def test_normalize_knowledge_transaction_ids_are_deterministic_and_evidence_orde
     assert first["evidence_ids"] == ["e1", "e2"]
 
 
+def test_normalize_knowledge_transaction_preserves_skill_skip_target_identity():
+    normalized = normalize_knowledge_transaction({
+        "transaction_kind": "skill",
+        "target_store": "skill",
+        "target_id": "timeout-workflow",
+        "decision": "skip",
+        "reason": "inventory_not_selected_by_planner",
+        "evidence_ids": [],
+    })
+
+    assert normalized["decision"] == "skip"
+    assert normalized["transaction_kind"] == "skill"
+    assert normalized["target_store"] == "skill"
+    assert normalized["target_id"] == "timeout-workflow"
+    assert normalized["operation"] == "none"
+    assert normalized["editor_task"] is None
+    assert normalized["reason"] == "inventory_not_selected_by_planner"
+
+
 def test_normalize_knowledge_transaction_non_apply_classifications_clear_editor_fields():
     unresolved = normalize_knowledge_transaction({
         "decision": "apply",

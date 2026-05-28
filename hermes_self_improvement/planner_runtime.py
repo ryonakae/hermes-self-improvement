@@ -723,7 +723,9 @@ def _maintenance_candidate_default_decision(item: dict[str, Any]) -> dict[str, A
         if eid not in evidence_ids:
             evidence_ids.append(eid)
     return {
-        "transaction_kind": "planner_skill",
+        "transaction_kind": "skill",
+        "target_store": "skill",
+        "target_id": target_skill,
         "decision": "defer",
         "reason": "maintenance_candidate_not_selected_by_planner",
         "evidence_ids": evidence_ids,
@@ -734,11 +736,99 @@ def _maintenance_candidate_default_decision(item: dict[str, Any]) -> dict[str, A
     }
 
 
+def _editable_candidate_names(candidate_rows: list[dict[str, Any]]) -> set[str]:
+    protected_provenance = {"external", "hub", "builtin", "plugin", "plugin-bundled"}
+    names: set[str] = set()
+    for row in candidate_rows:
+        name = str(row.get("name") or "").strip()
+        provenance = str(row.get("provenance") or row.get("source") or "")
+        state = str(row.get("state") or "")
+        if not name or row.get("mutable") is False or row.get("pinned"):
+            continue
+        if provenance in protected_provenance or state == "archived":
+            continue
+        names.add(name)
+    return names
+
+
+def _maintenance_evidence_maps_by_candidate(
+    *,
+    candidate_rows: list[dict[str, Any]],
+    maintenance_candidates: list[dict[str, Any]],
+) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
+    allowed = {
+        str(item.get("name") or ""): {str(eid) for eid in (item.get("evidence_ids") or []) if str(eid)}
+        for item in candidate_rows
+        if item.get("name")
+    }
+    required_maintenance: dict[str, set[str]] = {name: set() for name in allowed}
+    editable_names = _editable_candidate_names(candidate_rows)
+    for item in maintenance_candidates:
+        evidence_id = str(item.get("evidence_id") or "").strip()
+        if not evidence_id:
+            continue
+        raw_affordance = item.get("maintenance_affordance")
+        affordance = raw_affordance if isinstance(raw_affordance, dict) else {}
+        raw_coverage_fit = item.get("coverage_fit")
+        coverage_fit = raw_coverage_fit if isinstance(raw_coverage_fit, dict) else {}
+        fit_kind = str(coverage_fit.get("kind") or "")
+        match_target = str(coverage_fit.get("match_target") or "")
+        targets: set[str] = set()
+        if fit_kind in {"exact_duplicate", "partial_overlap"} and match_target.startswith("editable"):
+            targets.update(str(name) for name in (coverage_fit.get("fit_skills") or []) if str(name) in editable_names)
+        for key in ("target_skill", "skill"):
+            target = str(item.get(key) or "").strip()
+            if target in editable_names:
+                targets.add(target)
+        raw_hint = item.get("target_resolution")
+        hint = raw_hint if isinstance(raw_hint, dict) else {}
+        if str(hint.get("target_kind") or "") == "skill":
+            target = str(hint.get("target") or "").strip()
+            if target in editable_names and not str(hint.get("block_reason") or "").strip():
+                targets.add(target)
+        representative_ids = [str(eid) for eid in (affordance.get("representative_evidence_ids") or []) if str(eid)]
+        candidate_evidence_ids = [str(eid) for eid in (item.get("evidence_ids") or []) if str(eid)]
+        for target in targets:
+            allowed.setdefault(target, set()).update([evidence_id, *representative_ids, *candidate_evidence_ids])
+            required_maintenance.setdefault(target, set()).add(evidence_id)
+    return allowed, required_maintenance
+
+
+def _skill_task_for_mutation(raw: dict[str, Any], *, skill: str, maintenance_action: str, target_skill: str) -> dict[str, Any]:
+    raw_task = raw.get("skill_task") if isinstance(raw.get("skill_task"), dict) else raw.get("editor_task") if isinstance(raw.get("editor_task"), dict) else None
+    if raw_task:
+        raw_targets = raw_task.get("targets") if isinstance(raw_task.get("targets"), dict) else {}
+        primary = str(raw_targets.get("primary_skill") or raw_task.get("target_skill") or "").strip()
+        if not primary or primary == skill:
+            task = dict(raw_task)
+            task["targets"] = {**raw_targets, "primary_skill": skill}
+            return task
+    instructions = ""
+    for key in ("editor_instructions", "skill_editor_instructions", "change_intent", "reason", "rationale"):
+        if raw.get(key) is not None:
+            instructions = _redacted_preview(raw.get(key), max_chars=900)
+            if instructions:
+                break
+    if not instructions:
+        instructions = f"Apply the planner-selected {maintenance_action or 'patch'} for {skill} using the attached evidence."
+    task = {
+        "task_kind": "mutate_skill",
+        "targets": {"primary_skill": skill},
+        "instructions": instructions,
+        "maintenance_action": maintenance_action or "patch",
+    }
+    if maintenance_action == "merge" and target_skill:
+        task["targets"]["target_skill"] = target_skill
+        task["target_skill"] = target_skill
+    return task
+
+
 def _normalize_decision(
     raw: dict[str, Any],
     *,
     candidate_names: set[str],
     evidence_by_candidate: dict[str, set[str]],
+    required_maintenance_evidence_by_candidate: dict[str, set[str]],
     archive_markers_by_candidate: dict[str, list[str]],
     candidate_by_name: dict[str, dict[str, Any]],
 ) -> dict[str, Any] | None:
@@ -766,6 +856,9 @@ def _normalize_decision(
     evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item)]
     allowed_evidence = evidence_by_candidate.get(skill) or set()
     evidence_ids = [item for item in evidence_ids if item in allowed_evidence]
+    required_maintenance_ids = required_maintenance_evidence_by_candidate.get(skill) or set()
+    if decision == "mutate_skill" and required_maintenance_ids and not any(item in required_maintenance_ids for item in evidence_ids):
+        evidence_ids = []
     if decision == "mutate_skill" and not evidence_ids:
         decision = "skip"
         forced_skip_reason = "mutate_skill_without_attached_evidence"
@@ -821,6 +914,7 @@ def _normalize_decision(
         for key, max_chars in (("change_intent", 280), ("skill_editor_instructions", 900), ("editor_instructions", 900)):
             if raw.get(key) is not None:
                 normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
+        normalized["skill_task"] = _skill_task_for_mutation(raw, skill=skill, maintenance_action=maintenance_action, target_skill=target_skill)
     elif decision == "archive_skill":
         archive_reason = str(raw.get("archive_reason") or "").strip()
         allowed_reasons = set(archive_markers_by_candidate.get(skill) or [])
@@ -867,11 +961,6 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     candidate_rows = [item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)]
     candidate_names = {str(item.get("name") or "") for item in candidate_rows if item.get("name")}
     candidate_by_name = {str(item.get("name") or ""): item for item in candidate_rows if item.get("name")}
-    evidence_by_candidate = {
-        str(item.get("name") or ""): {str(eid) for eid in (item.get("evidence_ids") or [])}
-        for item in candidate_rows
-        if item.get("name")
-    }
     archive_markers_by_candidate = {
         str(item.get("name") or ""): [str(marker) for marker in (item.get("archive_markers") or []) if str(marker)]
         for item in candidate_rows
@@ -886,6 +975,10 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         if isinstance(item, dict) and item.get("name")
     }
     maintenance_candidates = [item for item in (knowledge_maintenance.get("maintenance_candidates") or []) if isinstance(item, dict)]
+    evidence_by_candidate, required_maintenance_evidence_by_candidate = _maintenance_evidence_maps_by_candidate(
+        candidate_rows=candidate_rows,
+        maintenance_candidates=maintenance_candidates,
+    )
     decisions: list[dict[str, Any]] = []
     seen: set[str] = set()
     seen_evidence_ids: set[str] = set()
@@ -903,6 +996,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
                 raw,
                 candidate_names=candidate_names,
                 evidence_by_candidate=evidence_by_candidate,
+                required_maintenance_evidence_by_candidate=required_maintenance_evidence_by_candidate,
                 archive_markers_by_candidate=archive_markers_by_candidate,
                 candidate_by_name=candidate_by_name,
             )
@@ -933,7 +1027,15 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
                     "rationale": "Lifecycle evidence marks this Hermes-prefixed duplicate as safe to archive after successor/reference checks.",
                 })
             else:
-                decisions.append({"skill": name, "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []})
+                decisions.append({
+                    "transaction_kind": "skill",
+                    "target_store": "skill",
+                    "target_id": name,
+                    "skill": name,
+                    "decision": "skip",
+                    "reason": "inventory_not_selected_by_planner",
+                    "evidence_ids": [],
+                })
     for item in maintenance_candidates:
         if not isinstance(item, dict):
             continue
@@ -1078,6 +1180,8 @@ def _skip_classification_report(*, digest: dict[str, Any], skipped: list[dict[st
 
 def _matched_noop_class(decision: dict[str, Any], *, strengths: set[str], cluster_actionability_targets: set[str]) -> str:
     reason = _skip_reason(decision)
+    if reason == "inventory_not_selected_by_planner":
+        return "matched_inventory_not_selected"
     if _classify_skill_skip(decision, cluster_actionability_targets=cluster_actionability_targets) == "actionability_loss":
         return "matched_actionability_loss"
     if _reason_is_benign_skip(reason) and reason != "not_selected_by_planner":
@@ -1134,6 +1238,8 @@ def build_planner_runtime_quality_report(
     prompt_lengths = []
     for item in runner_decisions:
         task = item.get("task") if isinstance(item, dict) and isinstance(item.get("task"), dict) else {}
+        if not task and isinstance(item, dict) and isinstance(item.get("editor_task"), dict):
+            task = item["editor_task"]
         instructions = task.get("instructions")
         if isinstance(instructions, str):
             prompt_lengths.append(len(instructions))

@@ -203,6 +203,53 @@ def test_run_improve_fixture_proves_all_canonical_transaction_stores_without_spl
 
 
 
+def test_run_knowledge_improvement_step_preserves_planner_skill_task_after_evidence_gate(tmp_path):
+    from hermes_self_improvement.evidence import make_knowledge_coverage_candidate
+    from hermes_self_improvement.runner_steps import run_knowledge_improvement_step
+
+    candidate = make_knowledge_coverage_candidate(
+        gap_kind="recurring_workflow_without_skill",
+        evidence_ids=["unmatched_patch"],
+        evidence_count=6,
+        workflow_boundary="patch tool workflow",
+        resolution_kind="unresolved",
+        rationale="Patch tool workflow needs a bounded local skill patch.",
+    )
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": [{
+            "skill": "local-patch-workflow",
+            "decision": "mutate_skill",
+            "maintenance_action": "patch",
+            "evidence_ids": [candidate["id"], "unmatched_patch"],
+            "risk": "low",
+            "editor_instructions": "Add bounded retry guidance.",
+        }]}
+
+    result = run_knowledge_improvement_step(
+        evidence_pack={
+            "summary": {"event_count": 6, "evidence_count": 1, "ignored_count": 0},
+            "views": {"skill": [candidate["id"]]},
+            "evidence": [candidate],
+            "skill_candidates": [{"name": "local-patch-workflow", "mutable": True, "state": "active", "provenance": "agent_created"}],
+        },
+        config={**config, "_planner_runtime_func": planner},
+        mutate=False,
+    )
+
+    transaction = result["knowledge_transactions"][0]
+    assert transaction["decision"] == "apply"
+    assert transaction["transaction_kind"] == "skill"
+    assert transaction["target_store"] == "skill"
+    assert transaction["target_id"] == "local-patch-workflow"
+    assert transaction["operation"] == "mutate_skill"
+    assert transaction["editor_task"]["task_kind"] == "mutate_skill"
+    assert transaction["transaction_result"]["outcome"] == "preview"
+    assert result["editor_validation"]["summary"] == {"preview": 1}
+    assert result["planner_quality"]["skill_editor_task_count"] == 1
+
+
 def test_run_improve_from_report_adds_reference_only_diagnostic_evidence(monkeypatch, tmp_path):
     import hermes_self_improvement.cli as cli
 
