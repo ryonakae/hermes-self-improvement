@@ -1,6 +1,6 @@
 # Knowledge Transaction Unification Implementation Plan
 
-> **For Hermes:** Implemented and dogfooded on 2026-05-28. Future work should not reopen split skill/memory lanes unless a new artifact shows concrete actionability loss.
+> **For Hermes:** Bridge/reporting slice completed and dogfooded on 2026-05-28, but full unified planner/editor execution is still pending. Continue with `2026-05-28-unified-knowledge-planner-editor-execution.md` before marking the roadmap final-ready.
 
 **Goal:** Finish the `planner / editor` redesign so skills and memory are handled as one knowledge transaction system, not two parallel runners with weak handoff.
 
@@ -32,14 +32,14 @@ This is not a request to loosen mutation gates or inflate apply counts. It is a 
 
 ## Non-negotiable completion criteria
 
-Completion status as of `run-20260528T070041Z.json`: all four outcomes below are implemented and dogfooded.
+Bridge/reporting completion status as of `run-20260528T070041Z.json`: artifact visibility, canonical summaries, routed-to-skill drop accounting, and split final `step_decisions` removal are implemented and dogfooded. Full unified planner/editor execution is **not** complete here; see `2026-05-28-unified-knowledge-planner-editor-execution.md`.
 
 1. Artifacts honestly expose matched-but-not-selected and memory-to-skill routing outcomes.
-2. Planner produces one knowledge transaction plan rather than independently losing skill/memory handoffs.
-3. Editor can execute mixed skill/memory transactions with official tools and add-before-remove semantics.
-4. Old split schema/reporting leaks are gone enough that memory editor failures cannot appear as `skill_editor_result_*`, and prompt/runtime naming no longer implies two independent editors.
+2. Canonical `knowledge_transactions` summaries exist in final artifacts and reports.
+3. Memory-to-skill bridge execution uses add-before-remove semantics for selected bridge candidates.
+4. Old split schema/reporting leaks are gone enough that memory editor failures cannot appear as `skill_editor_result_*` in final runtime-facing summaries.
 
-Do not mark future regressions as readiness-complete without a dogfood artifact showing zero unexplained cross-store drops and no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes.
+Do not mark future unified-execution readiness complete without a dogfood artifact showing one planner/editor transaction path, zero unexplained cross-store drops, and no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes.
 
 ## Compatibility and runtime reset policy
 
