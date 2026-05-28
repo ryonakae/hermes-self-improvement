@@ -14,10 +14,10 @@
 
 The 2026-05-28 bridge/reporting work is valuable but incomplete:
 
-- Slice 5 now wires `run_improve` through `run_knowledge_improvement_step(...)` as the planner/editor source of truth. The old split helper functions still exist for replay/lower-level tests and will be cleaned up in Slice 6, but `run_improve` no longer imports or calls the split skill/memory runner lanes.
+- Slices 4–6 now implement the code-side unified executor, `run_improve` wiring, and runtime-facing split-lane cleanup. Final artifacts and compact tool summaries use canonical `knowledge_transactions` / `knowledge_quality` / `knowledge_routing` instead of split `skill` / `memory` / `memory_to_skill` source-of-truth lanes.
 - Slice 4 extends `execute_knowledge_transaction(...)` to execute supported `skill`, `memory`, `memory_to_skill`, and `placement_move` transactions through official skill/memory/provider helpers.
-- Latest dogfood artifact `run-20260528T070041Z.json` predates Slice 5. It proved bridge/reporting visibility (`by_kind: {'planner_skill': 48}`, `cross_store: 0`) but not the new unified `run_improve` path.
-- Therefore code-side unified executor + `run_improve` wiring are implemented, while cleanup/dogfood closure remains pending in Slices 6–8.
+- Latest dogfood artifact `run-20260528T070041Z.json` predates Slices 5–6. It proved bridge/reporting visibility (`by_kind: {'planner_skill': 48}`, `cross_store: 0`) but not the new unified `run_improve` path.
+- Therefore code-side unified execution is implemented and verified by tests/status, while dogfood readiness closure remains pending in Slice 7.
 
 ## Review updates — 2026-05-28
 
@@ -353,6 +353,8 @@ git diff --check
 ---
 
 ## Slice 6: Remove old split-lane source-of-truth code and tests
+
+**Status:** Implemented 2026-05-28. Runtime-facing run artifacts and compact tool summaries now use canonical `knowledge_transactions` / `knowledge_quality` / `knowledge_routing` instead of split `step_decisions.skill` / `memory` / `memory_to_skill` source-of-truth lanes. Legacy split helpers remain only for backward-compatible replay and lower-level helper coverage. Focused tests, full suite, `py_compile`, runtime status, and `git diff --check` passed. Slice 7 remains for real dogfood artifact closure.
 
 **Objective:** Delete obsolete split runner assumptions after the unified path is green.
 

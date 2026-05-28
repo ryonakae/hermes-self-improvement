@@ -339,7 +339,7 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["full_payload"]["path"] == str(artifact)
     assert payload["evidence"]["views"] == {"skill": 2, "memory": 1, "evaluator": 0}
     assert payload["steps"]["proposals_considered"] == 4
-    assert payload["steps"]["skill"]["decision_count"] == 3
+    assert "skill" not in payload["steps"]
     assert payload["steps"]["prompt_sources"]["planner"]["overlay_active"] is False
     assert payload["steps"]["prompt_sources"]["editor"]["overlay_active"] is True
     assert payload["steps"]["prompt_sources"]["editor"]["active_hash"] == "sha256:active"
@@ -356,7 +356,8 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert payload["steps"]["skill_planner"]["quality"]["matched_noop_class_counts"] == {"matched_needs_planner_rationale": 1}
     assert payload["steps"]["skill_planner"]["quality"]["skip_reasons_by_class"]["benign"] == {"one_off_noise": 1}
     assert payload["steps"]["skill_planner"]["quality"]["editor_prompt_chars"]["max"] == 500
-    assert payload["steps"]["memory"]["related_lookups"]["completed"] == 1
+    assert "memory" not in payload["steps"]
+    assert "memory_to_skill" not in payload["steps"]
     assert payload["steps"]["knowledge_routing"] == {"memory_routed_to_skill_count": 1, "memory_routed_to_skill_selected_count": 1, "memory_routed_to_skill_dropped_count": 0, "cross_store_candidate_count": 1}
     assert payload["action_summary"] == {"apply": 3, "defer": 1, "skip": 1, "block": 1}
     assert payload["actionable"]["mutation_ready_count"] == 3

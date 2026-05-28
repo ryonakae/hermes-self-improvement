@@ -108,6 +108,8 @@ def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp
         "changed_skills": [],
         "changed_memories": [],
         "editor_validation": {"summary": {"preview": 1}},
+        "planner_quality": {"unmatched_evidence_count": 2, "action_like_skips": 1},
+        "knowledge_routing": {"memory_routed_to_skill_count": 1, "memory_routed_to_skill_selected_count": 1, "memory_routed_to_skill_dropped_count": 0},
         "prompt_sources": {"planner": {"prompt_hash": "p"}},
         "planner_digest": {"knowledge_maintenance": {}},
         "planner": {"status": "completed"},
@@ -126,6 +128,8 @@ def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp
         "reason": "dry_run_would_update_skill_then_remove_memory",
     }]
     assert result["step_decisions"]["knowledge_transactions"]["total"] == 1
+    assert result["step_decisions"]["knowledge_quality"] == {"unmatched_evidence_count": 2, "action_like_skips": 1}
+    assert result["step_decisions"]["knowledge_routing"]["memory_routed_to_skill_selected_count"] == 1
     assert result["step_decisions"]["editor_validation"]["summary"] == {"preview": 1}
     assert "skill" not in result["step_decisions"]
     assert "memory" not in result["step_decisions"]
@@ -134,6 +138,7 @@ def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp
     assert "skill" not in artifact["step_decisions"]
     assert "memory" not in artifact["step_decisions"]
     assert "memory_to_skill" not in artifact["step_decisions"]
+    assert artifact["step_decisions"]["knowledge_quality"]["unmatched_evidence_count"] == 2
 
 
 def test_run_improve_from_report_adds_reference_only_diagnostic_evidence(monkeypatch, tmp_path):
@@ -267,6 +272,9 @@ def test_compact_tool_result_summarizes_canonical_knowledge_transactions_without
     }
     assert summary["steps"]["knowledge_routing"]["unexplained_cross_store_drop_count"] == 1
     assert summary["steps"]["knowledge_routing"]["unexplained_cross_store_drop_by_reason"] == {"memory_convert_to_skill_update": 1}
+    assert "skill" not in summary["steps"]
+    assert "memory" not in summary["steps"]
+    assert "memory_to_skill" not in summary["steps"]
 
 
 def test_cli_action_summary_counts_canonical_knowledge_transactions_without_split_steps():

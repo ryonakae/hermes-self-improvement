@@ -63,7 +63,11 @@ def _iter_recent_json(root: Path, *, window_days: int, now: datetime):
 
 
 def _planner_quality_from_run(payload: dict[str, Any]) -> dict[str, Any]:
-    steps = payload.get("step_decisions") if isinstance(payload.get("step_decisions"), dict) else {}
+    raw_steps = payload.get("step_decisions")
+    steps: dict[str, Any] = raw_steps if isinstance(raw_steps, dict) else {}
+    quality = steps.get("knowledge_quality") if isinstance(steps.get("knowledge_quality"), dict) else {}
+    if quality:
+        return quality
     skill = steps.get("skill") if isinstance(steps.get("skill"), dict) else {}
     quality = skill.get("planner_quality") if isinstance(skill.get("planner_quality"), dict) else {}
     return quality

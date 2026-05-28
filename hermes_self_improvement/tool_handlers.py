@@ -187,9 +187,10 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     skill_step: dict[str, Any] = raw_skill_step if isinstance(raw_skill_step, dict) else {}
     raw_planner = skill_step.get("planner")
     planner: dict[str, Any] = raw_planner if isinstance(raw_planner, dict) else {}
+    raw_knowledge_quality = step_decisions.get("knowledge_quality")
     raw_planner_summary = planner.get("summary")
     planner_summary: dict[str, Any] = raw_planner_summary if isinstance(raw_planner_summary, dict) else {}
-    raw_planner_quality = skill_step.get("planner_quality")
+    raw_planner_quality = raw_knowledge_quality if isinstance(raw_knowledge_quality, dict) else skill_step.get("planner_quality")
     planner_quality: dict[str, Any] = raw_planner_quality if isinstance(raw_planner_quality, dict) else {}
     curator = result.get("curator_telemetry") if isinstance(result.get("curator_telemetry"), dict) else {}
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
@@ -232,7 +233,6 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         },
         "steps": {
             "proposals_considered": int(decision_summary.get("total") or 0),
-            "skill": _compact_step("skill", step_decisions.get("skill")),
             "prompt_sources": prompt_sources,
             "skill_planner": {
                 "status": planner.get("status"),
@@ -275,8 +275,6 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
             },
             "skill_lifecycle": skill_lifecycle,
             "knowledge_transactions": knowledge_transaction_summary,
-            "memory": _compact_step("memory", step_decisions.get("memory")),
-            "memory_to_skill": _compact_step("memory_to_skill", step_decisions.get("memory_to_skill")),
             "knowledge_routing": step_decisions.get("knowledge_routing") if isinstance(step_decisions.get("knowledge_routing"), dict) else {},
             "evaluator": _compact_step("evaluator", step_decisions.get("evaluator")),
         },

@@ -2011,7 +2011,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     planner: dict[str, Any] = raw_planner if isinstance(raw_planner, dict) else {}
     raw_planner_summary = planner.get("summary")
     planner_summary: dict[str, Any] = raw_planner_summary if isinstance(raw_planner_summary, dict) else {}
-    raw_planner_quality = skill_step.get("planner_quality")
+    raw_knowledge_quality = step_decisions.get("knowledge_quality")
+    raw_planner_quality = raw_knowledge_quality if isinstance(raw_knowledge_quality, dict) else skill_step.get("planner_quality")
     planner_quality: dict[str, Any] = raw_planner_quality if isinstance(raw_planner_quality, dict) else {}
     editor_prompt_chars = planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {}
     raw_planner_transactions = planner.get("knowledge_transactions")

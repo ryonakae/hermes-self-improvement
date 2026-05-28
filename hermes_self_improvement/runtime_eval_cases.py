@@ -414,9 +414,12 @@ def _improve_run_overlay_cases(config: dict[str, Any], *, limit: int) -> list[di
         unmatched_count = int(summary.get("unmatched_candidate_count") or 0)
         themes = [str(item) for item in (summary.get("unmatched_candidate_themes") or []) if str(item)] if isinstance(summary.get("unmatched_candidate_themes"), list) else []
         memory_gap_count = int(summary.get("memory_gap_candidate_count") or 0)
-        step_decisions = payload.get("step_decisions") if isinstance(payload.get("step_decisions"), dict) else {}
-        skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
-        planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
+        raw_step_decisions = payload.get("step_decisions")
+        step_decisions: dict[str, Any] = raw_step_decisions if isinstance(raw_step_decisions, dict) else {}
+        planner_quality = step_decisions.get("knowledge_quality") if isinstance(step_decisions.get("knowledge_quality"), dict) else {}
+        if not planner_quality:
+            skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
+            planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
         unresolved_count = int(planner_quality.get("unmatched_evidence_count") or 0)
         if unmatched_count > 0:
             cases.append(_improve_run_overlay_case(

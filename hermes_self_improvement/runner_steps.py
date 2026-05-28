@@ -1739,6 +1739,9 @@ def run_knowledge_improvement_step(
             "changed_skills": [],
             "changed_memories": [],
             "editor_validation": {"summary": {}},
+            "planner_quality": {},
+            "knowledge_routing": {},
+            "cluster_evidence": digest.get("cluster_evidence") if isinstance(digest.get("cluster_evidence"), dict) else {},
             "prompt_sources": prompt_sources,
         }
     transactions = [
@@ -1749,6 +1752,7 @@ def run_knowledge_improvement_step(
     transaction_results: list[dict[str, Any]] = []
     changed_skills: list[str] = []
     changed_memories: list[str] = []
+    quality = build_planner_runtime_quality_report(digest=digest, planner=planner, runner_decisions=transactions)
     for transaction in transactions:
         if mutate and transaction.get("decision") == "apply":
             result = execute_knowledge_transaction(transaction, config=config, mutate=True)
@@ -1768,6 +1772,14 @@ def run_knowledge_improvement_step(
         "changed_skills": _unique_nonempty_strings(changed_skills),
         "changed_memories": _unique_nonempty_strings(changed_memories),
         "editor_validation": {"summary": _knowledge_transaction_result_summary(transaction_results)},
+        "planner_quality": quality,
+        "knowledge_routing": build_knowledge_routing_summary(
+            memory_step={},
+            memory_to_skill_step={},
+            knowledge_transactions=transactions,
+            planner_digest=digest,
+        ),
+        "cluster_evidence": digest.get("cluster_evidence") if isinstance(digest.get("cluster_evidence"), dict) else {},
         "prompt_sources": prompt_sources,
     }
 
