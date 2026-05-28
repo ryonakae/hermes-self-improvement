@@ -4,9 +4,9 @@
 
 **Goal:** Build a Hermes plugin that continuously observes Hermes behavior, identifies durable improvement opportunities, safely mutates allowed knowledge assets, evaluates whether those changes helped, and reports the result clearly.
 
-**Architecture:** Keep one existing `improve` flow and one existing `calibrate` flow. Add better evidence, validation, accounting, outcome feedback, and report surfaces inside those flows. LLM role permissions are explicit and minimal: resolver/planner get read-only skill inspection, editor roles get mutation tools, evaluator/GEPA get prepared context and no tools. Do not add approval queues, extra lanes, broad policy modes, bespoke general-purpose tool loops, or Hermes core dependencies unless a concrete failure requires them.
+**Architecture:** Keep one existing `improve` flow and one existing `calibrate` flow. Add better evidence, validation, accounting, outcome feedback, and report surfaces inside those flows. LLM role permissions are explicit and minimal: planner gets prepared/read-only evidence and bounded inspection, editor alone gets mutation tools, evaluator/GEPA get prepared context and no tools. Do not add approval queues, extra lanes, broad policy modes, bespoke general-purpose tool loops, or Hermes core dependencies unless a concrete failure requires them.
 
-**Tech Stack:** Hermes standalone plugin, observer hooks, `hermes self-improvement`, Hermes `AIAgent(enabled_toolsets=...)`, optional `set_thread_tool_whitelist`, official skill/memory tools, native skill_agent / memory_agent tool harness being simplified toward Hermes-native constrained agents, runtime-private prompt overlays, DSPy/GEPA through `calibrate`, pytest.
+**Tech Stack:** Hermes standalone plugin, observer hooks, `hermes self-improvement`, Hermes `AIAgent(enabled_toolsets=...)`, optional `set_thread_tool_whitelist`, official skill/memory tools, unified planner/editor transaction harness, runtime-private prompt overlays, DSPy/GEPA through `calibrate`, pytest.
 
 ---
 
@@ -19,13 +19,13 @@ A complete loop looks like this:
 ```text
 [1] Observe real Hermes sessions, tool calls, outcomes, user corrections, skill/memory usage
   -> [2] Build compact evidence: failures, workflow gaps, inventory drift, memory gaps, duplicates, stale knowledge
-  -> [3] Resolve targets: resolver may inspect existing skills read-only (`skills_list`, `skill_view`) and then classify as existing mutable skill, memory candidate, unresolved/no existing fit, skip/defer/block
-  -> [4] Plan changes with LLM judgment; planner may inspect skills read-only but has no mutation tools
-  -> [5] Execute through editor roles only: skill_agent with official `skills` tools, memory_agent with official `memory` tool/provider, deterministic runtime-private overlay promotion after evaluator gates
+  -> [3] Plan knowledge placement and target resolution: classify evidence as skill, builtin_user, builtin_memory, external_memory, unresolved, none
+  -> [4] Produce bounded knowledge transactions with LLM judgment; planner may inspect allowed context but has no mutation tools
+  -> [5] Execute through the editor only: official skill and memory/provider tools, including mixed memory-to-skill transactions with add-before-remove semantics
   -> [6] Post-validate actual state: read back skill/memory/overlay, verify frontmatter/trace/target identity
   -> [7] Record episodes and credit assignment data
   -> [8] Observe later outcomes: recurrence, user correction, repeated edits, skill usage, reduced failures
-  -> [9] Calibrate target_resolver / improvement_planner / skill_agent / memory_agent / evaluator overlays with GEPA/DSPy when there is enough material
+  -> [9] Calibrate planner / editor / evaluator overlays with GEPA/DSPy when there is enough material
   -> [10] Report actual mutations, no-ops, blocks, overlays, unresolved work, and confidence clearly
   -> back to [1]
 ```
@@ -36,21 +36,22 @@ The key product promise is not “make many changes.” It is:
 
 ---
 
-## Current Position — 2026-05-27
+## Current Position — 2026-05-28
 
-Overall: **about 9.5合目** for the original long-term roadmap. Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, scheduled dogfood proof, and final readiness reporting are implemented. Remaining work is steady-state observation and future follow-up only if real scheduled artifacts show concrete actionability loss, repeated same-theme follow-up, or cron timeout regression.
+Overall: **runtime-healthy but not final-ready** for the original long-term roadmap. Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, and scheduled dogfood proof are implemented at the observation/readiness layer. However, 2026-05-28 artifact review found that planner/editor integration is still incomplete for cross-store knowledge work: matched skill evidence can be skipped with only `not_selected_by_planner`, memory-routed workflow evidence can be dropped between the memory and skill lanes, and memory editor results can still leak `skill_editor_result_*` schema errors. The active completion plan is `2026-05-28-knowledge-transaction-unification.md`.
 
 ### What changed since the earlier 2026-05-10 snapshot
 
-- The active runtime surface is now `planner / editor / evaluator / calibrator`; old role/module naming has been removed from runtime/status/report/internal module names.
+- The active runtime surface is now `planner / editor / evaluator / calibrator`; old role/module naming has been removed from many runtime/status/report/internal module names, but the semantic planner/editor integration still needs the knowledge transaction unification slice.
 - Runtime is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
 - `improve --dry-run --json` now completes cleanly and writes evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes under the new naming.
-- Full test baseline is green (`827 passed, 2 skipped`).
-- Slices A/B/C of the turn-trace/index redesign are implemented; Slice D D1/D2/D3/D4 and Slice E scheduled dogfood/final readiness reporting are implemented.
+- Full test baseline from the observation/readiness slices is green (`827 passed, 2 skipped`).
+- Slices A/B/C of the turn-trace/index redesign are implemented; Slice D D1/D2/D3/D4 and Slice E scheduled dogfood/readiness reporting are implemented for observation/readiness visibility.
+- New active completion plan: `2026-05-28-knowledge-transaction-unification.md`, covering matched-but-not-selected reporting, replacement of split skill/memory planner outputs with unified knowledge transactions, mixed skill+memory editor execution, removal of split editor schema leaks, and no compatibility shims for old split runtime contracts.
 
 ### Important caveat
 
-The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail** the canonical observation model. That substrate and the planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. D4's `acceptable_with_scheduled_dogfood` handoff is now validated: `self-improvement-calibrate` and `self-improvement-autonomous-maintenance` both completed successfully in the scheduled 2026-05-28 morning cron window, and latest maintenance artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json` has `actionability_loss_count 0`. No mutation guard should be loosened.
+The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail -> knowledge transaction plan -> unified editor execution** the canonical model. The observation substrate and planner handoff now exist, and D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up` in both artifacts and human/tool summaries. D4's `acceptable_with_scheduled_dogfood` handoff was validated for observation/readiness: `self-improvement-calibrate` and `self-improvement-autonomous-maintenance` both completed successfully in the scheduled 2026-05-28 morning cron window, and latest maintenance artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json` has `actionability_loss_count 0`. But that artifact also proved the remaining blocker: skill and memory can still be treated as separate lanes, with memory workflow candidates routed to skill and then dropped by skill-side `not_selected_by_planner`. No mutation guard should be loosened; the fix is knowledge transaction unification.
 
 ### Strong areas
 

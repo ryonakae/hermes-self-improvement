@@ -2,23 +2,27 @@
 
 ## Current source of truth
 
-Update note (2026-05-26): when implementation slices land, update this index and the parent roadmap immediately. The current state is easy to misread otherwise because the plugin is now structurally migrated and runtime-healthy, but the deeper observation-model redesign is still incomplete.
+Update note (2026-05-28): the 2026-05-28 scheduled dogfood looked benign at the shallow readiness layer, but deeper artifact review found that planner/editor integration is still incomplete for cross-store knowledge work. Treat the system as runtime-healthy but **not final-ready** until `2026-05-28-knowledge-transaction-unification.md` is implemented and dogfooded.
 
 As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`
-  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, and Slice D/E readiness work is complete.
-  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is about 9.5合目. Continue steady-state observation; reopen readiness only if scheduled artifacts show concrete actionability loss, repeated same-theme follow-up, or cron timeout regression.
+  - **Status:** active long-term source of truth; code-side milestones are mostly implemented, runtime is healthy, Slices A/B/C of the turn-trace/index redesign are implemented, and Slice D/E readiness work is complete at the observation/readiness layer. However, 2026-05-28 artifact review found planner/editor knowledge-transaction integration is still incomplete, so the roadmap is **not final-ready** until the knowledge transaction unification plan lands.
+  - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly. Current position is runtime-healthy but architecturally incomplete for cross-store skill/memory transactions.
+
+- `2026-05-28-knowledge-transaction-unification.md`
+  - **Status:** active top-priority implementation plan.
+  - Completes the unfinished planner/editor redesign: honest matched-but-not-selected reporting, replacement of split skill/memory planner outputs with unified knowledge transactions across skill/builtin-user/builtin-memory/external-memory targets, mixed skill+memory editor execution with add-before-remove semantics, removal of split skill/memory editor schema leaks, and no compatibility shims for old split runtime contracts.
 
 - `2026-05-25-self-improvement-role-redesign.md`
-  - **Status:** active redesign/status ledger.
-  - This is the clearest source for the new four-role architecture (`planner / editor / evaluator / calibrator`) and now explicitly records what is complete in code vs what remains incomplete in the turn-trace/evidence-index redesign.
+  - **Status:** active redesign/status ledger; needs correction after 2026-05-28 artifact review.
+  - This is the clearest source for the intended four-role architecture (`planner / editor / evaluator / calibrator`). Its earlier “ready” reading applied to structural role naming and observation/readiness layers, not to true cross-store planner/editor transaction semantics. The active child plan `2026-05-28-knowledge-transaction-unification.md` must complete before this redesign can be called final-ready.
 
 The current active hardening plans are:
 
 - `2026-05-26-turn-trace-and-readiness-followup.md`
-  - **Status:** active follow-up plan; Slices A/B/C implemented, Slice D D1/D2/D3/D4 implemented, Slice E implemented with final readiness `ready`.
-  - Breaks the remaining redesign work into concrete slices: (A) persist canonical turn-trace artifacts, (B) build deterministic cluster summary + evidence index/detail artifacts, (C) migrate planner handoff to the index/detail model, (D) retune decision quality on the new substrate, and (E) finish steady-state dogfood plus final readiness reporting. Latest scheduled evidence: `self-improvement-calibrate` and `self-improvement-autonomous-maintenance` both completed on 2026-05-28 morning; `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json` has `skip_class_counts` and `actionability_loss_count 0`.
+  - **Status:** implemented for turn-trace/index/readiness visibility; superseded for planner/editor completion by `2026-05-28-knowledge-transaction-unification.md`.
+  - Breaks the observation/readiness redesign into concrete slices: (A) persist canonical turn-trace artifacts, (B) build deterministic cluster summary + evidence index/detail artifacts, (C) migrate planner handoff to the index/detail model, (D) retune decision quality on the new substrate, and (E) finish scheduled dogfood readiness reporting. Latest scheduled evidence: `self-improvement-calibrate` and `self-improvement-autonomous-maintenance` both completed on 2026-05-28 morning; `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260527T190256Z.json` has `skip_class_counts` and `actionability_loss_count 0`, but deeper inspection found matched evidence and memory-to-skill routing can still be dropped by the split planner/editor architecture.
 
 - `2026-05-27-slice-d-quality-retuning.md`
   - **Status:** implemented Slice D child plan; D4 decision is `acceptable_with_scheduled_dogfood`.

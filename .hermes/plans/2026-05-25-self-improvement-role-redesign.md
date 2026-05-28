@@ -10,30 +10,33 @@
 
 ---
 
-## Execution status — 2026-05-27
+## Execution status — 2026-05-28
 
 ### Completed in code
 
 - The public/runtime role surface has been collapsed to `planner / editor / evaluator / calibrator`.
-- Old role/module naming has been removed from active runtime surfaces, status/report output, internal module filenames, symbol names, and primary artifact keys.
+- Old role/module naming has been removed from many runtime-facing surfaces, status/report output, internal module filenames, symbol names, and primary artifact keys.
 - Runtime setup is healthy again (`initialized: yes`, active evaluator ready, prompt overlays ready).
 - `improve --dry-run --json` completes and writes evidence packs, run artifacts, episodes, cluster summaries, and evidence indexes.
-- Current validation baseline: full suite passes (`827 passed, 2 skipped`).
+- Current validation baseline from the observation/readiness slices: full suite passes (`827 passed, 2 skipped`).
 - Slices A/B/C of the observation-model redesign are implemented: turn traces persist, cluster/index/detail artifacts are materialized, and planner handoff includes cluster evidence.
-- Slice D D1/D2/D3/D4 and Slice E are implemented: cluster evidence is counted in planner quality, dry-run artifacts distinguish safe stops from ordinary skips, CLI/tool summaries expose skip/readiness classes, and scheduled dogfood validated final readiness as `ready`.
+- Slice D D1/D2/D3/D4 and Slice E are implemented for the observation/readiness layer: cluster evidence is counted in planner quality, dry-run artifacts distinguish safe stops from ordinary skips, CLI/tool summaries expose skip/readiness classes, and scheduled dogfood completed under the current cron timeout.
 
 ### Partially complete
 
-- Planner/editor/evaluator/calibrator naming migration is complete enough for release-facing/runtime-facing surfaces, but older roadmap text and some historical milestone docs still describe the superseded resolver / planner / agent split and need periodic maintenance when touched.
-- Evidence handoff is index-aware and structured. Slice E confirmed the D4 handoff through scheduled dogfood: both split cron jobs completed under the current timeout and the scheduled maintenance artifact was benign-only with `actionability_loss_count 0`.
+- Planner/editor/evaluator/calibrator naming migration is complete enough for most release-facing/runtime-facing surfaces, but the **semantic integration of planner/editor is still incomplete**.
+- Evidence handoff is index-aware and structured. However, 2026-05-28 artifact review showed that matched evidence can still be skipped with only `not_selected_by_planner`, and memory-routed workflow evidence can fall between the memory and skill lanes.
 
 ### Not yet complete
 
-- Outcome attribution remains mostly `unknown`; this is expected while observation windows mature, not a readiness blocker after Slice E.
+- True knowledge transaction planning is not complete: planner still effectively reasons through split skill and memory paths in places, rather than one transaction model over `skill`, `builtin_user`, `builtin_memory`, `external_memory`, `unresolved`, and `none`.
+- True unified editor execution is not complete: the facade dispatches by task kind, and a memory editor result surfaced `skill_editor_result_changed_skills_missing`, proving schema/result validation is still mixed.
+- Cross-store moves such as memory-to-skill migration are not yet represented as one add-before-remove transaction in the main improve flow.
+- Outcome attribution remains mostly `unknown`; this is expected while observation windows mature, but it is separate from the planner/editor integration blocker.
 
 ### Current practical reading
 
-Treat this redesign as **structural migration done, runtime healthy, observation-model handoff implemented, Slice D readiness handoff validated by scheduled Slice E dogfood, final readiness `ready`**.
+Treat this redesign as **runtime healthy and observation/readiness layers implemented, but not final-ready**. The active completion plan is `2026-05-28-knowledge-transaction-unification.md`, which must land before this role redesign can be considered architecturally complete.
 
 ## Decisions
 
