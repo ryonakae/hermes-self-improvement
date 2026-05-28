@@ -283,7 +283,7 @@ def test_memory_step_routes_workflow_candidates_to_skill_not_memory():
     assert result["decisions"] == [{
         "evidence_id": "coverage-patch",
         "decision": "skip",
-        "reason": "not_memory_workflow_to_skill",
+        "reason": "memory_convert_to_skill_update",
         "suggested_route": "skill",
         "workflow_boundary": "patch tool workflow",
         "changed": False,

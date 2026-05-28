@@ -186,7 +186,7 @@ def test_knowledge_routing_summary_counts_planner_memory_to_skill_transaction_as
         "decisions": [{
             "evidence_id": "coverage-patch",
             "decision": "skip",
-            "reason": "not_memory_workflow_to_skill",
+            "reason": "memory_convert_to_skill_update",
             "suggested_route": "skill",
             "workflow_boundary": "patch tool workflow",
             "changed": False,
@@ -222,7 +222,7 @@ def test_knowledge_routing_summary_counts_explicit_planner_skill_decision_as_sel
         "decisions": [{
             "evidence_id": "coverage-timeout",
             "decision": "skip",
-            "reason": "not_memory_workflow_to_skill",
+            "reason": "memory_convert_to_skill_update",
             "suggested_route": "skill",
             "workflow_boundary": "timeout workflow",
             "changed": False,
@@ -252,8 +252,8 @@ def test_knowledge_routing_summary_counts_maintenance_representatives_as_selecte
         "status": "completed",
         "changed": 0,
         "decisions": [
-            {"evidence_id": "unmatched-patch", "decision": "skip", "reason": "not_memory_workflow_to_skill", "suggested_route": "skill", "workflow_boundary": "patch tool workflow", "changed": False},
-            {"evidence_id": "coverage-patch", "decision": "skip", "reason": "not_memory_workflow_to_skill", "suggested_route": "skill", "workflow_boundary": "patch tool workflow", "changed": False},
+            {"evidence_id": "unmatched-patch", "decision": "skip", "reason": "memory_convert_to_skill_update", "suggested_route": "skill", "workflow_boundary": "patch tool workflow", "changed": False},
+            {"evidence_id": "coverage-patch", "decision": "skip", "reason": "memory_convert_to_skill_update", "suggested_route": "skill", "workflow_boundary": "patch tool workflow", "changed": False},
         ],
     }
     knowledge_transactions = [{

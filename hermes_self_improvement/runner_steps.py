@@ -804,7 +804,7 @@ def _memory_non_operation_route(item: dict[str, Any]) -> dict[str, Any]:
         boundary = _workflow_boundary_from_memory_evidence(item)
         route = {
             "decision": "skip",
-            "reason": "not_memory_workflow_to_skill",
+            "reason": "memory_convert_to_skill_update",
             "suggested_route": "skill",
             "changed": False,
         }
@@ -1740,7 +1740,7 @@ def build_knowledge_routing_summary(
     routed = [
         item
         for item in memory_decisions
-        if item.get("suggested_route") == "skill" or item.get("reason") in {"not_memory_workflow_to_skill", "memory_convert_to_skill_update"}
+        if item.get("suggested_route") == "skill" or item.get("reason") == "memory_convert_to_skill_update"
     ]
     selected_ids = {
         str(item.get("evidence_id") or "")

@@ -245,7 +245,7 @@ def reconcile_planner_memory_payload_with_existing_memories(payload: Any, *, exi
             continue
         if _looks_workflow_shaped(fact_text):
             candidate["routing_hint"] = "defer_unclear"
-            candidate["skip_reason"] = "not_memory_workflow_to_skill"
+            candidate["skip_reason"] = "memory_convert_to_skill_update"
             candidate["suggested_route"] = "skill"
             candidate["reason"] = "Candidate fact looks procedural; route to skill maintenance rather than memory add."
             continue

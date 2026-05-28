@@ -173,7 +173,7 @@ def test_reconcile_memory_gap_payload_routes_workflow_shaped_fact_to_skill_route
 
     candidate = out["candidates"][0]
     assert candidate["routing_hint"] == "defer_unclear"
-    assert candidate["skip_reason"] == "not_memory_workflow_to_skill"
+    assert candidate["skip_reason"] == "memory_convert_to_skill_update"
     assert candidate.get("suggested_route") == "skill"
 
 

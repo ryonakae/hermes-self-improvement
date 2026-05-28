@@ -540,9 +540,9 @@ def test_improve_summary_reports_memory_to_skill_migrations():
                 "memory_routed_to_skill_selected_count": 1,
                 "memory_routed_to_skill_dropped_count": 2,
                 "cross_store_candidate_count": 3,
-                "memory_routed_to_skill_dropped_by_reason": {"not_memory_workflow_to_skill": 2},
+                "memory_routed_to_skill_dropped_by_reason": {"memory_convert_to_skill_update": 2},
                 "unexplained_cross_store_drop_count": 2,
-                "unexplained_cross_store_drop_by_reason": {"not_memory_workflow_to_skill": 2},
+                "unexplained_cross_store_drop_by_reason": {"memory_convert_to_skill_update": 2},
             },
         },
         "evidence_pack": {"summary": {}},
@@ -550,8 +550,8 @@ def test_improve_summary_reports_memory_to_skill_migrations():
 
     assert "- memory-to-skill migrations: applied 0, preview 1, deferred 1" in text
     assert "- memory routed to skill: total 3, selected 1, dropped 2" in text
-    assert "- memory routed drop reasons: not_memory_workflow_to_skill 2" in text
-    assert "- unexplained cross-store drops: 2 (not_memory_workflow_to_skill 2)" in text
+    assert "- memory routed drop reasons: memory_convert_to_skill_update 2" in text
+    assert "- unexplained cross-store drops: 2 (memory_convert_to_skill_update 2)" in text
     assert "- Would apply: 1, Deferred: 1, Skipped: 0, Blocked: 0" in text
 
 
@@ -943,7 +943,7 @@ def test_improve_summary_shows_memory_placement_routing():
         "dry_run": True,
         "summary": {},
         "step_decisions": {"memory": {"decisions": [
-            {"decision": "skip", "reason": "not_memory_workflow_to_skill", "workflow_boundary": "patch tool workflow", "suggested_route": "skill"},
+            {"decision": "skip", "reason": "memory_convert_to_skill_update", "workflow_boundary": "patch tool workflow", "suggested_route": "skill"},
             {"decision": "skip", "reason": "not_memory_raw_tool_output", "suggested_route": "diagnostic"},
             {"decision": "defer", "reason": "memory_inventory_needs_planner", "suggested_route": "memory_planner"},
             {"decision": "skip", "reason": "memory_duplicate_existing", "suggested_route": "none"},

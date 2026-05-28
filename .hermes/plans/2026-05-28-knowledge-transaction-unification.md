@@ -279,7 +279,7 @@ The editor receives a validated transaction plan and executes only that plan.
 
 ### Slice 4 — Remove old split semantics from prompts, summaries, readiness, and roadmap state
 
-**Status:** partially completed 2026-05-28; episode recording, CLI action summaries, human-facing CLI action detail lines, and compact tool results now read top-level canonical `knowledge_transactions` when present instead of requiring split `step_decisions.skill/memory/memory_to_skill`. Compact tool results now expose `steps.knowledge_transactions.total/apply/defer/skip/block/by_kind/cross_store`. Planner normalization now accepts canonical `memory_to_skill` transactions, the planner prompt documents the cross-store transaction shape, and knowledge routing treats canonical `memory_to_skill` plus explicit planner skill transactions as selected evidence. Unanswered maintenance candidates now become canonical deferred planner transactions instead of silently dropped routed evidence, and selected coverage candidates mark their representative unmatched evidence as handled. Knowledge routing also exposes `unexplained_cross_store_drop_count` / `unexplained_cross_store_drop_by_reason` and the CLI summary renders those drops so readiness cannot look benign when memory-to-skill work was silently dropped. Remaining work is to remove the rest of split prompt/report/readiness wording.
+**Status:** partially completed 2026-05-28; episode recording, CLI action summaries, human-facing CLI action detail lines, and compact tool results now read top-level canonical `knowledge_transactions` when present instead of requiring split `step_decisions.skill/memory/memory_to_skill`. Compact tool results now expose `steps.knowledge_transactions.total/apply/defer/skip/block/by_kind/cross_store`. Planner normalization now accepts canonical `memory_to_skill` transactions, the planner prompt documents the cross-store transaction shape, and knowledge routing treats canonical `memory_to_skill` plus explicit planner skill transactions as selected evidence. Unanswered maintenance candidates now become canonical deferred planner transactions instead of silently dropped routed evidence, selected coverage candidates mark their representative unmatched evidence as handled, and active runtime producers now use `memory_convert_to_skill_update` rather than the old terminal `not_memory_workflow_to_skill` reason. Knowledge routing also exposes `unexplained_cross_store_drop_count` / `unexplained_cross_store_drop_by_reason` and the CLI summary renders those drops so readiness cannot look benign when memory-to-skill work was silently dropped. Remaining work is to remove the rest of split prompt/report/readiness wording.
 
 **Validation completed for canonical summary/episode surfaces:**
 - RED/GREEN tests added for canonical-only episode recording: `tests/test_episode_ledger.py::test_record_run_episodes_uses_canonical_knowledge_transactions_without_split_steps`.
@@ -318,6 +318,13 @@ The editor receives a validated transaction plan and executes only that plan.
     - `memory_routed_to_skill_dropped_count: 0`.
     - `unexplained_cross_store_drop_count: 0`.
     - This confirms the old `memory -> suggested_route skill -> dropped` pattern is now either handled by canonical planner evidence selection or classified by canonical maintenance fallback handling.
+  - `~/.hermes/self-improvement/runs/run-20260528T063609Z.json`.
+    - `transaction_count: 45`.
+    - `knowledge_routing.memory_routed_to_skill_count: 6`.
+    - `memory_routed_to_skill_selected_count: 6`.
+    - `memory_routed_to_skill_dropped_count: 0`.
+    - `unexplained_cross_store_drop_count: 0`.
+    - Saved artifact text no longer contains `not_memory_workflow_to_skill`; active producers now emit `memory_convert_to_skill_update` for workflow-shaped memory facts routed to skill.
 
 **Objective:** Finish the migration so future agents cannot think the redesign is complete while skill/memory are still separate lanes.
 
