@@ -180,6 +180,118 @@ def _memory_editor_candidate_from_evidence(item: dict[str, Any]) -> dict[str, An
     }
 
 
+def _memory_target_store(value: str) -> str:
+    if value == "user":
+        return "builtin_user"
+    if value == "external_memory":
+        return "external_memory"
+    return "builtin_memory"
+
+
+def _knowledge_memory_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
+    candidate = _memory_editor_candidate_from_evidence(item)
+    if candidate is None:
+        return None
+    candidate_id = str(candidate.get("candidate_id") or item.get("id") or "")
+    if not candidate_id:
+        return None
+    target = str(candidate.get("target") or candidate.get("current_store") or "memory")
+    compact = {
+        "candidate_id": candidate_id,
+        "candidate_kind": candidate.get("candidate_kind") or item.get("kind") or "memory_gap_candidate",
+        "target_store": _memory_target_store(target),
+        "confidence": candidate.get("confidence") or "medium",
+        "risk": candidate.get("risk") or item.get("risk") or "medium",
+    }
+    for key in ("candidate_fact", "old_text", "relation_to_existing", "routing_hint", "placement_text", "current_store", "allowed_recommendations"):
+        if candidate.get(key) not in (None, "", [], {}):
+            compact[key] = candidate.get(key)
+    return compact
+
+
+def _knowledge_current_entry(entry: Any) -> dict[str, Any] | None:
+    if not isinstance(entry, dict):
+        return None
+    old_text = str(entry.get("old_text") or "").strip()
+    if not old_text:
+        return None
+    target = str(entry.get("target") or "memory")
+    compact: dict[str, Any] = {
+        "target_store": _memory_target_store(target),
+        "target": target,
+        "old_text": old_text,
+    }
+    for key in ("hash", "summary"):
+        if entry.get(key) not in (None, ""):
+            compact[key] = entry.get(key)
+    return compact
+
+
+def _unresolved_target_resolutions(target_resolutions: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for resolution in target_resolutions.get("resolutions") or []:
+        if not isinstance(resolution, dict):
+            continue
+        if str(resolution.get("resolution_kind") or "") != "unresolved":
+            continue
+        rows.append({
+            "evidence_id": str(resolution.get("candidate_id") or ""),
+            "unresolved_reason": resolution.get("unresolved_reason") or "target_uncertain",
+            "confidence": resolution.get("confidence") or "medium",
+            "reason": resolution.get("reason"),
+        })
+    return rows
+
+
+def build_knowledge_planner_digest(
+    evidence_pack: dict[str, Any],
+    *,
+    cluster_summary: dict[str, Any] | None = None,
+    evidence_index: dict[str, Any] | None = None,
+    turn_traces: list[dict[str, Any]] | None = None,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    skill_digest = build_planner_runtime_digest(
+        evidence_pack,
+        cluster_summary=cluster_summary,
+        evidence_index=evidence_index,
+        turn_traces=turn_traces,
+    )
+    raw_evidence = evidence_pack.get("evidence")
+    evidence: list[Any] = raw_evidence if isinstance(raw_evidence, list) else []
+    memory_candidates: list[dict[str, Any]] = []
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        candidate = _knowledge_memory_candidate_from_evidence(item)
+        if candidate is not None:
+            memory_candidates.append(candidate)
+    memory_candidates.sort(key=lambda item: (str(item.get("candidate_id") or ""), str(item.get("candidate_kind") or "")))
+    raw_entries = (config or {}).get("_memory_current_entries")
+    compact_entries, omitted_entries = _compact_current_entries_for_memory_editor(raw_entries if isinstance(raw_entries, list) else [])
+    current_entries = [entry for entry in (_knowledge_current_entry(item) for item in compact_entries) if entry is not None]
+    raw_target_resolutions = evidence_pack.get("target_resolutions")
+    target_resolutions: dict[str, Any] = raw_target_resolutions if isinstance(raw_target_resolutions, dict) else {}
+    unresolved = list(skill_digest.get("unresolved_observations") or [])
+    existing_unresolved_ids = {str(item.get("evidence_id") or "") for item in unresolved if isinstance(item, dict)}
+    for item in _unresolved_target_resolutions(target_resolutions):
+        if str(item.get("evidence_id") or "") not in existing_unresolved_ids:
+            unresolved.append(item)
+    digest = {
+        **skill_digest,
+        "schema_name": "self_improvement_knowledge_planner_digest",
+        "schema_version": "1.0",
+        "skill_digest_schema_name": skill_digest.get("schema_name"),
+        "memory_candidates": memory_candidates,
+        "memory_candidate_count": len(memory_candidates),
+        "current_entries": current_entries,
+        "current_entries_omitted_count": omitted_entries,
+        "target_resolutions": target_resolutions,
+        "unresolved_observations": unresolved[:20],
+    }
+    return digest
+
+
 def _dispatch_memory_editor(
     *,
     memory_evidence: list[dict[str, Any]],

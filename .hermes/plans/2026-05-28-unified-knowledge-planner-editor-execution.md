@@ -175,6 +175,8 @@ git diff --check
 
 ## Slice 2: Build one planner digest for skills and memory
 
+**Status:** completed. Added `build_knowledge_planner_digest(...)` with one bounded digest across editable skill candidates, memory candidates/current entries, target resolutions/unresolved items, and compact cluster/index evidence.
+
 **Objective:** Add `build_knowledge_planner_digest(...)` that gives the planner one view of skill and memory candidates without handing it raw traces.
 
 **Files:**
