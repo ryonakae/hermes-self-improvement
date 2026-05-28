@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from hermes_self_improvement.diagnostic_signals import build_diagnostic_signals, normalize_report_diagnostic_signals
 
@@ -104,6 +105,15 @@ def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp
         "source_old_text": "Use these exact steps for live context cleanup.",
         "reason": "dry_run_would_update_skill_then_remove_memory",
     }]
+    assert result["step_decisions"]["knowledge_transactions"]["total"] == 1
+    assert result["step_decisions"]["knowledge_routing"]["memory_routed_to_skill_selected_count"] == 1
+    assert "skill" not in result["step_decisions"]
+    assert "memory" not in result["step_decisions"]
+    assert "memory_to_skill" not in result["step_decisions"]
+    artifact = json.loads(Path(result["artifact_path"]).read_text(encoding="utf-8"))
+    assert "skill" not in artifact["step_decisions"]
+    assert "memory" not in artifact["step_decisions"]
+    assert "memory_to_skill" not in artifact["step_decisions"]
 
 
 def test_run_improve_from_report_adds_reference_only_diagnostic_evidence(monkeypatch, tmp_path):

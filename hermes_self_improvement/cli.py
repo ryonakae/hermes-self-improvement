@@ -1055,10 +1055,16 @@ def run_improve(
     step_decisions_payload = {
         "summary": decisions_summary,
         "proposals_considered": proposals,
-        "skill": skill_step,
-        "memory": memory_step,
-        "memory_to_skill": memory_to_skill_step,
+        "knowledge_transactions": _knowledge_transaction_summary(knowledge_transactions),
+        "knowledge_quality": skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {},
         "knowledge_routing": knowledge_routing,
+        "editor_validation": {
+            "skill_step_status": skill_step.get("status"),
+            "memory_step_status": memory_step.get("status"),
+            "memory_to_skill_step_status": memory_to_skill_step.get("status"),
+            "changed_skills": len(combined_skill_changes),
+            "changed_memories": len(combined_memory_changes),
+        },
         "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
     }
     action_summary = _action_summary_from_result({"knowledge_transactions": knowledge_transactions}, step_decisions_payload)
@@ -1334,20 +1340,33 @@ def _semantic_action_from_runner_decision(decision: dict[str, Any], *, kind: str
     return "skip"
 
 
+def _knowledge_transaction_summary(transactions: Any) -> dict[str, Any]:
+    rows = transactions if isinstance(transactions, list) else []
+    counts = {"apply": 0, "defer": 0, "skip": 0, "block": 0}
+    by_kind: dict[str, int] = {}
+    cross_store = 0
+    total = 0
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        total += 1
+        kind = str(item.get("transaction_kind") or item.get("target_store") or "unknown")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        if kind == "memory_to_skill" or (item.get("source_store") and item.get("target_store") and item.get("source_store") != item.get("target_store")):
+            cross_store += 1
+        action = _semantic_action_from_runner_decision(item, kind=kind)
+        counts[action] = counts.get(action, 0) + 1
+    return {"total": total, **counts, "by_kind": dict(sorted(by_kind.items())), "cross_store": cross_store}
+
+
 def _action_summary_from_result(result: dict[str, Any], step_decisions: dict[str, Any]) -> dict[str, int]:
     provided = result.get("action_summary") if isinstance(result.get("action_summary"), dict) else {}
     counts = {"apply": int(provided.get("apply") or 0), "defer": int(provided.get("defer") or 0), "skip": int(provided.get("skip") or 0), "block": int(provided.get("block") or 0)}
     if any(counts.values()):
         return counts
-    transactions = result.get("knowledge_transactions") if isinstance(result.get("knowledge_transactions"), list) else []
-    if transactions:
-        for item in transactions:
-            if not isinstance(item, dict):
-                continue
-            kind = str(item.get("transaction_kind") or item.get("target_store") or "knowledge_transaction")
-            action = _semantic_action_from_runner_decision(item, kind=kind)
-            counts[action] = counts.get(action, 0) + 1
-        return counts
+    transaction_summary = _knowledge_transaction_summary(result.get("knowledge_transactions"))
+    if transaction_summary["total"]:
+        return {key: int(transaction_summary.get(key) or 0) for key in ("apply", "defer", "skip", "block")}
     for kind in ("skill", "memory", "memory_to_skill"):
         step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
         for item in step.get("decisions") or []:

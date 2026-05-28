@@ -332,6 +332,12 @@ The editor receives a validated transaction plan and executes only that plan.
     - `memory_routed_to_skill_dropped_count: 0`.
     - `unexplained_cross_store_drop_count: 0`.
     - Saved artifact text contains none of `not_memory_workflow_to_skill`, `skill_editor_result`, `memory_editor_result`, `invalid_skill_editor_task`, `invalid_memory_editor_task`, `skill_editor_unavailable`, or `memory_editor_unavailable`.
+  - `~/.hermes/self-improvement/runs/run-20260528T070041Z.json`.
+    - `step_decisions` keys are only `editor_validation`, `evaluator`, `knowledge_quality`, `knowledge_routing`, `knowledge_transactions`, `proposals_considered`, and `summary`.
+    - Legacy split `step_decisions.skill`, `step_decisions.memory`, and `step_decisions.memory_to_skill` are absent.
+    - `knowledge_transactions.total: 48`, with `apply: 0`, `defer: 3`, `skip: 45`, `block: 0`, `by_kind: {'planner_skill': 48}`.
+    - `knowledge_routing.memory_routed_to_skill_count: 6`, `memory_routed_to_skill_selected_count: 6`, `memory_routed_to_skill_dropped_count: 0`, `unexplained_cross_store_drop_count: 0`.
+    - Saved artifact text contains none of `not_memory_workflow_to_skill`, `skill_editor_result`, `memory_editor_result`, `invalid_skill_editor_task`, `invalid_memory_editor_task`, `skill_editor_unavailable`, or `memory_editor_unavailable`.
 
 **Objective:** Finish the migration so future agents cannot think the redesign is complete while skill/memory are still separate lanes.
 
