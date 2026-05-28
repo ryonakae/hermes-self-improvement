@@ -11,7 +11,7 @@ As of 2026-05-10, the long-term roadmap is:
   - Defines the final destination for autonomous Hermes self-improvement: observe real sessions, build evidence, resolve targets, plan bounded changes, mutate only through official tools, post-validate actual state, record episodes, observe outcomes, calibrate runtime-private overlays, and report actual results clearly.
 
 - `2026-05-28-unified-knowledge-planner-editor-execution.md`
-  - **Status:** active top-priority implementation plan.
+  - **Status:** active top-priority implementation plan; Slice 4 executor expansion implemented/verified, Slice 5 `run_improve` unified-path wiring is next.
   - Replaces the current bridge-style orchestration (`run_skill_improvement_step` + `run_memory_improvement_step` + `apply_memory_to_skill_migrations`) with one planner/editor transaction path: `run_knowledge_improvement_step`, canonical transactions for skill/builtin-user/builtin-memory/external-memory/memory-to-skill, unified editor execution, split-lane removal, and dogfood readiness closure.
 
 - `2026-05-28-knowledge-transaction-unification.md`

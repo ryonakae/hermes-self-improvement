@@ -1835,7 +1835,10 @@ def _knowledge_transaction_skill_task(raw_task: dict[str, Any], target_skill: st
         task["task_kind"] = "skill_improve"
     raw_targets = task.get("targets")
     targets: dict[str, Any] = raw_targets if isinstance(raw_targets, dict) else {}
-    if not targets.get("primary_skill"):
+    if task.get("task_kind") == "skill_create":
+        if not targets.get("new_skill"):
+            task["targets"] = {**targets, "new_skill": target_skill}
+    elif not targets.get("primary_skill"):
         task["targets"] = {**targets, "primary_skill": target_skill}
     constraints = task.get("constraints") if isinstance(task.get("constraints"), list) else []
     if not constraints:
@@ -1847,10 +1850,215 @@ def _knowledge_transaction_skill_task(raw_task: dict[str, Any], target_skill: st
     return task
 
 
+def _knowledge_transaction_backend(config: dict[str, Any]):
+    if config.get("_skill_editor_backend") is not None:
+        return config.get("_skill_editor_backend")
+    if config.get("_editor_backend") is not None:
+        return config.get("_editor_backend")
+    return build_skill_editor_backend(config)
+
+
+def _knowledge_transaction_skill_target(transaction: dict[str, Any]) -> str:
+    return str(
+        transaction.get("target_skill")
+        or transaction.get("target_id")
+        or transaction.get("skill")
+        or transaction.get("proposed_skill_name")
+        or ""
+    ).strip()
+
+
+def _knowledge_transaction_content(transaction: dict[str, Any]) -> str:
+    task = transaction.get("editor_task") if isinstance(transaction.get("editor_task"), dict) else {}
+    return str(transaction.get("content") or task.get("content") or transaction.get("current_claim") or "").strip()
+
+
+def _knowledge_transaction_memory_operation(transaction: dict[str, Any]) -> dict[str, Any]:
+    operation = str(transaction.get("operation") or "").strip()
+    if operation == "memory_remove":
+        operation = "memory_delete"
+    target_store = str(transaction.get("target_store") or transaction.get("target_id") or "").strip()
+    op: dict[str, Any] = {"operation": operation, "target": target_store}
+    if transaction.get("provider"):
+        op["provider"] = transaction.get("provider")
+    old_text = str(transaction.get("source_old_text") or transaction.get("old_text") or "").strip()
+    content = _knowledge_transaction_content(transaction)
+    if old_text:
+        op["old_text"] = old_text
+    if content:
+        op["content"] = content
+    return op
+
+
+def _knowledge_transaction_memory_outcome(memory_result: dict[str, Any]) -> str:
+    validation = memory_result.get("post_validation") if isinstance(memory_result.get("post_validation"), dict) else {}
+    if validation.get("accounting_status"):
+        return str(validation.get("accounting_status"))
+    if validation.get("status") in {"write_only_unverified", "applied_unverified"}:
+        return str(validation.get("status"))
+    return "applied"
+
+
+def _execute_memory_transaction(transaction: dict[str, Any], *, config: dict[str, Any], result: dict[str, Any], mutate: bool) -> dict[str, Any]:
+    operation = _knowledge_transaction_memory_operation(transaction)
+    if not operation.get("operation") or not operation.get("target"):
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    if not mutate:
+        return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+    context = build_memory_mutation_context(provider=_external_memory_provider(config), operation=operation)
+    if not context.get("execution_enabled"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "blocked",
+            "reason": (context.get("reasons") or ["knowledge_transaction_memory_not_executable"])[0],
+            "memory_context": context,
+        }
+    memory_result = _execute_memory_context(context, config, operation=operation, external_provider=_external_memory_provider(config))
+    step_name = "memory_remove" if operation.get("operation") == "memory_delete" else str(operation.get("operation") or "memory_mutate").replace("memory_", "memory_")
+    target = str((context.get("tool_args") or {}).get("target") or operation.get("target") or "memory")
+    if not memory_result.get("success"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "blocked",
+            "reason": memory_result.get("error") or "knowledge_transaction_memory_step_failed",
+            "executed_steps": [{"step": step_name, "status": "failed", "target": target}],
+            "memory_result": memory_result,
+        }
+    transaction_id = str(transaction.get("transaction_id") or transaction.get("source_evidence_id") or "memory_transaction")
+    removed = [transaction_id] if operation.get("operation") == "memory_delete" else []
+    changed = [] if removed else [transaction_id]
+    return {
+        **result,
+        "success": True,
+        "outcome": _knowledge_transaction_memory_outcome(memory_result),
+        "changed_memories": changed,
+        "removed_memories": removed,
+        "executed_steps": [{"step": step_name, "status": "applied", "target": target}],
+        "memory_result": memory_result,
+    }
+
+
+def _execute_skill_transaction(transaction: dict[str, Any], *, config: dict[str, Any], result: dict[str, Any], mutate: bool) -> dict[str, Any]:
+    target_skill = _knowledge_transaction_skill_target(transaction)
+    operation = str(transaction.get("operation") or "mutate_skill").strip()
+    if not target_skill:
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    if not mutate:
+        return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+    if operation == "archive_skill":
+        archive_result = execute_skill_archive_operation(
+            {
+                "action": "archive",
+                "name": target_skill,
+                "reason": transaction.get("archive_reason") or transaction.get("reason"),
+                "successor": transaction.get("successor"),
+            },
+            archive_fn=config.get("_skill_archive_fn"),
+        )
+        if not archive_result.get("success"):
+            return {
+                **result,
+                "success": False,
+                "outcome": "blocked",
+                "reason": archive_result.get("error") or "knowledge_transaction_skill_archive_failed",
+                "executed_steps": [{"step": "skill_archive", "status": "failed", "target": target_skill}],
+                "archive_result": archive_result,
+            }
+        return {
+            **result,
+            "success": True,
+            "outcome": str(archive_result.get("after_state") or "archived"),
+            "changed_skills": [target_skill],
+            "executed_steps": [{"step": "skill_archive", "status": str(archive_result.get("after_state") or "archived"), "target": target_skill}],
+            "archive_result": archive_result,
+        }
+    raw_task = transaction.get("editor_task") if isinstance(transaction.get("editor_task"), dict) else transaction.get("skill_task") if isinstance(transaction.get("skill_task"), dict) else None
+    if raw_task is None:
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    skill_result = run_skill_editor_task(_knowledge_transaction_skill_task(raw_task, target_skill), config=config, backend=_knowledge_transaction_backend(config))
+    changed_skills = sorted({str(item) for item in (skill_result.get("changed_skills") or []) if str(item)})
+    created_skills = sorted({str(item) for item in (skill_result.get("created_skills") or []) if str(item)})
+    validated = _skill_result_has_validated_change(skill_result, target_skill) or (operation == "create_skill" and target_skill in created_skills and skill_result.get("success") and str(skill_result.get("outcome") or "") == "applied")
+    step = "skill_create" if operation == "create_skill" else "skill_mutate"
+    if not validated:
+        return {
+            **result,
+            "success": False,
+            "outcome": "blocked",
+            "reason": "knowledge_transaction_skill_step_failed",
+            "executed_steps": [{"step": step, "status": "failed", "target": target_skill}],
+            "skill_result": skill_result,
+        }
+    return {
+        **result,
+        "success": True,
+        "outcome": "applied",
+        "changed_skills": changed_skills,
+        "created_skills": created_skills,
+        "executed_steps": [{"step": step, "status": "applied", "target": target_skill}],
+        "verification_notes": list(skill_result.get("verification_notes") or []),
+        "rollback_hints": list(skill_result.get("rollback_hints") or []),
+    }
+
+
+def _execute_placement_move_transaction(transaction: dict[str, Any], *, config: dict[str, Any], result: dict[str, Any], mutate: bool) -> dict[str, Any]:
+    content = _knowledge_transaction_content(transaction)
+    source_store = str(transaction.get("source_store") or "").strip()
+    source_old_text = str(transaction.get("source_old_text") or "").strip()
+    target_store = str(transaction.get("target_store") or "").strip()
+    if not content or not source_store or not source_old_text or not target_store:
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    if not mutate:
+        return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+    add_transaction = {**transaction, "transaction_kind": "memory", "operation": "memory_add", "target_store": target_store, "editor_task": {"content": content}}
+    add_result = _execute_memory_transaction(add_transaction, config=config, result=_base_knowledge_transaction_result(add_transaction), mutate=True)
+    if not add_result.get("success"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "blocked",
+            "reason": add_result.get("reason") or "knowledge_transaction_placement_add_failed",
+            "executed_steps": [{"step": "memory_add", "status": "failed", "target": target_store}],
+            "add_result": add_result,
+        }
+    remove_transaction = {**transaction, "transaction_kind": "memory", "operation": "memory_delete", "target_store": source_store, "source_old_text": source_old_text}
+    remove_result = _execute_memory_transaction(remove_transaction, config=config, result=_base_knowledge_transaction_result(remove_transaction), mutate=True)
+    source_target = _knowledge_transaction_source_target(source_store)
+    if not remove_result.get("success"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "partial",
+            "reason": remove_result.get("reason") or "knowledge_transaction_placement_remove_failed",
+            "changed_memories": [str(transaction.get("transaction_id") or "placement_move")],
+            "executed_steps": [{"step": "memory_add", "status": "applied", "target": _knowledge_transaction_source_target(target_store)}, {"step": "memory_remove", "status": "failed", "target": source_target}],
+            "add_result": add_result,
+            "remove_result": remove_result,
+        }
+    return {
+        **result,
+        "success": True,
+        "outcome": "applied",
+        "changed_memories": [str(transaction.get("transaction_id") or "placement_move")],
+        "removed_memories": [str(transaction.get("source_id") or transaction.get("source_evidence_id") or transaction.get("transaction_id") or "placement_source")],
+        "executed_steps": [{"step": "memory_add", "status": "applied", "target": _knowledge_transaction_source_target(target_store)}, {"step": "memory_remove", "status": "applied", "target": source_target}],
+        "verification_notes": ["target memory added before source removal"],
+    }
+
+
 def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[str, Any] | None = None, mutate: bool = False) -> dict[str, Any]:
     cfg = config or {}
     result = _base_knowledge_transaction_result(transaction)
-    if transaction.get("transaction_kind") != "memory_to_skill":
+    transaction_kind = str(transaction.get("transaction_kind") or "")
+    if transaction_kind == "skill":
+        return _execute_skill_transaction(transaction, config=cfg, result=result, mutate=mutate)
+    if transaction_kind == "memory":
+        return _execute_memory_transaction(transaction, config=cfg, result=result, mutate=mutate)
+    if transaction_kind == "placement_move":
+        return _execute_placement_move_transaction(transaction, config=cfg, result=result, mutate=mutate)
+    if transaction_kind != "memory_to_skill":
         return {**result, "success": False, "outcome": "blocked", "reason": "unsupported_knowledge_transaction_kind"}
     target_skill = str(transaction.get("target_skill") or "")
     old_text = str(transaction.get("source_old_text") or "")
@@ -1864,8 +2072,7 @@ def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[s
     skill_task = transaction.get("skill_task") if isinstance(transaction.get("skill_task"), dict) else None
     if skill_task is None:
         return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_skill_task"}
-    backend = cfg.get("_skill_editor_backend") if cfg.get("_skill_editor_backend") is not None else build_skill_editor_backend(cfg)
-    skill_result = run_skill_editor_task(_knowledge_transaction_skill_task(skill_task, target_skill), config=cfg, backend=backend)
+    skill_result = run_skill_editor_task(_knowledge_transaction_skill_task(skill_task, target_skill), config=cfg, backend=_knowledge_transaction_backend(cfg))
     skill_step = {"step": "skill_patch", "target": target_skill}
     if not _skill_result_has_validated_change(skill_result, target_skill):
         return {

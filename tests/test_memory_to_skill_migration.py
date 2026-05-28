@@ -515,3 +515,238 @@ def test_memory_to_skill_replay_ignores_non_preview_memory_to_skill_decisions(tm
     assert result["changed"] == 0
     assert result["decisions"] == []
     assert calls == []
+
+
+def test_execute_knowledge_transaction_runs_skill_patch_transaction_through_editor_backend(tmp_path):
+    root = tmp_path / "skills"
+    write_skill(root, "safe-patch-usage")
+    calls = []
+
+    def fake_backend(prompt, task, config=None):
+        calls.append(task)
+        return success_payload("safe-patch-usage")
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-skill-patch",
+            "transaction_kind": "skill",
+            "decision": "apply",
+            "target_store": "skill",
+            "target_id": "safe-patch-usage",
+            "operation": "mutate_skill",
+            "editor_task": {"task_kind": "mutate_skill", "targets": {"primary_skill": "safe-patch-usage"}},
+        },
+        config={"_editor_backend": fake_backend, "_mutable_local_skill_roots": [root]},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["changed_skills"] == ["safe-patch-usage"]
+    assert result["executed_steps"] == [{"step": "skill_mutate", "status": "applied", "target": "safe-patch-usage"}]
+    assert calls[0]["targets"] == {"primary_skill": "safe-patch-usage"}
+
+
+def test_execute_knowledge_transaction_runs_builtin_memory_add_replace_remove():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        return {"success": True}
+
+    add = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-memory-add",
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "target_store": "builtin_user",
+            "target_id": "user",
+            "operation": "memory_add",
+            "editor_task": {"content": "User prefers short verification summaries."},
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+    replace = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-memory-replace",
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "operation": "memory_replace",
+            "source_old_text": "Old durable fact.",
+            "editor_task": {"content": "New durable fact."},
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+    remove = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-memory-remove",
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "operation": "memory_remove",
+            "source_old_text": "Stale durable fact.",
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert add["success"] is True and add["changed_memories"] == ["txn-memory-add"]
+    assert replace["success"] is True and replace["changed_memories"] == ["txn-memory-replace"]
+    assert remove["success"] is True and remove["removed_memories"] == ["txn-memory-remove"]
+    assert calls == [
+        {"action": "add", "target": "user", "content": "User prefers short verification summaries."},
+        {"action": "replace", "target": "memory", "old_text": "Old durable fact.", "content": "New durable fact."},
+        {"action": "remove", "target": "memory", "old_text": "Stale durable fact."},
+    ]
+
+
+def test_execute_knowledge_transaction_external_memory_add_is_provider_capability_aware():
+    provider_calls = []
+
+    def fake_provider(*args, **kwargs):
+        provider_calls.append((args, kwargs))
+        return {"success": True}
+
+    applied = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-external-add",
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "target_store": "external_memory",
+            "target_id": "hindsight",
+            "operation": "memory_add",
+            "editor_task": {"content": "External durable fact."},
+        },
+        config={"memory": {"provider": "hindsight"}, "_memory_provider_tool_fn": fake_provider},
+        mutate=True,
+    )
+    blocked = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-external-replace",
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "target_store": "external_memory",
+            "target_id": "hindsight",
+            "operation": "memory_replace",
+            "source_old_text": "old",
+            "editor_task": {"content": "new"},
+        },
+        config={"memory": {"provider": "hindsight"}, "_memory_provider_tool_fn": fake_provider},
+        mutate=True,
+    )
+
+    assert applied["success"] is True
+    assert applied["outcome"] == "applied_unverified"
+    assert applied["changed_memories"] == ["txn-external-add"]
+    assert provider_calls
+    assert blocked["success"] is False
+    assert blocked["outcome"] == "blocked"
+    assert blocked["reason"] == "unsupported_memory_operation"
+
+
+def test_execute_knowledge_transaction_placement_move_adds_before_removing_source():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-placement-move",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "source_id": "user-pref",
+            "source_old_text": "Use TDD for behavior changes.",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "operation": "move",
+            "editor_task": {"content": "Use TDD for behavior changes."},
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["changed_memories"] == ["txn-placement-move"]
+    assert result["removed_memories"] == ["user-pref"]
+    assert calls == [
+        {"action": "add", "target": "memory", "content": "Use TDD for behavior changes."},
+        {"action": "remove", "target": "user", "old_text": "Use TDD for behavior changes."},
+    ]
+
+
+def test_execute_knowledge_transaction_runs_skill_create_transaction_through_editor_backend(tmp_path):
+    root = tmp_path / "skills"
+    root.mkdir(parents=True)
+    calls = []
+
+    def fake_backend(prompt, task, config=None):
+        calls.append(task)
+        return {
+            "success": True,
+            "outcome": "applied",
+            "used_tools": [{"tool": "skill_manage", "action": "create", "name": "new-local-skill", "success": True}],
+            "changed_skills": [],
+            "created_skills": ["new-local-skill"],
+            "deleted_skills": [],
+            "verification_notes": ["created target skill"],
+            "rollback_hints": [],
+        }
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-skill-create",
+            "transaction_kind": "skill",
+            "decision": "apply",
+            "target_store": "skill",
+            "target_id": "new-local-skill",
+            "operation": "create_skill",
+            "editor_task": {"task_kind": "skill_create", "targets": {"new_skill": "new-local-skill"}},
+        },
+        config={"_editor_backend": fake_backend, "_mutable_local_skill_roots": [root]},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["created_skills"] == ["new-local-skill"]
+    assert result["executed_steps"] == [{"step": "skill_create", "status": "applied", "target": "new-local-skill"}]
+    assert calls[0]["targets"] == {"new_skill": "new-local-skill"}
+
+
+def test_execute_knowledge_transaction_runs_skill_archive_transaction_through_curator_lifecycle_tool():
+    archive_calls = []
+
+    def fake_archive(name):
+        archive_calls.append(name)
+        return {"success": True, "after_state": "archived"}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-skill-archive",
+            "transaction_kind": "skill",
+            "decision": "apply",
+            "target_store": "skill",
+            "target_id": "old-local-skill",
+            "operation": "archive_skill",
+            "archive_reason": "duplicate",
+            "successor": "new-local-skill",
+        },
+        config={"_skill_archive_fn": fake_archive},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "archived"
+    assert result["changed_skills"] == ["old-local-skill"]
+    assert result["executed_steps"] == [{"step": "skill_archive", "status": "archived", "target": "old-local-skill"}]
+    assert result["archive_result"]["tool_name"] == "skill_usage.archive_skill"
+    assert archive_calls == ["old-local-skill"]

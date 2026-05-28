@@ -15,7 +15,7 @@
 The 2026-05-28 bridge/reporting work is valuable but incomplete:
 
 - `run_improve` still orchestrates `run_skill_improvement_step(...)`, then `run_memory_improvement_step(...)`, then `apply_memory_to_skill_migrations(...)`, then `build_knowledge_transactions(...)`.
-- `execute_knowledge_transaction(...)` currently executes only `transaction_kind == "memory_to_skill"`; other transaction kinds return `unsupported_knowledge_transaction_kind`.
+- Slice 4 now extends `execute_knowledge_transaction(...)` to execute supported `skill`, `memory`, `memory_to_skill`, and `placement_move` transactions through official skill/memory/provider helpers. `run_improve` still has not been rewired to use this unified path as its only top-level source of truth.
 - Latest dogfood artifact `run-20260528T070041Z.json` proves legacy split `step_decisions.skill` / `memory` / `memory_to_skill` lanes are absent from the final artifact and routed-to-skill drops are zero, but it does not prove unified planner/editor execution. Its transaction summary is `by_kind: {'planner_skill': 48}` and `cross_store: 0`.
 - Therefore the system is **bridge/reporting complete**, not **unified planner/editor execution complete**.
 
@@ -263,6 +263,8 @@ git diff --check
 ---
 
 ## Slice 4: Extend editor execution for memory and skill transactions
+
+**Status:** Implemented 2026-05-28. Focused tests, full suite, `py_compile`, runtime status, and `git diff --check` passed. Remaining blocker moves to Slice 5: `run_improve` still needs to call the unified knowledge path as its source of truth.
 
 **Objective:** Make `execute_knowledge_transaction(...)` the single executor for supported transaction kinds.
 
