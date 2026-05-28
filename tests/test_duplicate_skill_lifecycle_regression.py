@@ -35,7 +35,7 @@ def test_existing_sandbox_skill_blocks_hermes_prefixed_duplicate_create():
     digest = build_planner_digest(pack)
 
     def planner(*, digest, config):
-        return {"decisions": [{
+        return {"knowledge_transactions": [{
             "skill": "hermes-sandbox-permission-workflow",
             "proposed_skill_name": "hermes-sandbox-permission-workflow",
             "decision": "create_skill",
@@ -45,7 +45,7 @@ def test_existing_sandbox_skill_blocks_hermes_prefixed_duplicate_create():
 
     result = run_planner(digest, config={"_planner_func": planner})
 
-    decision = result["decisions"][0]
+    decision = result["knowledge_transactions"][0]
     assert decision["decision"] == "skip"
     assert decision["reason"] == "create_skill_duplicates_existing_local_skill"
     assert decision["covered_by_existing_skill"] == "sandbox-permission-workflow"
@@ -87,7 +87,7 @@ def test_duplicate_lifecycle_candidate_fallback_archives_duplicate_to_successor(
 
     digest = build_planner_digest(pack)
     planner = run_planner(digest, config={})
-    decisions = {item["skill"]: item for item in planner["decisions"]}
+    decisions = {item["skill"]: item for item in planner["knowledge_transactions"]}
 
     duplicate = decisions["hermes-sandbox-permission-workflow"]
     assert duplicate["decision"] == "archive_skill"
@@ -113,10 +113,10 @@ def test_duplicate_lifecycle_candidate_overrides_not_selected_skip_from_planner(
     digest = build_planner_digest(pack)
 
     def planner(*, digest, config):
-        return {"decisions": [{"skill": "hermes-sandbox-permission-workflow", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []}]}
+        return {"knowledge_transactions": [{"skill": "hermes-sandbox-permission-workflow", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []}]}
 
     result = run_planner(digest, config={"_planner_func": planner})
-    duplicate = {item["skill"]: item for item in result["decisions"]}["hermes-sandbox-permission-workflow"]
+    duplicate = {item["skill"]: item for item in result["knowledge_transactions"]}["hermes-sandbox-permission-workflow"]
 
     assert duplicate["decision"] == "archive_skill"
     assert duplicate["archive_reason"] == "duplicate_skill"
@@ -139,10 +139,10 @@ def test_duplicate_lifecycle_candidate_is_not_silently_skipped_when_planner_omit
     digest = build_planner_digest(pack)
 
     def planner(*, digest, config):
-        return {"decisions": [{"skill": "sandbox-permission-workflow", "decision": "skip", "reason": "canonical_skill_kept", "evidence_ids": []}]}
+        return {"knowledge_transactions": [{"skill": "sandbox-permission-workflow", "decision": "skip", "reason": "canonical_skill_kept", "evidence_ids": []}]}
 
     result = run_planner(digest, config={"_planner_func": planner})
-    duplicate = {item["skill"]: item for item in result["decisions"]}["hermes-sandbox-permission-workflow"]
+    duplicate = {item["skill"]: item for item in result["knowledge_transactions"]}["hermes-sandbox-permission-workflow"]
 
     assert duplicate["decision"] == "archive_skill"
     assert duplicate["archive_reason"] == "duplicate_skill"

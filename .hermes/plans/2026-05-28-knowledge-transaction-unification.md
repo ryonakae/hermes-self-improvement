@@ -164,6 +164,19 @@ The editor receives a validated transaction plan and executes only that plan.
 
 ### Slice 2 — Replace split planner decisions with knowledge transaction planning
 
+**Status:** partially completed 2026-05-28; planner runtime now emits and consumes `knowledge_transactions` as the canonical planner output, while full cross-store transaction planning remains for the next slice of work.
+
+**Validation completed for planner-runtime contract:**
+- RED/GREEN tests added for canonical planner output and quality-report consumption: `tests/test_skill_planner.py::test_planner_emits_knowledge_transactions_without_legacy_decisions_key`, `tests/test_skill_planner.py::test_planner_quality_report_reads_knowledge_transactions_as_canonical_contract`, `tests/test_skill_planner.py::test_render_planner_messages_requests_knowledge_transactions_contract`, `tests/test_runner_steps.py::test_skill_step_consumes_planner_knowledge_transactions_without_legacy_decisions`.
+- Related focused tests: `tests/test_skill_planner.py tests/test_runner_steps.py tests/test_knowledge_maintenance_planner.py tests/test_markdown_artifacts.py tests/test_cli_surface.py` — passed.
+- Full suite: `835 passed, 2 skipped`.
+- Static checks: `python -m py_compile __init__.py hermes_self_improvement/*.py` and `git diff --check` passed.
+- Dry-run smoke artifact: `~/.hermes/self-improvement/runs/run-20260528T040851Z.json`.
+  - `planner_has_knowledge_transactions: true`
+  - `planner_has_legacy_decisions: false`
+  - `planner_status: completed`
+  - `transaction_count: 45`
+
 **Objective:** Delete the split skill/memory planning contract as the canonical path and make one knowledge transaction plan the only planner output consumed by execution.
 
 **Files:**

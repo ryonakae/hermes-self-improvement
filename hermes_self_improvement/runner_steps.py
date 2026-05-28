@@ -1123,7 +1123,7 @@ def run_skill_improvement_step(
             "decisions": [],
         }
 
-    for planner_decision in planner.get("decisions") or []:
+    for planner_decision in planner.get("knowledge_transactions") or []:
         if not isinstance(planner_decision, dict):
             continue
         skill_name = str(planner_decision.get("skill") or planner_decision.get("proposed_skill_name") or "")

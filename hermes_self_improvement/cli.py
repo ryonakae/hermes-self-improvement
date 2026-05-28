@@ -1964,7 +1964,8 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     raw_planner_quality = skill_step.get("planner_quality")
     planner_quality: dict[str, Any] = raw_planner_quality if isinstance(raw_planner_quality, dict) else {}
     editor_prompt_chars = planner_quality.get("editor_prompt_chars") if isinstance(planner_quality.get("editor_prompt_chars"), dict) else {}
-    planner_decisions: list[dict[str, Any]] = [item for item in (planner.get("decisions") if isinstance(planner.get("decisions"), list) else []) if isinstance(item, dict)]
+    raw_planner_transactions = planner.get("knowledge_transactions")
+    planner_decisions: list[dict[str, Any]] = [item for item in raw_planner_transactions if isinstance(item, dict)] if isinstance(raw_planner_transactions, list) else []
     skill_decisions: list[dict[str, Any]] = [item for item in (skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else []) if isinstance(item, dict)]
     selected_preview = [item for item in planner_decisions if isinstance(item, dict) and item.get("decision") == "mutate_skill"][:5]
     memory_step = step_decisions.get("memory") if isinstance(step_decisions.get("memory"), dict) else {}

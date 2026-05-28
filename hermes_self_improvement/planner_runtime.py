@@ -571,7 +571,7 @@ def _fallback_plan_from_digest(digest: dict[str, Any]) -> dict[str, Any]:
 
 
 def _planner_result(
-    decisions: list[dict[str, Any]],
+    knowledge_transactions: list[dict[str, Any]],
     *,
     digest: dict[str, Any],
     status: str,
@@ -587,8 +587,8 @@ def _planner_result(
         "status": status,
         "model_role": model_role,
         "planner_source": planner_source,
-        "summary": _summary_counts(decisions, candidate_count),
-        "decisions": decisions,
+        "summary": _summary_counts(knowledge_transactions, candidate_count),
+        "knowledge_transactions": knowledge_transactions,
     }
     if prompt_source:
         result["prompt_source"] = {"planner": prompt_source}
@@ -784,9 +784,9 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     if not isinstance(payload, dict):
         raise ValueError("planner_response_not_object")
     prompt_source = payload.get("_prompt_source") if isinstance(payload.get("_prompt_source"), dict) else None
-    raw_decisions = payload.get("decisions")
-    if not isinstance(raw_decisions, list):
-        raise ValueError("planner_response_missing_decisions")
+    raw_transactions = payload.get("knowledge_transactions")
+    if not isinstance(raw_transactions, list):
+        raise ValueError("planner_response_missing_knowledge_transactions")
     candidate_rows = [item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)]
     candidate_names = {str(item.get("name") or "") for item in candidate_rows if item.get("name")}
     candidate_by_name = {str(item.get("name") or ""): item for item in candidate_rows if item.get("name")}
@@ -809,7 +809,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     }
     decisions: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for raw in raw_decisions:
+    for raw in raw_transactions:
         if not isinstance(raw, dict):
             continue
         if str(raw.get("decision") or "") == "create_skill":
@@ -1024,7 +1024,7 @@ def build_planner_runtime_quality_report(
     runner_decisions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     candidates = [item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)]
-    planner_decisions = [item for item in planner.get("decisions") or [] if isinstance(item, dict)]
+    planner_decisions = [item for item in planner.get("knowledge_transactions") or [] if isinstance(item, dict)]
     selected = [item for item in planner_decisions if item.get("decision") == "mutate_skill"]
     skipped = [item for item in planner_decisions if item.get("decision") == "skip"]
     runner_decisions = runner_decisions or []

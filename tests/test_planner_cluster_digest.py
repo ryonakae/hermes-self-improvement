@@ -286,7 +286,7 @@ class TestPlannerRuntimeDigestClusterEvidence:
         )
         report = planner_runtime.build_planner_runtime_quality_report(
             digest=digest,
-            planner={"decisions": [{"decision": "mutate_skill", "skill": "timeout-workflow", "evidence_ids": ["c_test000000000001"]}]},
+            planner={"knowledge_transactions": [{"decision": "mutate_skill", "skill": "timeout-workflow", "evidence_ids": ["c_test000000000001"]}]},
             runner_decisions=[],
         )
 
@@ -314,7 +314,7 @@ class TestSkillImprovementStepClusterWiring:
         try:
             result = runner_steps.run_skill_improvement_step(
                 evidence_pack=evidence_pack,
-                config={"_planner_runtime_func": lambda **kw: {"status": "skip", "decisions": []}},
+                config={"_planner_runtime_func": lambda **kw: {"status": "skip", "knowledge_transactions": []}},
                 mutate=False,
                 cluster_summary=_make_cluster_summary(),
                 evidence_index=_make_evidence_index(_make_cluster_summary()),

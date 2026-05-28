@@ -598,7 +598,7 @@ def test_improve_summary_shows_knowledge_maintenance_decisions():
     text = cli._render_improve_summary({
         "dry_run": True,
         "summary": {},
-        "step_decisions": {"skill": {"planner": {"decisions": [
+        "step_decisions": {"skill": {"planner": {"knowledge_transactions": [
             {"skill": "safe-patch-usage", "decision": "mutate_skill", "maintenance_action": "patch", "candidate_source": "skill_inventory_candidate"},
             {"skill": "old-skill", "decision": "mutate_skill", "maintenance_action": "merge", "target_skill": "new-skill", "candidate_source": "skill_inventory_candidate"},
             {"skill": "obsolete-skill", "decision": "archive_skill", "candidate_source": "skill_inventory_candidate"},
@@ -622,7 +622,7 @@ def test_improve_summary_shows_unresolved_maintenance_candidates_from_digest():
     text = cli._render_improve_summary({
         "dry_run": True,
         "summary": {},
-        "step_decisions": {"skill": {"planner": {"decisions": []}, "planner_digest": {"knowledge_maintenance": {"maintenance_candidates": [
+        "step_decisions": {"skill": {"planner": {"knowledge_transactions": []}, "planner_digest": {"knowledge_maintenance": {"maintenance_candidates": [
             {"maintenance_affordance": {"workflow_boundary": "patch tool workflow"}, "source": "inventory"},
             {"maintenance_affordance": {"workflow_boundary": "timeout workflow"}, "source": "knowledge_coverage"},
         ]}}}},
@@ -641,7 +641,7 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
         "summary": {"skill_changes": 2, "memory_changes": 1, "scorer_evaluator_changed": True},
         "step_decisions": {
             "skill": {
-                "planner": {"decisions": [
+                "planner": {"knowledge_transactions": [
                     {"decision": "skip", "noop_outcome": "covered_by_existing_skill", "covered_by_reference_skill": "safe-patch-usage"},
                     {"decision": "skip", "noop_outcome": "duplicate_prevented", "covered_by_existing_skill": "timeout-workflow"},
                 ]},
@@ -683,7 +683,7 @@ def test_improve_summary_shows_overlay_generation_performance_when_tracked():
         "dry_run": False,
         "summary": {"skill_changes": 1, "memory_changes": 0},
         "step_decisions": {
-            "skill": {"planner": {"decisions": []}, "decisions": [
+            "skill": {"planner": {"knowledge_transactions": []}, "decisions": [
                 {"decision": "accepted", "changed": True, "result": {"changed_skills": ["alpha"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True}}},
             ]},
             "memory": {"decisions": []},
@@ -777,7 +777,7 @@ def test_improve_summary_renders_unresolved_section_with_next_actions():
         "summary": {"skill_changes": 0, "memory_changes": 0},
         "step_decisions": {
             "skill": {
-                "planner": {"decisions": []},
+                "planner": {"knowledge_transactions": []},
                 "decisions": [
                     {"decision": "skip", "reason": "insufficient_attached_evidence", "skill": "alpha", "next_action": "attach concrete evidence or keep as unresolved maintenance candidate"},
                     {"decision": "archive_skill_preview", "reason": "archive_blocked_no_official_tool", "skill": "beta", "skip_detail": "no_official_archive_tool_available", "next_action": "defer_archive_until_official_skill_archive_tool_is_available"},
@@ -808,7 +808,7 @@ def test_improve_summary_reports_quality_patch_candidates_and_quality_patched():
         "summary": {"skill_changes": 1, "memory_changes": 0, "scorer_evaluator_changed": False},
         "step_decisions": {
             "skill": {
-                "planner": {"decisions": [
+                "planner": {"knowledge_transactions": [
                     {"skill": "needs-patch-skill", "decision": "mutate_skill", "maintenance_action": "patch", "evidence_ids": ["ev1"]},
                     {"skill": "another-needs-patch", "decision": "mutate_skill", "maintenance_action": "patch", "evidence_ids": ["ev2"]},
                 ]},
@@ -845,7 +845,7 @@ def test_improve_summary_reports_write_only_unverified_memory_as_validation_unkn
         "dry_run": False,
         "summary": {"skill_changes": 0, "memory_changes": 2, "scorer_evaluator_changed": False},
         "step_decisions": {
-            "skill": {"planner": {"decisions": []}, "decisions": []},
+            "skill": {"planner": {"knowledge_transactions": []}, "decisions": []},
             "memory": {"decisions": [
                 {"decision": "accepted", "changed": True, "result": {"success": True, "post_validation": {"status": "passed", "mode": "built_in_hash"}}},
                 {"decision": "accepted", "changed": True, "result": {"success": True, "post_validation": {"status": "write_only_unverified", "mode": "provider_write_only", "provider": "supermemory", "accounting_status": "applied_unverified"}}},
@@ -883,7 +883,7 @@ def test_improve_summary_skill_quality_uses_trigger_steps_and_memory_shape():
     text = cli._render_improve_summary({
         "dry_run": False,
         "summary": {"skill_changes": 2},
-        "step_decisions": {"skill": {"planner": {"decisions": []}, "decisions": [
+        "step_decisions": {"skill": {"planner": {"knowledge_transactions": []}, "decisions": [
             {"decision": "accepted", "changed": True, "result": {"created_skills": ["workflow-thin"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": False}}},
             {"decision": "accepted", "changed": True, "result": {"changed_skills": ["too-short"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": True, "has_concrete_steps": True, "content_too_short": True}}},
             {"decision": "accepted", "changed": True, "result": {"changed_skills": ["memory-shaped"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": False, "has_concrete_steps": False, "memory_shaped": True}}},
@@ -905,7 +905,7 @@ def test_improve_summary_skill_quality_marks_missing_attached_evidence():
     text = cli._render_improve_summary({
         "dry_run": False,
         "summary": {"skill_changes": 1},
-        "step_decisions": {"skill": {"planner": {"decisions": []}, "decisions": [
+        "step_decisions": {"skill": {"planner": {"knowledge_transactions": []}, "decisions": [
             {"decision": "accepted", "changed": True, "attached_evidence_count": 0, "result": {"created_skills": ["thin-evidence-skill"], "post_validation": {"status": "passed", "has_frontmatter": True, "has_pitfalls": True, "has_verification": True, "has_trigger_conditions": True, "has_concrete_steps": True}}},
         ]}},
         "evidence_pack": {"summary": {}},

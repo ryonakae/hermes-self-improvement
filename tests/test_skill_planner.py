@@ -64,6 +64,16 @@ def test_render_planner_messages_uses_markdown_context_not_digest_dump():
     assert "Allowed planner decision vocabulary" in user_content
 
 
+def test_render_planner_messages_requests_knowledge_transactions_contract():
+    digest = build_planner_digest(pack())
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert "knowledge_transactions" in user_content
+    assert "decisions array" not in user_content
+
+
 def test_skill_planner_digest_attaches_inventory_candidate_to_all_group_targets():
     pack_data = {
         "summary": {"event_count": 0, "evidence_count": 1, "ignored_count": 0},
@@ -94,6 +104,41 @@ def test_skill_planner_digest_attaches_inventory_candidate_to_all_group_targets(
     assert rows["alpha-main"]["representative_evidence"][0]["inventory"]["group_kind"] == "similar_skills"
 
 
+def test_planner_emits_knowledge_transactions_without_legacy_decisions_key():
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [
+                {
+                    "skill": "demo-skill",
+                    "decision": "mutate_skill",
+                    "evidence_ids": ["ev1"],
+                    "risk": "low",
+                }
+            ]
+        }
+
+    result = run_planner(build_planner_digest(pack()), config={"_planner_func": fake_planner})
+
+    assert "decisions" not in result
+    assert result["knowledge_transactions"][0]["decision"] == "mutate_skill"
+    assert result["knowledge_transactions"][0]["evidence_ids"] == ["ev1"]
+
+
+def test_planner_quality_report_reads_knowledge_transactions_as_canonical_contract():
+    digest = build_planner_digest(pack())
+    planner_result = {
+        "knowledge_transactions": [
+            {"skill": "demo-skill", "decision": "mutate_skill", "evidence_ids": ["ev1"]},
+            {"skill": "unused-skill", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []},
+        ]
+    }
+
+    quality = build_planner_quality_report(digest=digest, planner=planner_result)
+
+    assert quality["mutate_skill_count"] == 1
+    assert quality["selected_with_evidence"] == 1
+
+
 def test_planner_allows_mutate_skill_with_inventory_evidence():
     pack_data = {
         "summary": {"event_count": 0, "evidence_count": 1, "ignored_count": 0},
@@ -110,12 +155,12 @@ def test_planner_allows_mutate_skill_with_inventory_evidence():
     }
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "alpha-main", "decision": "mutate_skill", "evidence_ids": ["inv-1"], "risk": "low"}]}
+        return {"knowledge_transactions": [{"skill": "alpha-main", "decision": "mutate_skill", "evidence_ids": ["inv-1"], "risk": "low"}]}
 
     result = run_planner(build_planner_digest(pack_data), config={"_planner_func": fake_planner})
 
-    assert result["decisions"][0]["decision"] == "mutate_skill"
-    assert result["decisions"][0]["evidence_ids"] == ["inv-1"]
+    assert result["knowledge_transactions"][0]["decision"] == "mutate_skill"
+    assert result["knowledge_transactions"][0]["evidence_ids"] == ["inv-1"]
 
 
 def test_skill_planner_digest_filters_immutable_candidates_before_llm_input():
@@ -145,7 +190,7 @@ def test_planner_allows_create_skill_for_missing_reusable_workflow():
     def fake_planner(*, digest, config):
         assert "ev2" in digest["available_skill_evidence_ids"]
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {
                     "decision": "create_skill",
                     "proposed_skill_name": "patch-tool-workflow",
@@ -157,7 +202,7 @@ def test_planner_allows_create_skill_for_missing_reusable_workflow():
         }
 
     result = run_planner(build_planner_digest(pack()), config={"_planner_func": fake_planner})
-    decision = result["decisions"][0]
+    decision = result["knowledge_transactions"][0]
 
     assert decision["decision"] == "create_skill"
     assert decision["proposed_skill_name"] == "patch-tool-workflow"
@@ -167,7 +212,7 @@ def test_planner_allows_create_skill_for_missing_reusable_workflow():
 def test_planner_rejects_create_skill_when_existing_hermes_skill_matches_name():
     def fake_planner(*, digest, config):
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {
                     "decision": "create_skill",
                     "proposed_skill_name": "demo-skill",
@@ -178,7 +223,7 @@ def test_planner_rejects_create_skill_when_existing_hermes_skill_matches_name():
         }
 
     result = run_planner(build_planner_digest(pack()), config={"_planner_func": fake_planner})
-    decision = result["decisions"][0]
+    decision = result["knowledge_transactions"][0]
 
     assert decision["decision"] == "skip"
     assert decision["reason"] == "create_skill_duplicate_existing_skill"
@@ -200,7 +245,7 @@ def test_planner_rejects_create_skill_when_existing_local_unprotected_skill_cove
 
     def fake_planner(*, digest, config):
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {
                     "decision": "create_skill",
                     "proposed_skill_name": "hermes-sandbox-permission-workflow",
@@ -211,7 +256,7 @@ def test_planner_rejects_create_skill_when_existing_local_unprotected_skill_cove
         }
 
     result = run_planner(build_planner_digest(pack_data), config={"_planner_func": fake_planner})
-    decision = result["decisions"][0]
+    decision = result["knowledge_transactions"][0]
 
     assert decision["decision"] == "skip"
     assert decision["reason"] == "create_skill_duplicates_existing_local_skill"
@@ -225,7 +270,7 @@ def test_run_planner_uses_injected_planner_and_normalizes_decisions():
     def fake_planner(*, digest, config):
         calls.append(digest)
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {
                     "skill": "demo-skill",
                     "decision": "mutate_skill",
@@ -245,9 +290,9 @@ def test_run_planner_uses_injected_planner_and_normalizes_decisions():
     assert calls
     assert result["status"] == "completed"
     assert result["summary"]["mutate_skill_count"] == 1
-    assert result["decisions"][0]["skill"] == "demo-skill"
-    assert result["decisions"][0]["decision"] == "mutate_skill"
-    assert all(item["skill"] != "not-a-candidate" for item in result["decisions"])
+    assert result["knowledge_transactions"][0]["skill"] == "demo-skill"
+    assert result["knowledge_transactions"][0]["decision"] == "mutate_skill"
+    assert all(item["skill"] != "not-a-candidate" for item in result["knowledge_transactions"])
 
 
 def test_run_planner_fails_closed_on_invalid_planner_output():
@@ -257,7 +302,7 @@ def test_run_planner_fails_closed_on_invalid_planner_output():
     result = run_planner(build_planner_digest(pack()), config={"_planner_func": bad_planner})
 
     assert result["status"] == "planner_error"
-    assert result["decisions"] == []
+    assert result["knowledge_transactions"] == []
     assert result["summary"]["mutate_skill_count"] == 0
 
 
@@ -268,7 +313,7 @@ def test_llm_planner_uses_read_only_editor(monkeypatch):
         calls["role"] = role
         calls["system_message"] = system_message
         calls["user_message"] = user_message
-        return {"final_response": '{"decisions": []}'}
+        return {"final_response": '{"knowledge_transactions": []}'}
 
     monkeypatch.setattr(planner, "run_constrained_role_agent", fake_run)
 
@@ -299,7 +344,7 @@ def test_llm_planner_uses_active_prompt_overlay(monkeypatch, tmp_path):
 
     def fake_run_constrained(*, role, system_message, user_message, config, **kwargs):
         seen["system_message"] = system_message
-        return {"final_response": '{"decisions": []}'}
+        return {"final_response": '{"knowledge_transactions": []}'}
 
     monkeypatch.setattr(planner, "run_constrained_role_agent", fake_run_constrained)
 
@@ -326,13 +371,13 @@ def test_llm_planner_accepts_archive_decision_from_fake_model(monkeypatch):
 
     def fake_run_constrained(*, role, system_message, user_message, config, **kwargs):
         return {
-            "final_response": '{"decisions":[{"skill":"unused-skill","decision":"archive_skill","evidence_ids":["ev_archive"],"archive_reason":"obsolete_marker"}]}'
+            "final_response": '{"knowledge_transactions":[{"skill":"unused-skill","decision":"archive_skill","evidence_ids":["ev_archive"],"archive_reason":"obsolete_marker"}]}'
         }
 
     monkeypatch.setattr(planner, "run_constrained_role_agent", fake_run_constrained)
 
     result = run_planner(build_planner_digest(pack_data), config=cfg)
-    decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
+    decision = {item["skill"]: item for item in result["knowledge_transactions"]}["unused-skill"]
 
     assert result["planner_source"] == "llm"
     assert result["summary"]["archive_skill_count"] == 1
@@ -344,7 +389,7 @@ def test_llm_planner_accepts_archive_decision_from_fake_model(monkeypatch):
 def test_run_planner_deterministic_fallback_skips_no_evidence_candidates_without_model_config():
     result = run_planner(build_planner_digest(pack()), config={})
 
-    by_skill = {item["skill"]: item for item in result["decisions"]}
+    by_skill = {item["skill"]: item for item in result["knowledge_transactions"]}
     assert by_skill["demo-skill"]["decision"] == "mutate_skill"
     assert by_skill["unused-skill"]["decision"] == "skip"
     assert by_skill["unused-skill"]["reason"] == "no_attached_evidence"
@@ -366,7 +411,7 @@ def test_run_planner_deterministic_fallback_skips_weak_only_candidates():
     }
 
     result = run_planner(build_planner_digest(pack_data), config={})
-    decision = result["decisions"][0]
+    decision = result["knowledge_transactions"][0]
 
     assert decision["decision"] == "skip"
     assert decision["reason"] == "weak_only_evidence"
@@ -390,7 +435,7 @@ def test_skill_planner_falls_back_when_llm_planner_fails(monkeypatch):
 def test_skill_planner_treats_unsupported_review_decision_as_skip():
     def fake_planner(*, digest, config):
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {
                     "skill": "demo-skill",
                     "decision": "manual_review",
@@ -402,7 +447,7 @@ def test_skill_planner_treats_unsupported_review_decision_as_skip():
         }
 
     result = run_planner(build_planner_digest(pack()), config={"_planner_func": fake_planner})
-    decision = result["decisions"][0]
+    decision = result["knowledge_transactions"][0]
 
     assert decision["decision"] == "skip"
     assert decision["original_decision"] == "manual_review"
@@ -432,7 +477,7 @@ def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence
         assert by_name["unused-skill"]["successor_skill"] == "demo-skill"
         assert by_name["unused-skill"]["successor_validation"] == "valid_active_skill"
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {
                     "skill": "unused-skill",
                     "decision": "archive_skill",
@@ -445,7 +490,7 @@ def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence
         }
 
     result = run_planner(build_planner_digest(pack_data), config={"_planner_func": fake_planner})
-    decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
+    decision = {item["skill"]: item for item in result["knowledge_transactions"]}["unused-skill"]
 
     assert decision["decision"] == "archive_skill"
     assert decision["archive_reason"] == "obsolete_marker"
@@ -456,10 +501,10 @@ def test_skill_planner_accepts_archive_decision_with_attached_lifecycle_evidence
 
 def test_skill_planner_blocks_archive_without_attached_lifecycle_evidence():
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "demo-skill", "decision": "archive_skill", "evidence_ids": ["ev1"]}]}
+        return {"knowledge_transactions": [{"skill": "demo-skill", "decision": "archive_skill", "evidence_ids": ["ev1"]}]}
 
     result = run_planner(build_planner_digest(pack()), config={"_planner_func": fake_planner})
-    decision = {item["skill"]: item for item in result["decisions"]}["demo-skill"]
+    decision = {item["skill"]: item for item in result["knowledge_transactions"]}["demo-skill"]
 
     assert decision["decision"] == "skip"
     assert decision["reason"] == "archive_without_lifecycle_evidence"
@@ -481,7 +526,7 @@ def test_skill_planner_blocks_archive_on_hard_invariants_only():
 
     def fake_planner(*, digest, config):
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {"skill": "pinned-skill", "decision": "archive_skill", "evidence_ids": ["ev_pinned"], "archive_reason": "obsolete_marker"},
                 {"skill": "external-skill", "decision": "archive_skill", "evidence_ids": ["ev_external"], "archive_reason": "obsolete_marker"},
                 {"skill": "referenced-skill", "decision": "archive_skill", "evidence_ids": ["ev_ref"], "archive_reason": "obsolete_marker"},
@@ -489,7 +534,7 @@ def test_skill_planner_blocks_archive_on_hard_invariants_only():
         }
 
     result = run_planner(build_planner_digest(pack_data), config={"_planner_func": fake_planner})
-    by_skill = {item["skill"]: item for item in result["decisions"]}
+    by_skill = {item["skill"]: item for item in result["knowledge_transactions"]}
 
     assert "pinned-skill" not in by_skill
     assert "external-skill" not in by_skill
@@ -518,10 +563,10 @@ def test_skill_planner_blocks_archive_with_invalid_successor():
     def fake_planner(*, digest, config):
         by_name = {item["name"]: item for item in digest["skill_candidates"]}
         assert by_name["unused-skill"]["successor_validation"] == "invalid_successor"
-        return {"decisions": [{"skill": "unused-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker", "successor": "missing-skill"}]}
+        return {"knowledge_transactions": [{"skill": "unused-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker", "successor": "missing-skill"}]}
 
     result = run_planner(build_planner_digest(pack_data), config={"_planner_func": fake_planner})
-    decision = {item["skill"]: item for item in result["decisions"]}["unused-skill"]
+    decision = {item["skill"]: item for item in result["knowledge_transactions"]}["unused-skill"]
 
     assert decision["decision"] == "skip"
     assert decision["reason"] == "archive_blocked_by_invalid_successor"
@@ -530,7 +575,7 @@ def test_skill_planner_blocks_archive_with_invalid_successor():
 def test_planner_normalization_strips_action_fields_from_skips_and_requires_evidence_for_editor():
     def fake_planner(*, digest, config):
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {
                     "skill": "demo-skill",
                     "decision": "mutate_skill",
@@ -550,7 +595,7 @@ def test_planner_normalization_strips_action_fields_from_skips_and_requires_evid
         }
 
     result = run_planner(build_planner_digest(pack()), config={"_planner_func": fake_planner})
-    by_skill = {item["skill"]: item for item in result["decisions"]}
+    by_skill = {item["skill"]: item for item in result["knowledge_transactions"]}
 
     assert by_skill["demo-skill"]["decision"] == "skip"
     assert by_skill["demo-skill"]["reason"] == "mutate_skill_without_attached_evidence"
@@ -565,7 +610,7 @@ def test_planner_normalization_strips_action_fields_from_skips_and_requires_evid
 def test_planner_quality_report_counts_evidence_and_action_like_skips():
     digest = build_planner_digest(pack())
     planner = {
-        "decisions": [
+        "knowledge_transactions": [
             {"skill": "demo-skill", "decision": "mutate_skill", "evidence_ids": ["ev1"]},
             {"skill": "unused-skill", "decision": "skip", "evidence_ids": []},
             {"skill": "memory-ish", "decision": "mutate_memory", "evidence_ids": []},
@@ -596,7 +641,7 @@ def test_planner_quality_report_classifies_skip_readiness():
         ]
     }
     planner = {
-        "decisions": [
+        "knowledge_transactions": [
             {"skill": "demo-skill", "decision": "skip", "reason": "Exact duplicate coverage_fit already exists.", "evidence_ids": ["ev1"]},
             {"skill": "unused-skill", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []},
             {"skill": "missing-proof", "decision": "skip", "reason": "mutate_skill_without_attached_evidence", "evidence_ids": []},
@@ -699,7 +744,7 @@ def test_planner_digest_marks_explicit_path_and_cluster_strengths():
 def test_planner_quality_report_exposes_matched_but_not_selected_reasons():
     digest = build_planner_digest(pack())
     planner = {
-        "decisions": [
+        "knowledge_transactions": [
             {"skill": "demo-skill", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": ["ev1"]},
             {"skill": "unused-skill", "decision": "skip", "reason": "covered_by_existing_skill", "evidence_ids": []},
         ]
@@ -730,7 +775,7 @@ def test_planner_quality_report_classifies_weak_matched_noop_separately():
     digest = build_planner_digest(pack_data)
     report = build_planner_quality_report(
         digest=digest,
-        planner={"decisions": [{"skill": "hermes-development-maintenance", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": ["ev_patch"]}]},
+        planner={"knowledge_transactions": [{"skill": "hermes-development-maintenance", "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": ["ev_patch"]}]},
         runner_decisions=[],
     )
 
@@ -756,7 +801,7 @@ def test_planner_quality_report_counts_hint_attachment_match_kinds():
     digest = build_planner_digest(pack_data)
     report = build_planner_quality_report(
         digest=digest,
-        planner={"decisions": [{"skill": "hermes-development-maintenance", "decision": "mutate_skill", "evidence_ids": ["ev_patch"]}]},
+        planner={"knowledge_transactions": [{"skill": "hermes-development-maintenance", "decision": "mutate_skill", "evidence_ids": ["ev_patch"]}]},
         runner_decisions=[],
     )
 
@@ -799,7 +844,7 @@ def test_planner_digest_marks_alias_reference_coverage_for_patch_tool_workflow()
 
 def test_planner_normalizes_create_skill_duplicate_with_program_owned_rationale():
     def fake_planner(*, digest, config):
-        return {"decisions": [{
+        return {"knowledge_transactions": [{
             "decision": "create_skill",
             "proposed_skill_name": "demo-skill",
             "evidence_ids": ["ev2"],
@@ -807,7 +852,7 @@ def test_planner_normalizes_create_skill_duplicate_with_program_owned_rationale(
         }]}
 
     result = run_planner(build_planner_digest(pack()), config={"_planner_func": fake_planner})
-    decision = result["decisions"][0]
+    decision = result["knowledge_transactions"][0]
 
     assert decision["decision"] == "skip"
     assert decision["reason"] == "create_skill_duplicate_existing_skill"
@@ -828,7 +873,7 @@ def test_planner_normalizes_create_skill_alias_covered_by_reference_skill():
     })
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{
+        return {"knowledge_transactions": [{
             "decision": "create_skill",
             "proposed_skill_name": "patch-tool-workflow",
             "evidence_ids": ["ev2"],
@@ -836,7 +881,7 @@ def test_planner_normalizes_create_skill_alias_covered_by_reference_skill():
         }]}
 
     result = run_planner(build_planner_digest(pack_data), config={"_planner_func": fake_planner})
-    decision = result["decisions"][0]
+    decision = result["knowledge_transactions"][0]
 
     assert decision["decision"] == "skip"
     assert decision["reason"] == "create_skill_duplicates_reference_skill"

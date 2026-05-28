@@ -204,12 +204,36 @@ def test_skill_step_dry_run_records_editor_preview_without_mutating(tmp_path):
     assert result["decisions"][0]["task"]["targets"]["primary_skill"] == "demo-skill"
 
 
+def test_skill_step_consumes_planner_knowledge_transactions_without_legacy_decisions(tmp_path):
+    pack = evidence_pack_for(None, candidates=[])
+
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [
+                {
+                    "decision": "create_skill",
+                    "proposed_skill_name": "patch-tool-workflow",
+                    "evidence_ids": ["ev1"],
+                    "reason": "missing reusable workflow skill",
+                    "risk": "low",
+                }
+            ]
+        }
+
+    result = run_skill_improvement_step(evidence_pack=pack, config={"_planner_func": fake_planner, "_skills_root": str(tmp_path / "skills")}, mutate=False)
+
+    assert "decisions" not in result["planner"]
+    assert result["planner"]["knowledge_transactions"][0]["decision"] == "create_skill"
+    assert result["decisions"][0]["decision"] == "create_skill_preview"
+    assert result["decisions"][0]["skill"] == "patch-tool-workflow"
+
+
 def test_skill_step_dry_run_records_create_skill_preview_without_existing_candidates(tmp_path):
     pack = evidence_pack_for(None, candidates=[])
 
     def fake_planner(*, digest, config):
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {
                     "decision": "create_skill",
                     "proposed_skill_name": "patch-tool-workflow",
@@ -239,7 +263,7 @@ def test_skill_step_skips_create_skill_when_local_skill_already_exists(tmp_path)
     (skills_root / "patch-tool-workflow" / "SKILL.md").write_text("---\nname: patch-tool-workflow\n---\n", encoding="utf-8")
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low", "rationale": "no existing fit; new skill justified"}]}
+        return {"knowledge_transactions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low", "rationale": "no existing fit; new skill justified"}]}
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
@@ -264,7 +288,7 @@ def test_skill_step_skips_create_skill_when_existing_alias_covers_workflow(tmp_p
     (skills_root / "safe-patch-usage" / "SKILL.md").write_text("---\nname: safe-patch-usage\n---\n", encoding="utf-8")
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low", "rationale": "no existing fit; new skill justified"}]}
+        return {"knowledge_transactions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low", "rationale": "no existing fit; new skill justified"}]}
 
     result = run_skill_improvement_step(
         evidence_pack=pack,
@@ -286,7 +310,7 @@ def test_skill_step_executes_create_skill_through_editor_when_mutating():
     pack = evidence_pack_for(None, candidates=[])
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low"}]}
+        return {"knowledge_transactions": [{"decision": "create_skill", "proposed_skill_name": "patch-tool-workflow", "evidence_ids": ["ev1"], "risk": "low"}]}
 
     class FakeBackend:
         def run(self, prompt, task, config):
@@ -316,7 +340,7 @@ def test_skill_step_executes_create_skill_through_editor_when_mutating():
 
 def test_skill_step_dry_run_records_archive_preview_without_mutating():
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
+        return {"knowledge_transactions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
 
     result = run_skill_improvement_step(
         evidence_pack=archive_evidence_pack(),
@@ -336,7 +360,7 @@ def test_skill_step_archive_preview_includes_reference_rewrite_plan(tmp_path):
     jobs_path.write_text(json.dumps({"jobs": [{"name": "active", "enabled": True, "skills": ["old-skill"]}]}), encoding="utf-8")
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "duplicate", "successor": "new-skill"}]}
+        return {"knowledge_transactions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "duplicate", "successor": "new-skill"}]}
 
     pack = archive_evidence_pack()
     pack["evidence"][0]["successor"] = "new-skill"
@@ -368,7 +392,7 @@ def test_skill_step_mutating_archive_defers_when_reference_rewrite_has_unresolve
     calls = []
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "duplicate", "successor": "new-skill"}]}
+        return {"knowledge_transactions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "duplicate", "successor": "new-skill"}]}
 
     def fake_archive(name):
         calls.append(name)
@@ -396,7 +420,7 @@ def test_skill_step_mutating_archive_without_successor_defers_when_active_refere
     calls = []
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
+        return {"knowledge_transactions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
 
     def fake_archive(name):
         calls.append(name)
@@ -417,7 +441,7 @@ def test_skill_step_mutating_archive_without_successor_defers_when_active_refere
 
 def test_skill_step_reports_archive_tool_failure_when_official_archive_tool_fails(tmp_path):
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
+        return {"knowledge_transactions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
 
     def failing_archive(name):
         raise RuntimeError("archive unavailable")
@@ -440,7 +464,7 @@ def test_skill_step_executes_archive_with_curator_primitive_when_mutating(tmp_pa
     calls = []
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
+        return {"knowledge_transactions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "obsolete_marker"}]}
 
     def fake_archive(name):
         calls.append(name)
@@ -467,7 +491,7 @@ def test_skill_step_rewrites_references_before_archive_when_mutating(tmp_path):
     calls = []
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "duplicate", "successor": "new-skill"}]}
+        return {"knowledge_transactions": [{"skill": "old-skill", "decision": "archive_skill", "evidence_ids": ["ev_archive"], "archive_reason": "duplicate", "successor": "new-skill"}]}
 
     def fake_archive(name):
         jobs = json.loads(jobs_path.read_text(encoding="utf-8"))
@@ -500,7 +524,7 @@ def test_skill_step_archives_merge_archive_candidates_after_reference_rewrite(tm
 
     def fake_planner(*, digest, config):
         return {
-            "decisions": [
+            "knowledge_transactions": [
                 {
                     "skill": "old-skill",
                     "decision": "mutate_skill",
@@ -574,7 +598,7 @@ def test_skill_step_converts_planner_defer_without_evidence_to_skip():
     pack = {"evidence": [], "views": {"skill": [], "memory": [], "evaluator": []}, "skill_candidates": [{"name": "thin-skill", "state": "active", "source": "curator", "usage": {}}]}
 
     def fake_planner(*, digest, config):
-        return {"decisions": [{"skill": "thin-skill", "decision": "defer", "reason": "target_uncertain_and_insufficient_evidence", "evidence_ids": []}]}
+        return {"knowledge_transactions": [{"skill": "thin-skill", "decision": "defer", "reason": "target_uncertain_and_insufficient_evidence", "evidence_ids": []}]}
 
     result = run_skill_improvement_step(evidence_pack=pack, config={"_planner_func": fake_planner}, mutate=False)
 

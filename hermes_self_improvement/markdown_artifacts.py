@@ -143,7 +143,7 @@ def render_candidate_markdown(candidate: dict[str, Any], evidence_by_id: dict[st
 
 
 def render_planner_markdown(planner: dict[str, Any], *, max_decisions: int = 30) -> str:
-    decisions = planner.get("decisions") if isinstance(planner.get("decisions"), list) else []
+    decisions = planner.get("knowledge_transactions") if isinstance(planner.get("knowledge_transactions"), list) else []
     lines = ["# Planner notes", "", _artifact_caveat(), "", "## Decisions"]
     for item in decisions[:max_decisions]:
         if not isinstance(item, dict):

@@ -249,13 +249,13 @@ def test_planner_accepts_canonical_maintenance_decisions():
     digest = build_planner_digest(evidence_pack)
 
     def planner(*, digest, config):
-        return {"decisions": [
+        return {"knowledge_transactions": [
             {"skill": "local-patch-workflow", "decision": "mutate_skill", "maintenance_action": "patch", "evidence_ids": ["ev_patch"], "risk": "low", "editor_instructions": "Add reusable patch guidance."},
             {"skill": "old-patch-workflow", "decision": "mutate_skill", "maintenance_action": "merge", "target_skill": "local-patch-workflow", "evidence_ids": ["ev_merge"], "risk": "medium", "editor_instructions": "Merge useful guidance into local-patch-workflow."},
         ]}
 
     result = run_planner(digest, config={"_planner_func": planner})
-    decisions = {row["skill"]: row for row in result["decisions"]}
+    decisions = {row["skill"]: row for row in result["knowledge_transactions"]}
 
     assert decisions["local-patch-workflow"]["decision"] == "mutate_skill"
     assert decisions["local-patch-workflow"]["maintenance_action"] == "patch"
@@ -284,11 +284,11 @@ def test_planner_rejects_create_skill_that_duplicates_reference_skill():
     digest = build_planner_digest(evidence_pack)
 
     def planner(*, digest, config):
-        return {"decisions": [{"decision": "create_skill", "proposed_skill_name": "safe-patch-usage", "evidence_ids": [candidate["id"]]}]}
+        return {"knowledge_transactions": [{"decision": "create_skill", "proposed_skill_name": "safe-patch-usage", "evidence_ids": [candidate["id"]]}]}
 
     result = run_planner(digest, config={"_planner_func": planner})
 
-    decision = result["decisions"][0]
+    decision = result["knowledge_transactions"][0]
     assert decision["decision"] == "skip"
     assert decision["reason"] == "create_skill_duplicates_reference_skill"
     assert decision["noop_outcome"] == "covered_by_existing_skill"
@@ -310,7 +310,7 @@ def test_skill_step_dry_run_maps_merge_skill_to_editor_preview():
         return {"resolutions": []}
 
     def planner(*, digest, config):
-        return {"decisions": [{
+        return {"knowledge_transactions": [{
             "skill": "old-patch-workflow",
             "decision": "mutate_skill",
             "maintenance_action": "merge",
