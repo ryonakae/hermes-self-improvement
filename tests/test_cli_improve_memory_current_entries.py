@@ -59,20 +59,7 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     (memories / "MEMORY.md").write_text("Hermes runtime root は `~/.hermes`。\n", encoding="utf-8")
     artifact_path = tmp_path / "run.json"
     evidence_path = tmp_path / "evidence.json"
-    captured_tasks: list[dict] = []
-
-    class FakeBackend:
-        def run(self, prompt, task, config=None):
-            captured_tasks.append(task)
-            return {
-                "success": True,
-                "outcome": "skipped_superseded",
-                "used_tools": [],
-                "changed_memories": [],
-                "removed_memories": [],
-                "verification_notes": [],
-                "rollback_hints": [],
-            }
+    captured: dict[str, object] = {}
 
     monkeypatch.setattr(cli, "get_hermes_home", lambda: hermes_home)
     monkeypatch.setattr(cli, "build_autonomous_operation_policy", lambda config: {})
@@ -100,8 +87,11 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     monkeypatch.setattr(cli, "write_evidence_pack", lambda evidence_pack, reports_dir: evidence_path)
     monkeypatch.setattr(cli, "_reports_dir", lambda config: tmp_path)
     monkeypatch.setattr(cli, "run_pipeline", lambda config, *, since_hours, write_report: {"proposals": []})
-    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda *, evidence_pack, config, mutate, **kwargs: {"changed": 0, "changed_skills": []})
-    monkeypatch.setattr(cli, "build_editor_backend", lambda config: FakeBackend())
+    def fake_knowledge_step(*, evidence_pack, config, mutate, **kwargs):
+        captured["current_entries"] = config.get("_memory_current_entries")
+        return {"status": "completed", "knowledge_transactions": [], "transaction_results": [], "changed_skills": [], "changed_memories": [], "editor_validation": {"summary": {}}, "prompt_sources": {}, "planner_digest": {}}
+
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", fake_knowledge_step)
     monkeypatch.setattr(cli, "_write_run_artifact", lambda payload, config: artifact_path)
     monkeypatch.setattr(cli, "record_run_episodes", lambda *, config, run_result: {"recorded": 0})
     monkeypatch.setattr(cli, "build_credit_assignment_aggregate", lambda *, config, limit: {})
@@ -110,8 +100,7 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     result = cli.run_improve(config={"_self_improvement_root": str(tmp_path)}, since_hours=24, dry_run=False)
 
     assert result["summary"]["memory_changes"] == 0
-    assert len(captured_tasks) == 1
-    entries = captured_tasks[0]["current_entries"]
+    entries = captured["current_entries"]
     assert {entry["target"] for entry in entries} == {"memory", "user"}
     assert all(entry["old_text"] == entry["text"] for entry in entries)
     assert any(entry["old_text"] == "Hermes runtime root は `~/.hermes`。" for entry in entries)

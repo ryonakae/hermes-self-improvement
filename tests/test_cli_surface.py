@@ -217,8 +217,7 @@ def test_improve_dry_run_summary_prints_next_actions(monkeypatch, tmp_path, caps
     monkeypatch.setattr(cli, "load_curator_telemetry", lambda config: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
     monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run", "transitions_checked": True})
     monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
-    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "skipped", "changed": False, "changed_skills": 0})
-    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "skipped", "changed": False, "changed_memories": 0})
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", lambda **kwargs: {"status": "completed", "knowledge_transactions": [], "transaction_results": [], "changed_skills": [], "changed_memories": [], "editor_validation": {"summary": {}}, "prompt_sources": {}, "planner_digest": {}})
     args = build_parser().parse_args(["improve", "--dry-run"])
 
     cli._handle_cli(args)
@@ -242,8 +241,7 @@ def test_improve_cli_json_keeps_full_payload_for_operator_debug(monkeypatch, tmp
     monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run", "details": large_details})
     monkeypatch.setattr(cli, "load_curator_telemetry", lambda config: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
     monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [{"id": "p1", "details": large_details}], "summary": {}})
-    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "skipped", "changed": 0, "changed_skills": [], "decisions": [{"task": {"instructions": large_details}}]})
-    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "skipped", "changed": 0, "changed_memories": [], "decisions": []})
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", lambda **kwargs: {"status": "completed", "knowledge_transactions": [], "transaction_results": [], "changed_skills": [], "changed_memories": [], "editor_validation": {"summary": {}}, "prompt_sources": {}, "planner_digest": {}})
 
     args = build_parser().parse_args(["improve", "--dry-run", "--json"])
     cli._handle_cli(args)
@@ -323,8 +321,6 @@ def test_run_improve_reconciles_memory_gap_adds_against_existing_memories(monkey
     monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
     monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
     monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
-    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "skipped", "changed": 0, "changed_skills": [], "decisions": []})
-
     def fake_extractor(digest, *, config=None):
         captured["digest"] = digest
         return {"candidates": [{
@@ -335,12 +331,12 @@ def test_run_improve_reconciles_memory_gap_adds_against_existing_memories(monkey
             "confidence": "high",
         }]}
 
-    def fake_memory_step(**kwargs):
+    def fake_knowledge_step(**kwargs):
         captured["memory_evidence"] = kwargs["evidence_pack"].get("evidence") or []
-        return {"status": "no_memory_evidence", "changed": 0, "changed_memories": [], "decisions": []}
+        return {"status": "completed", "knowledge_transactions": [], "transaction_results": [], "changed_skills": [], "changed_memories": [], "editor_validation": {"summary": {}}, "prompt_sources": {}, "planner_digest": {}}
 
     monkeypatch.setattr(cli, "run_planner", fake_extractor)
-    monkeypatch.setattr(cli, "run_memory_improvement_step", fake_memory_step)
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", fake_knowledge_step)
 
     result = cli.run_improve(config=config, dry_run=True)
 
@@ -365,8 +361,7 @@ def test_run_improve_wires_curator_lifecycle_and_telemetry(monkeypatch, tmp_path
     monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
     monkeypatch.setattr(cli, "build_active_skill_references", lambda cfg, *, candidate_names: {"candidate-skill": {"active_reference_count": 1, "blocking_references": [{"kind": "active_cron_skill_attachment", "job": "daily"}], "non_blocking_references": []}})
     captured = {}
-    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: captured.setdefault("evidence_pack", kwargs["evidence_pack"]) or {"status": "completed", "changed": 0, "changed_skills": [], "decisions": []})
-    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "no_memory_evidence", "changed": 0, "changed_memories": [], "decisions": []})
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", lambda **kwargs: captured.setdefault("evidence_pack", kwargs["evidence_pack"]) or {"status": "completed", "knowledge_transactions": [], "transaction_results": [], "changed_skills": [], "changed_memories": [], "editor_validation": {"summary": {}}, "prompt_sources": {}, "planner_digest": {}})
 
     result = cli.run_improve(config=config, dry_run=True)
 

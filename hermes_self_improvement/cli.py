@@ -47,10 +47,7 @@ from .runner_steps import (
     _execute_memory_move_operation,
     _external_memory_provider,
     apply_memory_to_skill_migrations,
-    build_knowledge_routing_summary,
-    build_knowledge_transactions,
-    run_memory_improvement_step,
-    run_skill_improvement_step,
+    run_knowledge_improvement_step,
 )
 from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
 from .observer import _event_path, _load_events, _report_dir, _reports_dir, _sha256_text, _stable_json, _turn_trace_artifact_summary, _turn_trace_root
@@ -1027,44 +1024,31 @@ def run_improve(
     )
     proposals = pipeline.get("proposals") if isinstance(pipeline.get("proposals"), list) else []
     decisions_summary = _summarize_runner_decisions(proposals)
-    skill_step = run_skill_improvement_step(
+    knowledge_config = dict(config) if isinstance(config, dict) else {}
+    knowledge_config["_memory_current_entries"] = existing_memories
+    knowledge_config.setdefault("_hermes_home", str(get_hermes_home()))
+    if knowledge_config.get("_editor_backend") is None:
+        knowledge_config["_editor_backend"] = build_editor_backend(knowledge_config)
+    knowledge_step = run_knowledge_improvement_step(
         evidence_pack=evidence_pack,
-        config=config,
+        config=knowledge_config,
         mutate=mutate,
         cluster_summary=cluster_summary,
         evidence_index=evidence_index,
         turn_traces=turn_traces,
     )
-    memory_config = dict(config) if isinstance(config, dict) else {}
-    memory_config["_memory_current_entries"] = existing_memories
-    memory_config.setdefault("_hermes_home", str(get_hermes_home()))
-    if memory_config.get("_editor_backend") is None:
-        memory_config["_editor_backend"] = build_editor_backend(memory_config)
-    memory_step = run_memory_improvement_step(evidence_pack=evidence_pack, config=memory_config, mutate=mutate)
-    memory_to_skill_config = dict(memory_config)
-    memory_to_skill_step = apply_memory_to_skill_migrations(memory_step=memory_step, config=memory_to_skill_config, mutate=mutate)
-    knowledge_transactions = build_knowledge_transactions(skill_step=skill_step, memory_step=memory_step, memory_to_skill_step=memory_to_skill_step)
-    knowledge_routing = build_knowledge_routing_summary(
-        memory_step=memory_step,
-        memory_to_skill_step=memory_to_skill_step,
-        knowledge_transactions=knowledge_transactions,
-        planner_digest=skill_step.get("planner_digest") if isinstance(skill_step.get("planner_digest"), dict) else None,
-    )
-    combined_skill_changes = sorted(set([*(skill_step.get("changed_skills") or []), *(memory_to_skill_step.get("changed_skills") or [])]))
-    combined_memory_changes = [*(memory_step.get("changed_memories") or []), *(memory_to_skill_step.get("removed_memories") or [])]
+    knowledge_transactions = [item for item in (knowledge_step.get("knowledge_transactions") or []) if isinstance(item, dict)]
+    knowledge_routing = knowledge_step.get("knowledge_routing") if isinstance(knowledge_step.get("knowledge_routing"), dict) else {}
+    combined_skill_changes = sorted(set(str(item) for item in (knowledge_step.get("changed_skills") or []) if str(item)))
+    combined_memory_changes = [str(item) for item in (knowledge_step.get("changed_memories") or []) if str(item)]
+    planner_digest = knowledge_step.get("planner_digest") if isinstance(knowledge_step.get("planner_digest"), dict) else {}
     step_decisions_payload = {
         "summary": decisions_summary,
         "proposals_considered": proposals,
         "knowledge_transactions": _knowledge_transaction_summary(knowledge_transactions),
-        "knowledge_quality": skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {},
+        "knowledge_quality": knowledge_step.get("planner_quality") if isinstance(knowledge_step.get("planner_quality"), dict) else {},
         "knowledge_routing": knowledge_routing,
-        "editor_validation": {
-            "skill_step_status": skill_step.get("status"),
-            "memory_step_status": memory_step.get("status"),
-            "memory_to_skill_step_status": memory_to_skill_step.get("status"),
-            "changed_skills": len(combined_skill_changes),
-            "changed_memories": len(combined_memory_changes),
-        },
+        "editor_validation": knowledge_step.get("editor_validation") if isinstance(knowledge_step.get("editor_validation"), dict) else {"summary": {}},
         "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
     }
     action_summary = _action_summary_from_result({"knowledge_transactions": knowledge_transactions}, step_decisions_payload)
@@ -1097,10 +1081,10 @@ def run_improve(
         "cluster_summary_path": str(cluster_summary_path),
         "evidence_index_path": str(evidence_index_path),
         "cluster_evidence": (
-            skill_step.get("cluster_evidence")
-            if isinstance(skill_step.get("cluster_evidence"), dict)
-            else skill_step.get("planner_digest", {}).get("cluster_evidence")
-            if isinstance(skill_step.get("planner_digest"), dict)
+            knowledge_step.get("cluster_evidence")
+            if isinstance(knowledge_step.get("cluster_evidence"), dict)
+            else planner_digest.get("cluster_evidence")
+            if isinstance(planner_digest, dict)
             else None
         ),
         **({"source_report": source_report_context} if source_report_context else {}),
@@ -1113,7 +1097,7 @@ def run_improve(
             "skipped_count": int(action_summary.get("skip") or 0),
             "blocked_count": int(action_summary.get("block") or 0),
         },
-        "prompt_sources": skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {},
+        "prompt_sources": knowledge_step.get("prompt_sources") if isinstance(knowledge_step.get("prompt_sources"), dict) else {},
         "skill_changes": combined_skill_changes,
         "memory_changes": combined_memory_changes,
         "summary": {

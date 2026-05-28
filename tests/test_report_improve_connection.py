@@ -89,9 +89,29 @@ def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp
     monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
     monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
     monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
-    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: {"status": "completed", "changed": 0, "changed_skills": [], "planner": {"knowledge_transactions": []}, "decisions": []})
-    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "completed", "changed": 0, "changed_memories": [], "decisions": [{"evidence_id": "memory-place-skill", "decision": "skip", "reason": "memory_convert_to_skill_update", "suggested_route": "skill", "skill_route": "hermes-memory-and-live-context", "old_text": "Use these exact steps for live context cleanup.", "source_target": "memory"}]})
-    monkeypatch.setattr(cli, "apply_memory_to_skill_migrations", lambda **kwargs: {"status": "preview", "changed": 0, "changed_skills": [], "removed_memories": [], "decisions": [{"evidence_id": "memory-place-skill", "decision": "memory_to_skill_preview", "reason": "dry_run_would_update_skill_then_remove_memory", "task": {"targets": {"primary_skill": "hermes-memory-and-live-context"}}}]})
+    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: (_ for _ in ()).throw(AssertionError("split skill lane called")), raising=False)
+    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: (_ for _ in ()).throw(AssertionError("split memory lane called")), raising=False)
+    monkeypatch.setattr(cli, "apply_memory_to_skill_migrations", lambda **kwargs: (_ for _ in ()).throw(AssertionError("split memory-to-skill lane called")))
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", lambda **kwargs: {
+        "status": "completed",
+        "knowledge_transactions": [{
+            "transaction_kind": "memory_to_skill",
+            "decision": "memory_to_skill_preview",
+            "source_store": "builtin_memory",
+            "target_store": "skill",
+            "source_evidence_id": "memory-place-skill",
+            "target_skill": "hermes-memory-and-live-context",
+            "source_old_text": "Use these exact steps for live context cleanup.",
+            "reason": "dry_run_would_update_skill_then_remove_memory",
+        }],
+        "transaction_results": [],
+        "changed_skills": [],
+        "changed_memories": [],
+        "editor_validation": {"summary": {"preview": 1}},
+        "prompt_sources": {"planner": {"prompt_hash": "p"}},
+        "planner_digest": {"knowledge_maintenance": {}},
+        "planner": {"status": "completed"},
+    })
 
     result = cli.run_improve(config=config, dry_run=True)
 
@@ -106,7 +126,7 @@ def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp
         "reason": "dry_run_would_update_skill_then_remove_memory",
     }]
     assert result["step_decisions"]["knowledge_transactions"]["total"] == 1
-    assert result["step_decisions"]["knowledge_routing"]["memory_routed_to_skill_selected_count"] == 1
+    assert result["step_decisions"]["editor_validation"]["summary"] == {"preview": 1}
     assert "skill" not in result["step_decisions"]
     assert "memory" not in result["step_decisions"]
     assert "memory_to_skill" not in result["step_decisions"]
@@ -136,8 +156,7 @@ def test_run_improve_from_report_adds_reference_only_diagnostic_evidence(monkeyp
     monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
     monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
     monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
-    monkeypatch.setattr(cli, "run_skill_improvement_step", lambda **kwargs: captured.setdefault("evidence_pack", kwargs["evidence_pack"]) or {"status": "skipped", "changed": 0, "changed_skills": [], "decisions": []})
-    monkeypatch.setattr(cli, "run_memory_improvement_step", lambda **kwargs: {"status": "skipped", "changed": 0, "changed_memories": [], "decisions": []})
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", lambda **kwargs: captured.setdefault("evidence_pack", kwargs["evidence_pack"]) or {"status": "skipped", "knowledge_transactions": [], "transaction_results": [], "changed_skills": [], "changed_memories": [], "editor_validation": {"summary": {}}, "prompt_sources": {}, "planner_digest": {}})
 
     result = cli.run_improve(config=config, dry_run=True, from_report=str(report_path))
 

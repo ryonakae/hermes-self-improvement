@@ -14,10 +14,10 @@
 
 The 2026-05-28 bridge/reporting work is valuable but incomplete:
 
-- `run_improve` still orchestrates `run_skill_improvement_step(...)`, then `run_memory_improvement_step(...)`, then `apply_memory_to_skill_migrations(...)`, then `build_knowledge_transactions(...)`.
-- Slice 4 now extends `execute_knowledge_transaction(...)` to execute supported `skill`, `memory`, `memory_to_skill`, and `placement_move` transactions through official skill/memory/provider helpers. `run_improve` still has not been rewired to use this unified path as its only top-level source of truth.
-- Latest dogfood artifact `run-20260528T070041Z.json` proves legacy split `step_decisions.skill` / `memory` / `memory_to_skill` lanes are absent from the final artifact and routed-to-skill drops are zero, but it does not prove unified planner/editor execution. Its transaction summary is `by_kind: {'planner_skill': 48}` and `cross_store: 0`.
-- Therefore the system is **bridge/reporting complete**, not **unified planner/editor execution complete**.
+- Slice 5 now wires `run_improve` through `run_knowledge_improvement_step(...)` as the planner/editor source of truth. The old split helper functions still exist for replay/lower-level tests and will be cleaned up in Slice 6, but `run_improve` no longer imports or calls the split skill/memory runner lanes.
+- Slice 4 extends `execute_knowledge_transaction(...)` to execute supported `skill`, `memory`, `memory_to_skill`, and `placement_move` transactions through official skill/memory/provider helpers.
+- Latest dogfood artifact `run-20260528T070041Z.json` predates Slice 5. It proved bridge/reporting visibility (`by_kind: {'planner_skill': 48}`, `cross_store: 0`) but not the new unified `run_improve` path.
+- Therefore code-side unified executor + `run_improve` wiring are implemented, while cleanup/dogfood closure remains pending in Slices 6–8.
 
 ## Review updates — 2026-05-28
 
@@ -309,6 +309,8 @@ git diff --check
 ---
 
 ## Slice 5: Wire `run_improve` to the unified path
+
+**Status:** Implemented 2026-05-28. `run_improve` now calls `run_knowledge_improvement_step(...)` as its planner/editor source of truth; split skill/memory lanes are not imported or called by the CLI improve path. Focused tests, full suite, runtime status, and `git diff --check` passed. Slice 6 remains for removing obsolete split-lane source-of-truth code/tests.
 
 **Objective:** Replace the split orchestration in `cli.py` with `run_knowledge_improvement_step(...)`.
 
