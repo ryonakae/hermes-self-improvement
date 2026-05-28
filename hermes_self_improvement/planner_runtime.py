@@ -669,6 +669,43 @@ def _normalize_create_skill_decision(
     return normalized
 
 
+def _normalize_memory_to_skill_transaction(
+    raw: dict[str, Any],
+    *,
+    candidate_names: set[str],
+    available_evidence_ids: set[str],
+) -> dict[str, Any] | None:
+    target_skill = str(raw.get("target_skill") or raw.get("skill") or "").strip()
+    source_evidence_id = str(raw.get("source_evidence_id") or raw.get("evidence_id") or "").strip()
+    if target_skill not in candidate_names:
+        return None
+    if source_evidence_id not in available_evidence_ids:
+        return None
+    source_store = str(raw.get("source_store") or "builtin_memory").strip()
+    if source_store not in {"builtin_memory", "builtin_user"}:
+        source_store = "builtin_memory"
+    source_old_text = str(raw.get("source_old_text") or raw.get("old_text") or "").strip()
+    if not source_old_text:
+        return None
+    normalized = {
+        "transaction_kind": "memory_to_skill",
+        "decision": str(raw.get("decision") or "apply").strip() or "apply",
+        "source_store": source_store,
+        "target_store": "skill",
+        "source_evidence_id": source_evidence_id,
+        "target_skill": target_skill,
+        "source_old_text": _redacted_preview(source_old_text, max_chars=1200),
+        "priority": str(raw.get("priority") or "medium") if str(raw.get("priority") or "medium") in ALLOWED_PRIORITIES else "medium",
+        "risk": str(raw.get("risk") or "medium") if str(raw.get("risk") or "medium") in ALLOWED_RISKS else "medium",
+    }
+    if isinstance(raw.get("skill_task"), dict):
+        normalized["skill_task"] = raw["skill_task"]
+    for key, max_chars in (("reason", 240), ("rationale", 600), ("change_intent", 280)):
+        if raw.get(key) is not None:
+            normalized[key] = _redacted_preview(raw.get(key), max_chars=max_chars)
+    return normalized
+
+
 def _normalize_decision(
     raw: dict[str, Any],
     *,
@@ -812,7 +849,9 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     for raw in raw_transactions:
         if not isinstance(raw, dict):
             continue
-        if str(raw.get("decision") or "") == "create_skill":
+        if str(raw.get("transaction_kind") or "") == "memory_to_skill":
+            item = _normalize_memory_to_skill_transaction(raw, candidate_names=candidate_names, available_evidence_ids=available_evidence_ids)
+        elif str(raw.get("decision") or "") == "create_skill":
             item = _normalize_create_skill_decision(raw, candidate_names=candidate_names, available_evidence_ids=available_evidence_ids, reference_skill_names=reference_skill_names)
         else:
             item = _normalize_decision(
@@ -825,7 +864,9 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         if not item:
             continue
         decisions.append(item)
-        seen.add(item["skill"])
+        selected_skill = str(item.get("skill") or item.get("target_skill") or "")
+        if selected_skill:
+            seen.add(selected_skill)
     for row in candidate_rows:
         name = str(row.get("name") or "")
         if name and name not in seen:

@@ -231,6 +231,9 @@ def test_planner_prompt_exposes_knowledge_maintenance_candidates():
     assert "patch-tool-workflow" in user_content
     assert candidate["id"] in user_content
     assert "create_skill" in user_content
+    assert "memory_to_skill" in user_content
+    assert "source_evidence_id" in user_content
+    assert "target_skill" in user_content
 
 
 def test_planner_accepts_canonical_maintenance_decisions():
@@ -262,6 +265,53 @@ def test_planner_accepts_canonical_maintenance_decisions():
     assert decisions["old-patch-workflow"]["decision"] == "mutate_skill"
     assert decisions["old-patch-workflow"]["maintenance_action"] == "merge"
     assert decisions["old-patch-workflow"]["target_skill"] == "local-patch-workflow"
+
+
+def test_planner_accepts_memory_to_skill_knowledge_transaction_for_maintenance_candidate():
+    candidate = make_knowledge_coverage_candidate(
+        gap_kind="recurring_workflow_without_skill",
+        evidence_ids=["coverage-patch"],
+        evidence_count=6,
+        workflow_boundary="patch tool workflow",
+        resolution_kind="unresolved",
+        rationale="Patch tool workflow guidance belongs in a skill, not memory.",
+    )
+    evidence_pack = {
+        "summary": {"event_count": 6, "evidence_count": 1, "ignored_count": 0},
+        "views": {"skill": [candidate["id"]]},
+        "evidence": [candidate],
+        "skill_candidates": [{"name": "local-patch-workflow", "mutable": True, "state": "active", "provenance": "agent_created"}],
+    }
+    digest = build_planner_digest(evidence_pack)
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": [{
+            "transaction_kind": "memory_to_skill",
+            "decision": "apply",
+            "source_store": "builtin_memory",
+            "target_store": "skill",
+            "source_evidence_id": candidate["id"],
+            "target_skill": "local-patch-workflow",
+            "source_old_text": "Patch tool workflow guidance belongs in a skill, not memory.",
+            "skill_task": {"task_kind": "mutate_skill", "targets": {"primary_skill": "local-patch-workflow"}},
+            "reason": "planner_selected_cross_store_skill_route",
+        }]}
+
+    result = run_planner(digest, config={"_planner_func": planner})
+
+    assert result["knowledge_transactions"] == [{
+        "transaction_kind": "memory_to_skill",
+        "decision": "apply",
+        "source_store": "builtin_memory",
+        "target_store": "skill",
+        "source_evidence_id": candidate["id"],
+        "target_skill": "local-patch-workflow",
+        "source_old_text": "Patch tool workflow guidance belongs in a skill, not memory.",
+        "skill_task": {"task_kind": "mutate_skill", "targets": {"primary_skill": "local-patch-workflow"}},
+        "reason": "planner_selected_cross_store_skill_route",
+        "risk": "medium",
+        "priority": "medium",
+    }]
 
 
 def test_planner_rejects_create_skill_that_duplicates_reference_skill():

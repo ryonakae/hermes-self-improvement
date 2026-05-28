@@ -179,6 +179,74 @@ def test_knowledge_routing_summary_reports_memory_to_skill_drop():
 
 
 
+def test_knowledge_routing_summary_counts_planner_memory_to_skill_transaction_as_selected():
+    memory_step = {
+        "status": "completed",
+        "changed": 0,
+        "decisions": [{
+            "evidence_id": "coverage-patch",
+            "decision": "skip",
+            "reason": "not_memory_workflow_to_skill",
+            "suggested_route": "skill",
+            "workflow_boundary": "patch tool workflow",
+            "changed": False,
+        }],
+    }
+    knowledge_transactions = [{
+        "transaction_kind": "memory_to_skill",
+        "decision": "apply",
+        "source_store": "builtin_memory",
+        "target_store": "skill",
+        "source_evidence_id": "coverage-patch",
+        "target_skill": "local-patch-workflow",
+        "source_old_text": "Patch tool workflow guidance belongs in a skill, not memory.",
+    }]
+
+    summary = build_knowledge_routing_summary(
+        memory_step=memory_step,
+        memory_to_skill_step={"status": "no_candidates", "decisions": []},
+        knowledge_transactions=knowledge_transactions,
+    )
+
+    assert summary["memory_routed_to_skill_count"] == 1
+    assert summary["memory_routed_to_skill_selected_count"] == 1
+    assert summary["memory_routed_to_skill_dropped_count"] == 0
+    assert summary["cross_store_candidate_count"] == 1
+    assert summary["unexplained_cross_store_drop_count"] == 0
+
+
+def test_knowledge_routing_summary_counts_explicit_planner_skill_decision_as_selected():
+    memory_step = {
+        "status": "completed",
+        "changed": 0,
+        "decisions": [{
+            "evidence_id": "coverage-timeout",
+            "decision": "skip",
+            "reason": "not_memory_workflow_to_skill",
+            "suggested_route": "skill",
+            "workflow_boundary": "timeout workflow",
+            "changed": False,
+        }],
+    }
+    knowledge_transactions = [{
+        "transaction_kind": "planner_skill",
+        "decision": "skip",
+        "skill": "timeout-workflow",
+        "evidence_ids": ["coverage-timeout"],
+        "reason": "Exact duplicate coverage indicates no new procedural gap.",
+    }]
+
+    summary = build_knowledge_routing_summary(
+        memory_step=memory_step,
+        memory_to_skill_step={"status": "no_candidates", "decisions": []},
+        knowledge_transactions=knowledge_transactions,
+    )
+
+    assert summary["memory_routed_to_skill_selected_count"] == 1
+    assert summary["memory_routed_to_skill_dropped_count"] == 0
+    assert summary["unexplained_cross_store_drop_count"] == 0
+
+
 def test_knowledge_routing_summary_counts_memory_to_skill_preview_as_selected():
     memory_step = memory_step_with_skill_route()
     memory_to_skill_step = {

@@ -1043,8 +1043,8 @@ def run_improve(
     memory_step = run_memory_improvement_step(evidence_pack=evidence_pack, config=memory_config, mutate=mutate)
     memory_to_skill_config = dict(memory_config)
     memory_to_skill_step = apply_memory_to_skill_migrations(memory_step=memory_step, config=memory_to_skill_config, mutate=mutate)
-    knowledge_routing = build_knowledge_routing_summary(memory_step=memory_step, memory_to_skill_step=memory_to_skill_step)
     knowledge_transactions = build_knowledge_transactions(skill_step=skill_step, memory_step=memory_step, memory_to_skill_step=memory_to_skill_step)
+    knowledge_routing = build_knowledge_routing_summary(memory_step=memory_step, memory_to_skill_step=memory_to_skill_step, knowledge_transactions=knowledge_transactions)
     combined_skill_changes = sorted(set([*(skill_step.get("changed_skills") or []), *(memory_to_skill_step.get("changed_skills") or [])]))
     combined_memory_changes = [*(memory_step.get("changed_memories") or []), *(memory_to_skill_step.get("removed_memories") or [])]
     step_decisions_payload = {

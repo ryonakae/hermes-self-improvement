@@ -279,14 +279,15 @@ The editor receives a validated transaction plan and executes only that plan.
 
 ### Slice 4 — Remove old split semantics from prompts, summaries, readiness, and roadmap state
 
-**Status:** partially completed 2026-05-28; episode recording, CLI action summaries, human-facing CLI action detail lines, and compact tool results now read top-level canonical `knowledge_transactions` when present instead of requiring split `step_decisions.skill/memory/memory_to_skill`. Compact tool results now expose `steps.knowledge_transactions.total/apply/defer/skip/block/by_kind/cross_store`. Knowledge routing now also exposes `unexplained_cross_store_drop_count` / `unexplained_cross_store_drop_by_reason` and the CLI summary renders those drops so readiness cannot look benign when memory-to-skill work was silently dropped. Remaining work is to remove the rest of split prompt/report/readiness wording and complete dry-run dogfood verification for old cross-store drop modes.
+**Status:** partially completed 2026-05-28; episode recording, CLI action summaries, human-facing CLI action detail lines, and compact tool results now read top-level canonical `knowledge_transactions` when present instead of requiring split `step_decisions.skill/memory/memory_to_skill`. Compact tool results now expose `steps.knowledge_transactions.total/apply/defer/skip/block/by_kind/cross_store`. Planner normalization now accepts canonical `memory_to_skill` transactions, the planner prompt documents the cross-store transaction shape, and knowledge routing treats canonical `memory_to_skill` plus explicit planner skill transactions as selected evidence. Knowledge routing also exposes `unexplained_cross_store_drop_count` / `unexplained_cross_store_drop_by_reason` and the CLI summary renders those drops so readiness cannot look benign when memory-to-skill work was silently dropped. Remaining work is to remove the rest of split prompt/report/readiness wording and improve planner selection for still-dropped routed workflow evidence.
 
 **Validation completed for canonical summary/episode surfaces:**
 - RED/GREEN tests added for canonical-only episode recording: `tests/test_episode_ledger.py::test_record_run_episodes_uses_canonical_knowledge_transactions_without_split_steps`.
 - RED/GREEN tests added for canonical-only CLI/tool summaries: `tests/test_report_improve_connection.py::test_cli_action_summary_counts_canonical_knowledge_transactions_without_split_steps`, `tests/test_report_improve_connection.py::test_cli_action_bucket_lines_describe_canonical_knowledge_transactions_without_split_steps`, `tests/test_report_improve_connection.py::test_compact_tool_result_summarizes_canonical_knowledge_transactions_without_split_steps`.
 - RED/GREEN tests added for unexplained cross-store drop visibility: `tests/test_memory_to_skill_migration.py::test_knowledge_routing_summary_reports_memory_to_skill_drop`, `tests/test_cli_surface.py::test_improve_summary_reports_memory_to_skill_migrations`.
-- Related focused tests: `tests/test_episode_ledger.py tests/test_report_improve_connection.py tests/test_memory_to_skill_migration.py tests/test_runner_steps.py` — `78 passed`; cross-store routing focused slice — `18 passed`.
-- Full suite: `843 passed, 2 skipped`.
+- RED/GREEN tests added for planner-owned cross-store selection and routing accounting: `tests/test_knowledge_maintenance_planner.py::test_planner_accepts_memory_to_skill_knowledge_transaction_for_maintenance_candidate`, `tests/test_knowledge_maintenance_planner.py::test_planner_prompt_exposes_knowledge_maintenance_candidates`, `tests/test_memory_to_skill_migration.py::test_knowledge_routing_summary_counts_planner_memory_to_skill_transaction_as_selected`, `tests/test_memory_to_skill_migration.py::test_knowledge_routing_summary_counts_explicit_planner_skill_decision_as_selected`.
+- Related focused tests: `tests/test_episode_ledger.py tests/test_report_improve_connection.py tests/test_memory_to_skill_migration.py tests/test_runner_steps.py` — `78 passed`; cross-store routing focused slice — `18 passed`; planner/routing surface focused slice — `86 passed`.
+- Full suite: `846 passed, 2 skipped`.
 - Static checks: `python -m py_compile __init__.py hermes_self_improvement/*.py` and `git diff --check` passed.
 - Dry-run smoke artifacts:
   - `~/.hermes/self-improvement/runs/run-20260528T053715Z.json`.
@@ -300,7 +301,15 @@ The editor receives a validated transaction plan and executes only that plan.
     - `memory_routed_to_skill_selected_count: 0`.
     - `memory_routed_to_skill_dropped_count: 6`.
     - `unexplained_cross_store_drop_count: 6` with `unexplained_cross_store_drop_by_reason: {'not_memory_workflow_to_skill': 6}`.
-    - This confirms the old cross-store drop mode is now visible rather than hidden as benign readiness.
+    - This confirmed the old cross-store drop mode was visible rather than hidden as benign readiness.
+  - `~/.hermes/self-improvement/runs/run-20260528T060925Z.json`.
+    - `transaction_count: 45`.
+    - `memory_to_skill_transactions: 0` and `planner_skill_transactions: 45`.
+    - `knowledge_routing.memory_routed_to_skill_count: 6`.
+    - `memory_routed_to_skill_selected_count: 2`.
+    - `memory_routed_to_skill_dropped_count: 4`.
+    - `unexplained_cross_store_drop_count: 4` with `unexplained_cross_store_drop_by_reason: {'not_memory_workflow_to_skill': 4}`.
+    - This confirms canonical planner skill decisions now count as selected routed evidence, while remaining drops need a follow-up planner selection quality slice.
 
 **Objective:** Finish the migration so future agents cannot think the redesign is complete while skill/memory are still separate lanes.
 

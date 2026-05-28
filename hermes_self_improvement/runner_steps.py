@@ -1729,7 +1729,12 @@ def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[s
     }
 
 
-def build_knowledge_routing_summary(*, memory_step: dict[str, Any], memory_to_skill_step: dict[str, Any]) -> dict[str, Any]:
+def build_knowledge_routing_summary(
+    *,
+    memory_step: dict[str, Any],
+    memory_to_skill_step: dict[str, Any],
+    knowledge_transactions: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     memory_decisions = [item for item in (memory_step.get("decisions") or []) if isinstance(item, dict)]
     routed = [
         item
@@ -1741,6 +1746,17 @@ def build_knowledge_routing_summary(*, memory_step: dict[str, Any], memory_to_sk
         for item in (memory_to_skill_step.get("decisions") or [])
         if isinstance(item, dict) and item.get("decision") in {"memory_to_skill_preview", "accepted"}
     }
+    selected_ids.update(
+        str(item.get("source_evidence_id") or "")
+        for item in (knowledge_transactions or [])
+        if isinstance(item, dict) and item.get("transaction_kind") == "memory_to_skill" and item.get("decision") in {"apply", "memory_to_skill_preview", "accepted"}
+    )
+    for item in knowledge_transactions or []:
+        if not isinstance(item, dict):
+            continue
+        for evidence_id in item.get("evidence_ids") or []:
+            if str(evidence_id):
+                selected_ids.add(str(evidence_id))
     selected = [item for item in routed if str(item.get("evidence_id") or "") in selected_ids]
     dropped = [item for item in routed if item not in selected]
     dropped_by_reason: dict[str, int] = {}

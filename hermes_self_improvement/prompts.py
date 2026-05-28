@@ -130,7 +130,7 @@ def _render_knowledge_maintenance_section(digest: dict[str, Any]) -> str:
         return "## Knowledge maintenance candidates\n- n/a\n"
     lines = [
         "## Knowledge maintenance candidates",
-        "These are unresolved procedural workflow gaps. For every item in this section, return one explicit decision: create_skill, mutate_skill (set maintenance_action to \"patch\" or \"merge\"), archive_skill, skip, or defer. Do not answer only for existing skill_candidates when maintenance candidates are present. If no editable skill fits and evidence_count is recurring/durable, create_skill is allowed unless it duplicates a reference skill or violates hard boundaries.",
+        "These are unresolved procedural workflow gaps. For every item in this section, return one explicit decision: create_skill, mutate_skill (set maintenance_action to \"patch\" or \"merge\"), archive_skill, skip, defer, or a canonical memory_to_skill transaction. Do not answer only for existing skill_candidates when maintenance candidates are present. If an item represents guidance currently routed away from memory into an existing editable skill, prefer transaction_kind=\"memory_to_skill\" with source_evidence_id, target_skill, source_store=\"builtin_memory\", target_store=\"skill\", source_old_text, and skill_task. If no editable skill fits and evidence_count is recurring/durable, create_skill is allowed unless it duplicates a reference skill or violates hard boundaries.",
     ]
     for item in candidates[:20]:
         affordance = item.get("maintenance_affordance") if isinstance(item.get("maintenance_affordance"), dict) else {}
