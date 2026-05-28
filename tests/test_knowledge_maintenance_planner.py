@@ -314,6 +314,36 @@ def test_planner_accepts_memory_to_skill_knowledge_transaction_for_maintenance_c
     }]
 
 
+def test_planner_defaults_unanswered_maintenance_candidate_to_canonical_defer():
+    candidate = make_knowledge_coverage_candidate(
+        gap_kind="recurring_workflow_without_skill",
+        evidence_ids=["unmatched_patch"],
+        evidence_count=26,
+        workflow_boundary="patch tool workflow",
+        resolution_kind="unresolved",
+        rationale="Patch workflow needs an explicit planner decision.",
+    )
+    evidence_pack = {
+        "summary": {"event_count": 26, "evidence_count": 1, "ignored_count": 0},
+        "views": {"skill": [candidate["id"]]},
+        "evidence": [candidate],
+        "skill_candidates": [{"name": "unrelated-skill", "mutable": True, "state": "active", "provenance": "agent_created"}],
+    }
+    digest = build_planner_digest(evidence_pack)
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": []}
+
+    result = run_planner(digest, config={"_planner_func": planner})
+
+    maintenance_decision = next(row for row in result["knowledge_transactions"] if candidate["id"] in row.get("evidence_ids", []))
+    assert maintenance_decision["transaction_kind"] == "planner_skill"
+    assert maintenance_decision["decision"] == "defer"
+    assert maintenance_decision["reason"] == "maintenance_candidate_not_selected_by_planner"
+    assert maintenance_decision["evidence_ids"] == [candidate["id"], "unmatched_patch"]
+    assert maintenance_decision["target_skill"] == "patch-tool-workflow"
+
+
 def test_planner_rejects_create_skill_that_duplicates_reference_skill():
     candidate = make_knowledge_coverage_candidate(
         gap_kind="recurring_workflow_without_skill",

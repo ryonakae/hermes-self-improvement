@@ -1734,6 +1734,7 @@ def build_knowledge_routing_summary(
     memory_step: dict[str, Any],
     memory_to_skill_step: dict[str, Any],
     knowledge_transactions: list[dict[str, Any]] | None = None,
+    planner_digest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     memory_decisions = [item for item in (memory_step.get("decisions") or []) if isinstance(item, dict)]
     routed = [
@@ -1757,6 +1758,21 @@ def build_knowledge_routing_summary(
         for evidence_id in item.get("evidence_ids") or []:
             if str(evidence_id):
                 selected_ids.add(str(evidence_id))
+    digest_source = planner_digest or {}
+    raw_maintenance = digest_source.get("knowledge_maintenance")
+    maintenance = raw_maintenance if isinstance(raw_maintenance, dict) else {}
+    representative_ids_by_coverage = {}
+    for item in maintenance.get("maintenance_candidates") or []:
+        if not isinstance(item, dict):
+            continue
+        raw_affordance = item.get("maintenance_affordance")
+        affordance = raw_affordance if isinstance(raw_affordance, dict) else {}
+        coverage_id = str(item.get("evidence_id") or "")
+        if coverage_id:
+            representative_ids_by_coverage[coverage_id] = [str(eid) for eid in (affordance.get("representative_evidence_ids") or []) if str(eid)]
+    for coverage_id in list(selected_ids):
+        for representative_id in representative_ids_by_coverage.get(coverage_id, []):
+            selected_ids.add(representative_id)
     selected = [item for item in routed if str(item.get("evidence_id") or "") in selected_ids]
     dropped = [item for item in routed if item not in selected]
     dropped_by_reason: dict[str, int] = {}

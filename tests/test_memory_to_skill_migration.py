@@ -247,6 +247,40 @@ def test_knowledge_routing_summary_counts_explicit_planner_skill_decision_as_sel
     assert summary["unexplained_cross_store_drop_count"] == 0
 
 
+def test_knowledge_routing_summary_counts_maintenance_representatives_as_selected():
+    memory_step = {
+        "status": "completed",
+        "changed": 0,
+        "decisions": [
+            {"evidence_id": "unmatched-patch", "decision": "skip", "reason": "not_memory_workflow_to_skill", "suggested_route": "skill", "workflow_boundary": "patch tool workflow", "changed": False},
+            {"evidence_id": "coverage-patch", "decision": "skip", "reason": "not_memory_workflow_to_skill", "suggested_route": "skill", "workflow_boundary": "patch tool workflow", "changed": False},
+        ],
+    }
+    knowledge_transactions = [{
+        "transaction_kind": "planner_skill",
+        "decision": "defer",
+        "target_skill": "patch-tool-workflow",
+        "evidence_ids": ["coverage-patch"],
+        "reason": "maintenance_candidate_not_selected_by_planner",
+    }]
+    planner_digest = {"knowledge_maintenance": {"maintenance_candidates": [{
+        "evidence_id": "coverage-patch",
+        "maintenance_affordance": {"representative_evidence_ids": ["unmatched-patch"]},
+    }]}}
+
+    summary = build_knowledge_routing_summary(
+        memory_step=memory_step,
+        memory_to_skill_step={"status": "no_candidates", "decisions": []},
+        knowledge_transactions=knowledge_transactions,
+        planner_digest=planner_digest,
+    )
+
+    assert summary["memory_routed_to_skill_count"] == 2
+    assert summary["memory_routed_to_skill_selected_count"] == 2
+    assert summary["memory_routed_to_skill_dropped_count"] == 0
+    assert summary["unexplained_cross_store_drop_count"] == 0
+
+
 def test_knowledge_routing_summary_counts_memory_to_skill_preview_as_selected():
     memory_step = memory_step_with_skill_route()
     memory_to_skill_step = {

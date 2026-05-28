@@ -706,6 +706,33 @@ def _normalize_memory_to_skill_transaction(
     return normalized
 
 
+def _maintenance_candidate_default_decision(item: dict[str, Any]) -> dict[str, Any] | None:
+    evidence_id = str(item.get("evidence_id") or "").strip()
+    if not evidence_id:
+        return None
+    raw_affordance = item.get("maintenance_affordance")
+    affordance = raw_affordance if isinstance(raw_affordance, dict) else {}
+    raw_coverage_fit = item.get("coverage_fit")
+    coverage_fit = raw_coverage_fit if isinstance(raw_coverage_fit, dict) else {}
+    fit_skills = [str(name) for name in (coverage_fit.get("fit_skills") or []) if str(name)]
+    target_skill = fit_skills[0] if fit_skills else str(affordance.get("create_skill_name_seed") or "").strip()
+    representative_ids = [str(eid) for eid in (affordance.get("representative_evidence_ids") or []) if str(eid)]
+    evidence_ids = []
+    for eid in [evidence_id, *representative_ids]:
+        if eid not in evidence_ids:
+            evidence_ids.append(eid)
+    return {
+        "transaction_kind": "planner_skill",
+        "decision": "defer",
+        "reason": "maintenance_candidate_not_selected_by_planner",
+        "evidence_ids": evidence_ids,
+        "priority": "medium",
+        "risk": "medium",
+        **({"target_skill": target_skill} if target_skill else {}),
+        "rationale": "Planner did not return an explicit decision for this maintenance candidate; keep it visible as a deferred canonical transaction instead of silently dropping routed workflow evidence.",
+    }
+
+
 def _normalize_decision(
     raw: dict[str, Any],
     *,
@@ -838,14 +865,17 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         if item.get("name")
     }
     available_evidence_ids = {str(item) for item in (digest.get("available_skill_evidence_ids") or []) if str(item)}
-    knowledge_maintenance = digest.get("knowledge_maintenance") if isinstance(digest.get("knowledge_maintenance"), dict) else {}
+    raw_knowledge_maintenance = digest.get("knowledge_maintenance")
+    knowledge_maintenance = raw_knowledge_maintenance if isinstance(raw_knowledge_maintenance, dict) else {}
     reference_skill_names = {
         str(item.get("name") or "")
         for item in (knowledge_maintenance.get("reference_skills") or [])
         if isinstance(item, dict) and item.get("name")
     }
+    maintenance_candidates = [item for item in (knowledge_maintenance.get("maintenance_candidates") or []) if isinstance(item, dict)]
     decisions: list[dict[str, Any]] = []
     seen: set[str] = set()
+    seen_evidence_ids: set[str] = set()
     for raw in raw_transactions:
         if not isinstance(raw, dict):
             continue
@@ -867,6 +897,11 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         selected_skill = str(item.get("skill") or item.get("target_skill") or "")
         if selected_skill:
             seen.add(selected_skill)
+        if item.get("source_evidence_id"):
+            seen_evidence_ids.add(str(item.get("source_evidence_id")))
+        for evidence_id in item.get("evidence_ids") or []:
+            if str(evidence_id):
+                seen_evidence_ids.add(str(evidence_id))
     for row in candidate_rows:
         name = str(row.get("name") or "")
         if name and name not in seen:
@@ -884,6 +919,18 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
                 })
             else:
                 decisions.append({"skill": name, "decision": "skip", "reason": "not_selected_by_planner", "evidence_ids": []})
+    for item in maintenance_candidates:
+        if not isinstance(item, dict):
+            continue
+        evidence_id = str(item.get("evidence_id") or "")
+        if not evidence_id or evidence_id in seen_evidence_ids:
+            continue
+        default_decision = _maintenance_candidate_default_decision(item)
+        if default_decision:
+            decisions.append(default_decision)
+            for selected_id in default_decision.get("evidence_ids") or []:
+                if str(selected_id):
+                    seen_evidence_ids.add(str(selected_id))
     return _planner_result(decisions, digest=digest, status="completed", prompt_source=prompt_source)
 
 
