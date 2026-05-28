@@ -202,11 +202,21 @@ def test_run_replay_improve_keeps_non_mutation_ready_decisions_as_skips(tmp_path
 
 
 def test_compact_tool_result_summarizes_canonical_knowledge_transactions_without_split_steps():
-    from hermes_self_improvement.tool_handlers import _compact_improve_tool_result
+    import hermes_self_improvement.tool_handlers as tools
 
-    summary = _compact_improve_tool_result({
+    summary = tools._compact_improve_tool_result({
         "dry_run": True,
         "execute": False,
+        "summary": {"skill_changes": 0, "memory_changes": 0},
+        "step_decisions": {
+            "knowledge_routing": {
+                "memory_routed_to_skill_count": 1,
+                "memory_routed_to_skill_selected_count": 0,
+                "memory_routed_to_skill_dropped_count": 1,
+                "unexplained_cross_store_drop_count": 1,
+                "unexplained_cross_store_drop_by_reason": {"memory_convert_to_skill_update": 1},
+            }
+        },
         "artifact_path": "/tmp/run.json",
         "knowledge_transactions": [
             {"transaction_kind": "skill", "decision": "mutate_skill", "target_store": "skill", "target_skill": "safe-patch-usage"},
@@ -226,6 +236,8 @@ def test_compact_tool_result_summarizes_canonical_knowledge_transactions_without
         "by_kind": {"memory": 2, "memory_to_skill": 1, "skill": 1},
         "cross_store": 1,
     }
+    assert summary["steps"]["knowledge_routing"]["unexplained_cross_store_drop_count"] == 1
+    assert summary["steps"]["knowledge_routing"]["unexplained_cross_store_drop_by_reason"] == {"memory_convert_to_skill_update": 1}
 
 
 def test_cli_action_summary_counts_canonical_knowledge_transactions_without_split_steps():

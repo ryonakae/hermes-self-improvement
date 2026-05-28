@@ -541,6 +541,8 @@ def test_improve_summary_reports_memory_to_skill_migrations():
                 "memory_routed_to_skill_dropped_count": 2,
                 "cross_store_candidate_count": 3,
                 "memory_routed_to_skill_dropped_by_reason": {"not_memory_workflow_to_skill": 2},
+                "unexplained_cross_store_drop_count": 2,
+                "unexplained_cross_store_drop_by_reason": {"not_memory_workflow_to_skill": 2},
             },
         },
         "evidence_pack": {"summary": {}},
@@ -549,6 +551,7 @@ def test_improve_summary_reports_memory_to_skill_migrations():
     assert "- memory-to-skill migrations: applied 0, preview 1, deferred 1" in text
     assert "- memory routed to skill: total 3, selected 1, dropped 2" in text
     assert "- memory routed drop reasons: not_memory_workflow_to_skill 2" in text
+    assert "- unexplained cross-store drops: 2 (not_memory_workflow_to_skill 2)" in text
     assert "- Would apply: 1, Deferred: 1, Skipped: 0, Blocked: 0" in text
 
 

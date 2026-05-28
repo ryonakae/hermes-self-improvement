@@ -1744,14 +1744,18 @@ def build_knowledge_routing_summary(*, memory_step: dict[str, Any], memory_to_sk
     selected = [item for item in routed if str(item.get("evidence_id") or "") in selected_ids]
     dropped = [item for item in routed if item not in selected]
     dropped_by_reason: dict[str, int] = {}
+    unexplained_dropped_by_reason: dict[str, int] = {}
     for item in dropped:
         reason = str(item.get("reason") or "unknown")
         dropped_by_reason[reason] = dropped_by_reason.get(reason, 0) + 1
+        unexplained_dropped_by_reason[reason] = unexplained_dropped_by_reason.get(reason, 0) + 1
     return {
         "memory_routed_to_skill_count": len(routed),
         "memory_routed_to_skill_selected_count": len(selected),
         "memory_routed_to_skill_dropped_count": len(dropped),
         "memory_routed_to_skill_dropped_by_reason": dropped_by_reason,
+        "unexplained_cross_store_drop_count": sum(unexplained_dropped_by_reason.values()),
+        "unexplained_cross_store_drop_by_reason": unexplained_dropped_by_reason,
         "cross_store_candidate_count": len(routed),
     }
 

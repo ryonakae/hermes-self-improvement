@@ -2109,6 +2109,12 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         if isinstance(raw_drop_reasons, dict) and raw_drop_reasons:
             drop_reasons = _top_count_map({str(key): int(value or 0) for key, value in raw_drop_reasons.items()})
             memory_routing_lines.append("- memory routed drop reasons: " + ", ".join(f"{key} {value}" for key, value in drop_reasons.items()))
+        unexplained_drop_count = int(knowledge_routing.get("unexplained_cross_store_drop_count") or 0)
+        raw_unexplained_reasons = knowledge_routing.get("unexplained_cross_store_drop_by_reason")
+        if unexplained_drop_count:
+            unexplained_reasons = _top_count_map({str(key): int(value or 0) for key, value in raw_unexplained_reasons.items()}) if isinstance(raw_unexplained_reasons, dict) else {}
+            suffix = " (" + ", ".join(f"{key} {value}" for key, value in unexplained_reasons.items()) + ")" if unexplained_reasons else ""
+            memory_routing_lines.append(f"- unexplained cross-store drops: {unexplained_drop_count}{suffix}")
     for decision in memory_step.get("decisions") or []:
         if isinstance(decision, dict):
             lookup = decision.get("related_memory_lookup") if isinstance(decision.get("related_memory_lookup"), dict) else {}

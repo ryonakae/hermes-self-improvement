@@ -174,6 +174,9 @@ def test_knowledge_routing_summary_reports_memory_to_skill_drop():
     assert summary["memory_routed_to_skill_dropped_count"] == 1
     assert summary["cross_store_candidate_count"] == 1
     assert summary["memory_routed_to_skill_dropped_by_reason"] == {"memory_convert_to_skill_update": 1}
+    assert summary["unexplained_cross_store_drop_count"] == 1
+    assert summary["unexplained_cross_store_drop_by_reason"] == {"memory_convert_to_skill_update": 1}
+
 
 
 def test_knowledge_routing_summary_counts_memory_to_skill_preview_as_selected():
