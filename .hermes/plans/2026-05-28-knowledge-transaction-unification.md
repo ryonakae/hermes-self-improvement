@@ -279,6 +279,21 @@ The editor receives a validated transaction plan and executes only that plan.
 
 ### Slice 4 — Remove old split semantics from prompts, summaries, readiness, and roadmap state
 
+**Status:** partially completed 2026-05-28; episode recording, CLI action summaries, and compact tool results now read top-level canonical `knowledge_transactions` when present instead of requiring split `step_decisions.skill/memory/memory_to_skill`. Compact tool results now expose `steps.knowledge_transactions.total/apply/defer/skip/block/by_kind/cross_store`. Remaining work is to remove the rest of split prompt/report/readiness wording and complete dry-run dogfood verification for old cross-store drop modes.
+
+**Validation completed for canonical summary/episode surfaces:**
+- RED/GREEN tests added for canonical-only episode recording: `tests/test_episode_ledger.py::test_record_run_episodes_uses_canonical_knowledge_transactions_without_split_steps`.
+- RED/GREEN tests added for canonical-only CLI/tool summaries: `tests/test_report_improve_connection.py::test_cli_action_summary_counts_canonical_knowledge_transactions_without_split_steps`, `tests/test_report_improve_connection.py::test_compact_tool_result_summarizes_canonical_knowledge_transactions_without_split_steps`.
+- Related focused tests: `tests/test_episode_ledger.py tests/test_report_improve_connection.py tests/test_memory_to_skill_migration.py tests/test_runner_steps.py` — `78 passed`.
+- Full suite: `842 passed, 2 skipped`.
+- Static checks: `python -m py_compile __init__.py hermes_self_improvement/*.py` and `git diff --check` passed.
+- Dry-run smoke artifact: `~/.hermes/self-improvement/runs/run-20260528T053715Z.json`.
+  - `knowledge_transactions` present in stdout and artifact.
+  - `transaction_count: 45`.
+  - top-level legacy `decisions` absent.
+  - `action_summary: {'apply': 0, 'block': 0, 'defer': 0, 'skip': 45}` from canonical transactions.
+  - `episodes_count: 45`, confirming episode recording consumes canonical transactions in the live CLI path.
+
 **Objective:** Finish the migration so future agents cannot think the redesign is complete while skill/memory are still separate lanes.
 
 **Files:**

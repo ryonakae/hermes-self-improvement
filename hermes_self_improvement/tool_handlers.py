@@ -72,9 +72,7 @@ def _related_lookup_counts(memory_step: dict[str, Any]) -> dict[str, int]:
 def _semantic_action_from_decision(decision: dict[str, Any], *, kind: str) -> str:
     raw = str(decision.get("decision") or "")
     reason = str(decision.get("reason") or "")
-    if raw in {"mutate_skill_preview", "archive_skill_preview", "memory_to_skill_preview"}:
-        return "apply"
-    if raw == "accepted":
+    if raw in {"mutate_skill", "mutate_skill_preview", "create_skill", "create_skill_preview", "archive_skill", "archive_skill_preview", "mutate_memory", "memory_to_skill_preview", "accepted", "apply"}:
         return "apply"
     if raw == "defer":
         return "defer"
@@ -89,7 +87,27 @@ def _semantic_action_from_decision(decision: dict[str, Any], *, kind: str) -> st
     return "skip"
 
 
-def _action_summary_from_steps(step_decisions: dict[str, Any]) -> dict[str, int]:
+def _knowledge_transaction_summary(transactions: Any) -> dict[str, Any]:
+    rows = transactions if isinstance(transactions, list) else []
+    counts = {"apply": 0, "defer": 0, "skip": 0, "block": 0}
+    by_kind: dict[str, int] = {}
+    cross_store = 0
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("transaction_kind") or item.get("target_store") or "unknown")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        if kind == "memory_to_skill" or (item.get("source_store") and item.get("target_store") and item.get("source_store") != item.get("target_store")):
+            cross_store += 1
+        action = _semantic_action_from_decision(item, kind=kind)
+        counts[action] = counts.get(action, 0) + 1
+    return {"total": len([item for item in rows if isinstance(item, dict)]), **counts, "by_kind": dict(sorted(by_kind.items())), "cross_store": cross_store}
+
+
+def _action_summary_from_steps(step_decisions: dict[str, Any], *, knowledge_transactions: Any = None) -> dict[str, int]:
+    transaction_summary = _knowledge_transaction_summary(knowledge_transactions)
+    if transaction_summary["total"]:
+        return {key: int(transaction_summary.get(key) or 0) for key in ("apply", "defer", "skip", "block")}
     counts = {"apply": 0, "defer": 0, "skip": 0, "block": 0}
     for kind in ("skill", "memory", "memory_to_skill"):
         step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
@@ -177,7 +195,9 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     episodes = result.get("episodes") if isinstance(result.get("episodes"), dict) else {}
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     autonomous_policy = result.get("autonomous_policy") if isinstance(result.get("autonomous_policy"), dict) else {}
-    action_summary = _action_summary_from_steps(step_decisions)
+    knowledge_transactions = result.get("knowledge_transactions") if isinstance(result.get("knowledge_transactions"), list) else []
+    action_summary = _action_summary_from_steps(step_decisions, knowledge_transactions=knowledge_transactions)
+    knowledge_transaction_summary = _knowledge_transaction_summary(knowledge_transactions)
     skill_lifecycle = _compact_skill_lifecycle(skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else [])
     artifact_path = result.get("artifact_path")
     return {
@@ -254,6 +274,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
                 },
             },
             "skill_lifecycle": skill_lifecycle,
+            "knowledge_transactions": knowledge_transaction_summary,
             "memory": _compact_step("memory", step_decisions.get("memory")),
             "memory_to_skill": _compact_step("memory_to_skill", step_decisions.get("memory_to_skill")),
             "knowledge_routing": step_decisions.get("knowledge_routing") if isinstance(step_decisions.get("knowledge_routing"), dict) else {},

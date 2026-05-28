@@ -201,6 +201,48 @@ def test_run_replay_improve_keeps_non_mutation_ready_decisions_as_skips(tmp_path
     assert result["action_summary"]["block"] == 0
 
 
+def test_compact_tool_result_summarizes_canonical_knowledge_transactions_without_split_steps():
+    from hermes_self_improvement.tool_handlers import _compact_improve_tool_result
+
+    summary = _compact_improve_tool_result({
+        "dry_run": True,
+        "execute": False,
+        "artifact_path": "/tmp/run.json",
+        "knowledge_transactions": [
+            {"transaction_kind": "skill", "decision": "mutate_skill", "target_store": "skill", "target_skill": "safe-patch-usage"},
+            {"transaction_kind": "memory_to_skill", "decision": "memory_to_skill_preview", "source_store": "builtin_memory", "target_store": "skill", "target_skill": "workflow-skill"},
+            {"transaction_kind": "memory", "decision": "defer", "target_store": "builtin_memory", "source_evidence_id": "mem1"},
+            {"transaction_kind": "memory", "decision": "skip", "target_store": "builtin_memory", "source_evidence_id": "mem2"},
+        ],
+    })
+
+    assert summary["action_summary"] == {"apply": 2, "defer": 1, "skip": 1, "block": 0}
+    assert summary["steps"]["knowledge_transactions"] == {
+        "total": 4,
+        "apply": 2,
+        "defer": 1,
+        "skip": 1,
+        "block": 0,
+        "by_kind": {"memory": 2, "memory_to_skill": 1, "skill": 1},
+        "cross_store": 1,
+    }
+
+
+def test_cli_action_summary_counts_canonical_knowledge_transactions_without_split_steps():
+    import hermes_self_improvement.cli as cli
+
+    summary = cli._action_summary_from_result({
+        "knowledge_transactions": [
+            {"decision": "mutate_skill", "target_store": "skill", "target_skill": "safe-patch-usage"},
+            {"decision": "memory_to_skill_preview", "transaction_kind": "memory_to_skill", "target_skill": "workflow-skill"},
+            {"decision": "defer", "target_store": "skill", "target_skill": "timeout-workflow"},
+            {"decision": "skip", "target_store": "builtin_memory", "source_evidence_id": "mem1"},
+        ]
+    }, {})
+
+    assert summary == {"apply": 2, "defer": 1, "skip": 1, "block": 0}
+
+
 def test_cli_action_summary_counts_mutate_skill_preview_as_apply():
     import hermes_self_improvement.cli as cli
 

@@ -1056,7 +1056,7 @@ def run_improve(
         "knowledge_routing": knowledge_routing,
         "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
     }
-    action_summary = _action_summary_from_result({}, step_decisions_payload)
+    action_summary = _action_summary_from_result({"knowledge_transactions": knowledge_transactions}, step_decisions_payload)
     run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
     result_payload = {
         "schema_name": "self_improvement_run_result",
@@ -1201,7 +1201,8 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
         "memory": {**memory_source, "changed": len(changed_memory_ids), "changed_memories": changed_memory_ids, "decisions": memory_decisions},
         "memory_to_skill": memory_to_skill_step,
     }
-    action_summary = _action_summary_from_result({}, step_decisions_payload)
+    source_knowledge_transactions = source.get("knowledge_transactions") if isinstance(source.get("knowledge_transactions"), list) else []
+    action_summary = _action_summary_from_result({"knowledge_transactions": source_knowledge_transactions}, step_decisions_payload)
     run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
     result_payload = {
         **source,
@@ -1309,7 +1310,7 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
 def _semantic_action_from_runner_decision(decision: dict[str, Any], *, kind: str) -> str:
     raw = str(decision.get("decision") or "").strip()
     reason = str(decision.get("reason") or "").strip()
-    if raw in {"accepted", "mutate_skill_preview", "create_skill_preview", "archive_skill_preview", "memory_to_skill_preview"}:
+    if raw in {"accepted", "mutate_skill", "mutate_skill_preview", "create_skill", "create_skill_preview", "archive_skill", "archive_skill_preview", "mutate_memory", "memory_to_skill_preview", "apply"}:
         return "apply"
     if raw in {"defer", "deferred"} or reason.startswith("target_uncertain"):
         return "defer"
@@ -1332,6 +1333,15 @@ def _action_summary_from_result(result: dict[str, Any], step_decisions: dict[str
     provided = result.get("action_summary") if isinstance(result.get("action_summary"), dict) else {}
     counts = {"apply": int(provided.get("apply") or 0), "defer": int(provided.get("defer") or 0), "skip": int(provided.get("skip") or 0), "block": int(provided.get("block") or 0)}
     if any(counts.values()):
+        return counts
+    transactions = result.get("knowledge_transactions") if isinstance(result.get("knowledge_transactions"), list) else []
+    if transactions:
+        for item in transactions:
+            if not isinstance(item, dict):
+                continue
+            kind = str(item.get("transaction_kind") or item.get("target_store") or "knowledge_transaction")
+            action = _semantic_action_from_runner_decision(item, kind=kind)
+            counts[action] = counts.get(action, 0) + 1
         return counts
     for kind in ("skill", "memory", "memory_to_skill"):
         step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}

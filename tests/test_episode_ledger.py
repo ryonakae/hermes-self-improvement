@@ -66,6 +66,73 @@ def sample_run_result(tmp_path):
     }
 
 
+def canonical_run_result(tmp_path):
+    artifact = tmp_path / "self-improvement" / "runs" / "run.json"
+    return {
+        "schema_name": "self_improvement_run_result",
+        "run_id": "run-canonical",
+        "dry_run": True,
+        "execute": False,
+        "artifact_path": str(artifact),
+        "prompt_sources": {
+            "planner": {"base_hash": "sha256:planner"},
+            "editor": {"base_hash": "sha256:editor"},
+        },
+        "calibration": {"active_evaluator_hash": "sha256:evaluator"},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-skill-1",
+                "transaction_kind": "skill",
+                "decision": "mutate_skill",
+                "target_store": "skill",
+                "target_skill": "demo-skill",
+                "evidence_ids": ["ev1"],
+                "reason": "planner selected skill improvement",
+            },
+            {
+                "transaction_id": "txn-memory-1",
+                "transaction_kind": "memory",
+                "decision": "mutate_memory",
+                "target_store": "builtin_memory",
+                "source_evidence_id": "mem1",
+                "operation": {"operation": "memory_add", "target": "memory", "content": "Do not store in episode."},
+                "reason": "planner selected memory update",
+            },
+            {
+                "transaction_id": "txn-cross-1",
+                "transaction_kind": "memory_to_skill",
+                "decision": "memory_to_skill_preview",
+                "source_store": "builtin_memory",
+                "target_store": "skill",
+                "source_evidence_id": "mem2",
+                "target_skill": "workflow-skill",
+                "source_old_text": "Do not store this source text in episode.",
+                "reason": "dry_run_would_update_skill_then_remove_memory",
+            },
+        ],
+    }
+
+
+def test_record_run_episodes_uses_canonical_knowledge_transactions_without_split_steps(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = canonical_run_result(tmp_path)
+
+    summary = record_run_episodes(config=config, run_result=result)
+
+    assert summary["count"] == 3
+    loaded = load_recent_episodes(config=config, limit=10)
+    by_target = {item["target_id"]: item for item in loaded}
+    assert by_target["demo-skill"]["decision"] == "mutate_skill"
+    assert by_target["demo-skill"]["action"] == "no_op"
+    assert by_target["demo-skill"]["transaction_id"] == "txn-skill-1"
+    assert by_target["memory:mem1"]["decision"] == "mutate_memory"
+    assert by_target["memory:mem1"]["action"] == "no_op"
+    assert by_target["workflow-skill"]["transaction_kind"] == "memory_to_skill"
+    assert by_target["workflow-skill"]["source_evidence_id"] == "mem2"
+    serialized = json.dumps(loaded, ensure_ascii=False)
+    assert "Do not store in episode" not in serialized
+
+
 def test_record_run_episodes_writes_append_only_skill_and_memory_episodes(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = sample_run_result(tmp_path)
