@@ -8,18 +8,19 @@
 
 **Tech Stack:** Python, pytest, Hermes self-improvement planner/runtime artifacts.
 
-**Status (2026-05-29):** implemented, verified, and smoke-tested. The planner evidence gate is still fail-closed, but valid editable-skill maintenance evidence can now pass through deterministic maintenance-candidate / coverage-fit / representative-evidence relationships. Canonical skill transactions retain executable `editor_task` / `skill_task`; inventory-only no-op rows remain canonical `skill` transactions with `inventory_not_selected_by_planner` instead of a `planner_skill` pseudo-kind.
+**Status (2026-05-29):** implemented, post-review hardened, verified, and smoke-tested. The planner evidence gate is still fail-closed, but valid editable-skill maintenance evidence can now pass through deterministic maintenance-candidate / coverage-fit / representative-evidence relationships. Direct editable-skill evidence remains valid even when a maintenance candidate also exists. Non-mutable/reference/builtin targets are blocked before direct evidence can authorize mutation. Canonical planner-supplied skill transactions are accepted only after the same editable/evidence gate checks and retain executable `editor_task` / `skill_task`; inventory-only no-op rows remain canonical `skill` transactions with `inventory_not_selected_by_planner` instead of a `planner_skill` pseudo-kind.
 
-**Validation (2026-05-29):**
+**Validation (2026-05-29, post-review hardening):**
 
-- `python -m pytest tests/test_knowledge_maintenance_planner.py tests/test_knowledge_transactions.py tests/test_report_improve_connection.py tests/test_memory_to_skill_migration.py -q` → `61 passed`
+- `python -m pytest tests/test_knowledge_maintenance_planner.py::test_planner_blocks_non_mutable_direct_skill_evidence tests/test_knowledge_maintenance_planner.py::test_planner_allows_direct_skill_evidence_when_maintenance_candidate_also_exists tests/test_knowledge_maintenance_planner.py::test_planner_accepts_canonical_skill_apply_transaction -q` → `3 passed`
+- `python -m pytest tests/test_knowledge_maintenance_planner.py tests/test_knowledge_transactions.py tests/test_report_improve_connection.py tests/test_memory_to_skill_migration.py -q` → `64 passed`
+- `python -m pytest tests -q` → `876 passed, 2 skipped`
 - `python -m py_compile __init__.py hermes_self_improvement/*.py` → passed
-- `python -m pytest tests -q` → `873 passed, 2 skipped`
 - `git diff --check` → passed
 - `hermes self-improvement status` → passed / runtime ready
-- `hermes self-improvement improve --dry-run` → passed; artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T165936Z.json`
+- `hermes self-improvement improve --dry-run` → passed; artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T173940Z.json`
 
-**Smoke artifact check:** `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T165936Z.json` has no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, reports `action_summary {'apply': 1, 'block': 0, 'defer': 0, 'skip': 45}`, keeps `skill_editor_task_count: 1`, and classifies inventory no-ops as `matched_inventory_not_selected`.
+**Smoke artifact check:** `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T173940Z.json` has no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, reports `action_summary {'apply': 1, 'block': 0, 'defer': 0, 'skip': 45}`, keeps `skill_editor_task_count: 1`, and classifies inventory no-ops as `matched_inventory_not_selected`.
 
 ---
 

@@ -369,6 +369,112 @@ def test_planner_does_not_use_reference_only_coverage_as_mutable_skill_evidence(
     assert all(row.get("skill") != "safe-patch-usage" or row["decision"] != "mutate_skill" for row in result["knowledge_transactions"])
 
 
+def test_planner_blocks_non_mutable_direct_skill_evidence():
+    digest = {
+        "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},
+        "skill_candidates": [{
+            "name": "safe-patch-usage",
+            "mutable": False,
+            "state": "active",
+            "provenance": "builtin",
+            "evidence_ids": ["ev_ref"],
+        }],
+        "available_skill_evidence_ids": ["ev_ref"],
+        "knowledge_maintenance": {"maintenance_candidates": [], "reference_skills": [{"name": "safe-patch-usage"}]},
+    }
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": [{
+            "skill": "safe-patch-usage",
+            "decision": "mutate_skill",
+            "evidence_ids": ["ev_ref"],
+            "risk": "low",
+            "editor_instructions": "Patch the built-in reference skill.",
+        }]}
+
+    result = run_planner(digest, config={"_planner_func": planner})
+    decision = result["knowledge_transactions"][0]
+
+    assert decision["decision"] == "skip"
+    assert decision["reason"] == "mutate_skill_target_not_editable"
+    assert decision["evidence_ids"] == []
+
+
+def test_planner_allows_direct_skill_evidence_when_maintenance_candidate_also_exists():
+    digest = {
+        "summary": {"event_count": 2, "evidence_count": 2, "ignored_count": 0},
+        "skill_candidates": [{
+            "name": "local-patch-workflow",
+            "mutable": True,
+            "state": "active",
+            "provenance": "agent_created",
+            "evidence_ids": ["ev_direct"],
+        }],
+        "available_skill_evidence_ids": ["ev_direct", "maint_1", "unmatched_patch"],
+        "knowledge_maintenance": {"maintenance_candidates": [{
+            "evidence_id": "maint_1",
+            "coverage_fit": {"kind": "partial_overlap", "match_target": "editable_skill", "fit_skills": ["local-patch-workflow"]},
+            "maintenance_affordance": {"representative_evidence_ids": ["unmatched_patch"]},
+        }]},
+    }
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": [{
+            "skill": "local-patch-workflow",
+            "decision": "mutate_skill",
+            "evidence_ids": ["ev_direct"],
+            "risk": "low",
+            "editor_instructions": "Patch direct issue.",
+        }]}
+
+    result = run_planner(digest, config={"_planner_func": planner})
+    decision = result["knowledge_transactions"][0]
+
+    assert decision["decision"] == "mutate_skill"
+    assert decision["evidence_ids"] == ["ev_direct"]
+    assert decision.get("reason") != "mutate_skill_without_attached_evidence"
+
+
+def test_planner_accepts_canonical_skill_apply_transaction():
+    digest = {
+        "summary": {"event_count": 1, "evidence_count": 1, "ignored_count": 0},
+        "skill_candidates": [{
+            "name": "local-patch-workflow",
+            "mutable": True,
+            "state": "active",
+            "provenance": "agent_created",
+            "evidence_ids": ["ev1"],
+        }],
+        "available_skill_evidence_ids": ["ev1"],
+        "knowledge_maintenance": {"maintenance_candidates": []},
+    }
+    task = {"task_kind": "mutate_skill", "targets": {"primary_skill": "local-patch-workflow"}, "instructions": "Patch."}
+
+    def planner(*, digest, config):
+        return {"knowledge_transactions": [{
+            "transaction_kind": "skill",
+            "decision": "apply",
+            "target_store": "skill",
+            "target_id": "local-patch-workflow",
+            "operation": "mutate_skill",
+            "evidence_ids": ["ev1"],
+            "editor_task": task,
+            "reason": "planner_selected_canonical_skill_patch",
+        }]}
+
+    result = run_planner(digest, config={"_planner_func": planner})
+    transaction = result["knowledge_transactions"][0]
+
+    assert transaction["decision"] == "apply"
+    assert transaction["transaction_kind"] == "skill"
+    assert transaction["target_store"] == "skill"
+    assert transaction["target_id"] == "local-patch-workflow"
+    assert transaction["operation"] == "mutate_skill"
+    assert transaction["editor_task"] == task
+    assert transaction["evidence_ids"] == ["ev1"]
+    assert transaction["reason"] == "planner_selected_canonical_skill_patch"
+
+
 def test_planner_defaults_unanswered_inventory_candidate_to_skill_skip_identity():
     evidence_pack = {
         "summary": {"event_count": 0, "evidence_count": 0, "ignored_count": 0},

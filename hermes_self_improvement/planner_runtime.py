@@ -10,6 +10,7 @@ from .evidence import (
     compute_coverage_fit_for_name,
     filter_llm_skill_candidates,
     resolve_coverage_alias,
+    skill_candidate_filter_reason,
     _canonical_skill_name_for_duplicate,
 )
 from .observer import _redact_text
@@ -737,15 +738,10 @@ def _maintenance_candidate_default_decision(item: dict[str, Any]) -> dict[str, A
 
 
 def _editable_candidate_names(candidate_rows: list[dict[str, Any]]) -> set[str]:
-    protected_provenance = {"external", "hub", "builtin", "plugin", "plugin-bundled"}
     names: set[str] = set()
     for row in candidate_rows:
         name = str(row.get("name") or "").strip()
-        provenance = str(row.get("provenance") or row.get("source") or "")
-        state = str(row.get("state") or "")
-        if not name or row.get("mutable") is False or row.get("pinned"):
-            continue
-        if provenance in protected_provenance or state == "archived":
+        if not name or skill_candidate_filter_reason(row):
             continue
         names.add(name)
     return names
@@ -755,14 +751,15 @@ def _maintenance_evidence_maps_by_candidate(
     *,
     candidate_rows: list[dict[str, Any]],
     maintenance_candidates: list[dict[str, Any]],
-) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
-    allowed = {
+) -> tuple[dict[str, set[str]], dict[str, set[str]], dict[str, set[str]]]:
+    editable_names = _editable_candidate_names(candidate_rows)
+    direct = {
         str(item.get("name") or ""): {str(eid) for eid in (item.get("evidence_ids") or []) if str(eid)}
         for item in candidate_rows
-        if item.get("name")
+        if str(item.get("name") or "") in editable_names
     }
+    allowed = {name: set(evidence_ids) for name, evidence_ids in direct.items()}
     required_maintenance: dict[str, set[str]] = {name: set() for name in allowed}
-    editable_names = _editable_candidate_names(candidate_rows)
     for item in maintenance_candidates:
         evidence_id = str(item.get("evidence_id") or "").strip()
         if not evidence_id:
@@ -791,7 +788,7 @@ def _maintenance_evidence_maps_by_candidate(
         for target in targets:
             allowed.setdefault(target, set()).update([evidence_id, *representative_ids, *candidate_evidence_ids])
             required_maintenance.setdefault(target, set()).add(evidence_id)
-    return allowed, required_maintenance
+    return allowed, required_maintenance, direct
 
 
 def _skill_task_for_mutation(raw: dict[str, Any], *, skill: str, maintenance_action: str, target_skill: str) -> dict[str, Any]:
@@ -831,6 +828,7 @@ def _normalize_decision(
     required_maintenance_evidence_by_candidate: dict[str, set[str]],
     archive_markers_by_candidate: dict[str, list[str]],
     candidate_by_name: dict[str, dict[str, Any]],
+    direct_evidence_by_candidate: dict[str, set[str]],
 ) -> dict[str, Any] | None:
     skill = str(raw.get("skill") or "").strip()
     if skill not in candidate_names:
@@ -843,6 +841,9 @@ def _normalize_decision(
     forced_skip_reason: str | None = None
     target_skill = str(raw.get("target_skill") or raw.get("successor") or "").strip()
     if decision == "mutate_skill":
+        if skill_candidate_filter_reason(candidate_by_name.get(skill) or {}):
+            decision = "skip"
+            forced_skip_reason = "mutate_skill_target_not_editable"
         if raw_maintenance_action == "merge":
             maintenance_action = "merge"
             if not target_skill or target_skill not in candidate_names:
@@ -857,7 +858,9 @@ def _normalize_decision(
     allowed_evidence = evidence_by_candidate.get(skill) or set()
     evidence_ids = [item for item in evidence_ids if item in allowed_evidence]
     required_maintenance_ids = required_maintenance_evidence_by_candidate.get(skill) or set()
-    if decision == "mutate_skill" and required_maintenance_ids and not any(item in required_maintenance_ids for item in evidence_ids):
+    direct_evidence_ids = direct_evidence_by_candidate.get(skill) or set()
+    cites_direct_evidence = any(item in direct_evidence_ids for item in evidence_ids)
+    if decision == "mutate_skill" and required_maintenance_ids and not cites_direct_evidence and not any(item in required_maintenance_ids for item in evidence_ids):
         evidence_ids = []
     if decision == "mutate_skill" and not evidence_ids:
         decision = "skip"
@@ -951,6 +954,55 @@ def _is_canonical_knowledge_transaction(raw: dict[str, Any]) -> bool:
     return False
 
 
+def _normalize_canonical_skill_transaction(
+    raw: dict[str, Any],
+    *,
+    candidate_names: set[str],
+    candidate_by_name: dict[str, dict[str, Any]],
+    evidence_by_candidate: dict[str, set[str]],
+    direct_evidence_by_candidate: dict[str, set[str]],
+    required_maintenance_evidence_by_candidate: dict[str, set[str]],
+) -> dict[str, Any] | None:
+    target_id = str(raw.get("target_id") or raw.get("target_skill") or raw.get("skill") or "").strip()
+    if target_id not in candidate_names:
+        return None
+    if skill_candidate_filter_reason(candidate_by_name.get(target_id) or {}):
+        return normalize_knowledge_transaction({
+            **raw,
+            "decision": "skip",
+            "target_store": "skill",
+            "target_id": target_id,
+            "operation": "none",
+            "editor_task": None,
+            "reason": "mutate_skill_target_not_editable",
+            "evidence_ids": [],
+        })
+    operation = str(raw.get("operation") or "")
+    decision = str(raw.get("decision") or "")
+    if decision == "apply" and operation == "mutate_skill":
+        evidence_ids = [str(item) for item in raw.get("evidence_ids") or [] if str(item)]
+        allowed_evidence = evidence_by_candidate.get(target_id) or set()
+        evidence_ids = [item for item in evidence_ids if item in allowed_evidence]
+        direct_evidence_ids = direct_evidence_by_candidate.get(target_id) or set()
+        required_maintenance_ids = required_maintenance_evidence_by_candidate.get(target_id) or set()
+        cites_direct_evidence = any(item in direct_evidence_ids for item in evidence_ids)
+        if required_maintenance_ids and not cites_direct_evidence and not any(item in required_maintenance_ids for item in evidence_ids):
+            evidence_ids = []
+        if not evidence_ids:
+            return normalize_knowledge_transaction({
+                **raw,
+                "decision": "skip",
+                "target_store": "skill",
+                "target_id": target_id,
+                "operation": "none",
+                "editor_task": None,
+                "reason": "mutate_skill_without_attached_evidence",
+                "evidence_ids": [],
+            })
+        raw = {**raw, "target_store": "skill", "target_id": target_id, "evidence_ids": evidence_ids}
+    return normalize_knowledge_transaction(raw)
+
+
 def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("planner_response_not_object")
@@ -975,7 +1027,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         if isinstance(item, dict) and item.get("name")
     }
     maintenance_candidates = [item for item in (knowledge_maintenance.get("maintenance_candidates") or []) if isinstance(item, dict)]
-    evidence_by_candidate, required_maintenance_evidence_by_candidate = _maintenance_evidence_maps_by_candidate(
+    evidence_by_candidate, required_maintenance_evidence_by_candidate, direct_evidence_by_candidate = _maintenance_evidence_maps_by_candidate(
         candidate_rows=candidate_rows,
         maintenance_candidates=maintenance_candidates,
     )
@@ -985,7 +1037,16 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     for raw in raw_transactions:
         if not isinstance(raw, dict):
             continue
-        if _is_canonical_knowledge_transaction(raw):
+        if str(raw.get("transaction_kind") or "") == "skill" and str(raw.get("target_store") or "") == "skill":
+            item = _normalize_canonical_skill_transaction(
+                raw,
+                candidate_names=candidate_names,
+                candidate_by_name=candidate_by_name,
+                evidence_by_candidate=evidence_by_candidate,
+                direct_evidence_by_candidate=direct_evidence_by_candidate,
+                required_maintenance_evidence_by_candidate=required_maintenance_evidence_by_candidate,
+            )
+        elif _is_canonical_knowledge_transaction(raw):
             item = normalize_knowledge_transaction(raw)
         elif str(raw.get("transaction_kind") or "") == "memory_to_skill":
             item = _normalize_memory_to_skill_transaction(raw, candidate_names=candidate_names, available_evidence_ids=available_evidence_ids)
@@ -999,11 +1060,12 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
                 required_maintenance_evidence_by_candidate=required_maintenance_evidence_by_candidate,
                 archive_markers_by_candidate=archive_markers_by_candidate,
                 candidate_by_name=candidate_by_name,
+                direct_evidence_by_candidate=direct_evidence_by_candidate,
             )
         if not item:
             continue
         decisions.append(item)
-        selected_skill = str(item.get("skill") or item.get("target_skill") or "")
+        selected_skill = str(item.get("skill") or item.get("target_skill") or (item.get("target_id") if item.get("target_store") == "skill" else "") or "")
         if selected_skill:
             seen.add(selected_skill)
         if item.get("source_evidence_id"):
