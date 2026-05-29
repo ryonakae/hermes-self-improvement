@@ -36,9 +36,9 @@ The key product promise is not “make many changes.” It is:
 
 ---
 
-## Current Position — 2026-05-28
+## Current Position — 2026-05-29
 
-Overall: **runtime-healthy and unified planner/editor execution code-complete through dry-run readiness closure**. Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, scheduled dogfood proof, canonical transaction reporting, unified editor error normalization, final `run_improve` artifact split-lane removal, and the unified `run_knowledge_improvement_step` path are implemented. Latest dry-run readiness artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T104450Z.json` reports `apply:0 / defer:6 / skip:43 / block:0`, canonical knowledge summaries, no split decision lanes, and zero unexplained cross-store drops. Remaining work is operational scheduled observation until a low-risk executable mutation appears naturally.
+Overall: **runtime-healthy and unified planner/editor execution code-complete with approved mutating replay proof**. Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, scheduled dogfood proof, canonical transaction reporting, unified editor error normalization, final `run_improve` artifact split-lane removal, the unified `run_knowledge_improvement_step` path, and source-of-truth cleanup are implemented. Cleanup dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T032803Z.json` reports canonical knowledge summaries, no split decision lanes, no `planner_skill`, no blank transaction kind, `actionability_loss_count: 0`, and zero unexplained cross-store drops. Approved mutating replay artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T091409Z.json` patched `hermes-development-maintenance` via canonical `mutate_skill` with `skill_changes: 1`, `memory_changes: 0`, and no follow-up next actions. Remaining work is operational outcome observation, especially whether recent skill patches reduce repeated workflow mistakes without user correction.
 
 ### What changed since the earlier 2026-05-10 snapshot
 
@@ -52,7 +52,7 @@ Overall: **runtime-healthy and unified planner/editor execution code-complete th
 
 ### Important caveat
 
-The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail -> knowledge transaction plan -> unified editor execution** the canonical model. That model is now implemented through dry-run readiness closure: observation substrate and planner handoff exist, D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up`, bridge/reporting blockers are closed, `run_improve` uses the unified knowledge path, and final artifacts no longer expose split `step_decisions.skill` / `memory` / `memory_to_skill` lanes. The remaining caveat is operational rather than architectural: the latest dry-run selected no low-risk executable mutation, so mutating dogfood should wait for natural evidence instead of loosening guards.
+The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail -> knowledge transaction plan -> unified editor execution** the canonical model. That model is now implemented through approved mutating replay proof: observation substrate and planner handoff exist, D3 makes skip/readiness state visible as `benign` / `safe_stop` / `actionability_loss` / `needs_follow_up`, bridge/reporting blockers are closed, `run_improve` uses the unified knowledge path, final artifacts no longer expose split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, and canonical replay can execute a canonical skill transaction. The remaining caveat is operational rather than architectural: improvement is not proven by one successful patch; outcome observation still needs later evidence that repeated workflow mistakes decrease without user correction.
 
 ### Strong areas
 

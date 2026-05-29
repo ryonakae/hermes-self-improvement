@@ -306,7 +306,7 @@ python -m pytest tests/test_knowledge_transactions.py tests/test_report_improve_
 
 ## Slice 7: Dogfood and close cleanup readiness
 
-**Status:** Completed on 2026-05-29. Full verification passed after the final canonical normalization fix for targetless `skip` transactions and the post-review replay fix that executes canonical apply transactions while stripping stale split lanes from canonical replay payloads. Validation: `python -m py_compile __init__.py hermes_self_improvement/*.py`, full `python -m pytest tests -q` → 895 passed, 2 skipped, `hermes self-improvement improve --dry-run --json`, and `git diff --check`. Final dogfood artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T032803Z.json` contains canonical `step_decisions.knowledge_transactions` only, no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, `by_kind {'none': 21, 'skill': 26}`, no `planner_skill`, no blank transaction kind, `actionability_loss_count: 0`, and `unexplained_cross_store_drop_count: 0`. No mutating dogfood was run.
+**Status:** Completed on 2026-05-29. Full verification passed after the final canonical normalization fix for targetless `skip` transactions and the post-review replay fix that executes canonical apply transactions while stripping stale split lanes from canonical replay payloads. Validation: `python -m py_compile __init__.py hermes_self_improvement/*.py`, full `python -m pytest tests -q` → 895 passed, 2 skipped, `hermes self-improvement improve --dry-run --json`, and `git diff --check`. Final cleanup dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T032803Z.json` contains canonical `step_decisions.knowledge_transactions` only, no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, `by_kind {'none': 21, 'skill': 26}`, no `planner_skill`, no blank transaction kind, `actionability_loss_count: 0`, and `unexplained_cross_store_drop_count: 0`. After explicit approval, `hermes self-improvement improve --from-run /Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T032803Z.json` produced `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T091409Z.json` and patched `hermes-development-maintenance` through the official skill tool path; result: `skill_changes: 1`, `memory_changes: 0`, `apply: 1 / defer: 1 / skip: 45 / block: 0`, no next actions, runtime status healthy, plugin repo clean.
 
 **Objective:** Prove behavior stayed the same while source-of-truth got simpler.
 
@@ -349,7 +349,7 @@ PY
    - `actionability_loss_count == 0` unless there is a concrete new evidence issue to investigate
    - `unexplained_cross_store_drop_count == 0`
    - no safety gate loosened
-4. If dry-run naturally selects a low-risk executable mutation, do **not** run mutating dogfood in this cleanup slice unless Ryo explicitly asks. The 2026-05-29 scheduled cron already proved mutation execution after the evidence-gate hardening baseline.
+4. If dry-run naturally selects a low-risk executable mutation, do **not** run mutating dogfood in this cleanup slice unless Ryo explicitly asks. Ryo explicitly approved the final replay after cleanup; `run-20260529T091409Z.json` is the approved mutating proof for canonical replay execution.
 5. Update plan/index with final validation and artifact path.
 6. Run independent code review before commit/push if code changed.
 
