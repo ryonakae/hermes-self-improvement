@@ -19,6 +19,8 @@ The 2026-05-28 bridge/reporting work is valuable but incomplete:
 - Latest dogfood artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260528T104450Z.json` was produced after Slices 5–7. It proves the new unified `run_improve` path at dry-run readiness: canonical `knowledge_transactions` are present, split `step_decisions.skill` / `memory` / `memory_to_skill` keys are absent, action summary is `apply:0 / defer:6 / skip:43 / block:0`, and unexplained cross-store drops are zero.
 - The live dry-run did not naturally select memory/cross-store mutations, so deterministic fixture-backed integration proof covers `skill`, `builtin_user`, `builtin_memory`, `external_memory`, and `memory_to_skill` end-to-end through `run_improve`, compact tool summaries, and episode creation. No mutating dogfood was run because no low-risk executable mutation appeared.
 
+- Follow-up source-of-truth cleanup completed on 2026-05-29 in `2026-05-29-knowledge-transaction-source-of-truth-cleanup.md`. Current runtime/reporting code now treats canonical `knowledge_transactions` as the single source of truth; legacy split-lane compatibility is isolated behind explicit fallback helpers, and canonical replay executes canonical apply transactions while stripping stale split lanes from canonical replay payloads. Final cleanup dogfood artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T032803Z.json` has no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, no `planner_skill`, no blank transaction kind, `actionability_loss_count: 0`, and `unexplained_cross_store_drop_count: 0`.
+
 ## Review updates — 2026-05-28
 
 Independent review found two blockers that this plan must guard against:

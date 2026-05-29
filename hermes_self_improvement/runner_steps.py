@@ -1179,6 +1179,12 @@ def run_skill_improvement_step(
     evidence_index: dict[str, Any] | None = None,
     turn_traces: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """Legacy split-lane skill runner kept for direct tests/replay compatibility.
+
+    The current `run_improve` source-of-truth path uses
+    `run_knowledge_improvement_step(...)` and canonical `knowledge_transactions`.
+    Do not route new scheduled/current-run orchestration through this helper.
+    """
     candidates = evidence_pack.get("skill_candidates") if isinstance(evidence_pack.get("skill_candidates"), list) else []
     candidate_by_name = {str(item.get("name") or ""): item for item in candidates if isinstance(item, dict) and str(item.get("name") or "")}
     views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
@@ -1790,11 +1796,17 @@ def _memory_transaction_source_store(source_target: str) -> str:
 
 
 def build_knowledge_transactions(*, skill_step: dict[str, Any], memory_step: dict[str, Any], memory_to_skill_step: dict[str, Any]) -> list[dict[str, Any]]:
+    """Legacy split-step bridge into canonical transaction shape.
+
+    Retained for historical artifacts/tests that still start from split
+    skill/memory/memory_to_skill steps. Current runs should receive canonical
+    transactions directly from `run_knowledge_improvement_step(...)`.
+    """
     transactions: list[dict[str, Any]] = []
     planner = skill_step.get("planner") if isinstance(skill_step.get("planner"), dict) else {}
     for item in planner.get("knowledge_transactions") or []:
         if isinstance(item, dict):
-            transactions.append({**item, "transaction_kind": item.get("transaction_kind") or "planner_skill"})
+            transactions.append({**item, "transaction_kind": item.get("transaction_kind") or "skill"})
     memory_by_id = {
         str(item.get("evidence_id") or ""): item
         for item in (memory_step.get("decisions") or [])
@@ -2218,6 +2230,12 @@ def build_knowledge_routing_summary(
 
 
 def apply_memory_to_skill_migrations(*, memory_step: dict[str, Any], config: dict[str, Any] | None = None, mutate: bool = False, replay_preview_only: bool = False) -> dict[str, Any]:
+    """Legacy split-lane memory-to-skill bridge.
+
+    This remains for replaying historical split `memory_to_skill` preview steps
+    and direct compatibility tests. Current canonical execution should use
+    `execute_knowledge_transaction(...)` with `transaction_kind=memory_to_skill`.
+    """
     cfg = config or {}
     candidates = _memory_to_skill_candidates(memory_step, replay_preview_only=replay_preview_only)
     if not candidates:
@@ -2283,6 +2301,12 @@ def run_memory_improvement_step(
     config: dict[str, Any] | None = None,
     mutate: bool = False,
 ) -> dict[str, Any]:
+    """Legacy split-lane memory runner kept for direct tests/replay compatibility.
+
+    The current `run_improve` source-of-truth path uses canonical
+    `knowledge_transactions`; do not use this as a new scheduled/current-run
+    orchestration entry point.
+    """
     views = evidence_pack.get("views") if isinstance(evidence_pack.get("views"), dict) else {}
     memory_ids = [str(item) for item in views.get("memory", [])]
     memory_evidence = _evidence_by_ids(evidence_pack, memory_ids)

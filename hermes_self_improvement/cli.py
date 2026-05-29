@@ -42,11 +42,13 @@ from .editor_backend_skill import build_skill_editor_backend
 from .editor_backend_memory import build_memory_editor_backend
 from .editor_skill import run_skill_editor_task
 from .next_actions import render_next_actions
+from .knowledge_transactions import canonical_transaction_view, legacy_split_transaction_view
 from .runner_steps import (
     _execute_memory_context,
     _execute_memory_move_operation,
     _external_memory_provider,
     apply_memory_to_skill_migrations,
+    execute_knowledge_transaction,
     run_knowledge_improvement_step,
 )
 from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
@@ -408,6 +410,7 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
                 skill_decisions=skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else [],
                 memory_decisions=memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [],
                 planner_decisions=(skill_step.get("planner") or {}).get("decisions") if isinstance(skill_step.get("planner"), dict) and isinstance((skill_step.get("planner") or {}).get("decisions"), list) else [],
+                knowledge_transactions=latest_run.get("knowledge_transactions") if isinstance(latest_run.get("knowledge_transactions"), list) else None,
             )
             if len(actual_lines) > 1:
                 lines.extend(actual_lines[:6])
@@ -1125,6 +1128,18 @@ def run_improve(
     return result_payload
 
 
+def _legacy_split_replay_memory_to_skill_step(*, source: dict[str, Any], steps: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    source_knowledge_transactions = source.get("knowledge_transactions") if isinstance(source.get("knowledge_transactions"), list) else []
+    if source_knowledge_transactions:
+        return {"status": "skipped_canonical_transactions_present", "changed": 0, "changed_skills": [], "removed_memories": [], "decisions": []}
+    raw_memory_to_skill_source = steps.get("memory_to_skill")
+    memory_to_skill_source: dict[str, Any] = raw_memory_to_skill_source if isinstance(raw_memory_to_skill_source, dict) else {}
+    replay_memory_config = dict(config)
+    replay_memory_config["_memory_current_entries"] = _load_builtin_memory_entries(_builtin_memory_paths(config))
+    replay_memory_config.setdefault("_hermes_home", str(get_hermes_home()))
+    return apply_memory_to_skill_migrations(memory_step=memory_to_skill_source, config=replay_memory_config, mutate=True, replay_preview_only=True)
+
+
 def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[str, Any]:
     source_path = Path(source_run_path).expanduser()
     if not source_path.exists() or not source_path.is_file():
@@ -1135,9 +1150,79 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
         raise SystemExit("dry-run artifact must be a JSON object")
     if not source.get("dry_run"):
         raise SystemExit("--from-run requires an improve dry-run artifact")
-    steps = source.get("step_decisions") if isinstance(source.get("step_decisions"), dict) else {}
+    raw_steps = source.get("step_decisions")
+    steps: dict[str, Any] = raw_steps if isinstance(raw_steps, dict) else {}
     backend = build_editor_backend(config)
     external_provider = _external_memory_provider(config)
+    source_knowledge_transactions = source.get("knowledge_transactions") if isinstance(source.get("knowledge_transactions"), list) else []
+
+    if source_knowledge_transactions:
+        replayed_transactions: list[dict[str, Any]] = []
+        changed_skills: list[str] = []
+        changed_memory_ids: list[str] = []
+        for item in source_knowledge_transactions:
+            if not isinstance(item, dict):
+                continue
+            transaction = dict(item)
+            if transaction.get("decision") == "apply":
+                raw_result = execute_knowledge_transaction(transaction, config=config, mutate=True)
+                result: dict[str, Any] = raw_result if isinstance(raw_result, dict) else {"success": False, "outcome": "blocked", "reason": "replay_transaction_result_missing"}
+            else:
+                existing_result = transaction.get("transaction_result")
+                result = existing_result if isinstance(existing_result, dict) else {"success": True, "outcome": "skipped", "reason": "replay_non_apply_transaction"}
+            transaction["transaction_result"] = result
+            changed_skills.extend(str(name) for name in (result.get("changed_skills") or []) if str(name))
+            changed_skills.extend(str(name) for name in (result.get("created_skills") or []) if str(name))
+            changed_memory_ids.extend(str(item_id) for item_id in (result.get("changed_memories") or []) if str(item_id))
+            changed_memory_ids.extend(str(item_id) for item_id in (result.get("removed_memories") or []) if str(item_id))
+            replayed_transactions.append(transaction)
+
+        combined_changed_skills = sorted(set(changed_skills))
+        combined_memory_ids = sorted(set(changed_memory_ids))
+        step_decisions_payload = {
+            key: value
+            for key, value in steps.items()
+            if key not in {"skill", "memory", "memory_to_skill"}
+        }
+        existing_knowledge_step = step_decisions_payload.get("knowledge_transactions")
+        knowledge_step = existing_knowledge_step if isinstance(existing_knowledge_step, dict) else {}
+        step_decisions_payload["knowledge_transactions"] = {
+            **knowledge_step,
+            "status": "canonical_replay_completed",
+            "changed_skills": combined_changed_skills,
+            "changed_memories": combined_memory_ids,
+        }
+        action_summary = _action_summary_from_result({"knowledge_transactions": replayed_transactions}, step_decisions_payload)
+        run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
+        source_summary = source.get("summary")
+        result_payload = {
+            **source,
+            "run_id": run_id,
+            "dry_run": False,
+            "execute": True,
+            "source_dry_run_artifact": str(source_path),
+            "source_dry_run_hash": _sha256_text(source_text),
+            "knowledge_transactions": replayed_transactions,
+            "step_decisions": step_decisions_payload,
+            "action_summary": action_summary,
+            "skill_changes": combined_changed_skills,
+            "memory_changes": combined_memory_ids,
+            "summary": {
+                **(source_summary if isinstance(source_summary, dict) else {}),
+                "skill_changes": len(combined_changed_skills),
+                "memory_changes": len(combined_memory_ids),
+                "dry_run": False,
+            },
+            "next_actions": [],
+        }
+        artifact_path = _write_run_artifact(result_payload, config)
+        result_payload["artifact_path"] = str(artifact_path)
+        episode_summary = record_run_episodes(config=config, run_result=result_payload)
+        result_payload["episodes"] = episode_summary
+        credit_aggregate = build_credit_assignment_aggregate(config=config, limit=1000)
+        result_payload["credit_assignment"] = compact_credit_assignment_summary(credit_aggregate)
+        _write_run_artifact(result_payload, config)
+        return result_payload
 
     skill_source = steps.get("skill") if isinstance(steps.get("skill"), dict) else {}
     skill_decisions = []
@@ -1180,11 +1265,7 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
             changed_memory_ids.append(str(decision.get("evidence_id") or "memory"))
         memory_decisions.append({**decision, "decision": "accepted" if changed else "rejected", "reason": result.get("error") or "memory_replay_completed", "changed": changed, "result": result})
 
-    memory_to_skill_source = steps.get("memory_to_skill") if isinstance(steps.get("memory_to_skill"), dict) else {}
-    replay_memory_config = dict(config)
-    replay_memory_config["_memory_current_entries"] = _load_builtin_memory_entries(_builtin_memory_paths(config))
-    replay_memory_config.setdefault("_hermes_home", str(get_hermes_home()))
-    memory_to_skill_step = apply_memory_to_skill_migrations(memory_step=memory_to_skill_source, config=replay_memory_config, mutate=True, replay_preview_only=True)
+    memory_to_skill_step = _legacy_split_replay_memory_to_skill_step(source=source, steps=steps, config=config)
     bridge_changed_skills = [str(name) for name in (memory_to_skill_step.get("changed_skills") or [])]
     bridge_removed_memories = [str(item) for item in (memory_to_skill_step.get("removed_memories") or [])]
 
@@ -1325,40 +1406,19 @@ def _semantic_action_from_runner_decision(decision: dict[str, Any], *, kind: str
 
 
 def _knowledge_transaction_summary(transactions: Any) -> dict[str, Any]:
-    rows = transactions if isinstance(transactions, list) else []
-    counts = {"apply": 0, "defer": 0, "skip": 0, "block": 0}
-    by_kind: dict[str, int] = {}
-    cross_store = 0
-    total = 0
-    for item in rows:
-        if not isinstance(item, dict):
-            continue
-        total += 1
-        kind = str(item.get("transaction_kind") or item.get("target_store") or "unknown")
-        by_kind[kind] = by_kind.get(kind, 0) + 1
-        if kind == "memory_to_skill" or (item.get("source_store") and item.get("target_store") and item.get("source_store") != item.get("target_store")):
-            cross_store += 1
-        action = _semantic_action_from_runner_decision(item, kind=kind)
-        counts[action] = counts.get(action, 0) + 1
-    return {"total": total, **counts, "by_kind": dict(sorted(by_kind.items())), "cross_store": cross_store}
+    return canonical_transaction_view({"knowledge_transactions": transactions})["transaction_summary"]
 
 
 def _action_summary_from_result(result: dict[str, Any], step_decisions: dict[str, Any]) -> dict[str, int]:
+    canonical_view = canonical_transaction_view(result)
+    if canonical_view.get("has_canonical"):
+        return {key: int(canonical_view["action_summary"].get(key) or 0) for key in ("apply", "defer", "skip", "block")}
     provided = result.get("action_summary") if isinstance(result.get("action_summary"), dict) else {}
     counts = {"apply": int(provided.get("apply") or 0), "defer": int(provided.get("defer") or 0), "skip": int(provided.get("skip") or 0), "block": int(provided.get("block") or 0)}
     if any(counts.values()):
         return counts
-    transaction_summary = _knowledge_transaction_summary(result.get("knowledge_transactions"))
-    if transaction_summary["total"]:
-        return {key: int(transaction_summary.get(key) or 0) for key in ("apply", "defer", "skip", "block")}
-    for kind in ("skill", "memory", "memory_to_skill"):
-        step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
-        for item in step.get("decisions") or []:
-            if not isinstance(item, dict):
-                continue
-            action = _semantic_action_from_runner_decision(item, kind=kind)
-            counts[action] = counts.get(action, 0) + 1
-    return counts
+    legacy_view = legacy_split_transaction_view(step_decisions)
+    return {key: int(legacy_view["action_summary"].get(key) or 0) for key in ("apply", "defer", "skip", "block")}
 
 
 def _format_count_map(counts: dict[str, Any]) -> str:
@@ -1551,11 +1611,20 @@ def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], mainte
     return lines
 
 
-def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: list[dict[str, Any]], memory_decisions: list[dict[str, Any]], planner_decisions: list[dict[str, Any]]) -> list[str]:
+def _actual_result_summary_lines(
+    *,
+    summary: dict[str, Any],
+    skill_decisions: list[dict[str, Any]],
+    memory_decisions: list[dict[str, Any]],
+    planner_decisions: list[dict[str, Any]],
+    knowledge_transactions: list[dict[str, Any]] | None = None,
+) -> list[str]:
     created = 0
     patched = 0
     created_names: list[str] = []
     patched_names: list[str] = []
+    memory_names: list[str] = []
+    memory_changed_count = 0
     archived = 0
     rewritten_references = 0
     archived_names: list[str] = []
@@ -1581,40 +1650,71 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
             validation_unknown += 1
             mode = str(post_validation.get("mode") or "unknown")
             validation_unknown_modes[mode] = validation_unknown_modes.get(mode, 0) + 1
-    for item in skill_decisions:
-        if not isinstance(item, dict):
-            continue
-        result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
-        if item.get("decision") == "accepted" and item.get("changed"):
-            created_values = result_payload.get("created_skills") or []
-            patched_values = result_payload.get("changed_skills") or []
-            created += len(created_values)
-            patched += len(patched_values)
-            note_names(created_names, created_values)
-            note_names(patched_names, patched_values)
-            planner_decision = item.get("planner_decision") if isinstance(item.get("planner_decision"), dict) else {}
-            if planner_decision.get("decision") == "archive_skill":
-                archived += 1
-                note_names(archived_names, [item.get("skill")])
-                rewritten_references += int(result_payload.get("rewritten_reference_count") or 0)
-            merge_archive = item.get("merge_archive_result") if isinstance(item.get("merge_archive_result"), dict) else {}
-            archived_values = merge_archive.get("archived_skills") or []
-            archived += len(archived_values)
-            note_names(archived_names, archived_values)
-            rewritten_references += int(merge_archive.get("rewritten_reference_count") or 0)
+    def tally_post_validations(result_payload: dict[str, Any]) -> None:
         tally_post_validation(result_payload)
-        if result_payload.get("error") == "skill_editor_post_validation_failed":
-            post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
-            if str(post_validation.get("status") or "") != "failed":
-                validation_rejected += 1
-        if result_payload.get("created_skills_inferred_from_trace"):
-            trace_recovered += 1
-    for item in memory_decisions:
-        if not isinstance(item, dict):
-            continue
-        result_payload = item.get("result") if isinstance(item.get("result"), dict) else {}
-        tally_post_validation(result_payload)
-    memory_changed = sum(1 for item in memory_decisions if isinstance(item, dict) and item.get("decision") == "accepted" and item.get("changed"))
+        for nested_key in ("skill_result", "memory_result"):
+            nested_result = result_payload.get(nested_key)
+            if isinstance(nested_result, dict):
+                tally_post_validation(nested_result)
+    if knowledge_transactions:
+        transaction_view = canonical_transaction_view({"knowledge_transactions": knowledge_transactions})
+        validation = transaction_view["validation"]
+        created = len(transaction_view["created_skills"])
+        patched = len(transaction_view["patched_skills"])
+        archived = len(transaction_view["archived_skills"])
+        rewritten_references = int(transaction_view["rewritten_references"] or 0)
+        memory_changed_count = int(transaction_view["changed_memory_count"] or 0)
+        created_names = list(transaction_view["created_skills"])
+        patched_names = list(transaction_view["patched_skills"])
+        archived_names = list(transaction_view["archived_skills"])
+        memory_names = list(transaction_view["changed_memories"])
+        post_validated = int(validation.get("post_validated") or 0)
+        validation_rejected = int(validation.get("rejected") or 0)
+        validation_unknown = int(validation.get("unknown") or 0)
+        validation_unknown_modes = validation.get("unknown_modes") if isinstance(validation.get("unknown_modes"), dict) else {}
+        trace_recovered = int(transaction_view["trace_recovered"] or 0)
+    else:
+        for item in skill_decisions:
+            if not isinstance(item, dict):
+                continue
+            raw_result_payload = item.get("result")
+            result_payload: dict[str, Any] = raw_result_payload if isinstance(raw_result_payload, dict) else {}
+            if item.get("decision") == "accepted" and item.get("changed"):
+                created_values = result_payload.get("created_skills") or []
+                patched_values = result_payload.get("changed_skills") or []
+                created += len(created_values)
+                patched += len(patched_values)
+                note_names(created_names, created_values)
+                note_names(patched_names, patched_values)
+                planner_decision = item.get("planner_decision") if isinstance(item.get("planner_decision"), dict) else {}
+                if planner_decision.get("decision") == "archive_skill":
+                    archived += 1
+                    note_names(archived_names, [item.get("skill")])
+                    rewritten_references += int(result_payload.get("rewritten_reference_count") or 0)
+                merge_archive = item.get("merge_archive_result") if isinstance(item.get("merge_archive_result"), dict) else {}
+                archived_values = merge_archive.get("archived_skills") or []
+                archived += len(archived_values)
+                note_names(archived_names, archived_values)
+                rewritten_references += int(merge_archive.get("rewritten_reference_count") or 0)
+            tally_post_validations(result_payload)
+            if result_payload.get("error") == "skill_editor_post_validation_failed":
+                post_validation = result_payload.get("post_validation") if isinstance(result_payload.get("post_validation"), dict) else {}
+                if str(post_validation.get("status") or "") != "failed":
+                    validation_rejected += 1
+            if result_payload.get("created_skills_inferred_from_trace"):
+                trace_recovered += 1
+        for item in memory_decisions:
+            if not isinstance(item, dict):
+                continue
+            raw_result_payload = item.get("result")
+            result_payload: dict[str, Any] = raw_result_payload if isinstance(raw_result_payload, dict) else {}
+            memory_values = result_payload.get("changed_memories") or []
+            memory_changed_count += len(memory_values)
+            note_names(memory_names, memory_values)
+            tally_post_validations(result_payload)
+    memory_changed = memory_changed_count
+    if not memory_changed and not knowledge_transactions:
+        memory_changed = sum(1 for item in memory_decisions if isinstance(item, dict) and item.get("decision") == "accepted" and item.get("changed"))
     if not memory_changed:
         memory_changed = int(summary.get("memory_changes") or 0)
     noop_counts: dict[str, int] = {}
@@ -1637,6 +1737,9 @@ def _actual_result_summary_lines(*, summary: dict[str, Any], skill_decisions: li
     if archived_names:
         suffix = f", ... {len(archived_names) - 5} more" if len(archived_names) > 5 else ""
         lines.append(f"- archived skills: {', '.join(archived_names[:5])}{suffix}")
+    if memory_names:
+        suffix = f", ... {len(memory_names) - 5} more" if len(memory_names) > 5 else ""
+        lines.append(f"- changed memories: {', '.join(memory_names[:5])}{suffix}")
     if rewritten_references:
         lines.append(f"- rewritten references: {rewritten_references}")
     lines.append(f"- validation: post-validated {post_validated}, rejected {validation_rejected}, unknown {validation_unknown}")
@@ -2257,6 +2360,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         skill_decisions=skill_decisions,
         memory_decisions=memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [],
         planner_decisions=planner_decisions,
+        knowledge_transactions=knowledge_transactions,
     )
     skill_quality_lines = _skill_quality_summary_lines(skill_decisions, planner_decisions)
     outcome_lines = _outcome_summary_lines(result.get("credit_assignment") if isinstance(result.get("credit_assignment"), dict) else {})

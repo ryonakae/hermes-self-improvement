@@ -133,6 +133,103 @@ def test_record_run_episodes_uses_canonical_knowledge_transactions_without_split
     assert "Do not store in episode" not in serialized
 
 
+
+def test_record_run_episodes_maps_canonical_apply_operations_to_episode_metadata(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    artifact = tmp_path / "self-improvement" / "runs" / "run.json"
+    result = {
+        "schema_name": "self_improvement_run_result",
+        "run_id": "run-apply-ops",
+        "dry_run": False,
+        "execute": True,
+        "artifact_path": str(artifact),
+        "prompt_sources": {"planner": {"base_hash": "sha256:planner"}, "editor": {"base_hash": "sha256:editor"}},
+        "calibration": {"active_evaluator_hash": "sha256:evaluator"},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-skill-apply",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "operation": "mutate_skill",
+                "target_store": "skill",
+                "target_id": "canonical-skill",
+                "transaction_result": {
+                    "success": True,
+                    "outcome": "applied",
+                    "changed_skills": ["canonical-skill"],
+                    "post_validation": {"status": "passed"},
+                },
+            },
+            {
+                "transaction_id": "txn-memory-remove",
+                "transaction_kind": "memory",
+                "decision": "apply",
+                "operation": "memory_remove",
+                "target_store": "builtin_memory",
+                "target_id": "memory:canonical-memory",
+                "source_evidence_id": "ev-memory",
+                "transaction_result": {
+                    "success": True,
+                    "outcome": "applied",
+                    "removed_memories": ["memory:canonical-memory"],
+                    "post_validation": {"status": "passed"},
+                },
+            },
+        ],
+    }
+
+    summary = record_run_episodes(config=config, run_result=result)
+
+    assert summary["count"] == 2
+    loaded = load_recent_episodes(config=config, limit=10)
+    by_txn = {item["transaction_id"]: item for item in loaded}
+    assert by_txn["txn-skill-apply"]["decision"] == "mutate_skill"
+    assert by_txn["txn-skill-apply"]["action"] == "skill_patch"
+    assert by_txn["txn-skill-apply"]["changed"] is True
+    assert by_txn["txn-skill-apply"]["operation"] == "mutate_skill"
+    assert by_txn["txn-skill-apply"]["post_validation_status"] == "passed"
+    assert by_txn["txn-memory-remove"]["target_id"] == "memory:canonical-memory"
+    assert by_txn["txn-memory-remove"]["decision"] == "mutate_memory"
+    assert by_txn["txn-memory-remove"]["action"] == "memory_remove"
+    assert by_txn["txn-memory-remove"]["operation"] == "memory_remove"
+
+
+
+def test_record_run_episodes_ignores_conflicting_split_lanes_when_canonical_transactions_exist(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = canonical_run_result(tmp_path)
+    result["step_decisions"] = {
+        "skill": {
+            "decisions": [
+                {"skill": "split-skill", "decision": "accepted", "changed": True, "result": {"created_skills": ["split-created"], "changed_skills": ["split-patched"]}},
+            ],
+        },
+        "memory": {
+            "decisions": [
+                {"evidence_id": "split-memory", "decision": "accepted", "changed": True, "result": {"changed_memories": ["memory:split-memory"]}},
+            ],
+        },
+        "memory_to_skill": {
+            "decisions": [
+                {"target_skill": "split-workflow-skill", "decision": "memory_to_skill_preview"},
+            ],
+        },
+    }
+
+    summary = record_run_episodes(config=config, run_result=result)
+
+    assert summary["count"] == 3
+    loaded = load_recent_episodes(config=config, limit=10)
+    by_target = {item["target_id"]: item for item in loaded}
+    assert by_target["demo-skill"]["transaction_id"] == "txn-skill-1"
+    assert by_target["memory:mem1"]["transaction_kind"] == "memory"
+    assert by_target["workflow-skill"]["transaction_kind"] == "memory_to_skill"
+    serialized = json.dumps(loaded, ensure_ascii=False)
+    assert "split-skill" not in serialized
+    assert "split-memory" not in serialized
+    assert "split-workflow-skill" not in serialized
+
+
 def test_record_run_episodes_writes_append_only_skill_and_memory_episodes(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = sample_run_result(tmp_path)

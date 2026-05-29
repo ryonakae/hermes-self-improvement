@@ -164,6 +164,17 @@ def test_knowledge_transactions_include_memory_to_skill_cross_store_candidate():
     ]
 
 
+def test_legacy_split_bridge_defaults_planner_skill_transactions_to_skill_kind():
+    transactions = build_knowledge_transactions(
+        skill_step={"planner": {"knowledge_transactions": [{"decision": "mutate_skill", "target_skill": "demo-skill"}]}},
+        memory_step={"decisions": []},
+        memory_to_skill_step={"decisions": []},
+    )
+
+    assert transactions == [{"decision": "mutate_skill", "target_skill": "demo-skill", "transaction_kind": "skill"}]
+
+
+
 def test_knowledge_routing_summary_reports_memory_to_skill_drop():
     memory_step = memory_step_with_skill_route()
     memory_to_skill_step = {"status": "no_candidates", "decisions": []}

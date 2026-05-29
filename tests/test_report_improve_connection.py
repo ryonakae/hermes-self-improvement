@@ -141,6 +141,70 @@ def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp
     assert artifact["step_decisions"]["knowledge_quality"]["unmatched_evidence_count"] == 2
 
 
+
+def test_run_improve_uses_canonical_knowledge_transactions_for_summary_and_quality(monkeypatch, tmp_path):
+    import hermes_self_improvement.cli as cli
+
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    canonical_transactions = [
+        {
+            "transaction_id": "txn-skill-apply",
+            "transaction_kind": "skill",
+            "decision": "apply",
+            "target_store": "skill",
+            "target_skill": "canonical-skill",
+            "transaction_result": {"outcome": "preview", "changed_skills": ["canonical-skill"]},
+        },
+        {
+            "transaction_id": "txn-memory-skip",
+            "transaction_kind": "memory",
+            "decision": "skip",
+            "target_store": "builtin_memory",
+            "source_evidence_id": "memory:canonical-entry",
+            "transaction_result": {"outcome": "preview", "changed_memories": ["memory:canonical-entry"]},
+        },
+        {
+            "transaction_id": "txn-cross-defer",
+            "transaction_kind": "memory_to_skill",
+            "decision": "defer",
+            "source_store": "builtin_memory",
+            "target_store": "skill",
+            "target_skill": "workflow-skill",
+            "transaction_result": {"outcome": "preview"},
+        },
+    ]
+
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", lambda **kwargs: {
+        "status": "completed",
+        "knowledge_transactions": canonical_transactions,
+        "transaction_results": [],
+        "changed_skills": ["canonical-skill"],
+        "changed_memories": ["memory:canonical-entry"],
+        "editor_validation": {"summary": {"preview": 3}},
+        "planner_quality": {"unmatched_evidence_count": 2, "action_like_skips": 1},
+        "knowledge_routing": {"memory_routed_to_skill_count": 1, "memory_routed_to_skill_selected_count": 1, "memory_routed_to_skill_dropped_count": 0},
+        "prompt_sources": {"planner": {"prompt_hash": "p"}},
+        "planner_digest": {"knowledge_maintenance": {}},
+        "planner": {"status": "completed"},
+    })
+
+    result = cli.run_improve(config=config, dry_run=True)
+
+    assert result["action_summary"] == {"apply": 1, "defer": 1, "skip": 1, "block": 0}
+    assert result["step_decisions"]["knowledge_transactions"] == {"total": 3, "apply": 1, "defer": 1, "skip": 1, "block": 0, "by_kind": {"memory": 1, "memory_to_skill": 1, "skill": 1}, "cross_store": 1}
+    assert result["step_decisions"]["knowledge_quality"] == {"unmatched_evidence_count": 2, "action_like_skips": 1}
+    assert result["knowledge_transactions"] == canonical_transactions
+    assert result["knowledge_transactions"][0]["target_skill"] == "canonical-skill"
+    assert result["knowledge_transactions"][1]["source_evidence_id"] == "memory:canonical-entry"
+    assert "skill" not in result["step_decisions"]
+    assert "memory" not in result["step_decisions"]
+    assert "memory_to_skill" not in result["step_decisions"]
+
+
 def test_run_improve_fixture_proves_all_canonical_transaction_stores_without_split_lanes(monkeypatch, tmp_path):
     import hermes_self_improvement.cli as cli
     import hermes_self_improvement.runner_steps as runner_steps
@@ -317,6 +381,94 @@ def test_run_replay_improve_executes_dry_run_artifact_without_replanning(monkeyp
     assert result["summary"]["memory_changes"] == 1
     assert result["skill_changes"] == ["patch-tool-workflow"]
     assert result["memory_changes"] == ["m1"]
+
+
+def test_run_replay_improve_with_canonical_transactions_skips_legacy_split_bridge(monkeypatch, tmp_path):
+    import hermes_self_improvement.cli as cli
+
+    source_path = tmp_path / "dry-run.json"
+    source_path.write_text(json.dumps({
+        "run_id": "run-canonical-dry",
+        "dry_run": True,
+        "summary": {"dry_run": True},
+        "knowledge_transactions": [
+            {"transaction_id": "txn-skip", "transaction_kind": "skill", "decision": "skip", "target_store": "skill", "target_id": "canonical-skill"},
+        ],
+        "step_decisions": {
+            "memory_to_skill": {"decisions": [{"decision": "memory_to_skill_preview", "target_skill": "split-skill"}]},
+        },
+    }), encoding="utf-8")
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+
+    def fail_if_legacy_bridge_called(**kwargs):
+        raise AssertionError("legacy split bridge should not run when canonical transactions exist")
+
+    monkeypatch.setattr(cli, "apply_memory_to_skill_migrations", fail_if_legacy_bridge_called)
+    monkeypatch.setattr(cli, "record_run_episodes", lambda **kwargs: {"count": 0, "path": str(tmp_path / "episodes")})
+
+    result = cli.run_replay_improve(config=config, source_run_path=str(source_path))
+
+    assert result["action_summary"] == {"apply": 0, "defer": 0, "skip": 1, "block": 0}
+    assert "memory_to_skill" not in result["step_decisions"]
+    assert result["step_decisions"]["knowledge_transactions"]["status"] == "canonical_replay_completed"
+    assert result["summary"]["skill_changes"] == 0
+    assert result["summary"]["memory_changes"] == 0
+
+
+def test_run_replay_improve_executes_canonical_apply_transactions_and_strips_split_lanes(monkeypatch, tmp_path):
+    import hermes_self_improvement.cli as cli
+
+    source_path = tmp_path / "dry-run.json"
+    source_path.write_text(json.dumps({
+        "run_id": "run-canonical-apply-dry",
+        "dry_run": True,
+        "summary": {"dry_run": True},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-apply",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "target_store": "skill",
+                "target_id": "canonical-skill",
+                "operation": "mutate_skill",
+            },
+            {
+                "transaction_id": "txn-skip",
+                "transaction_kind": "none",
+                "decision": "skip",
+                "target_store": "none",
+                "target_id": "",
+                "operation": "none",
+            },
+        ],
+        "step_decisions": {
+            "knowledge_transactions": {"by_kind": {"skill": 1, "none": 1}},
+            "skill": {"decisions": [{"decision": "create_skill_preview", "skill": "split-skill"}]},
+            "memory": {"decisions": [{"decision": "accepted", "evidence_id": "split-memory"}]},
+            "memory_to_skill": {"decisions": [{"decision": "memory_to_skill_preview", "target_skill": "split-skill"}]},
+        },
+    }), encoding="utf-8")
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    calls = []
+
+    def fake_execute(transaction, *, config=None, mutate=False):
+        calls.append((transaction["transaction_id"], mutate))
+        return {"success": True, "outcome": "applied", "changed_skills": [transaction["target_id"]], "changed_memories": []}
+
+    monkeypatch.setattr(cli, "execute_knowledge_transaction", fake_execute)
+    monkeypatch.setattr(cli, "apply_memory_to_skill_migrations", lambda **kwargs: (_ for _ in ()).throw(AssertionError("legacy bridge should not run")))
+    monkeypatch.setattr(cli, "record_run_episodes", lambda **kwargs: {"count": 0, "path": str(tmp_path / "episodes")})
+
+    result = cli.run_replay_improve(config=config, source_run_path=str(source_path))
+
+    assert calls == [("txn-apply", True)]
+    assert result["skill_changes"] == ["canonical-skill"]
+    assert result["memory_changes"] == []
+    assert result["action_summary"] == {"apply": 1, "defer": 0, "skip": 1, "block": 0}
+    assert {"skill", "memory", "memory_to_skill"}.isdisjoint(result["step_decisions"])
+    assert result["step_decisions"]["knowledge_transactions"]["status"] == "canonical_replay_completed"
+    assert result["knowledge_transactions"][0]["transaction_result"]["outcome"] == "applied"
+
 
 
 def test_run_replay_improve_keeps_non_mutation_ready_decisions_as_skips(tmp_path):

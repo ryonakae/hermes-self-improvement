@@ -105,3 +105,59 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     assert all(entry["old_text"] == entry["text"] for entry in entries)
     assert any(entry["old_text"] == "Hermes runtime root は `~/.hermes`。" for entry in entries)
     assert any(entry["old_text"] == "Ryo prefers concise reports." for entry in entries)
+
+
+def test_run_improve_uses_canonical_knowledge_step_not_split_entry_points(tmp_path, monkeypatch):
+    import hermes_self_improvement.runner_steps as runner_steps
+
+    artifact_path = tmp_path / "run.json"
+    evidence_path = tmp_path / "evidence.json"
+
+    def forbidden_split_entry_point(*args, **kwargs):
+        raise AssertionError("run_improve must not call split-lane improvement entry points")
+
+    monkeypatch.setattr(runner_steps, "run_skill_improvement_step", forbidden_split_entry_point)
+    monkeypatch.setattr(runner_steps, "run_memory_improvement_step", forbidden_split_entry_point)
+    monkeypatch.setattr(runner_steps, "apply_memory_to_skill_migrations", forbidden_split_entry_point)
+    monkeypatch.setattr(cli, "build_autonomous_operation_policy", lambda config: {})
+    monkeypatch.setattr(cli, "summarize_autonomous_operation_policy", lambda policy: {})
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda *, config, mutate: {})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda config: {})
+    monkeypatch.setattr(cli, "_event_path", lambda config: tmp_path / "events.jsonl")
+    monkeypatch.setattr(cli, "_load_events", lambda path, *, since: [])
+    monkeypatch.setattr(
+        cli,
+        "build_evidence_pack",
+        lambda events, since, until, *, curator_telemetry, memory_paths: {
+            "views": {"memory": [], "skill": [], "evaluator": []},
+            "evidence": [],
+            "summary": {},
+            "skill_candidates": [],
+        },
+    )
+    monkeypatch.setattr(cli, "build_planner_windows", lambda events: [])
+    monkeypatch.setattr(cli, "build_planner_digest", lambda windows, *, existing_memories, recent_candidates: {})
+    monkeypatch.setattr(cli, "run_planner", lambda digest, *, config: {"candidates": []})
+    monkeypatch.setattr(cli, "build_active_skill_references", lambda config, *, candidate_names: {})
+    monkeypatch.setattr(cli, "attach_active_skill_references", lambda evidence_pack, active_references: evidence_pack)
+    monkeypatch.setattr(cli, "write_evidence_pack", lambda evidence_pack, reports_dir: evidence_path)
+    monkeypatch.setattr(cli, "_reports_dir", lambda config: tmp_path)
+    monkeypatch.setattr(cli, "run_pipeline", lambda config, *, since_hours, write_report: {"proposals": []})
+    monkeypatch.setattr(cli, "_write_run_artifact", lambda payload, config: artifact_path)
+    monkeypatch.setattr(cli, "record_run_episodes", lambda *, config, run_result: {"recorded": 0})
+    monkeypatch.setattr(cli, "build_credit_assignment_aggregate", lambda *, config, limit: {})
+    monkeypatch.setattr(cli, "compact_credit_assignment_summary", lambda aggregate: {})
+
+    result = cli.run_improve(
+        config={
+            "_self_improvement_root": str(tmp_path),
+            "_planner_runtime_func": lambda *, digest, config: {"status": "completed", "knowledge_transactions": []},
+        },
+        since_hours=24,
+        dry_run=True,
+    )
+
+    assert result["knowledge_transactions"] == []
+    assert result["step_decisions"]["knowledge_transactions"]["total"] == 0
+    assert result["summary"]["skill_changes"] == 0
+    assert result["summary"]["memory_changes"] == 0

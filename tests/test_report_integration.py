@@ -98,6 +98,45 @@ def create_runner_artifacts(config: dict) -> None:
     }, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def test_operational_report_recent_run_uses_canonical_transactions_over_split_lanes():
+    mod = load_plugin_module()
+
+    lines = mod._render_operational_report_sections({
+        "recent_runs": [
+            {
+                "path": "run-canonical.json",
+                "summary": {"skill_changes": 1, "memory_changes": 1},
+                "knowledge_transactions": [
+                    {
+                        "transaction_id": "txn-skill",
+                        "transaction_kind": "skill",
+                        "decision": "apply",
+                        "transaction_result": {"changed_skills": ["canonical-skill"]},
+                    },
+                    {
+                        "transaction_id": "txn-memory",
+                        "transaction_kind": "memory",
+                        "decision": "apply",
+                        "transaction_result": {"changed_memories": ["memory:canonical"]},
+                    },
+                ],
+                "step_decisions": {
+                    "skill": {"decisions": [{"decision": "accepted", "changed": True, "result": {"changed_skills": ["split-skill"]}}]},
+                    "memory": {"decisions": [{"decision": "accepted", "changed": True, "result": {"changed_memories": ["memory:split"]}}]},
+                },
+            }
+        ]
+    })
+    text = "\n".join(lines)
+    actual_results = text.split("Skill quality:", 1)[0]
+
+    assert "canonical-skill" in actual_results
+    assert "memory:canonical" in actual_results
+    assert "split-skill" not in actual_results
+    assert "memory:split" not in actual_results
+
+
+
 def test_run_pipeline_report_includes_runner_and_calibration_summaries(tmp_path):
     mod = load_plugin_module()
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}

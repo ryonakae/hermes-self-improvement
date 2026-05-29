@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from hermes_self_improvement.runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_role_runtime_eval_cases
+from hermes_self_improvement.runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_role_runtime_eval_cases, legacy_split_planner_quality
 
 
 def write_json(path: Path, payload: dict) -> None:
@@ -92,6 +92,33 @@ def test_runtime_eval_cases_convert_unsafe_provenance_to_defer(tmp_path):
     assert cases[0]["case_type"] == "planner_ambiguous_target_defer"
     assert cases[0]["expected"]["decision"] == "defer"
     assert cases[0]["expected"]["reason_contains"] == "target_provenance_unsafe"
+
+
+
+def test_runtime_eval_cases_use_canonical_knowledge_quality_for_improve_runs_even_with_conflicting_split_quality(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "runs" / "run-canonical.json", {
+        "schema_name": "self_improvement_run_result",
+        "schema_version": "1.0",
+        "run_id": "run-canonical",
+        "dry_run": True,
+        "execute": False,
+        "artifact_path": str(root / "runs" / "run-canonical.json"),
+        "evidence_pack": {"summary": {"unmatched_candidate_count": 1, "memory_gap_candidate_count": 0}},
+        "step_decisions": {
+            "knowledge_quality": {"unmatched_evidence_count": 7, "action_like_skips": 1},
+            "skill": {"planner_quality": {"unmatched_evidence_count": 999, "action_like_skips": 999}},
+        },
+    })
+
+    cases = build_overlay_set_runtime_eval_cases(config=config, limit=100)
+    improve_cases = [case for case in cases if case.get("case_type") == "planner_overlay_from_improve_unmatched_candidates"]
+
+    assert len(improve_cases) == 1
+    assert improve_cases[0]["input"]["unmatched_candidate_count"] == 1
+    assert improve_cases[0]["input"]["unmatched_evidence_count"] == 7
+    assert improve_cases[0]["input"]["unmatched_evidence_count"] != 999
 
 
 def test_runtime_eval_cases_convert_editor_target_mismatch_to_skip(tmp_path):
@@ -352,6 +379,17 @@ def test_overlay_eval_cases_ignore_sparse_unmatched_failure_cluster(tmp_path):
     })
 
     assert build_overlay_set_runtime_eval_cases(config=config, limit=100) == []
+
+
+def test_legacy_split_planner_quality_is_explicit_fallback_helper():
+    assert legacy_split_planner_quality({
+        "knowledge_quality": {"unmatched_evidence_count": 1},
+        "skill": {"planner_quality": {"unmatched_evidence_count": 99}},
+    }) == {"unmatched_evidence_count": 1}
+    assert legacy_split_planner_quality({
+        "skill": {"planner_quality": {"unmatched_evidence_count": 12}},
+    }) == {"unmatched_evidence_count": 12}
+
 
 
 def test_overlay_eval_cases_include_improve_run_unmatched_and_memory_gap_signals(tmp_path):

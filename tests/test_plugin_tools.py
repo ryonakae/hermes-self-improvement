@@ -369,6 +369,67 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert len(raw) < 6000
 
 
+def test_compact_improve_tool_result_uses_canonical_knowledge_transactions_over_split_lanes():
+    import hermes_self_improvement.tool_handlers as tools
+
+    mod = tools
+    raw_result = {
+        "summary": {"skill_changes": 1, "memory_changes": 0, "scorer_evaluator_changed": False},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-skill-apply",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "target_store": "skill",
+                "target_skill": "canonical-skill",
+                "transaction_result": {"outcome": "preview", "changed_skills": ["canonical-skill"]},
+            },
+            {
+                "transaction_id": "txn-memory-skip",
+                "transaction_kind": "memory",
+                "decision": "skip",
+                "target_store": "builtin_memory",
+                "source_evidence_id": "memory:canonical-entry",
+                "transaction_result": {"outcome": "preview", "changed_memories": ["memory:canonical-entry"]},
+            },
+            {
+                "transaction_id": "txn-cross-defer",
+                "transaction_kind": "memory_to_skill",
+                "decision": "defer",
+                "source_store": "builtin_memory",
+                "target_store": "skill",
+                "target_skill": "workflow-skill",
+                "transaction_result": {"outcome": "preview"},
+            },
+        ],
+        "step_decisions": {
+            "summary": {"total": 999},
+            "skill": {
+                "decisions": [
+                    {"skill": "split-skill", "decision": "accepted", "changed": True, "result": {"created_skills": ["split-created"], "changed_skills": ["split-patched"]}},
+                    {"skill": "split-archive", "decision": "accepted", "changed": True, "result": {"created_skills": ["split-archive-created"]}},
+                ],
+            },
+            "memory": {
+                "decisions": [
+                    {"evidence_id": "split-memory", "decision": "accepted", "changed": True, "result": {"changed_memories": ["memory:split-memory"]}},
+                ],
+            },
+            "memory_to_skill": {
+                "decisions": [
+                    {"target_skill": "split-workflow-skill", "decision": "memory_to_skill_preview"},
+                ],
+            },
+        },
+    }
+
+    payload = mod._compact_improve_tool_result(raw_result)
+
+    assert payload["action_summary"] == {"apply": 1, "defer": 1, "skip": 1, "block": 0}
+    assert payload["steps"]["knowledge_transactions"] == {"total": 3, "apply": 1, "defer": 1, "skip": 1, "block": 0, "by_kind": {"memory": 1, "memory_to_skill": 1, "skill": 1}, "cross_store": 1}
+    assert payload["steps"]["skill_planner"]["quality"] == {"attached_candidate_count": 0, "unmatched_evidence_count": 0, "selected_with_evidence": 0, "action_like_skips": 0, "editor_task_count": 0, "hint_attached_evidence_count": 0, "hint_attached_candidate_count": 0, "cluster_evidence_count": 0, "cluster_attached_candidate_count": 0, "cluster_selected_count": 0, "weak_only_candidate_count": 0, "weak_only_selected_count": 0, "attachments_by_match_kind": {}, "evidence_strength_counts": {}, "selected_by_strength": {}, "skip_class_counts": {}, "skip_reasons_by_class": {}, "matched_candidate_count": 0, "matched_but_not_selected_count": 0, "matched_but_not_selected_by_reason": {}, "matched_noop_class_counts": {}, "benign_skip_count": 0, "safe_stop_count": 0, "actionability_loss_count": 0, "needs_follow_up_skip_count": 0, "editor_prompt_chars": {}}
+
+
 def test_report_and_improve_tool_schemas_do_not_expose_scorer_selector():
     mod = load_plugin_module()
     ctx = RecordingContext()

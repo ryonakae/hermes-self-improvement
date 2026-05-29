@@ -22,6 +22,151 @@ def normalize_knowledge_transactions(raw_transactions: list[dict[str, Any]]) -> 
     return [normalize_knowledge_transaction(item) for item in raw_transactions if isinstance(item, dict)]
 
 
+def canonical_transaction_view(payload: dict[str, Any]) -> dict[str, Any]:
+    transactions = _canonical_transactions_from_payload(payload)
+    view = _empty_transaction_view(has_canonical=bool(transactions))
+    if not transactions:
+        return view
+    for item in transactions:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("transaction_kind") or item.get("target_store") or "unknown")
+        view["transaction_summary"]["total"] += 1
+        view["transaction_summary"]["by_kind"][kind] = view["transaction_summary"]["by_kind"].get(kind, 0) + 1
+        if kind == "memory_to_skill" or (item.get("source_store") and item.get("target_store") and item.get("source_store") != item.get("target_store")):
+            view["transaction_summary"]["cross_store"] += 1
+        action = _semantic_action_from_transaction(item, kind=kind)
+        view["transaction_summary"][action] = view["transaction_summary"].get(action, 0) + 1
+        view["action_summary"][action] = view["action_summary"].get(action, 0) + 1
+
+        result_payload = _transaction_result_payload(item)
+        created_values = result_payload.get("created_skills") or []
+        patched_values = result_payload.get("changed_skills") or []
+        archived_values = result_payload.get("archived_skills") or []
+        if item.get("operation") == "archive_skill" or item.get("decision") == "archive_skill":
+            archived_values = archived_values or patched_values or [item.get("target_skill") or item.get("target_id") or item.get("skill")]
+            patched_values = []
+        changed_memory_values = list(result_payload.get("changed_memories") or [])
+        removed_memory_values = list(result_payload.get("removed_memories") or [])
+
+        _note_names(view["created_skills"], created_values)
+        _note_names(view["patched_skills"], patched_values)
+        _note_names(view["archived_skills"], archived_values)
+        _note_names(view["changed_memories"], changed_memory_values)
+        _note_names(view["removed_memories"], removed_memory_values)
+        _note_names(view["changed_memories"], removed_memory_values)
+        view["memory_touch_count"] += len(changed_memory_values) + len(removed_memory_values)
+        view["changed_memory_count"] = len(view["changed_memories"])
+        view["rewritten_references"] += int(result_payload.get("rewritten_reference_count") or 0)
+        if result_payload.get("created_skills_inferred_from_trace"):
+            view["trace_recovered"] += 1
+        _tally_post_validations(view["validation"], result_payload)
+    view["transaction_summary"]["by_kind"] = dict(sorted(view["transaction_summary"]["by_kind"].items()))
+    return view
+
+
+def legacy_split_transaction_view(step_decisions: dict[str, Any]) -> dict[str, Any]:
+    view = _empty_transaction_view(has_canonical=False)
+    if not isinstance(step_decisions, dict):
+        return view
+    for kind in ("skill", "memory", "memory_to_skill"):
+        step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
+        for item in step.get("decisions") or []:
+            if not isinstance(item, dict):
+                continue
+            action = _semantic_action_from_transaction(item, kind=kind)
+            view["action_summary"][action] = view["action_summary"].get(action, 0) + 1
+    return view
+
+
+def _empty_transaction_view(*, has_canonical: bool) -> dict[str, Any]:
+    action_summary = {"apply": 0, "defer": 0, "skip": 0, "block": 0}
+    return {
+        "has_canonical": has_canonical,
+        "transactions": [],
+        "action_summary": dict(action_summary),
+        "transaction_summary": {"total": 0, **action_summary, "by_kind": {}, "cross_store": 0},
+        "created_skills": [],
+        "patched_skills": [],
+        "archived_skills": [],
+        "changed_memories": [],
+        "removed_memories": [],
+        "changed_memory_count": 0,
+        "memory_touch_count": 0,
+        "rewritten_references": 0,
+        "validation": {"post_validated": 0, "rejected": 0, "unknown": 0, "unknown_modes": {}},
+        "trace_recovered": 0,
+    }
+
+
+def _canonical_transactions_from_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    rows = payload.get("knowledge_transactions")
+    if isinstance(rows, list):
+        return [item for item in rows if isinstance(item, dict)]
+    step_decisions = payload.get("step_decisions") if isinstance(payload.get("step_decisions"), dict) else payload
+    rows = step_decisions.get("knowledge_transactions") if isinstance(step_decisions, dict) else []
+    return [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
+
+
+def _transaction_result_payload(transaction: dict[str, Any]) -> dict[str, Any]:
+    raw_result = transaction.get("transaction_result") if isinstance(transaction.get("transaction_result"), dict) else transaction.get("result")
+    return raw_result if isinstance(raw_result, dict) else {}
+
+
+def _note_names(target: list[str], values: Any) -> None:
+    for value in values or []:
+        name = str(value or "").strip()
+        if name and name not in target:
+            target.append(name)
+
+
+def _semantic_action_from_transaction(transaction: dict[str, Any], *, kind: str) -> str:
+    raw = str(transaction.get("decision") or "")
+    reason = str(transaction.get("reason") or "")
+    if raw in {"mutate_skill", "mutate_skill_preview", "create_skill", "create_skill_preview", "archive_skill", "archive_skill_preview", "mutate_memory", "memory_to_skill_preview", "accepted", "apply"}:
+        return "apply"
+    if raw == "defer":
+        return "defer"
+    if raw == "skip":
+        return "skip"
+    if raw == "rejected":
+        if kind == "memory" and reason.startswith("dry_run_would_execute"):
+            return "apply"
+        return "block"
+    if raw in {"blocked", "block"}:
+        return "block"
+    return "skip"
+
+
+def _tally_post_validations(validation: dict[str, Any], result_payload: dict[str, Any]) -> None:
+    _tally_post_validation(validation, result_payload)
+    for nested_key in ("skill_result", "memory_result"):
+        nested_result = result_payload.get(nested_key)
+        if isinstance(nested_result, dict):
+            _tally_post_validation(validation, nested_result)
+
+
+def _tally_post_validation(validation: dict[str, Any], result_payload: dict[str, Any]) -> None:
+    if str(result_payload.get("error") or "") == "skill_editor_post_validation_failed":
+        validation["rejected"] = int(validation.get("rejected") or 0) + 1
+        return
+    raw_post_validation = result_payload.get("post_validation")
+    post_validation: dict[str, Any] = raw_post_validation if isinstance(raw_post_validation, dict) else {}
+    status = str(post_validation.get("status") or "")
+    if status == "passed":
+        validation["post_validated"] = int(validation.get("post_validated") or 0) + 1
+    elif status == "failed":
+        validation["rejected"] = int(validation.get("rejected") or 0) + 1
+    elif status == "write_only_unverified" or str(post_validation.get("accounting_status") or "") == "applied_unverified":
+        validation["unknown"] = int(validation.get("unknown") or 0) + 1
+        unknown_modes = validation.get("unknown_modes") if isinstance(validation.get("unknown_modes"), dict) else {}
+        mode = str(post_validation.get("mode") or "unknown")
+        unknown_modes[mode] = int(unknown_modes.get(mode) or 0) + 1
+        validation["unknown_modes"] = unknown_modes
+
+
 def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
     decision = _canonical_decision(str(raw.get("decision") or "apply"))
     target_store = str(raw.get("target_store") or "")
@@ -65,6 +210,14 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
         operation = operation or "mutate_skill"
     elif target_store in _NON_EXECUTABLE_STORES:
         transaction_kind = target_store
+        operation = "none"
+    elif not target_store and decision == "skip":
+        target_store = "none"
+        transaction_kind = "none"
+        operation = "none"
+    elif not target_store and decision == "defer":
+        target_store = "unresolved"
+        transaction_kind = "unresolved"
         operation = "none"
 
     transaction_kind = transaction_kind or _transaction_kind_for_store(target_store)

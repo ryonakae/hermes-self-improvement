@@ -1070,6 +1070,7 @@ def test_run_knowledge_improvement_step_dry_run_returns_canonical_transactions(m
         "none",
     ]
     assert {item["transaction_kind"] for item in transactions} >= {"skill", "memory", "memory_to_skill", "unresolved", "none"}
+    assert "planner_skill" not in {item["transaction_kind"] for item in transactions}
     assert all(item.get("transaction_id") for item in transactions)
     assert transactions[5]["decision"] == "defer"
     assert transactions[5]["editor_task"] is None

@@ -117,6 +117,21 @@ def test_normalize_knowledge_transaction_preserves_skill_skip_target_identity():
     assert normalized["reason"] == "inventory_not_selected_by_planner"
 
 
+def test_normalize_knowledge_transaction_targetless_skip_defaults_to_none_kind():
+    normalized = normalize_knowledge_transaction({
+        "decision": "skip",
+        "operation": "none",
+        "reason": "Exact duplicate of an existing skill.",
+    })
+
+    assert normalized["decision"] == "skip"
+    assert normalized["transaction_kind"] == "none"
+    assert normalized["target_store"] == "none"
+    assert normalized["target_id"] == ""
+    assert normalized["operation"] == "none"
+
+
+
 def test_normalize_knowledge_transaction_non_apply_classifications_clear_editor_fields():
     unresolved = normalize_knowledge_transaction({
         "decision": "apply",

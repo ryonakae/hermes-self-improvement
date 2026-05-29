@@ -492,6 +492,174 @@ def test_improve_summary_is_curator_style_and_mentions_private_eval_cases():
     assert "ledger" not in text.lower()
 
 
+
+def test_improve_summary_action_summary_prefers_canonical_transactions_over_provided_counts():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": True,
+        "summary": {"skill_changes": 0, "memory_changes": 0, "scorer_evaluator_changed": False},
+        "action_summary": {"apply": 99, "defer": 99, "skip": 99, "block": 99},
+        "knowledge_transactions": [
+            {"transaction_id": "txn-apply", "transaction_kind": "skill", "decision": "apply", "target_store": "skill"},
+            {"transaction_id": "txn-skip", "transaction_kind": "memory", "decision": "skip", "target_store": "builtin_memory"},
+        ],
+        "step_decisions": {
+            "summary": {"total": 2},
+            "skill": {"planner": {"summary": {}}, "decisions": [{"decision": "rejected"}]},
+            "memory": {"decisions": [{"decision": "defer"}]},
+        },
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "判断: apply 1 / defer 0 / skip 1 / block 0。" in text
+    assert "- Would apply: 1, Deferred: 0, Skipped: 1, Blocked: 0" in text
+    assert "99" not in text
+
+
+
+def test_improve_summary_actual_results_use_canonical_transaction_names_not_split_lanes():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 1, "memory_changes": 1, "scorer_evaluator_changed": False},
+        "action_summary": {"apply": 3, "defer": 0, "skip": 0, "block": 0},
+        "calibration": {"current_status": "updated", "runtime_eval_cases": {"count": 0, "status": "not_built"}},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-skill-apply",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "target_store": "skill",
+                "target_skill": "route-skill",
+                "transaction_result": {"outcome": "preview", "changed_skills": ["canonical-result-skill"]},
+            },
+            {
+                "transaction_id": "txn-memory-skip",
+                "transaction_kind": "memory",
+                "decision": "skip",
+                "target_store": "builtin_memory",
+                "source_evidence_id": "memory-route-source",
+                "transaction_result": {"outcome": "preview", "changed_memories": ["memory:canonical-result-entry"]},
+            },
+            {
+                "transaction_id": "txn-cross-defer",
+                "transaction_kind": "memory_to_skill",
+                "decision": "defer",
+                "source_store": "builtin_memory",
+                "target_store": "skill",
+                "target_skill": "workflow-skill",
+                "transaction_result": {"outcome": "preview"},
+            },
+        ],
+        "step_decisions": {
+            "summary": {"total": 3},
+            "skill": {
+                "planner": {"planner_source": "deterministic", "status": "completed", "summary": {"candidate_count": 1, "mutate_skill_count": 1, "skipped": 0, "deferred": 0}},
+                "planner_quality": {"unmatched_evidence_count": 0},
+                "decisions": [
+                    {"skill": "split-skill", "decision": "accepted", "changed": True, "result": {"created_skills": ["split-created"], "changed_skills": ["split-patched"]}},
+                ],
+            },
+            "memory": {
+                "decisions": [
+                    {"evidence_id": "split-memory", "decision": "accepted", "changed": True, "result": {"changed_memories": ["memory:split-memory"]}},
+                ],
+            },
+            "memory_to_skill": {
+                "decisions": [
+                    {"target_skill": "split-workflow-skill", "decision": "memory_to_skill_preview"},
+                ],
+            },
+            "knowledge_quality": {"unmatched_evidence_count": 7, "action_like_skips": 1},
+        },
+        "curator_telemetry": {"available": False, "candidate_count": 0, "rejected_count": 0},
+        "evidence_pack": {"summary": {"evidence_count": 0, "ignored_count": 0, "coverage_candidate_count": 0, "inventory_evidence_count": 0, "evidence_by_kind": {}, "inventory_health": {"skill_candidates": {}, "memory": {}}}},
+        "prompt_sources": {"planner": {"base_hash": "sha256:planner-base"}, "editor": {"base_hash": "sha256:editor-base"}},
+    })
+
+    assert "canonical-result-skill" in text
+    assert "memory:canonical-result-entry" in text
+    assert "split-skill" not in text
+    assert "split-memory" not in text
+    assert "split-workflow-skill" not in text
+
+
+
+def test_improve_summary_counts_nested_canonical_validation_and_duplicate_memory_results():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 1, "memory_changes": 2, "scorer_evaluator_changed": False},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-skill-passed",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "transaction_result": {
+                    "changed_skills": ["canonical-skill"],
+                    "skill_result": {"post_validation": {"status": "passed"}},
+                },
+            },
+            {
+                "transaction_id": "txn-memory-failed",
+                "transaction_kind": "memory",
+                "decision": "apply",
+                "transaction_result": {
+                    "changed_memories": ["memory:duplicate", "memory:duplicate"],
+                    "memory_result": {"post_validation": {"status": "failed"}},
+                },
+            },
+            {
+                "transaction_id": "txn-skill-unknown",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "transaction_result": {
+                    "changed_skills": ["canonical-unknown-skill"],
+                    "skill_result": {"post_validation": {"accounting_status": "applied_unverified", "mode": "skill_patch"}},
+                },
+            },
+        ],
+        "step_decisions": {
+            "summary": {"total": 3},
+            "skill": {"planner": {"summary": {}}, "decisions": []},
+            "memory": {"decisions": []},
+        },
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "skill patched 2" in text
+    assert "memory 1" in text
+    assert "changed memories: memory:duplicate" in text
+    assert "validation: post-validated 1, rejected 1, unknown 1" in text
+    assert "validation unknown breakdown: skill_patch 1" in text
+
+
+
+def test_improve_summary_classifies_canonical_archive_transactions_as_archived():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 1, "memory_changes": 0, "scorer_evaluator_changed": False},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-archive",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "operation": "archive_skill",
+                "target_skill": "stale-skill",
+                "transaction_result": {"changed_skills": ["stale-skill"], "rewritten_reference_count": 2},
+            }
+        ],
+        "step_decisions": {"summary": {"total": 1}, "skill": {"planner": {"summary": {}}, "decisions": []}},
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "skill created 0, skill patched 0, skill archived 1, references rewritten 2, memory 0" in text
+    assert "archived skills: stale-skill" in text
+    assert "patched skills: stale-skill" not in text
+
+
+
 def test_improve_summary_reports_editor_current_entry_visibility():
     cli = load_cli_module()
     text = cli._render_improve_summary({

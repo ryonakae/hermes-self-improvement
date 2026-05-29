@@ -9,6 +9,7 @@ from .calibration import run_calibration
 from .cli import run_improve, run_pipeline
 from .config import DEFAULT_RETENTION_DAYS, load_config
 from .editor_backend import editor_backend_status
+from .knowledge_transactions import canonical_transaction_view, legacy_split_transaction_view
 from .observer import _event_path, _load_events, _turn_trace_artifact_summary
 from .recovery_engine import memory_rollback_status
 from .setup_runtime import check_runtime_setup
@@ -69,54 +70,16 @@ def _related_lookup_counts(memory_step: dict[str, Any]) -> dict[str, int]:
     return counts
 
 
-def _semantic_action_from_decision(decision: dict[str, Any], *, kind: str) -> str:
-    raw = str(decision.get("decision") or "")
-    reason = str(decision.get("reason") or "")
-    if raw in {"mutate_skill", "mutate_skill_preview", "create_skill", "create_skill_preview", "archive_skill", "archive_skill_preview", "mutate_memory", "memory_to_skill_preview", "accepted", "apply"}:
-        return "apply"
-    if raw == "defer":
-        return "defer"
-    if raw == "skip":
-        return "skip"
-    if raw == "rejected":
-        if kind == "memory" and reason.startswith("dry_run_would_execute"):
-            return "apply"
-        return "block"
-    if raw in {"blocked", "block"}:
-        return "block"
-    return "skip"
-
-
 def _knowledge_transaction_summary(transactions: Any) -> dict[str, Any]:
-    rows = transactions if isinstance(transactions, list) else []
-    counts = {"apply": 0, "defer": 0, "skip": 0, "block": 0}
-    by_kind: dict[str, int] = {}
-    cross_store = 0
-    for item in rows:
-        if not isinstance(item, dict):
-            continue
-        kind = str(item.get("transaction_kind") or item.get("target_store") or "unknown")
-        by_kind[kind] = by_kind.get(kind, 0) + 1
-        if kind == "memory_to_skill" or (item.get("source_store") and item.get("target_store") and item.get("source_store") != item.get("target_store")):
-            cross_store += 1
-        action = _semantic_action_from_decision(item, kind=kind)
-        counts[action] = counts.get(action, 0) + 1
-    return {"total": len([item for item in rows if isinstance(item, dict)]), **counts, "by_kind": dict(sorted(by_kind.items())), "cross_store": cross_store}
+    return canonical_transaction_view({"knowledge_transactions": transactions})["transaction_summary"]
 
 
 def _action_summary_from_steps(step_decisions: dict[str, Any], *, knowledge_transactions: Any = None) -> dict[str, int]:
-    transaction_summary = _knowledge_transaction_summary(knowledge_transactions)
-    if transaction_summary["total"]:
-        return {key: int(transaction_summary.get(key) or 0) for key in ("apply", "defer", "skip", "block")}
-    counts = {"apply": 0, "defer": 0, "skip": 0, "block": 0}
-    for kind in ("skill", "memory", "memory_to_skill"):
-        step = step_decisions.get(kind) if isinstance(step_decisions.get(kind), dict) else {}
-        for decision in step.get("decisions") or []:
-            if not isinstance(decision, dict):
-                continue
-            action = _semantic_action_from_decision(decision, kind=kind)
-            counts[action] = counts.get(action, 0) + 1
-    return counts
+    canonical_view = canonical_transaction_view({"knowledge_transactions": knowledge_transactions})
+    if canonical_view["has_canonical"]:
+        return {key: int(canonical_view["action_summary"].get(key) or 0) for key in ("apply", "defer", "skip", "block")}
+    legacy_view = legacy_split_transaction_view(step_decisions)
+    return {key: int(legacy_view["action_summary"].get(key) or 0) for key in ("apply", "defer", "skip", "block")}
 
 
 def _actionable_summary(action_summary: dict[str, int]) -> dict[str, int]:
@@ -197,9 +160,19 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     prompt_sources = result.get("prompt_sources") if isinstance(result.get("prompt_sources"), dict) else skill_step.get("prompt_sources") if isinstance(skill_step.get("prompt_sources"), dict) else {}
     autonomous_policy = result.get("autonomous_policy") if isinstance(result.get("autonomous_policy"), dict) else {}
     knowledge_transactions = result.get("knowledge_transactions") if isinstance(result.get("knowledge_transactions"), list) else []
+    transaction_view = canonical_transaction_view(result)
     action_summary = _action_summary_from_steps(step_decisions, knowledge_transactions=knowledge_transactions)
-    knowledge_transaction_summary = _knowledge_transaction_summary(knowledge_transactions)
-    skill_lifecycle = _compact_skill_lifecycle(skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else [])
+    knowledge_transaction_summary = transaction_view["transaction_summary"]
+    if transaction_view["has_canonical"]:
+        skill_lifecycle = {
+            "would_archive": 0,
+            "archived": len(transaction_view["archived_skills"]),
+            "archived_skills": transaction_view["archived_skills"][:10],
+            "rewritten_references": int(transaction_view["rewritten_references"] or 0),
+            "deferred_references": 0,
+        }
+    else:
+        skill_lifecycle = _compact_skill_lifecycle(skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else [])
     artifact_path = result.get("artifact_path")
     return {
         "schema_name": "self_improvement_tool_result_summary",

@@ -400,6 +400,17 @@ def _improve_run_overlay_case(*, run: dict[str, Any], case_type: str, expected: 
     return case
 
 
+def legacy_split_planner_quality(step_decisions: dict[str, Any]) -> dict[str, Any]:
+    raw_planner_quality = step_decisions.get("knowledge_quality")
+    planner_quality: dict[str, Any] = raw_planner_quality if isinstance(raw_planner_quality, dict) else {}
+    if planner_quality:
+        return planner_quality
+    raw_skill_step = step_decisions.get("skill")
+    skill_step: dict[str, Any] = raw_skill_step if isinstance(raw_skill_step, dict) else {}
+    raw_skill_planner_quality = skill_step.get("planner_quality")
+    return raw_skill_planner_quality if isinstance(raw_skill_planner_quality, dict) else {}
+
+
 def _improve_run_overlay_cases(config: dict[str, Any], *, limit: int) -> list[dict[str, Any]]:
     runs_dir = _reports_dir(config) / "runs"
     if not runs_dir.exists():
@@ -416,10 +427,7 @@ def _improve_run_overlay_cases(config: dict[str, Any], *, limit: int) -> list[di
         memory_gap_count = int(summary.get("memory_gap_candidate_count") or 0)
         raw_step_decisions = payload.get("step_decisions")
         step_decisions: dict[str, Any] = raw_step_decisions if isinstance(raw_step_decisions, dict) else {}
-        planner_quality = step_decisions.get("knowledge_quality") if isinstance(step_decisions.get("knowledge_quality"), dict) else {}
-        if not planner_quality:
-            skill_step = step_decisions.get("skill") if isinstance(step_decisions.get("skill"), dict) else {}
-            planner_quality = skill_step.get("planner_quality") if isinstance(skill_step.get("planner_quality"), dict) else {}
+        planner_quality = legacy_split_planner_quality(step_decisions)
         unresolved_count = int(planner_quality.get("unmatched_evidence_count") or 0)
         if unmatched_count > 0:
             cases.append(_improve_run_overlay_case(

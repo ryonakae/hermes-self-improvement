@@ -328,6 +328,11 @@ def _memory_episode(run_result: dict[str, Any], step: dict[str, Any], decision: 
 def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict[str, Any], created_at: str, index: int) -> dict[str, Any] | None:
     decision = str(transaction.get("decision") or "skip")
     transaction_kind = str(transaction.get("transaction_kind") or "")
+    raw_operation = transaction.get("operation")
+    if isinstance(raw_operation, dict):
+        operation_name = str(raw_operation.get("operation") or raw_operation.get("action") or "").strip()
+    else:
+        operation_name = str(raw_operation or "").strip()
     raw_transaction_result = transaction.get("transaction_result")
     transaction_result: dict[str, Any] = raw_transaction_result if isinstance(raw_transaction_result, dict) else {}
     executed = bool(run_result.get("execute")) and transaction_result.get("outcome") in {"applied", "partial", "blocked"}
@@ -341,8 +346,8 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
     elif target_store == "skill" or transaction.get("target_skill") or transaction.get("skill"):
         target_kind = "skill"
         target_id = str(transaction.get("target_skill") or transaction.get("skill") or transaction.get("proposed_skill_name") or transaction.get("target_id") or "").strip()
-        if decision in {"mutate_skill", "create_skill", "archive_skill", "defer", "skip"}:
-            normalized_decision = decision
+        if decision in {"apply", "mutate_skill", "create_skill", "archive_skill", "defer", "skip"}:
+            normalized_decision = operation_name if decision == "apply" and operation_name in {"mutate_skill", "create_skill", "archive_skill"} else decision
         else:
             normalized_decision = "skip"
         if not executed:
@@ -358,10 +363,10 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
     elif target_store in {"builtin_memory", "builtin_user", "external_memory"} or transaction_kind == "memory":
         evidence_id = str(transaction.get("source_evidence_id") or transaction.get("evidence_id") or f"memory-{index}")
         target_kind = "memory"
-        target_id = f"memory:{evidence_id}"
+        raw_target_id = str(transaction.get("target_id") or "").strip()
+        target_id = raw_target_id if raw_target_id.startswith("memory:") else f"memory:{evidence_id}"
         normalized_decision = "mutate_memory" if decision in {"mutate_memory", "accepted", "apply"} else "skip"
-        raw_operation = transaction.get("operation")
-        operation: dict[str, Any] = raw_operation if isinstance(raw_operation, dict) else {}
+        operation: dict[str, Any] = raw_operation if isinstance(raw_operation, dict) else {"operation": operation_name}
         action = _memory_action(operation, executed=executed)
     else:
         return None
@@ -386,6 +391,13 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
         value = transaction.get(key)
         if isinstance(value, str) and value.strip():
             episode[key] = value.strip()[:240]
+    if operation_name:
+        episode["operation"] = operation_name[:120]
+    raw_post_validation = transaction_result.get("post_validation")
+    post_validation: dict[str, Any] = raw_post_validation if isinstance(raw_post_validation, dict) else {}
+    status = str(post_validation.get("status") or "").strip()
+    if status:
+        episode["post_validation_status"] = status[:80]
     if transaction.get("reason"):
         episode["reason"] = str(transaction.get("reason"))[:240]
     raw_evidence_ids = transaction.get("evidence_ids")
@@ -397,6 +409,27 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
     if combined_evidence:
         episode["evidence_ids"] = list(dict.fromkeys(combined_evidence))
     return validate_episode(episode)
+
+
+def _legacy_split_episodes_from_steps(run_result: dict[str, Any], steps: dict[str, Any], created_at: str) -> list[dict[str, Any]]:
+    episodes: list[dict[str, Any]] = []
+    raw_skill_step = steps.get("skill")
+    skill_step: dict[str, Any] = raw_skill_step if isinstance(raw_skill_step, dict) else {}
+    for index, decision in enumerate(skill_step.get("decisions") or []):
+        if not isinstance(decision, dict):
+            continue
+        episode = _skill_episode(run_result, skill_step, decision, created_at, index)
+        if episode is not None:
+            episodes.append(episode)
+    raw_memory_step = steps.get("memory")
+    memory_step: dict[str, Any] = raw_memory_step if isinstance(raw_memory_step, dict) else {}
+    for index, decision in enumerate(memory_step.get("decisions") or []):
+        if not isinstance(decision, dict):
+            continue
+        episode = _memory_episode(run_result, memory_step, decision, created_at, index)
+        if episode is not None:
+            episodes.append(episode)
+    return episodes
 
 
 def episodes_from_run_result(run_result: dict[str, Any], *, created_at: str | None = None) -> list[dict[str, Any]]:
@@ -411,23 +444,9 @@ def episodes_from_run_result(run_result: dict[str, Any], *, created_at: str | No
             if episode is not None:
                 episodes.append(episode)
         return episodes
-    steps = run_result.get("step_decisions") if isinstance(run_result.get("step_decisions"), dict) else {}
-    episodes: list[dict[str, Any]] = []
-    skill_step = steps.get("skill") if isinstance(steps.get("skill"), dict) else {}
-    for index, decision in enumerate(skill_step.get("decisions") or []):
-        if not isinstance(decision, dict):
-            continue
-        episode = _skill_episode(run_result, skill_step, decision, stamp, index)
-        if episode is not None:
-            episodes.append(episode)
-    memory_step = steps.get("memory") if isinstance(steps.get("memory"), dict) else {}
-    for index, decision in enumerate(memory_step.get("decisions") or []):
-        if not isinstance(decision, dict):
-            continue
-        episode = _memory_episode(run_result, memory_step, decision, stamp, index)
-        if episode is not None:
-            episodes.append(episode)
-    return episodes
+    raw_steps = run_result.get("step_decisions")
+    steps: dict[str, Any] = raw_steps if isinstance(raw_steps, dict) else {}
+    return _legacy_split_episodes_from_steps(run_result, steps, stamp)
 
 
 def record_run_episodes(*, config: dict[str, Any], run_result: dict[str, Any]) -> dict[str, Any]:
