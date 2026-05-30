@@ -168,6 +168,31 @@ def _render_builtin_memory_inventory_section(digest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _render_memory_inventory_groups_section(digest: dict[str, Any]) -> str:
+    raw_groups = digest.get("memory_inventory_groups")
+    inventory_groups = raw_groups if isinstance(raw_groups, dict) else {}
+    groups = [item for item in inventory_groups.get("groups") or [] if isinstance(item, dict)]
+    if not groups:
+        return "## Memory inventory cleanup groups\n- n/a\n"
+    lines = [
+        "## Memory inventory cleanup groups",
+        "These grouped USER.md / MEMORY.md inventory findings are first-class planner inputs. Return one explicit decision per memory inventory group: replace_builtin_user, replace_builtin_memory, remove_builtin_user, remove_builtin_memory, move_user_to_memory, move_memory_to_user, memory_to_skill, skip, or defer. Use exact old_text from the relevant entry and keep destructive cleanup deferred unless the duplicate/stale relationship is clear.",
+    ]
+    for group in groups[:20]:
+        evidence_id = _clip(group.get("evidence_id"), max_chars=80)
+        lines.append(
+            f"- evidence_id={evidence_id}; group={_clip(group.get('group_kind'), max_chars=80)}; relation={_clip(group.get('relation'), max_chars=80)}; entries={int(group.get('entry_count') or 0)}; reason={_clip(group.get('reason'), max_chars=180)}"
+        )
+        entries = [entry for entry in group.get("entries") or [] if isinstance(entry, dict)]
+        for entry in entries[:4]:
+            lines.append(
+                f"  - store={entry.get('store')}; old_text={_clip(entry.get('old_text'), max_chars=220)}"
+            )
+    if int(inventory_groups.get("omitted_count") or 0):
+        lines.append(f"- omitted memory inventory groups: {int(inventory_groups.get('omitted_count') or 0)}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _overlay_addendum(overlay: dict[str, Any] | None, key: str = "system_addendum") -> str:
     if not isinstance(overlay, dict):
         return ""
@@ -269,6 +294,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
         render_evidence_markdown(digest, max_items=20),
         _render_knowledge_maintenance_section(digest),
         _render_builtin_memory_inventory_section(digest),
+        _render_memory_inventory_groups_section(digest),
         *([quality_section] if quality_section else []),
         render_cluster_evidence_section(digest.get("cluster_evidence") or {}),
         "## Planner candidate briefs",

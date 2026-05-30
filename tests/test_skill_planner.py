@@ -941,6 +941,38 @@ def test_render_planner_messages_exposes_builtin_memory_inventory_actions():
     assert "Hermes runtime root is ~/.hermes." in user_content
 
 
+def test_render_planner_messages_exposes_memory_inventory_cleanup_groups():
+    pack_data = pack()
+    pack_data["evidence"].append({
+        "id": "memory-group-1",
+        "kind": "memory_inventory_candidate",
+        "inventory": {
+            "group_kind": "near_duplicate",
+            "relation": "semantic_duplicate",
+            "entries": [
+                {"target": "memory", "old_text": "Hermes uses ~/.hermes as runtime root.", "summary": "Hermes uses ~/.hermes as runtime root."},
+                {"target": "user", "old_text": "Ryo prefers concise reports.", "summary": "Ryo prefers concise reports."},
+            ],
+            "rationale": "These entries overlap and should be reviewed for consolidation.",
+        },
+    })
+    digest = build_planner_digest(pack_data)
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert "## Memory inventory cleanup groups" in user_content
+    assert "one explicit decision per memory inventory group" in user_content
+    assert "evidence_id=memory-group-1" in user_content
+    assert "group=near_duplicate" in user_content
+    assert "store=memory" in user_content
+    assert "store=user" in user_content
+    assert "Hermes uses ~/.hermes as runtime root." in user_content
+    assert "Ryo prefers concise reports." in user_content
+    assert "replace_builtin_memory" in user_content
+    assert "remove_builtin_user" in user_content
+
+
 def test_planner_accepts_memory_inventory_product_operations_without_skill_target():
     def fake_planner(*, digest, config):
         return {

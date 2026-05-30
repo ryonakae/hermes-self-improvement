@@ -97,7 +97,17 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     monkeypatch.setattr(cli, "build_credit_assignment_aggregate", lambda *, config, limit: {})
     monkeypatch.setattr(cli, "compact_credit_assignment_summary", lambda aggregate: {})
 
-    result = cli.run_improve(config={"_self_improvement_root": str(tmp_path)}, since_hours=24, dry_run=False)
+    result = cli.run_improve(
+        config={
+            "_self_improvement_root": str(tmp_path),
+            "memory_inventory_paths": {
+                "memory": str(memories / "MEMORY.md"),
+                "user": str(memories / "USER.md"),
+            },
+        },
+        since_hours=24,
+        dry_run=False,
+    )
 
     assert result["summary"]["memory_changes"] == 0
     entries = captured["current_entries"]

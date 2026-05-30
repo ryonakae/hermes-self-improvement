@@ -136,6 +136,48 @@ def _built_in_memory_inventory_digest(evidence_pack: dict[str, Any]) -> dict[str
     }
 
 
+def _memory_inventory_groups_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
+    groups: list[dict[str, Any]] = []
+    omitted = 0
+    for item in evidence:
+        if not isinstance(item, dict) or item.get("kind") != "memory_inventory_candidate":
+            continue
+        inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
+        group_kind = str(inventory.get("group_kind") or "")
+        if not group_kind or group_kind == "built_in_memory_inventory":
+            continue
+        if len(groups) >= 20:
+            omitted += 1
+            continue
+        entries: list[dict[str, Any]] = []
+        for entry in inventory.get("entries") or []:
+            if not isinstance(entry, dict):
+                continue
+            target = str(entry.get("target") or entry.get("store") or "")
+            old_text = str(entry.get("old_text") or "")
+            if target not in {"memory", "user", "builtin_memory", "builtin_user"} or not old_text:
+                continue
+            store = {"builtin_memory": "memory", "builtin_user": "user"}.get(target, target)
+            entries.append({
+                "store": store,
+                "old_text": old_text,
+                "preview": _redacted_preview(entry.get("preview") or old_text, max_chars=120),
+                "summary": _redacted_preview(entry.get("summary") or old_text, max_chars=160),
+            })
+        if not entries:
+            continue
+        groups.append({
+            "evidence_id": str(item.get("id") or ""),
+            "group_kind": group_kind,
+            "relation": inventory.get("relation"),
+            "reason": inventory.get("reason") or inventory.get("rationale"),
+            "entry_count": len(entries),
+            "entries": entries[:4],
+        })
+    return {"group_count": len(groups), "omitted_count": omitted, "groups": groups}
+
+
 def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
     event = item.get("event") if isinstance(item.get("event"), dict) else {}
     out = {
@@ -562,6 +604,7 @@ def build_planner_runtime_digest(
         "skill_candidates": candidate_rows,
         "knowledge_maintenance": knowledge_maintenance,
         "built_in_memory_inventory": _built_in_memory_inventory_digest(evidence_pack),
+        "memory_inventory_groups": _memory_inventory_groups_digest(evidence_pack),
         "unresolved_observations": unresolved_observations[:20],
         "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
         "unmatched_evidence": {"count": len(unmatched), "by_reason": by_reason, "examples": unmatched[:10]},
