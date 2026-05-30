@@ -1501,6 +1501,8 @@ def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_de
             planner_selected_ids.update(ids)
     by_route: dict[str, int] = {}
     unhandled_by_route: dict[str, int] = {}
+    default_defer_by_route: dict[str, int] = {}
+    default_defer_details: list[dict[str, Any]] = []
     selected_count = 0
     planner_decision_count = 0
     unhandled_count = 0
@@ -1515,6 +1517,17 @@ def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_de
                 planner_decision_count += 1
             if evidence_id in default_deferred_ids:
                 default_defer_count += 1
+                default_defer_by_route[route] = default_defer_by_route.get(route, 0) + 1
+                raw_reasons = item.get("route_reasons")
+                route_reasons = [str(reason) for reason in (raw_reasons if isinstance(raw_reasons, list) else []) if str(reason)][:6]
+                default_defer_details.append({
+                    "evidence_id": evidence_id,
+                    "current_store": str(item.get("current_store") or ""),
+                    "suggested_route": route,
+                    "route_reasons": route_reasons,
+                    "old_text": _redacted_preview(item.get("old_text") or "", max_chars=260),
+                    "diagnosis": "planner_omitted_candidate_default_defer",
+                })
             continue
         unhandled_count += 1
         unhandled_by_route[route] = unhandled_by_route.get(route, 0) + 1
@@ -1525,6 +1538,8 @@ def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_de
         "default_handled_count": default_defer_count,
         "unhandled_count": unhandled_count,
         "default_defer_count": default_defer_count,
+        "default_defer_by_route": dict(sorted(default_defer_by_route.items())),
+        "default_defer_details": default_defer_details[:20],
         "by_suggested_route": dict(sorted(by_route.items())),
         "unhandled_by_route": dict(sorted(unhandled_by_route.items())),
     }

@@ -337,6 +337,61 @@ def test_planner_quality_report_separates_default_memory_placement_defers_from_p
     assert placement["unhandled_count"] == 0
 
 
+def test_planner_quality_report_explains_default_deferred_memory_placement_candidates():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 2,
+        "omitted_count": 0,
+        "candidates": [
+            {
+                "evidence_id": "memory-place-procedure",
+                "current_store": "memory",
+                "suggested_route": "likely_memory_to_skill",
+                "route_reasons": ["procedural_or_operational_workflow"],
+                "old_text": "Gateway restart workflow: check logs, then restart host wrapper.",
+            },
+            {
+                "evidence_id": "memory-place-user-runtime",
+                "current_store": "user",
+                "suggested_route": "likely_move_user_to_memory",
+                "route_reasons": ["contains_runtime_path"],
+                "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+            },
+        ],
+    }
+    planner_result = {
+        "knowledge_transactions": [
+            {
+                "decision": "defer",
+                "target_store": "unresolved",
+                "operation": "none",
+                "evidence_ids": ["memory-place-procedure"],
+                "reason": "memory_placement_candidate_not_selected_by_planner",
+            },
+            {
+                "decision": "move_user_to_memory",
+                "source_id": "memory-place-user-runtime",
+                "source_old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+            },
+        ]
+    }
+
+    quality = build_planner_quality_report(digest=digest, planner=planner_result)
+    placement = quality["memory_placement_actionability"]
+
+    assert placement["default_defer_by_route"] == {"likely_memory_to_skill": 1}
+    assert placement["default_defer_details"] == [
+        {
+            "evidence_id": "memory-place-procedure",
+            "current_store": "memory",
+            "suggested_route": "likely_memory_to_skill",
+            "route_reasons": ["procedural_or_operational_workflow"],
+            "old_text": "Gateway restart workflow: check logs, then restart host wrapper.",
+            "diagnosis": "planner_omitted_candidate_default_defer",
+        }
+    ]
+
+
 def test_run_planner_defaults_unhandled_memory_placement_candidate_to_defer():
     digest = build_planner_digest(pack())
     digest["memory_placement_candidates"] = {
