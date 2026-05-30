@@ -605,18 +605,21 @@ def test_planner_digest_exposes_builtin_memory_inventory_as_first_class_evidence
     assert inventory["visible_count"] == 3
     assert inventory["entries"] == [
         {
+            "evidence_id": "memory_inv_c03d4d349d56",
             "store": "builtin_memory",
             "old_text": "Ryo prefers terse Slack reports.",
             "preview": "Ryo prefers terse Slack reports.",
             "candidate_reasons": ["wrong_store"],
         },
         {
+            "evidence_id": "memory_inv_c03d4d349d56",
             "store": "builtin_user",
             "old_text": "Hermes runtime root is ~/.hermes.",
             "preview": "Hermes runtime root is ~/.hermes.",
             "candidate_reasons": ["wrong_store"],
         },
         {
+            "evidence_id": "memory_inv_c03d4d349d56",
             "store": "builtin_memory",
             "old_text": "When patch fails, re-read the target and retry once with a smaller anchor.",
             "preview": "When patch fails, re-read the target and retry once with a smaller anchor.",

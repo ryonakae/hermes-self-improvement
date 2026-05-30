@@ -7,7 +7,16 @@ from typing import Any
 _CANONICAL_STORES = {"skill", "builtin_user", "builtin_memory", "external_memory", "unresolved", "none"}
 _MEMORY_STORES = {"builtin_user", "builtin_memory", "external_memory"}
 _NON_EXECUTABLE_STORES = {"unresolved", "none"}
-_SOURCE_REQUIRED_OPERATIONS = {"memory_replace", "memory_remove", "move"}
+_SOURCE_REQUIRED_OPERATIONS = {"memory_replace", "memory_remove", "memory_delete", "move"}
+_BUILTIN_MEMORY_TARGET_IDS = {"builtin_user": "user", "builtin_memory": "memory"}
+_MEMORY_PRODUCT_OPERATIONS = {
+    "move_user_to_memory": ("placement_move", "builtin_user", "builtin_memory", "move"),
+    "move_memory_to_user": ("placement_move", "builtin_memory", "builtin_user", "move"),
+    "replace_builtin_user": ("memory", "builtin_user", "builtin_user", "memory_replace"),
+    "replace_builtin_memory": ("memory", "builtin_memory", "builtin_memory", "memory_replace"),
+    "remove_builtin_user": ("memory", "builtin_user", "builtin_user", "memory_delete"),
+    "remove_builtin_memory": ("memory", "builtin_memory", "builtin_memory", "memory_delete"),
+}
 
 
 def normalize_knowledge_transaction(raw: dict[str, Any]) -> dict[str, Any]:
@@ -173,9 +182,16 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
     operation = str(raw.get("operation") or "")
     transaction_kind = str(raw.get("transaction_kind") or "")
     target_id = str(raw.get("target_id") or raw.get("target_skill") or "")
+    source_store = raw.get("source_store")
+    source_id = str(raw.get("source_id") or raw.get("source_evidence_id") or "")
+    source_old_text = str(raw.get("source_old_text") or raw.get("old_text") or "")
 
     legacy_decision = str(raw.get("decision") or "")
-    if legacy_decision == "create_skill":
+    if operation in _MEMORY_PRODUCT_OPERATIONS:
+        transaction_kind, source_store, target_store, operation = _MEMORY_PRODUCT_OPERATIONS[operation]
+        decision = "apply" if decision in {"apply", "accepted", "preview"} else decision
+        target_id = target_id or _BUILTIN_MEMORY_TARGET_IDS.get(target_store, "")
+    elif legacy_decision == "create_skill":
         decision = "apply"
         target_store = "skill"
         transaction_kind = "skill"
@@ -222,20 +238,25 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
 
     transaction_kind = transaction_kind or _transaction_kind_for_store(target_store)
     evidence_ids = sorted({str(item) for item in (raw.get("evidence_ids") or []) if str(item)})
-    return {
+    if operation in _SOURCE_REQUIRED_OPERATIONS and source_old_text and not source_id:
+        source_id = evidence_ids[0] if evidence_ids else target_id
+    transaction = {
         "transaction_id": str(raw.get("transaction_id") or ""),
         "decision": decision,
         "transaction_kind": transaction_kind,
         "target_store": target_store,
         "target_id": target_id,
-        "source_store": raw.get("source_store"),
-        "source_id": str(raw.get("source_id") or raw.get("source_evidence_id") or ""),
-        "source_old_text": str(raw.get("source_old_text") or ""),
+        "source_store": source_store,
+        "source_id": source_id,
+        "source_old_text": source_old_text,
         "operation": operation or "none",
         "editor_task": raw.get("editor_task") if isinstance(raw.get("editor_task"), dict) else raw.get("skill_task") if isinstance(raw.get("skill_task"), dict) else None,
         "evidence_ids": evidence_ids,
         "reason": str(raw.get("reason") or raw.get("rationale") or ""),
     }
+    if raw.get("content") is not None:
+        transaction["content"] = str(raw.get("content"))
+    return transaction
 
 
 def _canonical_decision(decision: str) -> str:
@@ -275,6 +296,9 @@ def _apply_non_executable_store_rules(transaction: dict[str, Any]) -> dict[str, 
             "decision": "defer",
             "transaction_kind": "unresolved",
             "target_id": "",
+            "source_store": None,
+            "source_id": "",
+            "source_old_text": "",
             "operation": "none",
             "editor_task": None,
             "reason": transaction.get("reason") or "knowledge_transaction_unresolved",
@@ -285,6 +309,9 @@ def _apply_non_executable_store_rules(transaction: dict[str, Any]) -> dict[str, 
             "decision": "skip",
             "transaction_kind": "none",
             "target_id": "",
+            "source_store": None,
+            "source_id": "",
+            "source_old_text": "",
             "operation": "none",
             "editor_task": None,
             "reason": transaction.get("reason") or "knowledge_transaction_no_durable_target",

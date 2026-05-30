@@ -889,3 +889,54 @@ def test_planner_normalizes_create_skill_alias_covered_by_reference_skill():
     assert decision["covered_by_reference_skill"] == "safe-patch-usage"
     assert "new skill justified" not in decision.get("rationale", "").lower()
     assert decision["next_action"] == "use_existing_reference_skill"
+
+def test_render_planner_messages_exposes_builtin_memory_inventory_actions():
+    digest = build_planner_digest(pack())
+    digest["built_in_memory_inventory"] = {
+        "source": "runtime_current_entries",
+        "visible_count": 1,
+        "omitted_count": 0,
+        "entries": [
+            {
+                "evidence_id": "memory-inv-1",
+                "store": "builtin_user",
+                "old_text": "Hermes runtime root is ~/.hermes.",
+                "preview": "Hermes runtime root is ~/.hermes.",
+                "candidate_reasons": ["wrong_store"],
+            }
+        ],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert "## Built-in memory inventory" in user_content
+    assert "move_user_to_memory" in user_content
+    assert "replace_builtin_user" in user_content
+    assert "memory_to_skill" in user_content
+    assert "Hermes runtime root is ~/.hermes." in user_content
+
+
+def test_planner_accepts_memory_inventory_product_operations_without_skill_target():
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [
+                {
+                    "decision": "apply",
+                    "operation": "move_user_to_memory",
+                    "old_text": "Hermes runtime root is ~/.hermes.",
+                    "content": "Hermes runtime root is ~/.hermes.",
+                    "reason": "environment fact belongs in MEMORY",
+                }
+            ]
+        }
+
+    result = run_planner(build_planner_digest(pack()), config={"_planner_func": fake_planner})
+
+    transaction = result["knowledge_transactions"][0]
+    assert transaction["decision"] == "apply"
+    assert transaction["transaction_kind"] == "placement_move"
+    assert transaction["source_store"] == "builtin_user"
+    assert transaction["target_store"] == "builtin_memory"
+    assert transaction["source_old_text"] == "Hermes runtime root is ~/.hermes."
+    assert transaction["operation"] == "move"

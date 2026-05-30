@@ -19,7 +19,7 @@ If it is about the person, prefer USER. If it is about the environment or operat
 PLANNER_SYSTEM_PROMPT = (
     "You are the Hermes self-improvement planner. Read Markdown evidence as context, not as a machine protocol. "
     "You may use only read-only skill inspection tools (`skills_list`, `skill_view`) to check existing skill coverage; do not call mutation tools. "
-    "Use only allowed decisions: mutate_skill, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator. "
+    "Use only allowed decisions: mutate_skill, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator, or canonical apply/skip transactions for built-in memory placement and cleanup. "
     "When mutate_skill, set maintenance_action to either \"patch\" or \"merge\" (with target_skill for merge). "
     "Do not bypass mutation scope, allowed tool boundaries, hard safety checks, or secret handling. "
     "Use runtime-private operating guidance when available."
@@ -27,10 +27,10 @@ PLANNER_SYSTEM_PROMPT = (
 
 PLANNER_USER_PREFIX = (
     "Read the Markdown context below. It is evidence and rationale context, not machine-control state.\n"
-    "Allowed planner decision vocabulary: mutate_skill, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator.\n"
+    "Allowed planner decision vocabulary: mutate_skill, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator, plus canonical apply/skip transactions for built-in memory placement and cleanup.\n"
     "For mutate_skill, also set maintenance_action: \"patch\" (in-place edit) or \"merge\" (with target_skill of the consolidation target).\n"
     "New skill creation is one maintenance option, not the default; prefer mutate_skill or archive_skill when evidence supports existing local mutable skill maintenance.\n"
-    "When you provide structured decisions, return JSON with a top-level knowledge_transactions array. Each transaction may use fields: skill/proposed_skill_name, decision, maintenance_action, target_skill, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n\n"
+    "When you provide structured decisions, return JSON with a top-level knowledge_transactions array. Each transaction may use fields: skill/proposed_skill_name, decision, operation, maintenance_action, target_store, target_skill, source_store, source_evidence_id, old_text, source_old_text, content, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n\n"
 )
 
 SKILL_EDITOR_BASE_SECTIONS = [
@@ -146,6 +146,28 @@ def _render_knowledge_maintenance_section(digest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _render_builtin_memory_inventory_section(digest: dict[str, Any]) -> str:
+    raw_inventory = digest.get("built_in_memory_inventory")
+    inventory = raw_inventory if isinstance(raw_inventory, dict) else {}
+    entries = [item for item in inventory.get("entries") or [] if isinstance(item, dict)]
+    if not entries:
+        return "## Built-in memory inventory\n- n/a\n"
+    lines = [
+        "## Built-in memory inventory",
+        "These current USER.md / MEMORY.md entries are first-class planner inputs. Prefer direct useful actions when target and exact old_text are clear. Use operations: move_user_to_memory, move_memory_to_user, replace_builtin_user, replace_builtin_memory, remove_builtin_user, remove_builtin_memory, memory_to_skill, or target_store=\"none\" with operation=\"none\" for true noise. Do not route to external_memory in this slice; defer if an entry is valuable but too long for built-in memory.",
+    ]
+    for item in entries[:40]:
+        reasons = item.get("candidate_reasons") if isinstance(item.get("candidate_reasons"), list) else []
+        reasons_str = ",".join(str(reason) for reason in reasons[:6]) if reasons else "good_as_is"
+        evidence_id = _clip(item.get("evidence_id"), max_chars=80)
+        lines.append(
+            f"- evidence_id={evidence_id}; store={item.get('store')}; reasons=[{reasons_str}]; old_text={_clip(item.get('old_text'), max_chars=220)}"
+        )
+    if int(inventory.get("omitted_count") or 0):
+        lines.append(f"- omitted memory entries: {int(inventory.get('omitted_count') or 0)}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _overlay_addendum(overlay: dict[str, Any] | None, key: str = "system_addendum") -> str:
     if not isinstance(overlay, dict):
         return ""
@@ -246,6 +268,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
     markdown_context = "\n".join([
         render_evidence_markdown(digest, max_items=20),
         _render_knowledge_maintenance_section(digest),
+        _render_builtin_memory_inventory_section(digest),
         *([quality_section] if quality_section else []),
         render_cluster_evidence_section(digest.get("cluster_evidence") or {}),
         "## Planner candidate briefs",

@@ -38,7 +38,7 @@ The key product promise is not “make many changes.” It is:
 
 ## Current Position — 2026-05-30
 
-Overall: **runtime-healthy and unified planner/editor execution code-complete with approved mutating replay proof; next work is planner-emitted memory placement/cleanup transactions.** Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, scheduled dogfood proof, canonical transaction reporting, unified editor error normalization, final `run_improve` artifact split-lane removal, the unified `run_knowledge_improvement_step` path, source-of-truth cleanup, and first-class built-in memory inventory evidence are implemented. Cleanup dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T032803Z.json` reports canonical knowledge summaries, no split decision lanes, no `planner_skill`, no blank transaction kind, `actionability_loss_count: 0`, and zero unexplained cross-store drops. Approved mutating replay artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T091409Z.json` patched `hermes-development-maintenance` via canonical `mutate_skill` with `skill_changes: 1`, `memory_changes: 0`, and no follow-up next actions. The active next slice is `2026-05-29-unified-knowledge-editor-memory-inventory.md` Slice 3: one Planner emits canonical placement/cleanup transactions across skills, `USER.md`, and `MEMORY.md`; one Knowledge Editor improves across skills and memory with minimal hard guards and complete logs/artifacts for recovery.
+Overall: **runtime-healthy and unified planner/editor execution code-complete with approved mutating replay proof; next work is cross-surface Knowledge Editor execution.** Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, scheduled dogfood proof, canonical transaction reporting, unified editor error normalization, final `run_improve` artifact split-lane removal, the unified `run_knowledge_improvement_step` path, source-of-truth cleanup, first-class built-in memory inventory evidence, and planner-emitted memory placement/cleanup transaction normalization are implemented. Cleanup dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T032803Z.json` reports canonical knowledge summaries, no split decision lanes, no `planner_skill`, no blank transaction kind, `actionability_loss_count: 0`, and zero unexplained cross-store drops. Approved mutating replay artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T091409Z.json` patched `hermes-development-maintenance` via canonical `mutate_skill` with `skill_changes: 1`, `memory_changes: 0`, and no follow-up next actions. The active next slice is `2026-05-29-unified-knowledge-editor-memory-inventory.md` Slice 4: one Knowledge Editor executes cross-surface canonical transactions through official `skill_manage` and `memory` tools with minimal hard guards and complete logs/artifacts for recovery.
 
 ### What changed since the earlier 2026-05-10 snapshot
 
@@ -53,7 +53,7 @@ Overall: **runtime-healthy and unified planner/editor execution code-complete wi
 
 ### Important caveat
 
-The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail -> knowledge transaction plan -> unified editor execution** the canonical model. That model is now implemented through approved mutating replay proof for skill mutation, and current `USER.md` / `MEMORY.md` inventory is planner-visible. The next completion line is not more safety machinery; it is simpler cross-surface execution: the planner must decide placement/cleanup across skills and memory, and the Knowledge Editor must edit allowed skills and built-in memory from one canonical transaction stream. Improvement is not proven by one successful skill patch; it requires memory inventory cleanup and later evidence that repeated workflow/memory mistakes decrease without user correction.
+The role-redesign plan aimed to make **turn trace -> cluster summary -> evidence index/detail -> knowledge transaction plan -> unified editor execution** the canonical model. That model is now implemented through approved mutating replay proof for skill mutation, current `USER.md` / `MEMORY.md` inventory is planner-visible, and the planner can now express built-in memory placement/cleanup choices as canonical transactions. The next completion line is not more safety machinery; it is simpler cross-surface execution: the Knowledge Editor must edit allowed skills and built-in memory from one canonical transaction stream. Improvement is not proven by one successful skill patch; it requires memory inventory cleanup and later evidence that repeated workflow/memory mistakes decrease without user correction.
 
 ### Strong areas
 
@@ -358,13 +358,13 @@ Exit criteria:
 
 ## Active Slice Queue
 
-### Current Slice — Operational dogfood and final readiness
+### Current Slice — Unified Knowledge Editor memory execution
 
-**Status:** active / next. Recent hardening slices are implemented: constrained role tooling, pre-release role simplification, LLM model routing, local skill lifecycle expansion, constrained-agent auto-model routing, dry-run/action accounting, and coverage-affordance reconciliation have all passed focused/full validation. A mutating replay from `run-20260523T075149Z` produced `run-20260523T092544Z` and patched `safe-patch-usage` successfully. Remaining work is operational proof from scheduled maintenance windows and a final readiness report, not unfinished Task 10 implementation.
+**Status:** active / next. `2026-05-29-unified-knowledge-editor-memory-inventory.md` Slices 1–3 are implemented: the product now presents one Knowledge Editor, built-in memory inventory is planner-visible from the official memory path, and the planner can emit canonical placement/cleanup transactions. Remaining work is Slice 4 execution: dry-run previews and mutating execution for skill, builtin-user, builtin-memory, placement moves, and memory-to-skill through official tools only.
 
-Plan files: `2026-05-22-llm-model-routing-spec-and-memory-extractor.md`, `2026-05-22-pre-release-role-simplification.md`, and `2026-05-19_101746-local-skill-lifecycle-expansion.md`.
+Plan file: `2026-05-29-unified-knowledge-editor-memory-inventory.md`.
 
-Goal: observe the next scheduled `self-improvement-autonomous-maintenance` runs, verify the fixed constrained-agent routing and action summary stay healthy in unattended cron output, verify actual mutation/no-op/overlay accounting remains understandable, and only add focused hardening fixes if dogfood reveals a concrete failure. Do not restart old completed constrained-agent or local-lifecycle implementation work from stale plan text.
+Goal: execute cross-surface canonical transactions in one Knowledge Editor stream while preserving minimal hard guards, exact `old_text` checks, add-before-remove placement moves, and unified run summaries.
 
 ### Slice A — Skill mutation post-validation readback
 
@@ -807,6 +807,7 @@ Result: `Knowledge maintenance:` summaries now include source buckets for `failu
 - Implemented actual-results skill name reporting: `Actual results:` now includes bounded created/patched skill-name lists when run artifacts contain them, so reports answer which skills changed as well as how many.
 - Implemented post-validation failure diagnostics: failed skill readback, missing intended skill patch/edit text, and built-in memory no-state-change rejection now include compact `reason`, `observed`, and `next_action` fields for artifact/report consumers.
 - Implemented memory post-validation capability accounting: memory mutation contexts now distinguish built-in hash verification, external write-only provider execution, and unsupported providers; successful write-only provider execution is recorded as `write_only_unverified` / `applied_unverified` rather than validated success.
+- Implemented planner-emitted built-in memory placement/cleanup transactions: planner prompts now render first-class built-in memory inventory, product operations (`move_user_to_memory`, `move_memory_to_user`, `replace_builtin_*`, `remove_builtin_*`) normalize to canonical `knowledge_transactions`, `memory_delete` is preserved as the cleanup operation, and targetless memory placement output no longer gets dropped as a skill decision.
 
 ---
 

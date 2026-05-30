@@ -122,6 +122,7 @@ def _built_in_memory_inventory_digest(evidence_pack: dict[str, Any]) -> dict[str
                 continue
             reasons = [str(reason) for reason in entry.get("candidate_reasons") or [] if str(reason)]
             entries.append({
+                "evidence_id": str(item.get("id") or ""),
                 "store": store,
                 "old_text": old_text,
                 "preview": _redacted_preview(entry.get("preview") or old_text, max_chars=120),
@@ -984,6 +985,16 @@ def _normalize_decision(
 def _is_canonical_knowledge_transaction(raw: dict[str, Any]) -> bool:
     target_store = str(raw.get("target_store") or "")
     transaction_kind = str(raw.get("transaction_kind") or "")
+    operation = str(raw.get("operation") or "")
+    if operation in {
+        "move_user_to_memory",
+        "move_memory_to_user",
+        "replace_builtin_user",
+        "replace_builtin_memory",
+        "remove_builtin_user",
+        "remove_builtin_memory",
+    }:
+        return True
     if target_store in {"builtin_user", "builtin_memory", "external_memory", "unresolved", "none"}:
         return True
     if transaction_kind in {"memory", "placement_move", "unresolved", "none"}:

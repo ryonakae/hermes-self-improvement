@@ -173,3 +173,120 @@ def test_normalize_knowledge_transaction_blocks_invalid_apply_transactions_with_
         assert normalized["operation"] == "none"
         assert normalized["editor_task"] is None
         assert normalized["reason"] == reason
+
+def test_normalize_knowledge_transaction_maps_memory_placement_product_operations():
+    move_user_to_memory = normalize_knowledge_transaction({
+        "decision": "apply",
+        "operation": "move_user_to_memory",
+        "evidence_ids": ["mem-inv-1"],
+        "old_text": "Hermes runtime root is ~/.hermes.",
+        "content": "Hermes runtime root is ~/.hermes.",
+        "reason": "environment fact belongs in MEMORY",
+    })
+
+    assert move_user_to_memory["decision"] == "apply"
+    assert move_user_to_memory["transaction_kind"] == "placement_move"
+    assert move_user_to_memory["source_store"] == "builtin_user"
+    assert move_user_to_memory["target_store"] == "builtin_memory"
+    assert move_user_to_memory["source_old_text"] == "Hermes runtime root is ~/.hermes."
+    assert move_user_to_memory["content"] == "Hermes runtime root is ~/.hermes."
+    assert move_user_to_memory["operation"] == "move"
+
+    move_memory_to_user = normalize_knowledge_transaction({
+        "decision": "apply",
+        "operation": "move_memory_to_user",
+        "source_id": "memory-entry-1",
+        "old_text": "Ryo prefers terse Slack reports.",
+        "content": "Ryo prefers terse Slack reports.",
+    })
+
+    assert move_memory_to_user["transaction_kind"] == "placement_move"
+    assert move_memory_to_user["source_store"] == "builtin_memory"
+    assert move_memory_to_user["target_store"] == "builtin_user"
+    assert move_memory_to_user["source_id"] == "memory-entry-1"
+    assert move_memory_to_user["source_old_text"] == "Ryo prefers terse Slack reports."
+
+
+def test_normalize_knowledge_transaction_maps_builtin_memory_cleanup_product_operations():
+    replace_user = normalize_knowledge_transaction({
+        "decision": "apply",
+        "operation": "replace_builtin_user",
+        "source_id": "user-entry-1",
+        "old_text": "Ryo likes reports.",
+        "content": "Ryo prefers short warm Slack reports.",
+    })
+    assert replace_user["transaction_kind"] == "memory"
+    assert replace_user["target_store"] == "builtin_user"
+    assert replace_user["target_id"] == "user"
+    assert replace_user["source_store"] == "builtin_user"
+    assert replace_user["source_old_text"] == "Ryo likes reports."
+    assert replace_user["operation"] == "memory_replace"
+    assert replace_user["content"] == "Ryo prefers short warm Slack reports."
+
+    replace_memory = normalize_knowledge_transaction({
+        "decision": "apply",
+        "operation": "replace_builtin_memory",
+        "old_text": "Hermes root is /opt/data",
+        "content": "Hermes runtime root is ~/.hermes.",
+    })
+    assert replace_memory["transaction_kind"] == "memory"
+    assert replace_memory["target_store"] == "builtin_memory"
+    assert replace_memory["target_id"] == "memory"
+    assert replace_memory["source_store"] == "builtin_memory"
+    assert replace_memory["source_old_text"] == "Hermes root is /opt/data"
+    assert replace_memory["operation"] == "memory_replace"
+
+    remove_user = normalize_knowledge_transaction({
+        "decision": "apply",
+        "operation": "remove_builtin_user",
+        "old_text": "Temporary todo: finish PR 123 today.",
+    })
+    assert remove_user["transaction_kind"] == "memory"
+    assert remove_user["target_store"] == "builtin_user"
+    assert remove_user["target_id"] == "user"
+    assert remove_user["source_store"] == "builtin_user"
+    assert remove_user["source_old_text"] == "Temporary todo: finish PR 123 today."
+    assert remove_user["operation"] == "memory_delete"
+
+    remove_memory = normalize_knowledge_transaction({
+        "decision": "apply",
+        "operation": "remove_builtin_memory",
+        "old_text": "Completed PR 123 yesterday.",
+    })
+    assert remove_memory["transaction_kind"] == "memory"
+    assert remove_memory["target_store"] == "builtin_memory"
+    assert remove_memory["target_id"] == "memory"
+    assert remove_memory["source_store"] == "builtin_memory"
+    assert remove_memory["source_old_text"] == "Completed PR 123 yesterday."
+    assert remove_memory["operation"] == "memory_delete"
+
+
+def test_normalize_knowledge_transaction_preserves_memory_to_skill_product_fields_and_none_skip():
+    memory_to_skill = normalize_knowledge_transaction({
+        "transaction_kind": "memory_to_skill",
+        "decision": "apply",
+        "source_store": "builtin_memory",
+        "source_evidence_id": "mem-inv-3",
+        "source_old_text": "When patch fails, re-read and retry with a smaller anchor.",
+        "target_store": "skill",
+        "target_skill": "safe-patch-usage",
+        "content": "When patch fails, re-read and retry with a smaller anchor.",
+    })
+    assert memory_to_skill["transaction_kind"] == "memory_to_skill"
+    assert memory_to_skill["source_id"] == "mem-inv-3"
+    assert memory_to_skill["target_id"] == "safe-patch-usage"
+    assert memory_to_skill["source_old_text"] == "When patch fails, re-read and retry with a smaller anchor."
+    assert memory_to_skill["content"] == "When patch fails, re-read and retry with a smaller anchor."
+    assert memory_to_skill["operation"] == "move"
+
+    none = normalize_knowledge_transaction({
+        "decision": "skip",
+        "target_store": "none",
+        "operation": "none",
+        "old_text": "Finished phase 2 yesterday.",
+        "reason": "temporary completed-work diary",
+    })
+    assert none["decision"] == "skip"
+    assert none["transaction_kind"] == "none"
+    assert none["operation"] == "none"
+    assert none["source_old_text"] == ""

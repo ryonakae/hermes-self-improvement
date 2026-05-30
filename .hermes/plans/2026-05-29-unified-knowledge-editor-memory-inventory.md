@@ -189,6 +189,8 @@ Run focused evidence/planner tests.
 
 ## Slice 3: Teach the planner to emit memory placement and cleanup transactions
 
+**Status (2026-05-30):** Implemented. Planner-facing memory inventory is rendered in the planner prompt, product-level built-in memory operations normalize into canonical `knowledge_transactions`, and planner output without a skill target is accepted for placement/cleanup actions. This slice is planning/normalization only; execution remains Slice 4.
+
 **Objective:** Let one planner choose across skill, `USER.md`, `MEMORY.md`, none, placement moves, and memory-to-skill.
 
 **Files:**
