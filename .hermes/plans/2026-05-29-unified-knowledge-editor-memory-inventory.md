@@ -241,6 +241,8 @@ Run focused normalization/planner tests.
 
 ## Slice 4: Make the Knowledge Editor execute cross-surface transactions simply
 
+**Status (2026-05-30):** Implemented. `execute_knowledge_transaction` now executes skill, built-in memory, placement move, and memory-to-skill transactions through official skill/memory tool paths; placement moves add destination before source removal, preserve source on add/capacity failure, retry add after same-target capacity recovery, and ledger results include executed steps, compact tool results, and rollback hints with exact `old_text` restore guidance. Focused verification: `tests/test_knowledge_transactions.py tests/test_skill_planner.py tests/test_memory_inventory_planner.py tests/test_memory_to_skill_migration.py tests/test_runner_steps.py tests/test_report_improve_connection.py -q` -> 163 passed.
+
 **Objective:** The editor can improve skills and memory in one canonical transaction stream, using official tools and minimal hard guards.
 
 **Files:**

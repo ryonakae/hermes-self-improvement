@@ -1954,6 +1954,15 @@ def _execute_memory_transaction(transaction: dict[str, Any], *, config: dict[str
     transaction_id = str(transaction.get("transaction_id") or transaction.get("source_evidence_id") or "memory_transaction")
     removed = [transaction_id] if operation.get("operation") == "memory_delete" else []
     changed = [] if removed else [transaction_id]
+    rollback_hints: list[str] = []
+    old_text = str(operation.get("old_text") or "").strip()
+    content = str(operation.get("content") or "").strip()
+    if operation.get("operation") == "memory_add" and content:
+        rollback_hints.append(f"Remove added {target} memory entry if reverting: {content}")
+    elif operation.get("operation") == "memory_replace" and old_text:
+        rollback_hints.append(f"Restore previous {target} memory entry if reverting: {old_text}")
+    elif operation.get("operation") == "memory_delete" and old_text:
+        rollback_hints.append(f"Re-add removed {target} memory entry if reverting: {old_text}")
     return {
         **result,
         "success": True,
@@ -1962,6 +1971,7 @@ def _execute_memory_transaction(transaction: dict[str, Any], *, config: dict[str
         "removed_memories": removed,
         "executed_steps": [{"step": step_name, "status": "applied", "target": target}],
         "memory_result": memory_result,
+        "rollback_hints": rollback_hints,
     }
 
 
@@ -2070,6 +2080,12 @@ def _execute_placement_move_transaction(transaction: dict[str, Any], *, config: 
         "removed_memories": [str(transaction.get("source_id") or transaction.get("source_evidence_id") or transaction.get("transaction_id") or "placement_source")],
         "executed_steps": [{"step": "memory_add", "status": "applied", "target": _knowledge_transaction_source_target(target_store)}, {"step": "memory_remove", "status": "applied", "target": source_target}],
         "verification_notes": ["target memory added before source removal"],
+        "rollback_hints": [
+            *list(add_result.get("rollback_hints") or []),
+            *list(remove_result.get("rollback_hints") or []),
+        ],
+        "add_result": add_result,
+        "remove_result": remove_result,
     }
 
 
@@ -2153,7 +2169,12 @@ def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[s
         "removed_memories": [evidence_id],
         "executed_steps": [{**skill_step, "status": "applied"}, {"step": "memory_remove", "status": "applied", "target": source_target}],
         "verification_notes": [*list(skill_result.get("verification_notes") or []), "source memory removed after skill verification"],
-        "rollback_hints": list(skill_result.get("rollback_hints") or []),
+        "rollback_hints": [
+            *list(skill_result.get("rollback_hints") or []),
+            f"Re-add removed {source_target} memory entry if reverting: {old_text}",
+        ],
+        "skill_result": skill_result,
+        "memory_result": remove_result,
     }
 
 

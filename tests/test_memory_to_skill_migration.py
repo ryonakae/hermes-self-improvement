@@ -94,22 +94,22 @@ def test_execute_knowledge_transaction_patches_skill_then_removes_memory(tmp_pat
         mutate=True,
     )
 
-    assert result == {
-        "success": True,
-        "outcome": "applied",
-        "transaction_id": "txn-memory-place-skill",
-        "transaction_kind": "memory_to_skill",
-        "changed_skills": ["hermes-memory-and-live-context"],
-        "created_skills": [],
-        "changed_memories": [],
-        "removed_memories": ["memory-place-skill"],
-        "executed_steps": [
-            {"step": "skill_patch", "status": "applied", "target": "hermes-memory-and-live-context"},
-            {"step": "memory_remove", "status": "applied", "target": "memory"},
-        ],
-        "verification_notes": ["patched target skill", "source memory removed after skill verification"],
-        "rollback_hints": [],
-    }
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["transaction_id"] == "txn-memory-place-skill"
+    assert result["transaction_kind"] == "memory_to_skill"
+    assert result["changed_skills"] == ["hermes-memory-and-live-context"]
+    assert result["created_skills"] == []
+    assert result["changed_memories"] == []
+    assert result["removed_memories"] == ["memory-place-skill"]
+    assert result["executed_steps"] == [
+        {"step": "skill_patch", "status": "applied", "target": "hermes-memory-and-live-context"},
+        {"step": "memory_remove", "status": "applied", "target": "memory"},
+    ]
+    assert result["verification_notes"] == ["patched target skill", "source memory removed after skill verification"]
+    assert any("Use these exact steps for live context cleanup." in hint for hint in result["rollback_hints"])
+    assert result["skill_result"]["success"] is True
+    assert result["memory_result"]["success"] is True
     assert calls[0][0] == "skill"
     assert calls[1] == ("memory", {"action": "remove", "target": "memory", "old_text": "Use these exact steps for live context cleanup."})
 
@@ -793,3 +793,131 @@ def test_execute_knowledge_transaction_runs_skill_archive_transaction_through_cu
     assert result["executed_steps"] == [{"step": "skill_archive", "status": "archived", "target": "old-local-skill"}]
     assert result["archive_result"]["tool_name"] == "skill_usage.archive_skill"
     assert archive_calls == ["old-local-skill"]
+
+def test_execute_knowledge_transaction_placement_move_keeps_source_when_destination_add_fails():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        if args.get("action") == "add":
+            return {"success": False, "error": "memory_add_failed"}
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-placement-add-fails",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "source_id": "user-pref",
+            "source_old_text": "Hermes runtime root is ~/.hermes.",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "operation": "move",
+            "content": "Hermes runtime root is ~/.hermes.",
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+    assert result["reason"] == "memory_add_failed"
+    assert result["executed_steps"] == [{"step": "memory_add", "status": "failed", "target": "builtin_memory"}]
+    assert calls == [{"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."}]
+    assert result.get("removed_memories") in (None, [])
+
+
+def test_execute_knowledge_transaction_placement_move_recovers_capacity_before_source_remove():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        if args == {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."} and len(calls) == 1:
+            return {
+                "success": False,
+                "error": "memory_capacity_exceeded",
+                "current_entries": [{"target": "memory", "old_text": "Old stale runtime root is /opt/data."}],
+            }
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-placement-capacity",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "source_id": "user-env-fact",
+            "source_old_text": "Hermes runtime root is ~/.hermes.",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "operation": "move",
+            "content": "Hermes runtime root is ~/.hermes.",
+        },
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_memory_capacity_planner_fn": lambda **kwargs: [
+                {"action": "remove", "target": "memory", "old_text": "Old stale runtime root is /opt/data."}
+            ],
+        },
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert calls == [
+        {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."},
+        {"action": "remove", "target": "memory", "old_text": "Old stale runtime root is /opt/data."},
+        {"action": "add", "target": "memory", "content": "Hermes runtime root is ~/.hermes."},
+        {"action": "remove", "target": "user", "old_text": "Hermes runtime root is ~/.hermes."},
+    ]
+    assert result["add_result"]["memory_result"]["capacity_recovery"]["compaction_changed"] == 1
+
+
+def test_execute_knowledge_transaction_memory_and_memory_to_skill_results_include_ledger_details(tmp_path):
+    root = tmp_path / "skills"
+    root.mkdir(parents=True)
+    write_skill(root)
+    memory_calls = []
+
+    def fake_memory(**args):
+        memory_calls.append(args)
+        return {"success": True}
+
+    memory_result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-memory-replace-ledger",
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "operation": "memory_replace",
+            "source_old_text": "Hermes root is /opt/data.",
+            "content": "Hermes runtime root is ~/.hermes.",
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    mts_result = execute_knowledge_transaction(
+        transaction_with_memory_to_skill(),
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_editor_backend": lambda *args, **kwargs: success_payload(),
+            "_mutable_local_skill_roots": [root],
+            "_memory_current_entries": current_entries(),
+        },
+        mutate=True,
+    )
+
+    assert memory_result["memory_result"]["success"] is True
+    assert memory_result["executed_steps"] == [{"step": "memory_replace", "status": "applied", "target": "memory"}]
+    assert any("Hermes root is /opt/data." in hint for hint in memory_result["rollback_hints"])
+
+    assert mts_result["skill_result"]["success"] is True
+    assert mts_result["memory_result"]["success"] is True
+    assert mts_result["executed_steps"] == [
+        {"step": "skill_patch", "target": "hermes-memory-and-live-context", "status": "applied"},
+        {"step": "memory_remove", "status": "applied", "target": "memory"},
+    ]
+    assert any("Use these exact steps for live context cleanup." in hint for hint in mts_result["rollback_hints"])
