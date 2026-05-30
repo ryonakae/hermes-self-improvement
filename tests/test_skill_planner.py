@@ -973,6 +973,43 @@ def test_render_planner_messages_exposes_memory_inventory_cleanup_groups():
     assert "remove_builtin_user" in user_content
 
 
+def test_render_planner_messages_exposes_memory_inventory_action_hints():
+    pack_data = pack()
+    pack_data["evidence"].append({
+        "id": "memory-group-action",
+        "kind": "memory_inventory_candidate",
+        "inventory": {
+            "group_kind": "stale_fact_pair",
+            "entries": [
+                {"target": "memory", "old_text": "Hermes runtime root is /opt/data.", "summary": "Hermes runtime root is /opt/data."},
+                {"target": "memory", "old_text": "Hermes runtime root is ~/.hermes.", "summary": "Hermes runtime root is ~/.hermes."},
+            ],
+            "hints": ["planner should consider replace/remove for stale fact pairs"],
+        },
+        "target_resolution_hint": {
+            "resolution_kind": "mutate_memory",
+            "suggested_action": "apply",
+            "reason": "clear_stale_memory_pair",
+            "memory_operation_hint": {
+                "operation": "memory_replace",
+                "target": "memory",
+                "old_text": "Hermes runtime root is /opt/data.",
+                "content": "Hermes runtime root is ~/.hermes.",
+            },
+        },
+    })
+    digest = build_planner_digest(pack_data)
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert "suggested_action=apply" in user_content
+    assert "action_reason=clear_stale_memory_pair" in user_content
+    assert "operation=memory_replace" in user_content
+    assert "old_text=Hermes runtime root is /opt/data." in user_content
+    assert "content=Hermes runtime root is ~/.hermes." in user_content
+
+
 def test_planner_accepts_memory_inventory_product_operations_without_skill_target():
     def fake_planner(*, digest, config):
         return {

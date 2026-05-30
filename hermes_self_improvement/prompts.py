@@ -180,9 +180,23 @@ def _render_memory_inventory_groups_section(digest: dict[str, Any]) -> str:
     ]
     for group in groups[:20]:
         evidence_id = _clip(group.get("evidence_id"), max_chars=80)
+        raw_action_hint = group.get("action_hint")
+        action_hint: dict[str, Any] = raw_action_hint if isinstance(raw_action_hint, dict) else {}
+        action_bits = []
+        if action_hint.get("suggested_action"):
+            action_bits.append(f"suggested_action={_clip(action_hint.get('suggested_action'), max_chars=40)}")
+        if action_hint.get("reason"):
+            action_bits.append(f"action_reason={_clip(action_hint.get('reason'), max_chars=80)}")
+        action_suffix = "; " + "; ".join(action_bits) if action_bits else ""
         lines.append(
-            f"- evidence_id={evidence_id}; group={_clip(group.get('group_kind'), max_chars=80)}; relation={_clip(group.get('relation'), max_chars=80)}; entries={int(group.get('entry_count') or 0)}; reason={_clip(group.get('reason'), max_chars=180)}"
+            f"- evidence_id={evidence_id}; group={_clip(group.get('group_kind'), max_chars=80)}; relation={_clip(group.get('relation'), max_chars=80)}; entries={int(group.get('entry_count') or 0)}; reason={_clip(group.get('reason'), max_chars=180)}{action_suffix}"
         )
+        raw_operation_hint = action_hint.get("memory_operation_hint")
+        operation_hint: dict[str, Any] = raw_operation_hint if isinstance(raw_operation_hint, dict) else {}
+        if operation_hint:
+            lines.append(
+                f"  - hinted_operation: operation={_clip(operation_hint.get('operation'), max_chars=60)}; target={_clip(operation_hint.get('target'), max_chars=40)}; old_text={_clip(operation_hint.get('old_text'), max_chars=220)}; content={_clip(operation_hint.get('content'), max_chars=220)}"
+            )
         entries = [entry for entry in group.get("entries") or [] if isinstance(entry, dict)]
         for entry in entries[:4]:
             lines.append(

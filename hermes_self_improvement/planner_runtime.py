@@ -167,11 +167,29 @@ def _memory_inventory_groups_digest(evidence_pack: dict[str, Any]) -> dict[str, 
             })
         if not entries:
             continue
+        action_hint: dict[str, Any] = {}
+        raw_hint = item.get("target_resolution_hint") if isinstance(item.get("target_resolution_hint"), dict) else {}
+        if raw_hint:
+            action_hint = {
+                "resolution_kind": raw_hint.get("resolution_kind"),
+                "suggested_action": raw_hint.get("suggested_action"),
+                "reason": raw_hint.get("reason"),
+            }
+            operation_hint = raw_hint.get("memory_operation_hint") if isinstance(raw_hint.get("memory_operation_hint"), dict) else {}
+            if operation_hint:
+                action_hint["memory_operation_hint"] = {
+                    "operation": operation_hint.get("operation"),
+                    "target": operation_hint.get("target"),
+                    "old_text": _redacted_preview(operation_hint.get("old_text"), max_chars=220),
+                    "content": _redacted_preview(operation_hint.get("content"), max_chars=220),
+                    "reason": _redacted_preview(operation_hint.get("reason"), max_chars=160),
+                }
         groups.append({
             "evidence_id": str(item.get("id") or ""),
             "group_kind": group_kind,
             "relation": inventory.get("relation"),
             "reason": inventory.get("reason") or inventory.get("rationale"),
+            "action_hint": action_hint,
             "entry_count": len(entries),
             "entries": entries[:4],
         })

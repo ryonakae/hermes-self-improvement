@@ -1866,6 +1866,22 @@ def _stale_memory_pair_action_hint(entries: list[dict[str, Any]]) -> dict[str, A
     }
 
 
+def _duplicate_memory_group_action_hint(group_kind: str, entries: list[dict[str, Any]]) -> dict[str, Any]:
+    reason = "duplicate_requires_exact_remove_review" if group_kind == "semantic_duplicate" else "near_duplicate_requires_review"
+    return {
+        "resolution_kind": "mutate_memory",
+        "suggested_action": "defer",
+        "reason": reason,
+        "entry_count": len(entries),
+    }
+
+
+def _memory_inventory_action_hint(group_kind: str, entries: list[dict[str, Any]]) -> dict[str, Any]:
+    if group_kind == "stale_fact_pair":
+        return _stale_memory_pair_action_hint(entries)
+    return _duplicate_memory_group_action_hint(group_kind, entries)
+
+
 def _memory_inventory_group_counts(inventory_evidence: list[dict[str, Any]]) -> dict[str, int]:
     counts = {"exact_duplicate_group_count": 0, "near_duplicate_group_count": 0, "stale_pair_count": 0}
     for item in inventory_evidence:
@@ -2005,7 +2021,7 @@ def collect_memory_inventory_candidates(memory_paths: dict[str, Any] | None, *, 
         hints = ["old_text must be specific for replace/remove", "skip if current fact cannot be determined safely"]
         if group_kind == "stale_fact_pair":
             hints.insert(0, "planner should consider replace/remove for stale fact pairs")
-        target_resolution_hint = _stale_memory_pair_action_hint(group) if group_kind == "stale_fact_pair" else None
+        target_resolution_hint = _memory_inventory_action_hint(group_kind, group)
         out.append(make_memory_inventory_candidate(
             group_kind=group_kind,
             entries=group,
