@@ -1948,6 +1948,79 @@ MEMORY_PLACEMENT_BOUNDARY = (
 )
 
 
+def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
+    return any(marker in text for marker in markers)
+
+
+def _memory_placement_route_hint(current_store: str, old_text: str) -> dict[str, Any]:
+    lowered = old_text.lower()
+    user_markers = (
+        "prefers",
+        "preference",
+        "expects",
+        "communication",
+        "reports",
+        "文体",
+        "好む",
+        "望む",
+        "報告",
+        "質問では",
+    )
+    runtime_markers = (
+        "~/",
+        "/users/",
+        "/opt/",
+        "cron",
+        "config",
+        "socket",
+        "provider",
+        "gateway",
+        "docker",
+        "compose",
+        "api",
+        "token",
+        "plugin",
+    )
+    procedural_markers = (
+        "when ",
+        "before ",
+        "after ",
+        "run ",
+        "check ",
+        "verify",
+        "restart",
+        "troubleshoot",
+        "workflow",
+        "手順",
+        "検証",
+        "確認",
+        "運用",
+    )
+    diary_markers = (
+        "completed",
+        "fixed",
+        "submitted",
+        "merged",
+        "phase",
+        " done",
+        "yesterday",
+        "today",
+        "pr ",
+        "issue ",
+    )
+    if current_store == "memory" and _contains_any(lowered, user_markers):
+        return {"suggested_route": "likely_move_memory_to_user", "route_reasons": ["user_preference_language"]}
+    if _contains_any(lowered, diary_markers):
+        return {"suggested_route": "likely_defer", "route_reasons": ["stale_or_diary_language"]}
+    if current_store == "memory" and _contains_any(lowered, procedural_markers):
+        return {"suggested_route": "likely_memory_to_skill", "route_reasons": ["procedural_or_operational_workflow"]}
+    if current_store == "user" and _contains_any(lowered, runtime_markers):
+        return {"suggested_route": "likely_move_user_to_memory", "route_reasons": ["contains_runtime_path"]}
+    if len(old_text) > 300:
+        return {"suggested_route": "likely_defer", "route_reasons": ["too_verbose"]}
+    return {"suggested_route": "likely_keep", "route_reasons": ["store_matches_known_boundary_or_low_signal"]}
+
+
 def collect_memory_placement_candidates(memory_paths: dict[str, Any] | None, *, limit: int = 40) -> list[dict[str, Any]]:
     if not isinstance(memory_paths, dict) or not {"memory", "user"}.issubset(set(memory_paths)):
         return []
@@ -1964,6 +2037,7 @@ def collect_memory_placement_candidates(memory_paths: dict[str, Any] | None, *, 
             "old_text": _redact_text(old_text, max_chars=500),
             "summary": _redact_text(str(entry.get("summary") or old_text), max_chars=240),
             "official_boundary": MEMORY_PLACEMENT_BOUNDARY,
+            **_memory_placement_route_hint(current_store, old_text),
             "allowed_recommendations": [
                 "keep",
                 "move_user_to_memory",

@@ -405,3 +405,46 @@ def test_build_evidence_pack_includes_memory_placement_candidates_when_both_stor
 
     assert pack["summary"]["evidence_by_kind"]["memory_placement_candidate"] == 2
     assert any(item["kind"] == "memory_placement_candidate" for item in pack["evidence"])
+
+
+def test_memory_placement_candidate_hints_user_runtime_fact_should_move_to_memory(tmp_path):
+    user = tmp_path / "USER.md"
+    memory = tmp_path / "MEMORY.md"
+    user.write_text(
+        "Gmail observer=~/.hermes/automations/gmail-purchase-observer, cron=~/.hermes/cron/jobs.json.\n",
+        encoding="utf-8",
+    )
+    memory.write_text("Ryo prefers concise reports.\n", encoding="utf-8")
+
+    items = collect_memory_placement_candidates({"user": user, "memory": memory})
+    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "user")
+
+    assert inventory["suggested_route"] == "likely_move_user_to_memory"
+    assert "contains_runtime_path" in inventory["route_reasons"]
+    assert inventory["old_text"].startswith("Gmail observer=")
+
+
+def test_memory_placement_candidate_hints_memory_user_preference_should_move_to_user(tmp_path):
+    user = tmp_path / "USER.md"
+    memory = tmp_path / "MEMORY.md"
+    user.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
+    memory.write_text("Ryo prefers concise implementation reports with completed and remaining work clearly stated.\n", encoding="utf-8")
+
+    items = collect_memory_placement_candidates({"memory": memory, "user": user})
+    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "memory")
+
+    assert inventory["suggested_route"] == "likely_move_memory_to_user"
+    assert "user_preference_language" in inventory["route_reasons"]
+
+
+def test_memory_placement_candidate_hints_procedural_memory_should_route_to_skill(tmp_path):
+    user = tmp_path / "USER.md"
+    memory = tmp_path / "MEMORY.md"
+    user.write_text("Ryo prefers concise Japanese replies.\n", encoding="utf-8")
+    memory.write_text("Gateway restart: check host script, then KeepAlive, then verify logs before retrying.\n", encoding="utf-8")
+
+    items = collect_memory_placement_candidates({"memory": memory, "user": user})
+    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "memory")
+
+    assert inventory["suggested_route"] == "likely_memory_to_skill"
+    assert "procedural_or_operational_workflow" in inventory["route_reasons"]

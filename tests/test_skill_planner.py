@@ -74,6 +74,63 @@ def test_memory_placement_evidence_in_skill_view_is_not_skill_target_missing():
     assert digest["unmatched_evidence"]["by_reason"].get("skill_target_missing", 0) == 0
 
 
+def test_planner_digest_exposes_memory_placement_candidates():
+    pack_data = pack()
+    pack_data["evidence"].append({
+        "id": "memory-place-user-runtime",
+        "kind": "memory_placement_candidate",
+        "inventory": {
+            "group_kind": "placement_review",
+            "current_store": "user",
+            "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+            "summary": "Gmail observer path.",
+            "suggested_route": "likely_move_user_to_memory",
+            "route_reasons": ["contains_runtime_path"],
+        },
+        "likely_targets": [{"target": "memory", "weight": 0.7}, {"target": "skill", "weight": 0.3}],
+    })
+
+    digest = build_planner_digest(pack_data)
+    placements = digest["memory_placement_candidates"]
+
+    assert placements["candidate_count"] == 1
+    row = placements["candidates"][0]
+    assert row["evidence_id"] == "memory-place-user-runtime"
+    assert row["current_store"] == "user"
+    assert row["suggested_route"] == "likely_move_user_to_memory"
+    assert row["route_reasons"] == ["contains_runtime_path"]
+    assert row["old_text"] == "Gmail observer=~/.hermes/automations/gmail-purchase-observer."
+    assert "move_user_to_memory" in row["allowed_decisions"]
+
+
+def test_render_planner_messages_exposes_memory_placement_candidates():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 1,
+        "omitted_count": 0,
+        "candidates": [{
+            "evidence_id": "memory-place-user-runtime",
+            "current_store": "user",
+            "suggested_route": "likely_move_user_to_memory",
+            "route_reasons": ["contains_runtime_path"],
+            "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+            "summary": "Gmail observer path.",
+            "allowed_decisions": ["keep", "move_user_to_memory", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
+        }],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert "## Memory placement candidates" in user_content
+    assert "one explicit decision per memory placement candidate" in user_content
+    assert "evidence_id=memory-place-user-runtime" in user_content
+    assert "current_store=user" in user_content
+    assert "suggested_route=likely_move_user_to_memory" in user_content
+    assert "route_reasons=[contains_runtime_path]" in user_content
+    assert "Gmail observer=~/.hermes/automations/gmail-purchase-observer." in user_content
+
+
 def test_render_planner_messages_uses_markdown_context_not_digest_dump():
     digest = build_planner_digest(pack())
 
@@ -161,6 +218,76 @@ def test_planner_quality_report_reads_knowledge_transactions_as_canonical_contra
 
     assert quality["mutate_skill_count"] == 1
     assert quality["selected_with_evidence"] == 1
+
+
+def test_planner_quality_report_counts_memory_placement_actionability():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 2,
+        "omitted_count": 0,
+        "candidates": [
+            {
+                "evidence_id": "memory-place-user-runtime",
+                "current_store": "user",
+                "suggested_route": "likely_move_user_to_memory",
+                "route_reasons": ["contains_runtime_path"],
+                "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+            },
+            {
+                "evidence_id": "memory-place-procedure",
+                "current_store": "memory",
+                "suggested_route": "likely_memory_to_skill",
+                "route_reasons": ["procedural_or_operational_workflow"],
+                "old_text": "Gateway restart: check logs.",
+            },
+        ],
+    }
+    planner_result = {
+        "knowledge_transactions": [
+            {
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "operation": "move_user_to_memory",
+                "source_evidence_id": "memory-place-user-runtime",
+                "source_old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+            }
+        ]
+    }
+
+    quality = build_planner_quality_report(digest=digest, planner=planner_result)
+    placement = quality["memory_placement_actionability"]
+
+    assert placement["candidate_count"] == 2
+    assert placement["selected_count"] == 1
+    assert placement["unhandled_count"] == 1
+    assert placement["by_suggested_route"] == {"likely_memory_to_skill": 1, "likely_move_user_to_memory": 1}
+    assert placement["unhandled_by_route"] == {"likely_memory_to_skill": 1}
+
+
+def test_run_planner_defaults_unhandled_memory_placement_candidate_to_defer():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 1,
+        "omitted_count": 0,
+        "candidates": [{
+            "evidence_id": "memory-place-user-runtime",
+            "current_store": "user",
+            "suggested_route": "likely_move_user_to_memory",
+            "route_reasons": ["contains_runtime_path"],
+            "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+        }],
+    }
+
+    def fake_planner(*, digest, config):
+        return {"knowledge_transactions": []}
+
+    result = run_planner(digest, config={"_planner_func": fake_planner})
+
+    tx = next(item for item in result["knowledge_transactions"] if item.get("evidence_ids") == ["memory-place-user-runtime"])
+    assert tx["decision"] == "defer"
+    assert tx["transaction_kind"] == "unresolved"
+    assert tx["evidence_ids"] == ["memory-place-user-runtime"]
+    assert tx["reason"] == "memory_placement_candidate_not_selected_by_planner"
 
 
 def test_planner_allows_mutate_skill_with_inventory_evidence():

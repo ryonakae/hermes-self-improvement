@@ -196,6 +196,48 @@ def _memory_inventory_groups_digest(evidence_pack: dict[str, Any]) -> dict[str, 
     return {"group_count": len(groups), "omitted_count": omitted, "groups": groups}
 
 
+def _memory_placement_candidates_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    raw_evidence = evidence_pack.get("evidence")
+    evidence = raw_evidence if isinstance(raw_evidence, list) else []
+    candidates: list[dict[str, Any]] = []
+    omitted = 0
+    for item in evidence:
+        if not isinstance(item, dict) or item.get("kind") != "memory_placement_candidate":
+            continue
+        raw_inventory = item.get("inventory")
+        inventory = raw_inventory if isinstance(raw_inventory, dict) else {}
+        current_store = str(inventory.get("current_store") or "")
+        old_text = str(inventory.get("old_text") or "")
+        if current_store not in {"memory", "user", "builtin_memory", "builtin_user"} or not old_text:
+            continue
+        if len(candidates) >= 40:
+            omitted += 1
+            continue
+        raw_reasons = inventory.get("route_reasons")
+        route_reasons = [
+            _redacted_preview(reason, max_chars=80)
+            for reason in (raw_reasons if isinstance(raw_reasons, list) else [])
+            if str(reason)
+        ][:6]
+        candidates.append({
+            "evidence_id": str(item.get("id") or ""),
+            "current_store": {"builtin_memory": "memory", "builtin_user": "user"}.get(current_store, current_store),
+            "suggested_route": str(inventory.get("suggested_route") or "likely_defer"),
+            "route_reasons": route_reasons or ["missing_route_reason"],
+            "old_text": _redacted_preview(old_text, max_chars=260),
+            "summary": _redacted_preview(inventory.get("summary") or old_text, max_chars=180),
+            "allowed_decisions": [
+                "keep",
+                "move_user_to_memory",
+                "move_memory_to_user",
+                "memory_to_skill",
+                "skip",
+                "defer",
+            ],
+        })
+    return {"candidate_count": len(candidates), "omitted_count": omitted, "candidates": candidates}
+
+
 def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
     event = item.get("event") if isinstance(item.get("event"), dict) else {}
     out = {
@@ -622,6 +664,7 @@ def build_planner_runtime_digest(
         "skill_candidates": candidate_rows,
         "knowledge_maintenance": knowledge_maintenance,
         "built_in_memory_inventory": _built_in_memory_inventory_digest(evidence_pack),
+        "memory_placement_candidates": _memory_placement_candidates_digest(evidence_pack),
         "memory_inventory_groups": _memory_inventory_groups_digest(evidence_pack),
         "unresolved_observations": unresolved_observations[:20],
         "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
@@ -838,6 +881,19 @@ def _maintenance_candidate_default_decision(item: dict[str, Any]) -> dict[str, A
         **({"target_skill": target_skill} if target_skill else {}),
         "rationale": "Planner did not return an explicit decision for this maintenance candidate; keep it visible as a deferred canonical transaction instead of silently dropping routed workflow evidence.",
     }
+
+
+def _memory_placement_default_decision(item: dict[str, Any]) -> dict[str, Any] | None:
+    evidence_id = str(item.get("evidence_id") or "").strip()
+    if not evidence_id:
+        return None
+    return normalize_knowledge_transaction({
+        "decision": "defer",
+        "target_store": "unresolved",
+        "operation": "none",
+        "evidence_ids": [evidence_id],
+        "reason": "memory_placement_candidate_not_selected_by_planner",
+    })
 
 
 def _editable_candidate_names(candidate_rows: list[dict[str, Any]]) -> set[str]:
@@ -1223,6 +1279,20 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
             for selected_id in default_decision.get("evidence_ids") or []:
                 if str(selected_id):
                     seen_evidence_ids.add(str(selected_id))
+    raw_placement = digest.get("memory_placement_candidates")
+    placement = raw_placement if isinstance(raw_placement, dict) else {}
+    for item in placement.get("candidates") or []:
+        if not isinstance(item, dict):
+            continue
+        evidence_id = str(item.get("evidence_id") or "").strip()
+        if not evidence_id or evidence_id in seen_evidence_ids:
+            continue
+        default_decision = _memory_placement_default_decision(item)
+        if default_decision:
+            decisions.append(default_decision)
+            for selected_id in default_decision.get("evidence_ids") or []:
+                if str(selected_id):
+                    seen_evidence_ids.add(str(selected_id))
     return _planner_result(decisions, digest=digest, status="completed", prompt_source=prompt_source)
 
 
@@ -1399,6 +1469,52 @@ def _matched_noop_report(*, digest: dict[str, Any], skipped: list[dict[str, Any]
     }
 
 
+def _decision_evidence_ids(decision: dict[str, Any]) -> set[str]:
+    ids = {str(item) for item in (decision.get("evidence_ids") or []) if str(item)}
+    for key in ("source_evidence_id", "source_id", "evidence_id"):
+        value = str(decision.get(key) or "").strip()
+        if value:
+            ids.add(value)
+    return ids
+
+
+def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_decisions: list[dict[str, Any]]) -> dict[str, Any]:
+    raw_placement = digest.get("memory_placement_candidates")
+    placement = raw_placement if isinstance(raw_placement, dict) else {}
+    candidates = [item for item in placement.get("candidates") or [] if isinstance(item, dict)]
+    selected_ids: set[str] = set()
+    default_deferred_ids: set[str] = set()
+    for decision in planner_decisions:
+        ids = _decision_evidence_ids(decision)
+        selected_ids.update(ids)
+        if str(decision.get("reason") or "") == "memory_placement_candidate_not_selected_by_planner":
+            default_deferred_ids.update(ids)
+    by_route: dict[str, int] = {}
+    unhandled_by_route: dict[str, int] = {}
+    selected_count = 0
+    unhandled_count = 0
+    default_defer_count = 0
+    for item in candidates:
+        evidence_id = str(item.get("evidence_id") or "").strip()
+        route = str(item.get("suggested_route") or "unknown")
+        by_route[route] = by_route.get(route, 0) + 1
+        if evidence_id and evidence_id in selected_ids:
+            selected_count += 1
+            if evidence_id in default_deferred_ids:
+                default_defer_count += 1
+            continue
+        unhandled_count += 1
+        unhandled_by_route[route] = unhandled_by_route.get(route, 0) + 1
+    return {
+        "candidate_count": len(candidates),
+        "selected_count": selected_count,
+        "unhandled_count": unhandled_count,
+        "default_defer_count": default_defer_count,
+        "by_suggested_route": dict(sorted(by_route.items())),
+        "unhandled_by_route": dict(sorted(unhandled_by_route.items())),
+    }
+
+
 def build_planner_runtime_quality_report(
     *,
     digest: dict[str, Any],
@@ -1501,6 +1617,7 @@ def build_planner_runtime_quality_report(
             "max": max(prompt_lengths) if prompt_lengths else 0,
             "avg": int(sum(prompt_lengths) / len(prompt_lengths)) if prompt_lengths else 0,
         },
+        "memory_placement_actionability": _memory_placement_actionability_report(digest=digest, planner_decisions=planner_decisions),
         **skip_classification,
         **matched_noop,
     }

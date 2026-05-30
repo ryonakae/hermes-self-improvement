@@ -207,6 +207,29 @@ def _render_memory_inventory_groups_section(digest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
+    raw_candidates = digest.get("memory_placement_candidates")
+    placement = raw_candidates if isinstance(raw_candidates, dict) else {}
+    candidates = [item for item in placement.get("candidates") or [] if isinstance(item, dict)]
+    if not candidates:
+        return "## Memory placement candidates\n- n/a\n"
+    lines = [
+        "## Memory placement candidates",
+        "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, move_user_to_memory, move_memory_to_user, memory_to_skill, skip, or defer. Treat suggested_route as advisory, not authority. Use exact old_text when moving/removing. Defer if the entry is valuable but too broad, too long, or ambiguous.",
+    ]
+    for item in candidates[:40]:
+        reasons = item.get("route_reasons") if isinstance(item.get("route_reasons"), list) else []
+        reasons_str = ",".join(str(reason) for reason in reasons[:6]) if reasons else "missing_route_reason"
+        decisions = item.get("allowed_decisions") if isinstance(item.get("allowed_decisions"), list) else []
+        decisions_str = ",".join(str(decision) for decision in decisions[:8]) if decisions else "keep,move_user_to_memory,move_memory_to_user,memory_to_skill,skip,defer"
+        lines.append(
+            f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; current_store={_clip(item.get('current_store'), max_chars=40)}; suggested_route={_clip(item.get('suggested_route'), max_chars=80)}; route_reasons=[{reasons_str}]; allowed_decisions=[{decisions_str}]; old_text={_clip(item.get('old_text'), max_chars=260)}"
+        )
+    if int(placement.get("omitted_count") or 0):
+        lines.append(f"- omitted memory placement candidates: {int(placement.get('omitted_count') or 0)}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _overlay_addendum(overlay: dict[str, Any] | None, key: str = "system_addendum") -> str:
     if not isinstance(overlay, dict):
         return ""
@@ -308,6 +331,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
         render_evidence_markdown(digest, max_items=20),
         _render_knowledge_maintenance_section(digest),
         _render_builtin_memory_inventory_section(digest),
+        _render_memory_placement_candidates_section(digest),
         _render_memory_inventory_groups_section(digest),
         *([quality_section] if quality_section else []),
         render_cluster_evidence_section(digest.get("cluster_evidence") or {}),
