@@ -2,7 +2,7 @@
 
 ## Current source of truth
 
-Update note (2026-05-30): `2026-05-29-unified-knowledge-editor-memory-inventory.md` Slice 1 is implemented. Product-facing editor prompts/status metadata now present one `Knowledge Editor`; skill/memory backends are only described as tool adapters. The next active implementation slice is Slice 2: feed current `USER.md` / `MEMORY.md` inventory into the planner as first-class evidence using the official `MemoryStore` / runtime snapshot path, not injected prompt parsing.
+Update note (2026-05-30): `2026-05-29-unified-knowledge-editor-memory-inventory.md` Slice 2 is implemented. Built-in memory inventory now flows into planner evidence/digest as first-class `built_in_memory_inventory` rows from the official `MemoryStore` / runtime current-entry path, with exact `old_text`, store (`builtin_user` / `builtin_memory`), bounded previews, and hint-only candidate reasons. The next active implementation slice is Slice 3: teach the planner to emit canonical memory placement and cleanup transactions.
 
 Previous update note (2026-05-29): source-of-truth cleanup is implemented and verified. `2026-05-29-knowledge-transaction-source-of-truth-cleanup.md` completed the cleanup after successful evidence-gate hardening and the first scheduled mutating cron proof: current runtime/reporting code now treats canonical `knowledge_transactions` as the single source of truth, legacy split-lane compatibility is isolated behind explicit fallback helpers, canonical replay executes canonical apply transactions, and no safety/evidence gate or memory-candidate behavior was loosened. Final cleanup dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T032803Z.json` has no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, `by_kind {'none': 21, 'skill': 26}`, no `planner_skill`, no blank transaction kind, `actionability_loss_count: 0`, and `unexplained_cross_store_drop_count: 0`. After explicit approval, canonical replay from that artifact produced mutating run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T091409Z.json`, patching `hermes-development-maintenance` through the official skill tool path with `skill_changes: 1`, `memory_changes: 0`, `apply: 1 / defer: 1 / skip: 45 / block: 0`, and no next actions. Verification passed: `py_compile`, full `pytest tests -q` → 895 passed, 2 skipped, `improve --dry-run --json`, `improve --from-run`, `status`, skill readback, and `git diff --check`.
 
@@ -13,7 +13,7 @@ Previous readiness note: unified planner/editor execution dogfood-readiness was 
 As of 2026-05-10, the long-term roadmap is:
 
 - `2026-05-29-unified-knowledge-editor-memory-inventory.md`
-  - **Status:** active; Slice 1 implemented, Slice 2 next.
+  - **Status:** active; Slices 1–2 implemented, Slice 3 next.
   - Implements the simplified model Ryo selected after the canonical transaction cleanup: one Planner decides across skills, `USER.md`, and `MEMORY.md`; one Knowledge Editor improves across skills and memory using official `skill_manage` and `memory` tools. This plan explicitly avoids new roles, approval queues, confidence gates, or safety-heavy lanes. Minimal hard guards only: editable local/unprotected skills, `USER.md`, `MEMORY.md`, and dry-run non-mutation. It adds built-in memory inventory evidence, planner placement/cleanup transactions, cross-surface editor execution, compact reporting, and dogfood proof.
 
 - `2026-05-10-self-improvement-long-term-roadmap.md`

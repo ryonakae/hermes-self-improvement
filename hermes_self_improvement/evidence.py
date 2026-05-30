@@ -492,12 +492,20 @@ def make_memory_inventory_candidate(
         old_text = str(entry.get("old_text") or "").strip()
         if _looks_secret(old_text):
             continue
-        clean_entries.append({
-            "target": str(entry.get("target") or "memory"),
+        target = str(entry.get("target") or "memory")
+        clean_entry = {
+            "target": target,
             "old_text": _redact_text(old_text, max_chars=260),
             "summary": _redact_text(str(entry.get("summary") or old_text), max_chars=180),
             "hash": entry.get("hash") or _sha256_text(old_text)[:12],
-        })
+        }
+        if entry.get("store"):
+            clean_entry["store"] = str(entry.get("store"))
+        if entry.get("preview") is not None:
+            clean_entry["preview"] = _redact_text(str(entry.get("preview") or ""), max_chars=120)
+        if isinstance(entry.get("candidate_reasons"), list):
+            clean_entry["candidate_reasons"] = _clean_list(entry.get("candidate_reasons"), max_items=6, max_chars=80)
+        clean_entries.append(clean_entry)
     inventory = {
         "group_kind": _redact_text(group_kind, max_chars=80),
         "entries": clean_entries,
@@ -1690,6 +1698,108 @@ def _memory_entries(memory_paths: dict[str, Any]) -> list[dict[str, Any]]:
     return entries
 
 
+def _memory_store_name(target: str) -> str:
+    return "builtin_user" if target == "user" else "builtin_memory"
+
+
+def _preview_memory_entry(text: str, *, max_chars: int = 120) -> str:
+    return _redact_text(" ".join(str(text or "").split()), max_chars=max_chars)
+
+
+def _runtime_memory_entries(config: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(config, dict):
+        return []
+    raw_entries = config.get("_memory_current_entries")
+    if not isinstance(raw_entries, list):
+        return []
+    entries: list[dict[str, Any]] = []
+    for raw in raw_entries:
+        if not isinstance(raw, dict):
+            continue
+        target = str(raw.get("target") or raw.get("store") or "memory").strip().lower()
+        if target in {"builtin_memory", "built_in_memory"}:
+            target = "memory"
+        elif target in {"builtin_user", "built_in_user"}:
+            target = "user"
+        if target not in {"memory", "user"}:
+            continue
+        old_text = str(raw.get("old_text") or raw.get("text") or raw.get("content") or "").strip()
+        if not old_text or _looks_secret(old_text):
+            continue
+        entries.append({
+            "target": target,
+            "store": _memory_store_name(target),
+            "old_text": old_text,
+            "summary": str(raw.get("summary") or old_text),
+            "hash": raw.get("hash") or _sha256_text(old_text)[:12],
+            "source": "runtime_current_entries",
+        })
+    return entries
+
+
+def _memory_entries_for_inventory(memory_paths: dict[str, Any] | None, config: dict[str, Any] | None) -> tuple[list[dict[str, Any]], str]:
+    runtime_entries = _runtime_memory_entries(config)
+    if runtime_entries:
+        return runtime_entries, "runtime_current_entries"
+    if isinstance(memory_paths, dict):
+        return _memory_entries(memory_paths), "memory_paths"
+    return [], "none"
+
+
+def _memory_candidate_reasons(entry: dict[str, Any], duplicate_texts: set[str]) -> list[str]:
+    target = str(entry.get("target") or "memory")
+    text = str(entry.get("old_text") or "")
+    lowered = text.lower()
+    reasons: list[str] = []
+    user_markers = ("prefers", "preference", "communication style", "expects", "ryo prefers", "user prefers")
+    env_markers = ("hermes", "runtime", "repo", "repository", "cron", "gateway", "tool", "provider", "~/.", "/users/", "/opt/", "api", "config")
+    procedure_markers = ("when ", "before ", "after ", "run ", "use ", "retry", "workflow", "steps", "command", "patch", "test")
+    diary_markers = ("completed", "fixed", "submitted", "merged", "pr ", "issue ", "yesterday", "today", "phase ", "done")
+    if target == "memory" and any(marker in lowered for marker in user_markers):
+        reasons.append("wrong_store")
+    if target == "user" and any(marker in lowered for marker in env_markers):
+        reasons.append("wrong_store")
+    if any(marker in lowered for marker in procedure_markers):
+        reasons.append("procedural_belongs_in_skill")
+    if any(marker in lowered for marker in diary_markers):
+        reasons.append("stale_or_diary")
+    if text in duplicate_texts:
+        reasons.append("duplicate")
+    if len(text) > 300:
+        reasons.append("too_verbose")
+    if not reasons:
+        reasons.append("good_as_is")
+    return reasons
+
+
+def collect_builtin_memory_inventory_candidates(entries: list[dict[str, Any]], *, source: str = "runtime_current_entries", limit: int = 40) -> list[dict[str, Any]]:
+    visible = [entry for entry in entries if isinstance(entry, dict) and str(entry.get("target") or "") in {"memory", "user"} and str(entry.get("old_text") or "").strip()]
+    if not visible:
+        return []
+    counts = Counter(str(entry.get("old_text") or "") for entry in visible)
+    duplicate_texts = {text for text, count in counts.items() if count > 1}
+    compact_entries: list[dict[str, Any]] = []
+    for entry in visible[:limit]:
+        old_text = str(entry.get("old_text") or "").strip()
+        compact_entries.append({
+            "target": str(entry.get("target") or "memory"),
+            "store": str(entry.get("store") or _memory_store_name(str(entry.get("target") or "memory"))),
+            "old_text": old_text,
+            "summary": str(entry.get("summary") or old_text),
+            "preview": _preview_memory_entry(old_text),
+            "candidate_reasons": _memory_candidate_reasons(entry, duplicate_texts),
+            "hash": entry.get("hash") or _sha256_text(old_text)[:12],
+        })
+    return [make_memory_inventory_candidate(
+        group_kind="built_in_memory_inventory",
+        entries=compact_entries,
+        rationale="Current built-in USER.md and MEMORY.md entries are visible for planner placement, compaction, and skill-routing review.",
+        hints=["planner sees exact old_text for replace/remove", "candidate_reasons are hints, not final actions"],
+        risk="medium",
+        target_resolution_hint={"resolution_kind": "mutate_memory", "source": source},
+    )]
+
+
 def _memory_tokens(text: str) -> set[str]:
     normalized = "".join(ch.lower() if ch.isalnum() else " " for ch in text)
     return {token for token in normalized.split() if len(token) >= 3}
@@ -1950,10 +2060,11 @@ def build_evidence_pack(
     if unmatched_improvement_evidence:
         evidence.extend(unmatched_improvement_evidence)
         kind_counts["unmatched_improvement_candidate"] += len(unmatched_improvement_evidence)
+    memory_entries, memory_entries_source = _memory_entries_for_inventory(memory_paths, config)
     coverage_evidence = collect_knowledge_coverage_candidates(
         unmatched_improvement_evidence,
         skill_candidates=skill_candidates,
-        existing_memory_entries=_memory_entries(memory_paths or {}) if isinstance(memory_paths, dict) else [],
+        existing_memory_entries=memory_entries,
     )
     if coverage_evidence:
         evidence.extend(coverage_evidence)
@@ -1967,16 +2078,20 @@ def build_evidence_pack(
     if skill_duplicate_lifecycle_evidence:
         evidence.extend(skill_duplicate_lifecycle_evidence)
         kind_counts["skill_lifecycle_candidate"] += len(skill_duplicate_lifecycle_evidence)
-    memory_entries = _memory_entries(memory_paths or {}) if isinstance(memory_paths, dict) else []
+    built_in_memory_inventory_evidence = (
+        collect_builtin_memory_inventory_candidates(memory_entries, source=memory_entries_source)
+        if memory_entries_source == "runtime_current_entries"
+        else []
+    )
     memory_inventory_evidence = collect_memory_inventory_candidates(memory_paths)
     memory_placement_evidence = collect_memory_placement_candidates(memory_paths)
-    inventory_evidence = skill_inventory_evidence + memory_inventory_evidence + memory_placement_evidence
+    inventory_evidence = skill_inventory_evidence + built_in_memory_inventory_evidence + memory_inventory_evidence + memory_placement_evidence
     if inventory_evidence:
         evidence.extend(inventory_evidence)
         if skill_inventory_evidence:
             kind_counts["skill_inventory_candidate"] += len(skill_inventory_evidence)
-        if memory_inventory_evidence:
-            kind_counts["memory_inventory_candidate"] += len(memory_inventory_evidence)
+        if built_in_memory_inventory_evidence or memory_inventory_evidence:
+            kind_counts["memory_inventory_candidate"] += len(built_in_memory_inventory_evidence) + len(memory_inventory_evidence)
         if memory_placement_evidence:
             kind_counts["memory_placement_candidate"] += len(memory_placement_evidence)
     views = _views_for_evidence(evidence)

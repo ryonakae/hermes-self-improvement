@@ -71,7 +71,25 @@ def _builtin_memory_paths(config: dict[str, Any]) -> dict[str, Path]:
     return {"memory": home / "memories" / "MEMORY.md", "user": home / "memories" / "USER.md"}
 
 
-def _load_builtin_memory_entries(memory_paths: dict[str, Path], *, limit: int = 80) -> list[dict[str, str]]:
+def _entries_from_memory_store(store: Any, *, limit: int = 80) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    for target, attr in (("memory", "memory_entries"), ("user", "user_entries")):
+        raw_entries = getattr(store, attr, [])
+        if not isinstance(raw_entries, list):
+            continue
+        for raw in raw_entries:
+            entry_text = str(raw or "").strip()
+            if not entry_text:
+                continue
+            entries.append({"target": target, "text": entry_text, "old_text": entry_text, "summary": entry_text})
+            if len(entries) >= limit:
+                return entries
+    return entries
+
+
+def _load_builtin_memory_entries(memory_paths: dict[str, Path], *, limit: int = 80, store: Any | None = None) -> list[dict[str, str]]:
+    if store is not None:
+        return _entries_from_memory_store(store, limit=limit)
     entries: list[dict[str, str]] = []
     for target in ("memory", "user"):
         path = memory_paths.get(target)
@@ -94,6 +112,26 @@ def _load_builtin_memory_entries(memory_paths: dict[str, Path], *, limit: int = 
             if len(entries) >= limit:
                 return entries
     return entries
+
+
+def _load_builtin_memory_store_entries(*, limit: int = 80) -> list[dict[str, str]]:
+    try:
+        from tools.memory_tool import MemoryStore  # type: ignore
+
+        store = MemoryStore()
+        store.load_from_disk()
+    except Exception:
+        return []
+    return _load_builtin_memory_entries({}, limit=limit, store=store)
+
+
+def _current_builtin_memory_entries(config: dict[str, Any]) -> list[dict[str, str]]:
+    if isinstance(config.get("memory_inventory_paths"), dict):
+        return _load_builtin_memory_entries(_builtin_memory_paths(config))
+    store_entries = _load_builtin_memory_store_entries()
+    if store_entries:
+        return store_entries
+    return _load_builtin_memory_entries(_builtin_memory_paths(config))
 
 
 def _load_gepa_adapter_module(name: str = "hermes_self_improvement_gepa_adapter_cli") -> Any:
@@ -964,7 +1002,7 @@ def run_improve(
         report_signals = source_report_context.get("diagnostic_signals") if isinstance(source_report_context.get("diagnostic_signals"), list) else []
         if report_signals:
             evidence_pack = _attach_diagnostic_signals_to_evidence_pack(evidence_pack, report_signals)
-    existing_memories = _load_builtin_memory_entries(_builtin_memory_paths(config))
+    existing_memories = _current_builtin_memory_entries(config)
     conversation_windows = build_planner_windows(events)
     planner_memory_digest = build_planner_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
     memory_gap_payload = reconcile_planner_payload_with_existing_memories(
@@ -1135,7 +1173,7 @@ def _legacy_split_replay_memory_to_skill_step(*, source: dict[str, Any], steps: 
     raw_memory_to_skill_source = steps.get("memory_to_skill")
     memory_to_skill_source: dict[str, Any] = raw_memory_to_skill_source if isinstance(raw_memory_to_skill_source, dict) else {}
     replay_memory_config = dict(config)
-    replay_memory_config["_memory_current_entries"] = _load_builtin_memory_entries(_builtin_memory_paths(config))
+    replay_memory_config["_memory_current_entries"] = _current_builtin_memory_entries(config)
     replay_memory_config.setdefault("_hermes_home", str(get_hermes_home()))
     return apply_memory_to_skill_migrations(memory_step=memory_to_skill_source, config=replay_memory_config, mutate=True, replay_preview_only=True)
 

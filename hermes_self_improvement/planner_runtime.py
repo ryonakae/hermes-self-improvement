@@ -97,6 +97,44 @@ def _redacted_preview(value: Any, *, max_chars: int = 220) -> str:
     return _redact_text(str(value or ""), max_chars=max_chars)
 
 
+def _built_in_memory_inventory_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
+    entries: list[dict[str, Any]] = []
+    source = "runtime_current_entries"
+    omitted = 0
+    for item in evidence:
+        if not isinstance(item, dict) or item.get("kind") != "memory_inventory_candidate":
+            continue
+        inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
+        if inventory.get("group_kind") != "built_in_memory_inventory":
+            continue
+        hint = item.get("target_resolution_hint") if isinstance(item.get("target_resolution_hint"), dict) else {}
+        source = str(hint.get("source") or source)
+        for entry in inventory.get("entries") or []:
+            if not isinstance(entry, dict):
+                continue
+            store = str(entry.get("store") or "")
+            old_text = str(entry.get("old_text") or "")
+            if store not in {"builtin_memory", "builtin_user"} or not old_text:
+                continue
+            if len(entries) >= 40:
+                omitted += 1
+                continue
+            reasons = [str(reason) for reason in entry.get("candidate_reasons") or [] if str(reason)]
+            entries.append({
+                "store": store,
+                "old_text": old_text,
+                "preview": _redacted_preview(entry.get("preview") or old_text, max_chars=120),
+                "candidate_reasons": reasons[:6] or ["good_as_is"],
+            })
+    return {
+        "source": source,
+        "visible_count": len(entries),
+        "omitted_count": omitted,
+        "entries": entries,
+    }
+
+
 def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
     event = item.get("event") if isinstance(item.get("event"), dict) else {}
     out = {
@@ -520,6 +558,7 @@ def build_planner_runtime_digest(
         "available_skill_evidence_ids": skill_ids,
         "skill_candidates": candidate_rows,
         "knowledge_maintenance": knowledge_maintenance,
+        "built_in_memory_inventory": _built_in_memory_inventory_digest(evidence_pack),
         "unresolved_observations": unresolved_observations[:20],
         "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
         "unmatched_evidence": {"count": len(unmatched), "by_reason": by_reason, "examples": unmatched[:10]},

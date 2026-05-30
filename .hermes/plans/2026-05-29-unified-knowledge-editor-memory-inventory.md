@@ -138,6 +138,8 @@ Expected: pass.
 
 ## Slice 2: Feed built-in memory inventory into the planner as first-class evidence
 
+**Status (2026-05-30):** Implemented. Runtime `_memory_current_entries` now comes from the official `MemoryStore` path when using default built-in memory, and planner evidence/digest exposes compact `built_in_memory_inventory` rows with `store`, exact `old_text`, bounded `preview`, and hint-only `candidate_reasons`.
+
 **Objective:** Let the planner assess current `USER.md` / `MEMORY.md` entries even when no recent observation event directly points at them.
 
 **Files:**

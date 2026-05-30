@@ -547,3 +547,104 @@ def test_memory_inventory_rejects_conflicting_replaces_for_same_old_text_before_
     assert result["decisions"][0]["decision"] == "accepted"
     assert result["decisions"][1]["decision"] == "rejected"
     assert result["decisions"][1]["reason"] == "memory_operation_conflicts_with_prior_operation"
+
+def test_build_evidence_pack_uses_runtime_current_entries_for_builtin_memory_inventory():
+    from datetime import datetime, timezone
+
+    from hermes_self_improvement.evidence import build_evidence_pack
+
+    current_entries = [
+        {"target": "memory", "old_text": "Ryo prefers terse Slack reports.", "summary": "user preference in wrong store"},
+        {"target": "user", "old_text": "Hermes runtime root is ~/.hermes.", "summary": "environment fact in wrong store"},
+        {"target": "memory", "old_text": "When patch fails, re-read the target and retry once with a smaller anchor.", "summary": "procedural workflow"},
+        {"target": "memory", "old_text": "Completed PR 123 and fixed the widget bug yesterday.", "summary": "completed work diary"},
+        {"target": "memory", "old_text": "Hermes runtime root is ~/.hermes.", "summary": "duplicate env fact"},
+    ]
+
+    pack = build_evidence_pack(
+        [],
+        datetime(2026, 5, 30, tzinfo=timezone.utc),
+        datetime(2026, 5, 30, tzinfo=timezone.utc),
+        config={"_memory_current_entries": current_entries},
+    )
+
+    inventory = [item for item in pack["evidence"] if item.get("kind") == "memory_inventory_candidate"]
+    assert inventory
+    visible_entries = [entry for item in inventory for entry in item["inventory"]["entries"]]
+    assert {entry["store"] for entry in visible_entries} >= {"builtin_memory", "builtin_user"}
+    assert any(entry["old_text"] == "Ryo prefers terse Slack reports." for entry in visible_entries)
+    assert any(entry["old_text"] == "Hermes runtime root is ~/.hermes." for entry in visible_entries)
+    assert all(len(entry["preview"]) <= 120 for entry in visible_entries)
+    assert any("wrong_store" in entry["candidate_reasons"] for entry in visible_entries)
+    assert any("procedural_belongs_in_skill" in entry["candidate_reasons"] for entry in visible_entries)
+    assert any("stale_or_diary" in entry["candidate_reasons"] for entry in visible_entries)
+
+
+def test_planner_digest_exposes_builtin_memory_inventory_as_first_class_evidence():
+    from datetime import datetime, timezone
+
+    from hermes_self_improvement.evidence import build_evidence_pack
+    from hermes_self_improvement.planner_runtime import build_planner_runtime_digest
+
+    current_entries = [
+        {"target": "memory", "old_text": "Ryo prefers terse Slack reports.", "summary": "user preference in wrong store"},
+        {"target": "user", "old_text": "Hermes runtime root is ~/.hermes.", "summary": "environment fact in wrong store"},
+        {"target": "memory", "old_text": "When patch fails, re-read the target and retry once with a smaller anchor.", "summary": "procedural workflow"},
+    ]
+    pack = build_evidence_pack(
+        [],
+        datetime(2026, 5, 30, tzinfo=timezone.utc),
+        datetime(2026, 5, 30, tzinfo=timezone.utc),
+        config={"_memory_current_entries": current_entries},
+    )
+
+    digest = build_planner_runtime_digest(pack)
+
+    inventory = digest["built_in_memory_inventory"]
+    assert inventory["source"] == "runtime_current_entries"
+    assert inventory["visible_count"] == 3
+    assert inventory["entries"] == [
+        {
+            "store": "builtin_memory",
+            "old_text": "Ryo prefers terse Slack reports.",
+            "preview": "Ryo prefers terse Slack reports.",
+            "candidate_reasons": ["wrong_store"],
+        },
+        {
+            "store": "builtin_user",
+            "old_text": "Hermes runtime root is ~/.hermes.",
+            "preview": "Hermes runtime root is ~/.hermes.",
+            "candidate_reasons": ["wrong_store"],
+        },
+        {
+            "store": "builtin_memory",
+            "old_text": "When patch fails, re-read the target and retry once with a smaller anchor.",
+            "preview": "When patch fails, re-read the target and retry once with a smaller anchor.",
+            "candidate_reasons": ["procedural_belongs_in_skill"],
+        },
+    ]
+
+
+def test_builtin_memory_entry_loader_uses_memory_store_live_entries_before_file_paths(tmp_path):
+    from hermes_self_improvement.cli import _load_builtin_memory_entries
+
+    class FakeStore:
+        memory_entries = ["Hermes runtime root is ~/.hermes."]
+        user_entries = ["Ryo prefers terse Slack reports."]
+
+    missing_paths = {"memory": tmp_path / "missing-MEMORY.md", "user": tmp_path / "missing-USER.md"}
+
+    assert _load_builtin_memory_entries(missing_paths, store=FakeStore()) == [
+        {
+            "target": "memory",
+            "text": "Hermes runtime root is ~/.hermes.",
+            "old_text": "Hermes runtime root is ~/.hermes.",
+            "summary": "Hermes runtime root is ~/.hermes.",
+        },
+        {
+            "target": "user",
+            "text": "Ryo prefers terse Slack reports.",
+            "old_text": "Ryo prefers terse Slack reports.",
+            "summary": "Ryo prefers terse Slack reports.",
+        },
+    ]
