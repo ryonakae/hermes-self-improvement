@@ -214,11 +214,59 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
     if not candidates:
         return "## Memory placement candidates\n- n/a\n"
     lines = [
+        "### Priority placement candidates requiring semantic judgment",
+        "These entries have suggested_route=likely_memory_to_skill. They are the highest-value placement candidates: put one transaction for each of them at the beginning of knowledge_transactions. Decide memory_to_skill when an exact editable target_skill is known; otherwise use the priority defer template with evidence_ids. Do this before reviewing low-action likely_keep entries.",
+    ]
+    priority_candidates = [item for item in candidates if str(item.get("suggested_route") or "") == "likely_memory_to_skill"]
+    if priority_candidates:
+        for item in priority_candidates[:12]:
+            evidence_id = _clip(item.get("evidence_id"), max_chars=80)
+            old_text = _clip(item.get("old_text"), max_chars=260)
+            reasons = item.get("route_reasons") if isinstance(item.get("route_reasons"), list) else []
+            reasons_str = ",".join(str(reason) for reason in reasons[:6]) if reasons else "missing_route_reason"
+            lines.append(
+                f"- evidence_id={evidence_id}; current_store={_clip(item.get('current_store'), max_chars=40)}; suggested_route={_clip(item.get('suggested_route'), max_chars=80)}; route_reasons=[{reasons_str}]; old_text={old_text}"
+            )
+            lines.append(
+                "  - memory_to_skill template when target_skill is known: "
+                + json.dumps({
+                    "transaction_kind": "memory_to_skill",
+                    "decision": "apply",
+                    "source_evidence_id": evidence_id,
+                    "source_store": "builtin_memory",
+                    "target_store": "skill",
+                    "target_skill": "<existing-editable-skill-name>",
+                    "source_old_text": old_text,
+                    "reason": "procedural_memory_belongs_in_skill",
+                }, ensure_ascii=False, separators=(",", ":"))
+            )
+            lines.append(
+                "  - priority defer template when no exact target_skill is known: "
+                + json.dumps({
+                    "decision": "defer",
+                    "target_store": "unresolved",
+                    "operation": "none",
+                    "evidence_ids": [evidence_id],
+                    "reason": "memory_to_skill_target_unclear",
+                }, ensure_ascii=False, separators=(",", ":"))
+            )
+    else:
+        lines.append("- n/a")
+    lines.extend([
+        "",
         "## Memory placement candidates",
         "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, move_user_to_memory, move_memory_to_user, memory_to_skill, skip, or defer. Treat suggested_route as advisory, not authority. Use exact old_text when moving/removing. Defer if the entry is valuable but too broad, too long, or ambiguous.",
         "For each memory placement candidate, copy exactly one template into knowledge_transactions and fill only the fields that are already known. Do not omit a candidate just because the answer is keep/skip/defer.",
-    ]
-    for item in candidates[:40]:
+    ])
+    priority_order = {
+        "likely_memory_to_skill": 0,
+        "likely_move_user_to_memory": 1,
+        "likely_move_memory_to_user": 1,
+        "likely_defer": 2,
+        "likely_keep": 3,
+    }
+    ordered_candidates = sorted(candidates, key=lambda item: (priority_order.get(str(item.get("suggested_route") or ""), 2), str(item.get("evidence_id") or "")))
+    for item in ordered_candidates[:40]:
         evidence_id = _clip(item.get("evidence_id"), max_chars=80)
         old_text = _clip(item.get("old_text"), max_chars=260)
         reasons = item.get("route_reasons") if isinstance(item.get("route_reasons"), list) else []

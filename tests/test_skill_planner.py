@@ -169,6 +169,53 @@ def test_render_planner_messages_includes_memory_placement_transaction_templates
     assert '"reason":"keep_current_store"' in user_content
 
 
+def test_render_planner_messages_prioritizes_memory_to_skill_placement_candidates():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 2,
+        "omitted_count": 0,
+        "candidates": [
+            {
+                "evidence_id": "memory-place-keep",
+                "current_store": "memory",
+                "suggested_route": "likely_keep",
+                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "old_text": "Gateway uses host restart wrapper.",
+                "summary": "Gateway runtime fact.",
+                "allowed_decisions": ["keep", "memory_to_skill", "skip", "defer"],
+            },
+            {
+                "evidence_id": "memory-place-procedure",
+                "current_store": "memory",
+                "suggested_route": "likely_memory_to_skill",
+                "route_reasons": ["procedural_or_operational_workflow"],
+                "old_text": "Gateway restart workflow: check logs, then restart host wrapper.",
+                "summary": "Gateway restart workflow.",
+                "allowed_decisions": ["keep", "memory_to_skill", "skip", "defer"],
+            },
+        ],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    priority_header = "Priority placement candidates requiring semantic judgment"
+    assert priority_header in user_content
+    priority_section = user_content.split(priority_header, 1)[1].split("## Memory placement candidates", 1)[0]
+    assert "put one transaction for each of them at the beginning of knowledge_transactions" in priority_section
+    assert "use the priority defer template with evidence_ids" in priority_section
+    assert "evidence_id=memory-place-procedure" in priority_section
+    assert "suggested_route=likely_memory_to_skill" in priority_section
+    assert "evidence_id=memory-place-keep" not in priority_section
+    assert '"transaction_kind":"memory_to_skill"' in priority_section
+    assert '"source_evidence_id":"memory-place-procedure"' in priority_section
+    assert '"reason":"procedural_memory_belongs_in_skill"' in priority_section
+    assert '"evidence_ids":["memory-place-procedure"]' in priority_section
+    assert '"reason":"memory_to_skill_target_unclear"' in priority_section
+    main_section = user_content.split("## Memory placement candidates", 1)[1]
+    assert main_section.index("evidence_id=memory-place-procedure") < main_section.index("evidence_id=memory-place-keep")
+
+
 def test_render_planner_messages_uses_markdown_context_not_digest_dump():
     digest = build_planner_digest(pack())
 
