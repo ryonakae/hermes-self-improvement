@@ -81,6 +81,49 @@ def test_run_pipeline_writes_json_report_artifact_with_diagnostic_signals(monkey
     assert str(latest_json) in out["report_paths"]
 
 
+def test_run_improve_feeds_current_builtin_memory_entries_into_evidence_pack(monkeypatch, tmp_path):
+    import hermes_self_improvement.cli as cli
+
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "_editor_backend": object()}
+    captured = {}
+    current_entries = [
+        {"target": "memory", "old_text": "Hermes runtime uses ~/.hermes.", "summary": "Hermes runtime uses ~/.hermes."},
+        {"target": "user", "old_text": "Ryo prefers concise reports.", "summary": "Ryo prefers concise reports."},
+    ]
+
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli, "_current_builtin_memory_entries", lambda cfg: current_entries)
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "run_planner", lambda *args, **kwargs: {"candidates": []})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", lambda **kwargs: captured.setdefault("evidence_pack", kwargs["evidence_pack"]) or {
+        "status": "completed",
+        "knowledge_transactions": [],
+        "transaction_results": [],
+        "changed_skills": [],
+        "changed_memories": [],
+        "editor_validation": {"summary": {}},
+        "prompt_sources": {},
+        "planner_digest": {},
+        "planner": {"status": "completed"},
+    })
+
+    cli.run_improve(config=config, dry_run=True)
+
+    evidence_pack = captured["evidence_pack"]
+    inventory_items = [
+        item for item in evidence_pack["evidence"]
+        if item.get("kind") == "memory_inventory_candidate"
+        and (item.get("inventory") or {}).get("group_kind") == "built_in_memory_inventory"
+    ]
+    assert inventory_items
+    entries = inventory_items[0]["inventory"]["entries"]
+    assert {entry["store"] for entry in entries} >= {"builtin_memory", "builtin_user"}
+    assert any(entry["old_text"] == "Hermes runtime uses ~/.hermes." for entry in entries)
+    assert any(entry["old_text"] == "Ryo prefers concise reports." for entry in entries)
+
+
 def test_run_improve_exposes_cross_store_knowledge_transactions(monkeypatch, tmp_path):
     import hermes_self_improvement.cli as cli
 

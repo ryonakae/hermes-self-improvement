@@ -990,19 +990,23 @@ def run_improve(
     until = datetime.now(UTC)
     since = until - timedelta(hours=int(since_hours))
     events = _load_events(_event_path(config), since=since)
+    existing_memories = _current_builtin_memory_entries(config)
+    evidence_config = dict(config)
+    evidence_config["_memory_current_entries"] = existing_memories
+    evidence_config.setdefault("_hermes_home", str(get_hermes_home()))
     evidence_pack = build_evidence_pack(
         events,
         since,
         until,
         curator_telemetry=curator_telemetry,
         memory_paths=_builtin_memory_paths(config),
+        config=evidence_config,
     )
     source_report_context = _load_report_context(from_report) if from_report else None
     if source_report_context:
         report_signals = source_report_context.get("diagnostic_signals") if isinstance(source_report_context.get("diagnostic_signals"), list) else []
         if report_signals:
             evidence_pack = _attach_diagnostic_signals_to_evidence_pack(evidence_pack, report_signals)
-    existing_memories = _current_builtin_memory_entries(config)
     conversation_windows = build_planner_windows(events)
     planner_memory_digest = build_planner_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
     memory_gap_payload = reconcile_planner_payload_with_existing_memories(

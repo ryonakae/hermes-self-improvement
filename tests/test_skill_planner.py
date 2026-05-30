@@ -50,6 +50,30 @@ def test_build_planner_digest_attaches_evidence_and_caps_previews():
     assert digest["unmatched_evidence"]["by_reason"]["skill_target_missing"] == 1
 
 
+def test_memory_placement_evidence_in_skill_view_is_not_skill_target_missing():
+    placement = {
+        "id": "memory-place-1",
+        "kind": "memory_placement_candidate",
+        "inventory": {
+            "group_kind": "placement_review",
+            "current_store": "user",
+            "old_text": "Ryo prefers concise reports.",
+            "summary": "Ryo prefers concise reports.",
+        },
+        "likely_targets": [{"target": "memory", "weight": 0.8}, {"target": "skill", "weight": 0.2}],
+    }
+    pack_data = {
+        "summary": {"event_count": 0, "evidence_count": 1, "ignored_count": 0},
+        "evidence": [placement],
+        "views": {"skill": ["memory-place-1"], "memory": ["memory-place-1"], "evaluator": []},
+        "skill_candidates": [],
+    }
+
+    digest = build_planner_digest(pack_data)
+
+    assert digest["unmatched_evidence"]["by_reason"].get("skill_target_missing", 0) == 0
+
+
 def test_render_planner_messages_uses_markdown_context_not_digest_dump():
     digest = build_planner_digest(pack())
 

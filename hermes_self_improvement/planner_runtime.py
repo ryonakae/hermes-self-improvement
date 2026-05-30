@@ -296,6 +296,8 @@ def build_planner_runtime_digest(
 
     for item in skill_evidence:
         evidence_id = str(item.get("id") or "")
+        if item.get("kind") in {"memory_inventory_candidate", "memory_placement_candidate"}:
+            continue
         resolved_any = False
         for resolution in resolver_resolutions.get(evidence_id, []):
             resolution_kind = str(resolution.get("resolution_kind") or "")

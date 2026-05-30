@@ -71,7 +71,7 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     monkeypatch.setattr(
         cli,
         "build_evidence_pack",
-        lambda events, since, until, *, curator_telemetry, memory_paths: {
+        lambda events, since, until, *, curator_telemetry, memory_paths, config=None: {
             "views": {"memory": ["m-current"], "skill": [], "evaluator": []},
             "evidence": [_memory_gap_candidate()],
             "summary": {},
@@ -128,7 +128,7 @@ def test_run_improve_uses_canonical_knowledge_step_not_split_entry_points(tmp_pa
     monkeypatch.setattr(
         cli,
         "build_evidence_pack",
-        lambda events, since, until, *, curator_telemetry, memory_paths: {
+        lambda events, since, until, *, curator_telemetry, memory_paths, config=None: {
             "views": {"memory": [], "skill": [], "evaluator": []},
             "evidence": [],
             "summary": {},
