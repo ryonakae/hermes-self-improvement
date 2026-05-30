@@ -216,14 +216,32 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
     lines = [
         "## Memory placement candidates",
         "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, move_user_to_memory, move_memory_to_user, memory_to_skill, skip, or defer. Treat suggested_route as advisory, not authority. Use exact old_text when moving/removing. Defer if the entry is valuable but too broad, too long, or ambiguous.",
+        "For each memory placement candidate, copy exactly one template into knowledge_transactions and fill only the fields that are already known. Do not omit a candidate just because the answer is keep/skip/defer.",
     ]
     for item in candidates[:40]:
+        evidence_id = _clip(item.get("evidence_id"), max_chars=80)
+        old_text = _clip(item.get("old_text"), max_chars=260)
         reasons = item.get("route_reasons") if isinstance(item.get("route_reasons"), list) else []
         reasons_str = ",".join(str(reason) for reason in reasons[:6]) if reasons else "missing_route_reason"
         decisions = item.get("allowed_decisions") if isinstance(item.get("allowed_decisions"), list) else []
         decisions_str = ",".join(str(decision) for decision in decisions[:8]) if decisions else "keep,move_user_to_memory,move_memory_to_user,memory_to_skill,skip,defer"
         lines.append(
-            f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; current_store={_clip(item.get('current_store'), max_chars=40)}; suggested_route={_clip(item.get('suggested_route'), max_chars=80)}; route_reasons=[{reasons_str}]; allowed_decisions=[{decisions_str}]; old_text={_clip(item.get('old_text'), max_chars=260)}"
+            f"- evidence_id={evidence_id}; current_store={_clip(item.get('current_store'), max_chars=40)}; suggested_route={_clip(item.get('suggested_route'), max_chars=80)}; route_reasons=[{reasons_str}]; allowed_decisions=[{decisions_str}]; old_text={old_text}"
+        )
+        template_base = {"source_evidence_id": evidence_id, "source_old_text": old_text}
+        lines.append(
+            "  - move template: "
+            + json.dumps({"operation": "move_user_to_memory", **template_base, "reason": "placement_boundary"}, ensure_ascii=False, separators=(",", ":"))
+            + " or "
+            + json.dumps({"operation": "move_memory_to_user", **template_base, "reason": "placement_boundary"}, ensure_ascii=False, separators=(",", ":"))
+        )
+        lines.append(
+            "  - keep/skip template: "
+            + json.dumps({"decision": "skip", "target_store": "none", "operation": "none", "evidence_ids": [evidence_id], "reason": "keep_current_store"}, ensure_ascii=False, separators=(",", ":"))
+        )
+        lines.append(
+            "  - defer template: "
+            + json.dumps({"decision": "defer", "target_store": "unresolved", "operation": "none", "evidence_ids": [evidence_id], "reason": "placement_unclear"}, ensure_ascii=False, separators=(",", ":"))
         )
     if int(placement.get("omitted_count") or 0):
         lines.append(f"- omitted memory placement candidates: {int(placement.get('omitted_count') or 0)}")

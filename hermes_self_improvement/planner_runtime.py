@@ -1114,6 +1114,15 @@ def _is_canonical_knowledge_transaction(raw: dict[str, Any]) -> bool:
         "remove_builtin_memory",
     }:
         return True
+    if str(raw.get("decision") or "") in {
+        "move_user_to_memory",
+        "move_memory_to_user",
+        "replace_builtin_user",
+        "replace_builtin_memory",
+        "remove_builtin_user",
+        "remove_builtin_memory",
+    }:
+        return True
     if target_store in {"builtin_user", "builtin_memory", "external_memory", "unresolved", "none"}:
         return True
     if transaction_kind in {"memory", "placement_move", "unresolved", "none"}:
@@ -1237,9 +1246,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         selected_skill = str(item.get("skill") or item.get("target_skill") or (item.get("target_id") if item.get("target_store") == "skill" else "") or "")
         if selected_skill:
             seen.add(selected_skill)
-        if item.get("source_evidence_id"):
-            seen_evidence_ids.add(str(item.get("source_evidence_id")))
-        for evidence_id in item.get("evidence_ids") or []:
+        for evidence_id in _decision_evidence_ids(item):
             if str(evidence_id):
                 seen_evidence_ids.add(str(evidence_id))
     for row in candidate_rows:
@@ -1484,14 +1491,18 @@ def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_de
     candidates = [item for item in placement.get("candidates") or [] if isinstance(item, dict)]
     selected_ids: set[str] = set()
     default_deferred_ids: set[str] = set()
+    planner_selected_ids: set[str] = set()
     for decision in planner_decisions:
         ids = _decision_evidence_ids(decision)
         selected_ids.update(ids)
         if str(decision.get("reason") or "") == "memory_placement_candidate_not_selected_by_planner":
             default_deferred_ids.update(ids)
+        else:
+            planner_selected_ids.update(ids)
     by_route: dict[str, int] = {}
     unhandled_by_route: dict[str, int] = {}
     selected_count = 0
+    planner_decision_count = 0
     unhandled_count = 0
     default_defer_count = 0
     for item in candidates:
@@ -1500,6 +1511,8 @@ def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_de
         by_route[route] = by_route.get(route, 0) + 1
         if evidence_id and evidence_id in selected_ids:
             selected_count += 1
+            if evidence_id in planner_selected_ids:
+                planner_decision_count += 1
             if evidence_id in default_deferred_ids:
                 default_defer_count += 1
             continue
@@ -1508,6 +1521,8 @@ def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_de
     return {
         "candidate_count": len(candidates),
         "selected_count": selected_count,
+        "planner_decision_count": planner_decision_count,
+        "default_handled_count": default_defer_count,
         "unhandled_count": unhandled_count,
         "default_defer_count": default_defer_count,
         "by_suggested_route": dict(sorted(by_route.items())),

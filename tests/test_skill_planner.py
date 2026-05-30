@@ -131,6 +131,44 @@ def test_render_planner_messages_exposes_memory_placement_candidates():
     assert "Gmail observer=~/.hermes/automations/gmail-purchase-observer." in user_content
 
 
+def test_render_planner_messages_includes_memory_placement_transaction_templates():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 2,
+        "omitted_count": 0,
+        "candidates": [
+            {
+                "evidence_id": "memory-place-user-runtime",
+                "current_store": "user",
+                "suggested_route": "likely_move_user_to_memory",
+                "route_reasons": ["contains_runtime_path"],
+                "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+                "summary": "Gmail observer path.",
+                "allowed_decisions": ["keep", "move_user_to_memory", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
+            },
+            {
+                "evidence_id": "memory-place-keep",
+                "current_store": "memory",
+                "suggested_route": "likely_keep",
+                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "old_text": "Gateway uses host restart wrapper.",
+                "summary": "Gateway runtime fact.",
+                "allowed_decisions": ["keep", "move_user_to_memory", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
+            },
+        ],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert "For each memory placement candidate, copy exactly one template into knowledge_transactions" in user_content
+    assert '"operation":"move_user_to_memory"' in user_content
+    assert '"source_evidence_id":"memory-place-user-runtime"' in user_content
+    assert '"source_old_text":"Gmail observer=~/.hermes/automations/gmail-purchase-observer."' in user_content
+    assert '"target_store":"none"' in user_content
+    assert '"reason":"keep_current_store"' in user_content
+
+
 def test_render_planner_messages_uses_markdown_context_not_digest_dump():
     digest = build_planner_digest(pack())
 
@@ -259,9 +297,44 @@ def test_planner_quality_report_counts_memory_placement_actionability():
 
     assert placement["candidate_count"] == 2
     assert placement["selected_count"] == 1
+    assert placement["planner_decision_count"] == 1
+    assert placement["default_handled_count"] == 0
     assert placement["unhandled_count"] == 1
     assert placement["by_suggested_route"] == {"likely_memory_to_skill": 1, "likely_move_user_to_memory": 1}
     assert placement["unhandled_by_route"] == {"likely_memory_to_skill": 1}
+
+
+def test_planner_quality_report_separates_default_memory_placement_defers_from_planner_decisions():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 1,
+        "omitted_count": 0,
+        "candidates": [{
+            "evidence_id": "memory-place-user-runtime",
+            "current_store": "user",
+            "suggested_route": "likely_move_user_to_memory",
+            "route_reasons": ["contains_runtime_path"],
+            "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+        }],
+    }
+    planner_result = {
+        "knowledge_transactions": [{
+            "decision": "defer",
+            "target_store": "unresolved",
+            "operation": "none",
+            "evidence_ids": ["memory-place-user-runtime"],
+            "reason": "memory_placement_candidate_not_selected_by_planner",
+        }]
+    }
+
+    quality = build_planner_quality_report(digest=digest, planner=planner_result)
+    placement = quality["memory_placement_actionability"]
+
+    assert placement["selected_count"] == 1
+    assert placement["planner_decision_count"] == 0
+    assert placement["default_defer_count"] == 1
+    assert placement["default_handled_count"] == 1
+    assert placement["unhandled_count"] == 0
 
 
 def test_run_planner_defaults_unhandled_memory_placement_candidate_to_defer():
@@ -288,6 +361,43 @@ def test_run_planner_defaults_unhandled_memory_placement_candidate_to_defer():
     assert tx["transaction_kind"] == "unresolved"
     assert tx["evidence_ids"] == ["memory-place-user-runtime"]
     assert tx["reason"] == "memory_placement_candidate_not_selected_by_planner"
+
+
+def test_run_planner_treats_memory_placement_decision_source_id_as_handled():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 1,
+        "omitted_count": 0,
+        "candidates": [{
+            "evidence_id": "memory-place-user-runtime",
+            "current_store": "user",
+            "suggested_route": "likely_move_user_to_memory",
+            "route_reasons": ["contains_runtime_path"],
+            "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+        }],
+    }
+
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [{
+                "decision": "move_user_to_memory",
+                "source_evidence_id": "memory-place-user-runtime",
+                "source_old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+                "reason": "runtime_path_belongs_in_memory",
+            }]
+        }
+
+    result = run_planner(digest, config={"_planner_func": fake_planner})
+    rows = [item for item in result["knowledge_transactions"] if "memory-place-user-runtime" in set(item.get("evidence_ids") or []) | {str(item.get("source_id") or "")}]
+
+    assert len(rows) == 1
+    tx = rows[0]
+    assert tx["decision"] == "apply"
+    assert tx["transaction_kind"] == "placement_move"
+    assert tx["operation"] == "move"
+    assert tx["source_store"] == "builtin_user"
+    assert tx["target_store"] == "builtin_memory"
+    assert tx["source_id"] == "memory-place-user-runtime"
 
 
 def test_planner_allows_mutate_skill_with_inventory_evidence():

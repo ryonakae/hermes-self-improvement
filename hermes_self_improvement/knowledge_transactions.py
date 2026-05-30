@@ -187,9 +187,10 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
     source_old_text = str(raw.get("source_old_text") or raw.get("old_text") or "")
 
     legacy_decision = str(raw.get("decision") or "")
-    if operation in _MEMORY_PRODUCT_OPERATIONS:
-        transaction_kind, source_store, target_store, operation = _MEMORY_PRODUCT_OPERATIONS[operation]
-        decision = "apply" if decision in {"apply", "accepted", "preview"} else decision
+    memory_product_operation = operation or legacy_decision
+    if memory_product_operation in _MEMORY_PRODUCT_OPERATIONS:
+        transaction_kind, source_store, target_store, operation = _MEMORY_PRODUCT_OPERATIONS[memory_product_operation]
+        decision = "apply" if decision in {"apply", "accepted", "preview", memory_product_operation} else decision
         target_id = target_id or _BUILTIN_MEMORY_TARGET_IDS.get(target_store, "")
     elif legacy_decision == "create_skill":
         decision = "apply"
