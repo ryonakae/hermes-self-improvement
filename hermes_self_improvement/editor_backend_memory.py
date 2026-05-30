@@ -256,7 +256,7 @@ class NativeMemoryEditorBackend:
             "Markdown brief:\n" + (markdown_brief or "n/a"),
         ])
         system_message = (
-            "You are a constrained Hermes memory agent. Use only the provided memory tool. "
+            "You are the constrained Hermes Knowledge Editor using the memory tool adapter. Use only the provided memory tool. "
             "Read Markdown briefs as judgment context, not as a machine protocol. "
             "For each candidate, decide whether to add, replace, remove, or skip; route procedural reusable guidance back to skill by setting decision=\"convert_to_skill_proposal\" in the final JSON. "
             "Use exact old_text from current_entries for replace/remove. Use add only for genuinely new facts. "

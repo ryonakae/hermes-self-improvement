@@ -2,7 +2,7 @@
 
 > **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
 
-**Goal:** Make `hermes-self-improvement` genuinely improve both skills and built-in memory by letting the planner judge across skills, `USER.md`, and `MEMORY.md`, and letting one Knowledge Editor execute cross-surface improvements with only minimal hard scope guards.
+**Goal:** Make `hermes-self-improvement` genuinely improve both skills and built-in memory by letting the planner decide across skills, `USER.md`, and `MEMORY.md`, and letting one Knowledge Editor execute cross-surface improvements with only minimal hard scope guards.
 
 **Architecture:** Keep the existing canonical `knowledge_transactions` path as the only source of truth. Do not add new roles, approval queues, confidence gates, lanes, or safety-heavy policy layers. The planner produces cross-surface transactions; the editor executes them through official `skill_manage` and `memory` tools, records enough before/after detail to undo bad edits, and stops mutation only for hard scope violations or dry-run.
 
@@ -16,7 +16,7 @@ The source-of-truth cleanup is complete: final artifacts use canonical `knowledg
 
 The next gap is conceptual and operational:
 
-- The product model should be simple: **Planner judges across skill and memory; Editor improves across skill and memory.**
+- The product model should be simple: **Planner decides across skill and memory; Editor improves across skill and memory.**
 - Current implementation still exposes or implies separate skill/memory editor paths in names, status, prompts, and some planning language.
 - Built-in memory hygiene is not strong enough until the plugin can inventory current `USER.md` / `MEMORY.md`, fix placement mistakes, consolidate/remove low-value entries, and move entries between the two stores.
 - This work may use observation data, but it must also work from current memory inventory alone. Some memory cleanup is hygiene, not tool-failure evidence.
@@ -93,6 +93,8 @@ Keep transaction names direct and product-level. Exact implementation names can 
 
 ## Slice 1: Rename the product model in prompts and reports without changing behavior
 
+**Status:** Implemented 2026-05-30 in commit sequence item 2. Product-facing editor prompts/status metadata now present one `Knowledge Editor`; skill/memory backends are described as tool adapters. Verified with focused prompt/backend/status tests.
+
 **Objective:** Make the runtime and artifacts present one cross-surface Knowledge Editor concept instead of implying separate skill and memory editors as product roles.
 
 **Files:**
@@ -136,7 +138,7 @@ Expected: pass.
 
 ## Slice 2: Feed built-in memory inventory into the planner as first-class evidence
 
-**Objective:** Let the planner judge current `USER.md` / `MEMORY.md` entries even when no recent observation event directly points at them.
+**Objective:** Let the planner assess current `USER.md` / `MEMORY.md` entries even when no recent observation event directly points at them.
 
 **Files:**
 - Modify: `hermes_self_improvement/evidence.py`
@@ -185,7 +187,7 @@ Run focused evidence/planner tests.
 
 ## Slice 3: Teach the planner to emit memory placement and cleanup transactions
 
-**Objective:** Let one planner decide across skill, `USER.md`, `MEMORY.md`, none, placement moves, and memory-to-skill.
+**Objective:** Let one planner choose across skill, `USER.md`, `MEMORY.md`, none, placement moves, and memory-to-skill.
 
 **Files:**
 - Modify: planner prompt/default overlay seeds.
@@ -375,7 +377,7 @@ Expected: pass, repo clean after commit/push, artifact records actual skill/memo
 This plan is complete when:
 
 - The planner can see current `USER.md` / `MEMORY.md` entries as first-class inventory evidence.
-- The planner can choose skill, builtin user, builtin memory, memory-to-skill, placement move, none, or skip in one canonical transaction list.
+- The planner can select skill, builtin user, builtin memory, memory-to-skill, placement move, none, or skip in one canonical transaction list.
 - The editor executes skill and memory changes from that same transaction list using official tools.
 - Product-facing docs/reports describe one Planner and one Knowledge Editor, not separate skill/memory roles.
 - Minimal hard guards are enforced: only allowed local skills, `USER.md`, and `MEMORY.md`; dry-run never mutates.

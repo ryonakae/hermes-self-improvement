@@ -315,7 +315,8 @@ def test_native_memory_backend_accepts_constrained_agent_result_through_existing
     def fake_runner(*, role, user_message, system_message, config, max_iterations):
         assert role == "editor"
         assert "Current memory entries" in user_message
-        assert "constrained Hermes memory agent" in system_message
+        assert "constrained Hermes Knowledge Editor" in system_message
+        assert "memory tool adapter" in system_message
         assert ("submit_" + "mutation_result") not in system_message
         assert "Final response must be a JSON object" in system_message
         assert max_iterations == 14

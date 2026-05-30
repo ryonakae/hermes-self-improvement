@@ -550,7 +550,7 @@ class NativeSkillEditorBackend:
             "Markdown brief:\n" + (markdown_brief or "n/a"),
         ])
         system_message = (
-            "You are a constrained Hermes skill agent. Use only the provided skill tools. "
+            "You are the constrained Hermes Knowledge Editor using the skill tool adapter. Use only the provided skill tools. "
             "Read Markdown briefs as judgment context, not as a machine protocol. "
             "For skill_create tasks, the target skill is expected to be missing: do not stop just because skill_view cannot read it; "
             "if the evidence supports creation, call skill_manage(action=\"create\") with complete SKILL.md content. "

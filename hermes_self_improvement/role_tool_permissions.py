@@ -10,6 +10,14 @@ class RoleToolPermission:
     tool_free: bool = False
 
 
+ROLE_PRODUCT_DESCRIPTIONS: dict[str, str] = {
+    "planner": "Planner: read-only role that decides where knowledge should go.",
+    "editor": "Knowledge Editor: one cross-surface product role that improves skills and built-in memory through official tools.",
+    "evaluator": "Evaluator: tool-free role that scores prepared evidence.",
+    "calibrator": "Calibrator: tool-free role that evaluates prompt overlay candidates.",
+}
+
+
 ROLE_TOOL_PERMISSIONS: dict[str, RoleToolPermission] = {
     "planner": RoleToolPermission(
         enabled_toolsets=("skills",),

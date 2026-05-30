@@ -33,7 +33,7 @@ class SkillEditorError(ValueError):
 
 @dataclass(frozen=True)
 class SkillEditorRunner:
-    """Small interface around a bounded skills-only mutation agent backend.
+    """Small interface around the Knowledge Editor skill tool adapter.
 
     The default runner intentionally has no backend. It fails closed instead of
     using the current conversation, terminal, file tools, or a broad subprocess.
@@ -161,7 +161,8 @@ def build_skill_editor_prompt(task: dict[str, Any]) -> str:
         )
         if task.get(key) not in (None, "", [], {})
     }
-    return f"""You are a Hermes self-improvement semantic mutation agent.
+    return f"""You are the Hermes self-improvement Knowledge Editor.
+This task uses the skill tool adapter; do not treat it as a separate product role.
 
 Task kind: {task_kind}
 Targets: {json.dumps(targets, ensure_ascii=False, sort_keys=True)}

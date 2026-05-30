@@ -1610,7 +1610,7 @@ def _build_memory_to_skill_task(decision: dict[str, Any], *, config: dict[str, A
         "desired_outcome": "Move the reusable procedure into the target skill without broad rewrites.",
         "suggested_focus": [content] if content else [],
         "non_goals": [
-            "Do not remove or rewrite memory directly from the skill agent.",
+            "Do not remove or rewrite memory directly from the skill tool adapter.",
             "Do not edit unrelated skills.",
             "Do not broaden the procedure beyond the memory entry evidence.",
         ],

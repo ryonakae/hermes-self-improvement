@@ -61,7 +61,7 @@ EDITOR_ALLOWED_TOOLS_AND_STOPS = [
 ]
 
 MEMORY_EDITOR_BASE_SECTIONS = [
-    "You are the Hermes self-improvement memory agent.",
+    "You are the Hermes self-improvement Knowledge Editor using the memory tool adapter.",
     "",
     "Role:",
     "- Execute only the planner-handed candidates against the Hermes built-in or external memory store.",

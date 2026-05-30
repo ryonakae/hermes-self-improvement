@@ -17,12 +17,12 @@ Backend = Callable[[str, dict[str, Any], dict[str, Any] | None], dict[str, Any] 
 
 
 class MemoryEditorError(ValueError):
-    """Raised when a semantic memory-agent task is invalid or unsafe."""
+    """Raised when a Knowledge Editor memory task is invalid or unsafe."""
 
 
 @dataclass(frozen=True)
 class MemoryEditorRunner:
-    """Small interface around a bounded memory-only agent backend.
+    """Small interface around the Knowledge Editor memory tool adapter.
 
     The default runner has no backend so it fails closed instead of falling
     back to direct filesystem or unrelated tools. Tests and the Hermes-native
@@ -95,7 +95,8 @@ def build_memory_editor_prompt(task: dict[str, Any]) -> str:
         )
         if task.get(key) not in (None, "", [], {})
     }
-    return f"""You are a Hermes self-improvement semantic memory agent.
+    return f"""You are the Hermes self-improvement Knowledge Editor.
+This task uses the memory tool adapter; do not treat it as a separate product role.
 
 Task kind: {task_kind}
 
@@ -113,7 +114,7 @@ Hard constraints:
 - Use exact old_text from current_entries for replace/remove. Use add only for genuinely new facts.
 - If the candidate is sensitive, duplicate, or unclear, do not call memory; record the reason in verification_notes and return a non-mutating outcome.
 - If memory_capacity_exceeded is returned, remove a stale entry then retry add.
-- For procedural reusable knowledge, do not store as memory; return decision=\"convert_to_skill_proposal\" so the next cycle can route it to the skill agent.
+- For procedural reusable knowledge, do not store as memory; return decision=\"convert_to_skill_proposal\" so the next cycle can route it to the skill tool adapter.
 - Allowed non-mutating outcomes: skipped_superseded, stopped_stale_target, stopped_conflict, stopped_uncertain_needs_review.
 - Stop and return success=false if the task asks you to operate outside scope.
 - Final assistant response must be a JSON object with success, outcome, changed_memories, removed_memories, verification_notes, rollback_hints, and optional decision.

@@ -801,7 +801,7 @@ def test_build_runtime_eval_cases_includes_role_episode_cases(tmp_path):
 
 def write_planner_quality_run(config: dict, payload: dict, name: str = "run.json") -> Path:
     path = Path(config["_self_improvement_root"]) / "runs" / name
-    write_json(path, {"schema_name": "self_improvement_run_result", "created_at": "2026-04-30T00:00:00+00:00", **payload})
+    write_json(path, {"schema_name": "self_improvement_run_result", "created_at": datetime.now(timezone.utc).isoformat(), **payload})
     return path
 
 
