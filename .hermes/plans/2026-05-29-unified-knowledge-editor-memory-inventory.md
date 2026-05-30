@@ -299,6 +299,8 @@ Run focused transaction tests.
 
 ## Slice 5: Report memory inventory and cross-surface edits clearly
 
+**Status (2026-05-30):** Implemented. Non-dry-run CLI summaries now render compact canonical `Knowledge changes` lines for direct skill edits, built-in memory edits, placement moves, memory-to-skill changes, USER/MEMORY move directions, and deferred/skipped transaction counts without exposing split-lane role names. Compact tool payloads now include machine-readable `steps.knowledge_changes` with the same counts. Focused verification: `tests/test_cli_surface.py tests/test_plugin_tools.py tests/test_report_integration.py tests/test_knowledge_transaction_view.py -q` -> 72 passed.
+
 **Objective:** Make CLI/tool/artifact summaries answer what changed and why without opening raw JSON.
 
 **Files:**

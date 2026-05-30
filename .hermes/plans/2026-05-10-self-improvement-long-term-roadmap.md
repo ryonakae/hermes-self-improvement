@@ -360,7 +360,7 @@ Exit criteria:
 
 ### Current Slice — Unified Knowledge Editor memory execution
 
-**Status:** implemented. `2026-05-29-unified-knowledge-editor-memory-inventory.md` Slices 1–4 are implemented: the product now presents one Knowledge Editor, built-in memory inventory is planner-visible from the official memory path, the planner can emit canonical placement/cleanup transactions, and `execute_knowledge_transaction` executes skill, builtin-user, builtin-memory, placement moves, and memory-to-skill through official tools only. Remaining work is Slice 5 reporting and Slice 6 dogfood proof.
+**Status:** implemented through reporting. `2026-05-29-unified-knowledge-editor-memory-inventory.md` Slices 1–5 are implemented: the product now presents one Knowledge Editor, built-in memory inventory is planner-visible from the official memory path, the planner can emit canonical placement/cleanup transactions, `execute_knowledge_transaction` executes skill, builtin-user, builtin-memory, placement moves, and memory-to-skill through official tools only, and CLI/tool summaries report cross-surface knowledge changes clearly. Remaining work is Slice 6 dogfood proof.
 
 Plan file: `2026-05-29-unified-knowledge-editor-memory-inventory.md`.
 

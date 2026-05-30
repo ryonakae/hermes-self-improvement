@@ -91,6 +91,51 @@ def _actionable_summary(action_summary: dict[str, int]) -> dict[str, int]:
     }
 
 
+def _canonical_knowledge_change_counts(knowledge_transactions: Any) -> dict[str, Any]:
+    counts: dict[str, Any] = {
+        "skills": 0,
+        "memory": 0,
+        "placement_moves": 0,
+        "memory_to_skill": 0,
+        "memory_placement": {"USER->MEMORY": 0, "MEMORY->USER": 0},
+        "deferred_transactions": 0,
+        "skipped_transactions": 0,
+    }
+    for item in knowledge_transactions:
+        if not isinstance(item, dict):
+            continue
+        decision = str(item.get("decision") or "")
+        if decision in {"defer", "deferred"}:
+            counts["deferred_transactions"] += 1
+            continue
+        if decision in {"skip", "skipped"}:
+            counts["skipped_transactions"] += 1
+            continue
+        if decision not in {"apply", "accepted", "mutate_skill", "mutate_memory", "memory_to_skill_preview"}:
+            continue
+        raw_result_payload = item.get("transaction_result") if isinstance(item.get("transaction_result"), dict) else item.get("result")
+        result_payload = raw_result_payload if isinstance(raw_result_payload, dict) else {}
+        if result_payload and result_payload.get("success") is False:
+            continue
+        kind = str(item.get("transaction_kind") or "")
+        if kind == "skill":
+            counts["skills"] += 1
+        elif kind == "memory":
+            counts["memory"] += 1
+        elif kind == "placement_move":
+            counts["placement_moves"] += 1
+            counts["memory"] += 1
+            source_store = str(item.get("source_store") or "")
+            target_store = str(item.get("target_store") or "")
+            if source_store == "builtin_user" and target_store == "builtin_memory":
+                counts["memory_placement"]["USER->MEMORY"] += 1
+            elif source_store == "builtin_memory" and target_store == "builtin_user":
+                counts["memory_placement"]["MEMORY->USER"] += 1
+        elif kind == "memory_to_skill":
+            counts["memory_to_skill"] += 1
+    return counts
+
+
 def _compact_step(name: str, step: Any) -> dict[str, Any]:
     data = step if isinstance(step, dict) else {}
     out = {
@@ -248,6 +293,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
             },
             "skill_lifecycle": skill_lifecycle,
             "knowledge_transactions": knowledge_transaction_summary,
+            "knowledge_changes": _canonical_knowledge_change_counts(knowledge_transactions),
             "knowledge_routing": step_decisions.get("knowledge_routing") if isinstance(step_decisions.get("knowledge_routing"), dict) else {},
             "evaluator": _compact_step("evaluator", step_decisions.get("evaluator")),
         },

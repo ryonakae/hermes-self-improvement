@@ -1649,6 +1649,63 @@ def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], mainte
     return lines
 
 
+def _knowledge_change_summary_lines(knowledge_transactions: list[dict[str, Any]]) -> list[str]:
+    if not knowledge_transactions:
+        return []
+    skill_changes = 0
+    memory_changes = 0
+    placement_moves = 0
+    memory_to_skill = 0
+    user_to_memory = 0
+    memory_to_user = 0
+    deferred = 0
+    skipped = 0
+    for item in knowledge_transactions:
+        if not isinstance(item, dict):
+            continue
+        action = _semantic_action_from_runner_decision(item, kind=_transaction_display_kind(item))
+        if action == "defer":
+            deferred += 1
+            continue
+        if action == "skip":
+            skipped += 1
+            continue
+        if action != "apply":
+            continue
+        raw_result_payload = item.get("transaction_result") if isinstance(item.get("transaction_result"), dict) else item.get("result")
+        result_payload = raw_result_payload if isinstance(raw_result_payload, dict) else {}
+        if result_payload and result_payload.get("success") is False:
+            continue
+        kind = str(item.get("transaction_kind") or "")
+        if kind == "skill":
+            if result_payload.get("changed_skills") or result_payload.get("created_skills") or result_payload.get("archived_skills") or item.get("target_skill") or item.get("target_id"):
+                skill_changes += 1
+        elif kind == "memory":
+            if result_payload.get("changed_memories") or result_payload.get("removed_memories") or item.get("operation") in {"memory_add", "memory_replace", "memory_delete", "memory_remove"}:
+                memory_changes += 1
+        elif kind == "placement_move":
+            placement_moves += 1
+            memory_changes += 1
+            source_store = str(item.get("source_store") or "")
+            target_store = str(item.get("target_store") or "")
+            if source_store == "builtin_user" and target_store == "builtin_memory":
+                user_to_memory += 1
+            elif source_store == "builtin_memory" and target_store == "builtin_user":
+                memory_to_user += 1
+        elif kind == "memory_to_skill":
+            memory_to_skill += 1
+    lines = [
+        f"Knowledge changes: skills {skill_changes}, memory {memory_changes}, placement moves {placement_moves}, memory-to-skill {memory_to_skill}",
+    ]
+    if placement_moves:
+        lines.append(f"Memory placement: USER->MEMORY {user_to_memory}, MEMORY->USER {memory_to_user}")
+    if deferred:
+        lines.append(f"- deferred transactions: {deferred}")
+    if skipped:
+        lines.append(f"- skipped transactions: {skipped}")
+    return lines
+
+
 def _actual_result_summary_lines(
     *,
     summary: dict[str, Any],
@@ -2400,6 +2457,7 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
         planner_decisions=planner_decisions,
         knowledge_transactions=knowledge_transactions,
     )
+    knowledge_change_lines = _knowledge_change_summary_lines(knowledge_transactions)
     skill_quality_lines = _skill_quality_summary_lines(skill_decisions, planner_decisions)
     outcome_lines = _outcome_summary_lines(result.get("credit_assignment") if isinstance(result.get("credit_assignment"), dict) else {})
     unresolved_lines = _unresolved_summary_lines(
@@ -2440,6 +2498,9 @@ def _render_improve_summary(result: dict[str, Any]) -> str:
     if not result.get("dry_run"):
         insert_at = lines.index("Skill planner:")
         lines[insert_at:insert_at] = actual_result_lines
+        if knowledge_change_lines:
+            insert_at = lines.index("Skill planner:")
+            lines[insert_at:insert_at] = knowledge_change_lines
         if skill_quality_lines:
             insert_at = lines.index("Skill planner:")
             lines[insert_at:insert_at] = skill_quality_lines

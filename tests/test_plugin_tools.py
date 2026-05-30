@@ -427,6 +427,15 @@ def test_compact_improve_tool_result_uses_canonical_knowledge_transactions_over_
 
     assert payload["action_summary"] == {"apply": 1, "defer": 1, "skip": 1, "block": 0}
     assert payload["steps"]["knowledge_transactions"] == {"total": 3, "apply": 1, "defer": 1, "skip": 1, "block": 0, "by_kind": {"memory": 1, "memory_to_skill": 1, "skill": 1}, "cross_store": 1}
+    assert payload["steps"]["knowledge_changes"] == {
+        "skills": 1,
+        "memory": 0,
+        "placement_moves": 0,
+        "memory_to_skill": 0,
+        "memory_placement": {"USER->MEMORY": 0, "MEMORY->USER": 0},
+        "deferred_transactions": 1,
+        "skipped_transactions": 1,
+    }
     assert payload["steps"]["skill_planner"]["quality"] == {"attached_candidate_count": 0, "unmatched_evidence_count": 0, "selected_with_evidence": 0, "action_like_skips": 0, "editor_task_count": 0, "hint_attached_evidence_count": 0, "hint_attached_candidate_count": 0, "cluster_evidence_count": 0, "cluster_attached_candidate_count": 0, "cluster_selected_count": 0, "weak_only_candidate_count": 0, "weak_only_selected_count": 0, "attachments_by_match_kind": {}, "evidence_strength_counts": {}, "selected_by_strength": {}, "skip_class_counts": {}, "skip_reasons_by_class": {}, "matched_candidate_count": 0, "matched_but_not_selected_count": 0, "matched_but_not_selected_by_reason": {}, "matched_noop_class_counts": {}, "benign_skip_count": 0, "safe_stop_count": 0, "actionability_loss_count": 0, "needs_follow_up_skip_count": 0, "editor_prompt_chars": {}}
 
 

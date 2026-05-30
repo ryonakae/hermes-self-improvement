@@ -1340,3 +1340,73 @@ def test_improve_summary_renders_reference_skill_coverage():
     assert "Reference coverage:" in text
     assert "timeout_workflow -> timeout-workflow" in text
     assert "patch_tool_workflow -> safe-patch-usage" in text
+
+
+def test_improve_summary_reports_cross_surface_knowledge_changes_from_canonical_transactions():
+    cli = load_cli_module()
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 1, "memory_changes": 2},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-skill",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "target_store": "skill",
+                "target_id": "safe-patch-usage",
+                "operation": "mutate_skill",
+                "transaction_result": {"success": True, "changed_skills": ["safe-patch-usage"]},
+            },
+            {
+                "transaction_id": "txn-placement",
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "operation": "move",
+                "transaction_result": {"success": True, "changed_memories": ["txn-placement"], "removed_memories": ["user-entry"]},
+            },
+            {
+                "transaction_id": "txn-memory-replace",
+                "transaction_kind": "memory",
+                "decision": "apply",
+                "target_store": "builtin_memory",
+                "operation": "memory_replace",
+                "transaction_result": {"success": True, "changed_memories": ["txn-memory-replace"]},
+            },
+            {
+                "transaction_id": "txn-memory-to-skill",
+                "transaction_kind": "memory_to_skill",
+                "decision": "apply",
+                "source_store": "builtin_memory",
+                "target_store": "skill",
+                "target_skill": "hermes-memory-and-live-context",
+                "transaction_result": {"success": True, "changed_skills": ["hermes-memory-and-live-context"], "removed_memories": ["memory-entry"]},
+            },
+            {
+                "transaction_id": "txn-deferred",
+                "transaction_kind": "memory",
+                "decision": "defer",
+                "target_store": "builtin_memory",
+                "operation": "memory_replace",
+                "reason": "entry_too_long_for_builtin_memory",
+            },
+            {
+                "transaction_id": "txn-skip",
+                "transaction_kind": "none",
+                "decision": "skip",
+                "target_store": "none",
+                "operation": "none",
+                "reason": "session_only",
+            },
+        ],
+        "step_decisions": {"knowledge_routing": {}},
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Knowledge changes: skills 1, memory 2, placement moves 1, memory-to-skill 1" in text
+    assert "Memory placement: USER->MEMORY 1, MEMORY->USER 0" in text
+    assert "- deferred transactions: 1" in text
+    assert "- skipped transactions: 1" in text
+    assert "skill_agent" not in text
+    assert "memory_agent" not in text
