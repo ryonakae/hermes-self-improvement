@@ -337,6 +337,8 @@ Run focused report tests.
 
 ## Slice 6: Dogfood with dry-run, then one approved mutating replay
 
+**Status (2026-05-30):** Dry-run proof completed; no mutating replay was run because the live dry-run selected no executable `apply` transactions. Artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260530T012404Z.json`. Verification from artifact: `dry_run=True`, 48 canonical `knowledge_transactions`, no top-level legacy `decisions`, no split `step_decisions.skill` / `memory` / `memory_to_skill` lanes, `by_kind {'skill': 48}`, actions `skip:46 / defer:2`, memory inventory summary visible via `evidence_pack.summary.inventory_health` with 25 built-in memory entries and 28 inventory evidence items. Runtime `status` still reports the pre-existing `active_prompt_overlays_invalid` setup reason. Next mutating replay requires a future dry-run with a low-risk executable `apply` and explicit Ryo approval.
+
 **Objective:** Prove the simple cross-surface model works before calling it complete.
 
 **Files:**

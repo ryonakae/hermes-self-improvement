@@ -360,7 +360,7 @@ Exit criteria:
 
 ### Current Slice — Unified Knowledge Editor memory execution
 
-**Status:** implemented through reporting. `2026-05-29-unified-knowledge-editor-memory-inventory.md` Slices 1–5 are implemented: the product now presents one Knowledge Editor, built-in memory inventory is planner-visible from the official memory path, the planner can emit canonical placement/cleanup transactions, `execute_knowledge_transaction` executes skill, builtin-user, builtin-memory, placement moves, and memory-to-skill through official tools only, and CLI/tool summaries report cross-surface knowledge changes clearly. Remaining work is Slice 6 dogfood proof.
+**Status:** implemented through dry-run dogfood. `2026-05-29-unified-knowledge-editor-memory-inventory.md` Slices 1–6 are implemented: the product now presents one Knowledge Editor, built-in memory inventory is planner-visible from the official memory path, the planner can emit canonical placement/cleanup transactions, `execute_knowledge_transaction` executes skill, builtin-user, builtin-memory, placement moves, and memory-to-skill through official tools only, and CLI/tool summaries report cross-surface knowledge changes clearly. Dogfood artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260530T012404Z.json` proved canonical dry-run shape with no split lanes and no executable apply, so no mutating replay was run.
 
 Plan file: `2026-05-29-unified-knowledge-editor-memory-inventory.md`.
 
