@@ -778,6 +778,40 @@ def test_execute_knowledge_transaction_placement_move_adds_before_removing_sourc
     ]
 
 
+def test_execute_knowledge_transaction_placement_move_memory_to_user_adds_before_removing_source():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-placement-memory-to-user",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "source_store": "builtin_memory",
+            "source_id": "memory-pref",
+            "source_old_text": "Ryo prefers terse Slack reports.",
+            "target_store": "builtin_user",
+            "target_id": "user",
+            "operation": "move",
+            "editor_task": {"content": "Ryo prefers terse Slack reports."},
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["changed_memories"] == ["txn-placement-memory-to-user"]
+    assert result["removed_memories"] == ["memory-pref"]
+    assert calls == [
+        {"action": "add", "target": "user", "content": "Ryo prefers terse Slack reports."},
+        {"action": "remove", "target": "memory", "old_text": "Ryo prefers terse Slack reports."},
+    ]
+
+
 def test_execute_knowledge_transaction_runs_skill_create_transaction_through_editor_backend(tmp_path):
     root = tmp_path / "skills"
     root.mkdir(parents=True)
