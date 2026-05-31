@@ -2057,7 +2057,6 @@ def collect_memory_placement_candidates(memory_paths: dict[str, Any] | None, *, 
             "id": _stable_id("memory_place", inventory),
             "kind": "memory_placement_candidate",
             "source": "inventory",
-            "likely_targets": _targets(("memory", 0.7), ("skill", 0.3)),
             "inventory": inventory,
             "risk": "medium",
         })

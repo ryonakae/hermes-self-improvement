@@ -196,7 +196,59 @@ def _memory_inventory_groups_digest(evidence_pack: dict[str, Any]) -> dict[str, 
     return {"group_count": len(groups), "omitted_count": omitted, "groups": groups}
 
 
-def _memory_placement_candidates_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+_TARGET_SKILL_STOPWORDS = {
+    "and",
+    "the",
+    "for",
+    "with",
+    "skill",
+    "skills",
+    "hermes",
+    "self",
+    "improvement",
+    "workflow",
+    "workflows",
+    "operation",
+    "operations",
+    "session",
+    "sessions",
+}
+
+
+def _target_skill_tokens(value: Any) -> set[str]:
+    text = str(value or "").lower()
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", text)
+        if len(token) >= 3 and token not in _TARGET_SKILL_STOPWORDS
+    }
+
+
+def _candidate_target_skills_for_memory_text(text: str, editable_skills: list[dict[str, Any]]) -> list[dict[str, str]]:
+    text_tokens = _target_skill_tokens(text)
+    if not text_tokens:
+        return []
+    scored: list[tuple[int, int, str, str]] = []
+    for skill in editable_skills:
+        if not isinstance(skill, dict) or not bool(skill.get("mutable", True)):
+            continue
+        name = str(skill.get("name") or "").strip()
+        if not name:
+            continue
+        name_overlap = len(text_tokens & _target_skill_tokens(name))
+        description_overlap = len(text_tokens & _target_skill_tokens(skill.get("description") or ""))
+        if not name_overlap and not description_overlap:
+            continue
+        reason = "name_token_overlap" if name_overlap else "description_token_overlap"
+        scored.append((name_overlap, description_overlap, name, reason))
+    scored.sort(key=lambda item: (-item[0], -item[1], item[2]))
+    return [
+        {"skill": name, "match_reason": reason}
+        for _name_overlap, _description_overlap, name, reason in scored[:3]
+    ]
+
+
+def _memory_placement_candidates_digest(evidence_pack: dict[str, Any], editable_skills: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     raw_evidence = evidence_pack.get("evidence")
     evidence = raw_evidence if isinstance(raw_evidence, list) else []
     candidates: list[dict[str, Any]] = []
@@ -219,7 +271,7 @@ def _memory_placement_candidates_digest(evidence_pack: dict[str, Any]) -> dict[s
             for reason in (raw_reasons if isinstance(raw_reasons, list) else [])
             if str(reason)
         ][:6]
-        candidates.append({
+        candidate = {
             "evidence_id": str(item.get("id") or ""),
             "current_store": {"builtin_memory": "memory", "builtin_user": "user"}.get(current_store, current_store),
             "suggested_route": str(inventory.get("suggested_route") or "likely_defer"),
@@ -234,7 +286,15 @@ def _memory_placement_candidates_digest(evidence_pack: dict[str, Any]) -> dict[s
                 "skip",
                 "defer",
             ],
-        })
+        }
+        if candidate["suggested_route"] == "likely_memory_to_skill":
+            target_skills = _candidate_target_skills_for_memory_text(
+                " ".join([old_text, str(inventory.get("summary") or "")]),
+                editable_skills or [],
+            )
+            if target_skills:
+                candidate["candidate_target_skills"] = target_skills
+        candidates.append(candidate)
     return {"candidate_count": len(candidates), "omitted_count": omitted, "candidates": candidates}
 
 
@@ -664,7 +724,7 @@ def build_planner_runtime_digest(
         "skill_candidates": candidate_rows,
         "knowledge_maintenance": knowledge_maintenance,
         "built_in_memory_inventory": _built_in_memory_inventory_digest(evidence_pack),
-        "memory_placement_candidates": _memory_placement_candidates_digest(evidence_pack),
+        "memory_placement_candidates": _memory_placement_candidates_digest(evidence_pack, candidate_rows),
         "memory_inventory_groups": _memory_inventory_groups_digest(evidence_pack),
         "unresolved_observations": unresolved_observations[:20],
         "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
@@ -727,6 +787,7 @@ def _planner_result(
     planner_source: str = "llm",
     error: str | None = None,
     prompt_source: dict[str, Any] | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     candidate_count = len(digest.get("skill_candidates") or [])
     result = {
@@ -740,6 +801,8 @@ def _planner_result(
     }
     if prompt_source:
         result["prompt_source"] = {"planner": prompt_source}
+    if diagnostics:
+        result["planner_diagnostics"] = diagnostics
     if error:
         result["error"] = _redacted_preview(error, max_chars=240)
     return result
@@ -1181,6 +1244,37 @@ def _normalize_canonical_skill_transaction(
     return normalize_knowledge_transaction(raw)
 
 
+def _raw_decision_evidence_ids(raw: dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    for key in ("source_evidence_id", "source_id", "evidence_id"):
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            ids.append(value.strip())
+    raw_ids = raw.get("evidence_ids")
+    if isinstance(raw_ids, list):
+        ids.extend(str(item).strip() for item in raw_ids if str(item).strip())
+    return list(dict.fromkeys(ids))
+
+
+def _raw_planner_diagnostics(raw_transactions: list[Any]) -> dict[str, Any]:
+    raw_decisions = [item for item in raw_transactions if isinstance(item, dict)]
+    memory_placement_decision_ids: list[str] = []
+    by_kind: dict[str, int] = {}
+    for raw in raw_decisions:
+        kind = str(raw.get("transaction_kind") or raw.get("decision") or "unknown")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        if kind in {"memory_to_skill", "placement_move", "memory", "unresolved"}:
+            memory_placement_decision_ids.extend(_raw_decision_evidence_ids(raw))
+        elif str(raw.get("target_store") or "") in {"builtin_user", "builtin_memory", "unresolved"}:
+            memory_placement_decision_ids.extend(_raw_decision_evidence_ids(raw))
+    return {
+        "raw_decision_count": len(raw_decisions),
+        "raw_non_object_count": len(raw_transactions) - len(raw_decisions),
+        "raw_decision_count_by_kind": dict(sorted(by_kind.items())),
+        "raw_memory_placement_decision_ids": list(dict.fromkeys(memory_placement_decision_ids))[:50],
+    }
+
+
 def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("planner_response_not_object")
@@ -1188,6 +1282,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
     raw_transactions = payload.get("knowledge_transactions")
     if not isinstance(raw_transactions, list):
         raise ValueError("planner_response_missing_knowledge_transactions")
+    diagnostics = _raw_planner_diagnostics(raw_transactions)
     candidate_rows = [item for item in digest.get("skill_candidates") or [] if isinstance(item, dict)]
     candidate_names = {str(item.get("name") or "") for item in candidate_rows if item.get("name")}
     candidate_by_name = {str(item.get("name") or ""): item for item in candidate_rows if item.get("name")}
@@ -1249,6 +1344,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         for evidence_id in _decision_evidence_ids(item):
             if str(evidence_id):
                 seen_evidence_ids.add(str(evidence_id))
+    normalized_before_defaults = len(decisions)
     for row in candidate_rows:
         name = str(row.get("name") or "")
         if name and name not in seen:
@@ -1288,6 +1384,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
                     seen_evidence_ids.add(str(selected_id))
     raw_placement = digest.get("memory_placement_candidates")
     placement = raw_placement if isinstance(raw_placement, dict) else {}
+    default_deferred_memory_placement_ids: list[str] = []
     for item in placement.get("candidates") or []:
         if not isinstance(item, dict):
             continue
@@ -1297,10 +1394,17 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         default_decision = _memory_placement_default_decision(item)
         if default_decision:
             decisions.append(default_decision)
+            default_deferred_memory_placement_ids.append(evidence_id)
             for selected_id in default_decision.get("evidence_ids") or []:
                 if str(selected_id):
                     seen_evidence_ids.add(str(selected_id))
-    return _planner_result(decisions, digest=digest, status="completed", prompt_source=prompt_source)
+    diagnostics.update({
+        "normalized_decision_count_before_defaults": normalized_before_defaults,
+        "normalized_decision_count_after_defaults": len(decisions),
+        "dropped_raw_decision_count": max(0, int(diagnostics.get("raw_decision_count") or 0) - normalized_before_defaults),
+        "default_deferred_memory_placement_ids": default_deferred_memory_placement_ids[:50],
+    })
+    return _planner_result(decisions, digest=digest, status="completed", prompt_source=prompt_source, diagnostics=diagnostics)
 
 
 def _message_content_to_text(content: Any) -> str:
@@ -1485,7 +1589,12 @@ def _decision_evidence_ids(decision: dict[str, Any]) -> set[str]:
     return ids
 
 
-def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_decisions: list[dict[str, Any]]) -> dict[str, Any]:
+def _memory_placement_actionability_report(
+    *,
+    digest: dict[str, Any],
+    planner_decisions: list[dict[str, Any]],
+    planner_diagnostics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     raw_placement = digest.get("memory_placement_candidates")
     placement = raw_placement if isinstance(raw_placement, dict) else {}
     candidates = [item for item in placement.get("candidates") or [] if isinstance(item, dict)]
@@ -1507,6 +1616,12 @@ def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_de
     planner_decision_count = 0
     unhandled_count = 0
     default_defer_count = 0
+    planner_diagnostics = planner_diagnostics or {}
+    raw_memory_placement_decision_ids = {
+        str(item)
+        for item in (planner_diagnostics.get("raw_memory_placement_decision_ids") or [])
+        if str(item)
+    }
     for item in candidates:
         evidence_id = str(item.get("evidence_id") or "").strip()
         route = str(item.get("suggested_route") or "unknown")
@@ -1520,13 +1635,18 @@ def _memory_placement_actionability_report(*, digest: dict[str, Any], planner_de
                 default_defer_by_route[route] = default_defer_by_route.get(route, 0) + 1
                 raw_reasons = item.get("route_reasons")
                 route_reasons = [str(reason) for reason in (raw_reasons if isinstance(raw_reasons, list) else []) if str(reason)][:6]
+                diagnosis = (
+                    "planner_emitted_but_normalization_rejected"
+                    if evidence_id in raw_memory_placement_decision_ids
+                    else "planner_omitted_candidate_default_defer"
+                )
                 default_defer_details.append({
                     "evidence_id": evidence_id,
                     "current_store": str(item.get("current_store") or ""),
                     "suggested_route": route,
                     "route_reasons": route_reasons,
                     "old_text": _redacted_preview(item.get("old_text") or "", max_chars=260),
-                    "diagnosis": "planner_omitted_candidate_default_defer",
+                    "diagnosis": diagnosis,
                 })
             continue
         unhandled_count += 1
@@ -1647,7 +1767,11 @@ def build_planner_runtime_quality_report(
             "max": max(prompt_lengths) if prompt_lengths else 0,
             "avg": int(sum(prompt_lengths) / len(prompt_lengths)) if prompt_lengths else 0,
         },
-        "memory_placement_actionability": _memory_placement_actionability_report(digest=digest, planner_decisions=planner_decisions),
+        "memory_placement_actionability": _memory_placement_actionability_report(
+            digest=digest,
+            planner_decisions=planner_decisions,
+            planner_diagnostics=planner.get("planner_diagnostics") if isinstance(planner.get("planner_diagnostics"), dict) else {},
+        ),
         **skip_classification,
         **matched_noop,
     }

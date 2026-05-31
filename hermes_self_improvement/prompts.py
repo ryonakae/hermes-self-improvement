@@ -215,7 +215,7 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
         return "## Memory placement candidates\n- n/a\n"
     lines = [
         "### Priority placement candidates requiring semantic judgment",
-        "These entries have suggested_route=likely_memory_to_skill. They are the highest-value placement candidates: put one transaction for each of them at the beginning of knowledge_transactions. Decide memory_to_skill when an exact editable target_skill is known; otherwise use the priority defer template with evidence_ids. Do this before reviewing low-action likely_keep entries.",
+        "These entries have suggested_route=likely_memory_to_skill. They are the highest-value placement candidates: put one transaction for each of them at the beginning of knowledge_transactions. Decide memory_to_skill when an exact editable target_skill is known; otherwise use the priority defer template with evidence_ids. Candidate target skills are context hints, not commands; if none is a good semantic fit, defer with reason=memory_to_skill_target_unclear. Do this before reviewing low-action likely_keep entries.",
     ]
     priority_candidates = [item for item in candidates if str(item.get("suggested_route") or "") == "likely_memory_to_skill"]
     if priority_candidates:
@@ -224,8 +224,18 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
             old_text = _clip(item.get("old_text"), max_chars=260)
             reasons = item.get("route_reasons") if isinstance(item.get("route_reasons"), list) else []
             reasons_str = ",".join(str(reason) for reason in reasons[:6]) if reasons else "missing_route_reason"
+            raw_target_skills = item.get("candidate_target_skills")
+            target_skills: list[Any] = raw_target_skills if isinstance(raw_target_skills, list) else []
+            target_skill_bits = []
+            for skill in target_skills[:3]:
+                if not isinstance(skill, dict) or not skill.get("skill"):
+                    continue
+                target_skill_bits.append(
+                    f"{_clip(skill.get('skill'), max_chars=80)}({_clip(skill.get('match_reason'), max_chars=60)})"
+                )
+            target_skill_str = ",".join(target_skill_bits) or "none"
             lines.append(
-                f"- evidence_id={evidence_id}; current_store={_clip(item.get('current_store'), max_chars=40)}; suggested_route={_clip(item.get('suggested_route'), max_chars=80)}; route_reasons=[{reasons_str}]; old_text={old_text}"
+                f"- evidence_id={evidence_id}; current_store={_clip(item.get('current_store'), max_chars=40)}; suggested_route={_clip(item.get('suggested_route'), max_chars=80)}; route_reasons=[{reasons_str}]; candidate_target_skills=[{target_skill_str}]; old_text={old_text}"
             )
             lines.append(
                 "  - memory_to_skill template when target_skill is known: "

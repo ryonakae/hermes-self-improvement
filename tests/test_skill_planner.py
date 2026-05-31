@@ -103,6 +103,49 @@ def test_planner_digest_exposes_memory_placement_candidates():
     assert "move_user_to_memory" in row["allowed_decisions"]
 
 
+def test_planner_digest_exposes_memory_placement_target_skill_hints_as_context():
+    pack_data = pack()
+    pack_data["skill_candidates"] = [
+        {
+            "name": "hermes-gateway-and-sessions",
+            "state": "active",
+            "source": "curator",
+            "description": "Operate Hermes gateway sessions, restart handling, Safehouse bootstrap boundaries, and Slack delivery.",
+            "mutable": True,
+        },
+        {
+            "name": "spotify",
+            "state": "active",
+            "source": "curator",
+            "description": "Spotify playback controls.",
+            "mutable": True,
+        },
+    ]
+    pack_data["evidence"].append({
+        "id": "memory-place-gateway",
+        "kind": "memory_placement_candidate",
+        "inventory": {
+            "group_kind": "placement_review",
+            "current_store": "memory",
+            "old_text": "Gateway restart: check host script, KeepAlive, Safehouse bootstrap, then verify Slack delivery logs.",
+            "summary": "Gateway restart workflow.",
+            "suggested_route": "likely_memory_to_skill",
+            "route_reasons": ["procedural_or_operational_workflow"],
+        },
+    })
+
+    digest = build_planner_digest(pack_data)
+    row = digest["memory_placement_candidates"]["candidates"][0]
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert row["candidate_target_skills"] == [
+        {"skill": "hermes-gateway-and-sessions", "match_reason": "name_token_overlap"}
+    ]
+    assert "candidate_target_skills=[hermes-gateway-and-sessions(name_token_overlap)]" in user_content
+    assert "Candidate target skills are context hints, not commands" in user_content
+
+
 def test_render_planner_messages_exposes_memory_placement_candidates():
     digest = build_planner_digest(pack())
     digest["memory_placement_candidates"] = {
@@ -463,6 +506,90 @@ def test_run_planner_defaults_unhandled_memory_placement_candidate_to_defer():
     assert tx["transaction_kind"] == "unresolved"
     assert tx["evidence_ids"] == ["memory-place-user-runtime"]
     assert tx["reason"] == "memory_placement_candidate_not_selected_by_planner"
+
+
+def test_run_planner_reports_raw_and_normalized_memory_placement_diagnostics():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 2,
+        "omitted_count": 0,
+        "candidates": [
+            {
+                "evidence_id": "memory-place-procedure",
+                "current_store": "memory",
+                "suggested_route": "likely_memory_to_skill",
+                "route_reasons": ["procedural_or_operational_workflow"],
+                "old_text": "Gateway restart workflow: check logs.",
+            },
+            {
+                "evidence_id": "memory-place-user-runtime",
+                "current_store": "user",
+                "suggested_route": "likely_move_user_to_memory",
+                "route_reasons": ["contains_runtime_path"],
+                "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+            },
+        ],
+    }
+
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move_user_to_memory",
+                    "source_evidence_id": "memory-place-user-runtime",
+                    "source_old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+                },
+                {"decision": "skip", "skill": "missing-skill"},
+            ]
+        }
+
+    result = run_planner(digest, config={"_planner_func": fake_planner})
+    diagnostics = result["planner_diagnostics"]
+
+    assert diagnostics["raw_decision_count"] == 2
+    assert diagnostics["raw_decision_count_by_kind"] == {"placement_move": 1, "skip": 1}
+    assert diagnostics["raw_memory_placement_decision_ids"] == ["memory-place-user-runtime"]
+    assert diagnostics["normalized_decision_count_before_defaults"] == 1
+    assert diagnostics["dropped_raw_decision_count"] == 1
+    assert diagnostics["default_deferred_memory_placement_ids"] == ["memory-place-procedure"]
+    quality = build_planner_quality_report(digest=digest, planner=result)
+    details = quality["memory_placement_actionability"]["default_defer_details"]
+    assert details[0]["diagnosis"] == "planner_omitted_candidate_default_defer"
+
+
+def test_planner_quality_report_marks_raw_memory_placement_decision_dropped_by_normalization():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 1,
+        "omitted_count": 0,
+        "candidates": [{
+            "evidence_id": "memory-place-procedure",
+            "current_store": "memory",
+            "suggested_route": "likely_memory_to_skill",
+            "route_reasons": ["procedural_or_operational_workflow"],
+            "old_text": "Gateway restart workflow: check logs.",
+        }],
+    }
+
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [{
+                "transaction_kind": "memory_to_skill",
+                "decision": "apply",
+                "source_evidence_id": "memory-place-procedure",
+                "source_old_text": "Gateway restart workflow: check logs.",
+            }]
+        }
+
+    result = run_planner(digest, config={"_planner_func": fake_planner})
+    quality = build_planner_quality_report(digest=digest, planner=result)
+    placement = quality["memory_placement_actionability"]
+
+    assert result["planner_diagnostics"]["raw_memory_placement_decision_ids"] == ["memory-place-procedure"]
+    assert result["planner_diagnostics"]["dropped_raw_decision_count"] == 1
+    assert placement["default_defer_details"][0]["diagnosis"] == "planner_emitted_but_normalization_rejected"
 
 
 def test_run_planner_treats_memory_placement_decision_source_id_as_handled():

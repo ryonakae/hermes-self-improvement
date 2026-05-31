@@ -419,9 +419,11 @@ def test_memory_placement_candidate_hints_user_runtime_fact_should_move_to_memor
     items = collect_memory_placement_candidates({"user": user, "memory": memory})
     inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "user")
 
+    candidate = next(item for item in items if item["inventory"]["current_store"] == "user")
     assert inventory["suggested_route"] == "likely_move_user_to_memory"
     assert "contains_runtime_path" in inventory["route_reasons"]
     assert inventory["old_text"].startswith("Gmail observer=")
+    assert "likely_targets" not in candidate
 
 
 def test_memory_placement_candidate_hints_memory_user_preference_should_move_to_user(tmp_path):
@@ -433,8 +435,10 @@ def test_memory_placement_candidate_hints_memory_user_preference_should_move_to_
     items = collect_memory_placement_candidates({"memory": memory, "user": user})
     inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "memory")
 
+    candidate = next(item for item in items if item["inventory"]["current_store"] == "memory")
     assert inventory["suggested_route"] == "likely_move_memory_to_user"
     assert "user_preference_language" in inventory["route_reasons"]
+    assert "likely_targets" not in candidate
 
 
 def test_memory_placement_candidate_hints_procedural_memory_should_route_to_skill(tmp_path):
@@ -446,5 +450,7 @@ def test_memory_placement_candidate_hints_procedural_memory_should_route_to_skil
     items = collect_memory_placement_candidates({"memory": memory, "user": user})
     inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "memory")
 
+    candidate = next(item for item in items if item["inventory"]["current_store"] == "memory")
     assert inventory["suggested_route"] == "likely_memory_to_skill"
     assert "procedural_or_operational_workflow" in inventory["route_reasons"]
+    assert "likely_targets" not in candidate

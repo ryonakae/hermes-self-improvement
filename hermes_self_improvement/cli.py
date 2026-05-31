@@ -1087,11 +1087,29 @@ def run_improve(
     combined_skill_changes = sorted(set(str(item) for item in (knowledge_step.get("changed_skills") or []) if str(item)))
     combined_memory_changes = [str(item) for item in (knowledge_step.get("changed_memories") or []) if str(item)]
     planner_digest = knowledge_step.get("planner_digest") if isinstance(knowledge_step.get("planner_digest"), dict) else {}
+    raw_planner_obj = knowledge_step.get("planner")
+    raw_planner = raw_planner_obj if isinstance(raw_planner_obj, dict) else {}
+    raw_planner_diagnostics = raw_planner.get("planner_diagnostics")
+    planner_diagnostics = raw_planner_diagnostics if isinstance(raw_planner_diagnostics, dict) else {}
+    raw_placement_obj = planner_digest.get("memory_placement_candidates")
+    raw_placement: dict[str, Any] = raw_placement_obj if isinstance(raw_placement_obj, dict) else {}
+    raw_placement_candidates = raw_placement.get("candidates")
+    memory_placement_target_hints = [
+        {
+            "evidence_id": str(item.get("evidence_id") or ""),
+            "suggested_route": str(item.get("suggested_route") or ""),
+            "candidate_target_skills": item.get("candidate_target_skills"),
+        }
+        for item in (raw_placement_candidates if isinstance(raw_placement_candidates, list) else [])
+        if isinstance(item, dict) and isinstance(item.get("candidate_target_skills"), list) and item.get("candidate_target_skills")
+    ][:20]
     step_decisions_payload = {
         "summary": decisions_summary,
         "proposals_considered": proposals,
         "knowledge_transactions": _knowledge_transaction_summary(knowledge_transactions),
         "knowledge_quality": knowledge_step.get("planner_quality") if isinstance(knowledge_step.get("planner_quality"), dict) else {},
+        "planner_diagnostics": planner_diagnostics,
+        "memory_placement_target_hints": memory_placement_target_hints,
         "knowledge_routing": knowledge_routing,
         "editor_validation": knowledge_step.get("editor_validation") if isinstance(knowledge_step.get("editor_validation"), dict) else {"summary": {}},
         "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
