@@ -114,6 +114,58 @@ def test_execute_knowledge_transaction_patches_skill_then_removes_memory(tmp_pat
     assert calls[1] == ("memory", {"action": "remove", "target": "memory", "old_text": "Use these exact steps for live context cleanup."})
 
 
+def test_execute_knowledge_transaction_accepts_normalized_memory_to_skill_target_id_and_removes_source(tmp_path):
+    root = tmp_path / "skills"
+    write_skill(root, "hermes-lcm")
+    calls = []
+
+    def fake_backend(prompt, task, config=None):
+        calls.append(("skill", task))
+        return success_payload("hermes-lcm")
+
+    def fake_memory(**args):
+        calls.append(("memory", args))
+        return {"success": True, "changed": True}
+
+    transaction = normalize_knowledge_transaction({
+        "transaction_id": "txn-normalized-memory-to-skill",
+        "transaction_kind": "memory_to_skill",
+        "decision": "apply",
+        "source_store": "builtin_memory",
+        "target_store": "skill",
+        "target_id": "hermes-lcm",
+        "source_id": "memory_place_lcm",
+        "source_old_text": "hermes-lcm導入済み: thresholdはlcm_statusで確認。",
+        "skill_task": {
+            "type": "skill_editor_task",
+            "task_kind": "mutate_skill",
+            "targets": {"primary_skill": "hermes-lcm"},
+            "instructions": "Move reusable lcm operation guidance into the skill.",
+        },
+    })
+
+    result = execute_knowledge_transaction(
+        transaction,
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_editor_backend": fake_backend,
+            "_mutable_local_skill_roots": [root],
+            "_memory_current_entries": current_entries(old_text="hermes-lcm導入済み: thresholdはlcm_statusで確認。"),
+        },
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["changed_skills"] == ["hermes-lcm"]
+    assert result["removed_memories"] == ["memory_place_lcm"]
+    assert result["executed_steps"] == [
+        {"step": "skill_patch", "status": "applied", "target": "hermes-lcm"},
+        {"step": "memory_remove", "status": "applied", "target": "memory"},
+    ]
+    assert calls[1] == ("memory", {"action": "remove", "target": "memory", "old_text": "hermes-lcm導入済み: thresholdはlcm_statusで確認。"})
+
+
 def test_execute_knowledge_transaction_keeps_memory_when_skill_patch_fails(tmp_path):
     root = tmp_path / "skills"
     write_skill(root)

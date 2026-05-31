@@ -2101,7 +2101,7 @@ def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[s
         return _execute_placement_move_transaction(transaction, config=cfg, result=result, mutate=mutate)
     if transaction_kind != "memory_to_skill":
         return {**result, "success": False, "outcome": "blocked", "reason": "unsupported_knowledge_transaction_kind"}
-    target_skill = str(transaction.get("target_skill") or "")
+    target_skill = str(transaction.get("target_skill") or transaction.get("target_id") or "")
     old_text = str(transaction.get("source_old_text") or "")
     source_target = _knowledge_transaction_source_target(str(transaction.get("source_store") or "builtin_memory"))
     if not target_skill or not old_text:
@@ -2110,7 +2110,7 @@ def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[s
         return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
     if not _memory_to_skill_old_text_is_current(cfg, target=source_target, old_text=old_text):
         return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_source_old_text_not_current"}
-    skill_task = transaction.get("skill_task") if isinstance(transaction.get("skill_task"), dict) else None
+    skill_task = transaction.get("skill_task") if isinstance(transaction.get("skill_task"), dict) else transaction.get("editor_task") if isinstance(transaction.get("editor_task"), dict) else None
     if skill_task is None:
         return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_skill_task"}
     skill_result = run_skill_editor_task(_knowledge_transaction_skill_task(skill_task, target_skill), config=cfg, backend=_knowledge_transaction_backend(cfg))
@@ -2159,7 +2159,7 @@ def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[s
             "skill_result": skill_result,
             "memory_remove_result": remove_result,
         }
-    evidence_id = str(transaction.get("source_evidence_id") or transaction.get("transaction_id") or "memory_to_skill")
+    evidence_id = str(transaction.get("source_evidence_id") or transaction.get("source_id") or transaction.get("transaction_id") or "memory_to_skill")
     return {
         **result,
         "success": True,
