@@ -248,6 +248,28 @@ def test_collect_memory_inventory_candidates_groups_near_duplicates(tmp_path):
     assert all("old_text" in entry for entry in inv["entries"])
 
 
+def test_exact_cross_store_duplicate_prefers_removing_memory_when_user_is_canonical(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    user = tmp_path / "USER.md"
+    text = "Ryo prefers concise implementation reports with completed and remaining work clearly stated."
+    memory.write_text(text + "\n", encoding="utf-8")
+    user.write_text(text + "\n", encoding="utf-8")
+
+    item = collect_memory_inventory_candidates(memory_paths={"memory": memory, "user": user})[0]
+
+    assert item["inventory"]["group_kind"] == "semantic_duplicate"
+    hint = item["target_resolution_hint"]
+    assert hint["resolution_kind"] == "mutate_memory"
+    assert hint["suggested_action"] == "apply"
+    assert hint["reason"] == "duplicate_already_in_canonical_store"
+    assert hint["memory_operation_hint"] == {
+        "operation": "memory_remove",
+        "target": "memory",
+        "old_text": text,
+        "reason": "remove duplicate memory entry after preserving canonical user entry",
+    }
+
+
 def test_near_duplicate_memory_group_has_defer_action_hint(tmp_path):
     memory = tmp_path / "MEMORY.md"
     memory.write_text("Hermes runtime root is ~/.hermes.\nHermes runtime config lives in ~/.hermes/config.yaml.\n", encoding="utf-8")

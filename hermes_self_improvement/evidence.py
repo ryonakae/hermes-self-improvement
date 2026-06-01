@@ -1866,7 +1866,50 @@ def _stale_memory_pair_action_hint(entries: list[dict[str, Any]]) -> dict[str, A
     }
 
 
+def _canonical_store_for_memory_text(old_text: str) -> str | None:
+    memory_route = _memory_placement_route_hint("memory", old_text).get("suggested_route")
+    user_route = _memory_placement_route_hint("user", old_text).get("suggested_route")
+    if memory_route == "likely_move_memory_to_user":
+        return "user"
+    if user_route == "likely_move_user_to_memory":
+        return "memory"
+    return None
+
+
+def _cross_store_duplicate_action_hint(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if len(entries) != 2:
+        return None
+    first, second = entries
+    first_text = str(first.get("old_text") or "").strip()
+    second_text = str(second.get("old_text") or "").strip()
+    first_target = str(first.get("target") or "memory")
+    second_target = str(second.get("target") or "memory")
+    if not first_text or first_text != second_text or {first_target, second_target} != {"memory", "user"}:
+        return None
+    canonical_target = _canonical_store_for_memory_text(first_text)
+    if canonical_target not in {"memory", "user"}:
+        return None
+    duplicate_target = "memory" if canonical_target == "user" else "user"
+    duplicate_entry = first if first_target == duplicate_target else second
+    old_text = str(duplicate_entry.get("old_text") or "").strip()
+    return {
+        "resolution_kind": "mutate_memory",
+        "suggested_action": "apply",
+        "reason": "duplicate_already_in_canonical_store",
+        "memory_operation_hint": {
+            "operation": "memory_remove",
+            "target": duplicate_target,
+            "old_text": _redact_text(old_text, max_chars=500),
+            "reason": f"remove duplicate {duplicate_target} entry after preserving canonical {canonical_target} entry",
+        },
+    }
+
+
 def _duplicate_memory_group_action_hint(group_kind: str, entries: list[dict[str, Any]]) -> dict[str, Any]:
+    if group_kind == "semantic_duplicate":
+        cross_store_hint = _cross_store_duplicate_action_hint(entries)
+        if cross_store_hint:
+            return cross_store_hint
     reason = "duplicate_requires_exact_remove_review" if group_kind == "semantic_duplicate" else "near_duplicate_requires_review"
     return {
         "resolution_kind": "mutate_memory",

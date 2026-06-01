@@ -687,3 +687,11 @@ Known-incident smoke:
 - Replayed the incident-shaped public planner path with `memory_place_2217e1ddb538`, `current_store=user`, `suggested_route=likely_keep`, and a bad planner-emitted `move_memory_to_user` transaction.
 - Current result: no executable `placement_move`; normalized output is a single `defer` transaction with `reason=memory_placement_candidate_not_selected_by_planner`.
 - Diagnostics preserve `raw_memory_placement_decision_ids=["memory_place_2217e1ddb538"]` and report `diagnosis=planner_emitted_but_normalization_rejected`.
+
+Follow-up cleanup slice:
+
+- Added clear cross-store duplicate cleanup hints: when the same exact text exists in USER and MEMORY and the text has a clear canonical store, the duplicate side receives an apply-oriented `memory_remove` hint.
+- Planner prompt now renders canonical cleanup templates such as `remove_builtin_memory` for apply-safe duplicate cleanup groups.
+- Canonical transaction normalization preserves `source_evidence_id` in `evidence_ids` for source-directed memory cleanup operations.
+- Prompt guidance now explicitly says existing skill coverage is not a skip reason when source cleanup is needed: use `memory_to_skill` to update/verify the skill and remove source memory after the skill-side change is safe.
+- Dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260601T065204Z.json` produced `apply=4 / defer=29 / skip=66 / block=0`, with three `memory_to_skill` candidates selected for existing skills (`hermes-gateway-and-sessions`, `hindsight-operations`, `hermes-lcm`) and zero dropped memory-routed-to-skill candidates.

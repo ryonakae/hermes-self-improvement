@@ -169,6 +169,20 @@ def _render_builtin_memory_inventory_section(digest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _memory_inventory_cleanup_operation(operation_hint: dict[str, Any]) -> str:
+    operation = str(operation_hint.get("operation") or "")
+    target = str(operation_hint.get("target") or "")
+    if operation == "memory_remove" and target == "memory":
+        return "remove_builtin_memory"
+    if operation == "memory_remove" and target == "user":
+        return "remove_builtin_user"
+    if operation == "memory_replace" and target == "memory":
+        return "replace_builtin_memory"
+    if operation == "memory_replace" and target == "user":
+        return "replace_builtin_user"
+    return ""
+
+
 def _render_memory_inventory_groups_section(digest: dict[str, Any]) -> str:
     raw_groups = digest.get("memory_inventory_groups")
     inventory_groups = raw_groups if isinstance(raw_groups, dict) else {}
@@ -198,6 +212,20 @@ def _render_memory_inventory_groups_section(digest: dict[str, Any]) -> str:
             lines.append(
                 f"  - hinted_operation: operation={_clip(operation_hint.get('operation'), max_chars=60)}; target={_clip(operation_hint.get('target'), max_chars=40)}; old_text={_clip(operation_hint.get('old_text'), max_chars=220)}; content={_clip(operation_hint.get('content'), max_chars=220)}"
             )
+            cleanup_operation = _memory_inventory_cleanup_operation(operation_hint)
+            if cleanup_operation and action_hint.get("suggested_action") == "apply":
+                cleanup_template = {
+                    "operation": cleanup_operation,
+                    "source_evidence_id": evidence_id,
+                    "source_old_text": operation_hint.get("old_text") or "",
+                    "reason": action_hint.get("reason") or operation_hint.get("reason") or "memory_inventory_cleanup",
+                }
+                if operation_hint.get("content"):
+                    cleanup_template["content"] = operation_hint.get("content")
+                lines.append(
+                    "  - apply template: "
+                    + json.dumps(cleanup_template, ensure_ascii=False, separators=(",", ":"))
+                )
         entries = [entry for entry in group.get("entries") or [] if isinstance(entry, dict)]
         for entry in entries[:4]:
             lines.append(
@@ -216,7 +244,7 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
         return "## Memory placement candidates\n- n/a\n"
     lines = [
         "### Priority placement candidates requiring semantic judgment",
-        "These entries have suggested_route=likely_memory_to_skill. They are the highest-value placement candidates: put one transaction for each of them at the beginning of knowledge_transactions. Decide memory_to_skill when an exact editable target_skill is known; otherwise use the priority defer template with evidence_ids. Candidate target skills are context hints, not commands; if none is a good semantic fit, defer with reason=memory_to_skill_target_unclear. Do this before reviewing low-action likely_keep entries.",
+        "These entries have suggested_route=likely_memory_to_skill. They are the highest-value placement candidates: put one transaction for each of them at the beginning of knowledge_transactions. Decide memory_to_skill when an exact editable target_skill is known; this means update/verify the existing skill first, then remove the source memory only after the skill-side change is safe. Do not skip merely because the skill already exists: if the memory duplicates or belongs in that skill, use memory_to_skill for source cleanup. Otherwise use the priority defer template with evidence_ids. Candidate target skills are context hints, not commands; if none is a good semantic fit, defer with reason=memory_to_skill_target_unclear. Do this before reviewing low-action likely_keep entries.",
     ]
     priority_candidates = [item for item in candidates if str(item.get("suggested_route") or "") == "likely_memory_to_skill"]
     if priority_candidates:

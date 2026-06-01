@@ -290,6 +290,70 @@ def test_render_planner_messages_only_shows_store_valid_memory_placement_move_te
     assert '"operation":"move_user_to_memory"' not in memory_move_lines[0]
 
 
+def test_render_planner_messages_renders_apply_template_for_cross_store_duplicate_cleanup():
+    digest = build_planner_digest(pack())
+    digest["memory_inventory_groups"] = {
+        "group_count": 1,
+        "omitted_count": 0,
+        "groups": [{
+            "evidence_id": "memory-inv-user-dup",
+            "group_kind": "semantic_duplicate",
+            "relation": "semantic_duplicate",
+            "reason": "Memory duplicate already exists in canonical USER store.",
+            "entry_count": 2,
+            "action_hint": {
+                "resolution_kind": "mutate_memory",
+                "suggested_action": "apply",
+                "reason": "duplicate_already_in_canonical_store",
+                "memory_operation_hint": {
+                    "operation": "memory_remove",
+                    "target": "memory",
+                    "old_text": "Ryo prefers concise implementation reports.",
+                    "reason": "remove duplicate memory entry after preserving canonical user entry",
+                },
+            },
+            "entries": [
+                {"store": "memory", "old_text": "Ryo prefers concise implementation reports."},
+                {"store": "user", "old_text": "Ryo prefers concise implementation reports."},
+            ],
+        }],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert "suggested_action=apply" in user_content
+    assert '"operation":"remove_builtin_memory"' in user_content
+    assert '"source_evidence_id":"memory-inv-user-dup"' in user_content
+    assert '"source_old_text":"Ryo prefers concise implementation reports."' in user_content
+    assert '"reason":"duplicate_already_in_canonical_store"' in user_content
+
+
+def test_run_planner_accepts_memory_inventory_duplicate_cleanup_remove_transaction():
+    digest = build_planner_digest(pack())
+
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [{
+                "operation": "remove_builtin_memory",
+                "source_evidence_id": "memory-inv-user-dup",
+                "source_old_text": "Ryo prefers concise implementation reports.",
+                "reason": "duplicate_already_in_canonical_store",
+            }]
+        }
+
+    result = run_planner(digest, config={"_planner_func": fake_planner})
+    tx = result["knowledge_transactions"][0]
+
+    assert tx["decision"] == "apply"
+    assert tx["transaction_kind"] == "memory"
+    assert tx["operation"] == "memory_delete"
+    assert tx["source_store"] == "builtin_memory"
+    assert tx["target_store"] == "builtin_memory"
+    assert tx["source_id"] == "memory-inv-user-dup"
+    assert tx["evidence_ids"] == ["memory-inv-user-dup"]
+
+
 def test_render_planner_messages_prioritizes_memory_to_skill_placement_candidates():
     digest = build_planner_digest(pack())
     digest["memory_placement_candidates"] = {
