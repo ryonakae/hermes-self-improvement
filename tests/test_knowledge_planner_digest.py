@@ -36,7 +36,8 @@ def _evidence_pack():
                 "inventory": {
                     "current_store": "memory",
                     "old_text": "Use exact old_text before replace/remove.",
-                    "allowed_recommendations": ["builtin_memory", "skill"],
+                    "placement_observations": ["contains_operational_or_procedural_language"],
+                    "allowed_decisions": ["keep", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
                 },
             },
         ],

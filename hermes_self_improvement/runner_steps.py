@@ -138,18 +138,24 @@ def _environment_fact_agent_candidate_from_evidence(item: dict[str, Any]) -> dic
 
 
 def _memory_placement_agent_candidate_from_evidence(item: dict[str, Any]) -> dict[str, Any] | None:
-    inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
+    raw_inventory = item.get("inventory")
+    inventory: dict[str, Any] = raw_inventory if isinstance(raw_inventory, dict) else {}
     text = str(inventory.get("old_text") or inventory.get("summary") or "").strip()
     current_store = str(inventory.get("current_store") or "").strip()
     if not text or current_store not in {"memory", "user"}:
         return None
+    raw_observations = inventory.get("placement_observations")
+    raw_allowed_decisions = inventory.get("allowed_decisions")
+    observations = raw_observations if isinstance(raw_observations, list) else []
+    allowed_decisions = raw_allowed_decisions if isinstance(raw_allowed_decisions, list) else []
     return {
         "candidate_id": item.get("id"),
         "candidate_kind": "memory_placement_candidate",
         "current_store": current_store,
         "placement_text": _redact_text(text, max_chars=360),
-        "allowed_recommendations": [str(value) for value in (inventory.get("allowed_recommendations") if isinstance(inventory.get("allowed_recommendations"), list) else [])[:6]],
-        "suggested_route": "placement_review",
+        "placement_observations": [str(value) for value in observations[:6] if str(value)],
+        "allowed_decisions": [str(value) for value in allowed_decisions[:6] if str(value)],
+        "official_boundary": _redact_text(str(inventory.get("official_boundary") or ""), max_chars=240),
         "risk": item.get("risk") or "medium",
     }
 
@@ -204,7 +210,7 @@ def _knowledge_memory_candidate_from_evidence(item: dict[str, Any]) -> dict[str,
         "confidence": candidate.get("confidence") or "medium",
         "risk": candidate.get("risk") or item.get("risk") or "medium",
     }
-    for key in ("candidate_fact", "old_text", "relation_to_existing", "routing_hint", "placement_text", "current_store", "allowed_recommendations"):
+    for key in ("candidate_fact", "old_text", "relation_to_existing", "routing_hint", "placement_text", "current_store", "placement_observations", "allowed_decisions", "official_boundary"):
         if candidate.get(key) not in (None, "", [], {}):
             compact[key] = candidate.get(key)
     return compact
@@ -899,8 +905,12 @@ def _memory_non_operation_route(item: dict[str, Any]) -> dict[str, Any]:
             return {
                 "decision": "skip",
                 "reason": "keep_current_user" if current_store == "user" else "keep_current_memory",
-                "suggested_route": "none",
                 "changed": False,
+                "placement_observations": [
+                    str(value)
+                    for value in (inventory.get("placement_observations") if isinstance(inventory.get("placement_observations"), list) else [])[:6]
+                    if str(value)
+                ],
                 "operation": {
                     "operation": "memory_keep",
                     "target": current_store,
@@ -910,7 +920,6 @@ def _memory_non_operation_route(item: dict[str, Any]) -> dict[str, Any]:
         return {
             "decision": "defer",
             "reason": "memory_placement_needs_routing",
-            "suggested_route": "memory_planner",
             "changed": False,
         }
     if kind in {"knowledge_coverage_candidate", "unmatched_improvement_candidate"}:
@@ -1528,7 +1537,6 @@ def _memory_non_mutating_operation_decision(evidence_id: str, operation: dict[st
             "evidence_id": evidence_id,
             "decision": "skip",
             "reason": "keep_current_user" if target == "user" else "keep_current_memory",
-            "suggested_route": "none",
             "changed": False,
             "operation": operation,
         }

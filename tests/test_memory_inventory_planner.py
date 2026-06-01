@@ -33,13 +33,13 @@ def _placement_evidence(*, evidence_id="memory-place-keep", current_store="memor
             "current_store": current_store,
             "old_text": old_text,
             "summary": old_text,
-            "allowed_recommendations": [
+            "placement_observations": ["mentions_tool_or_runtime_term"],
+            "allowed_decisions": [
                 "keep",
-                "move_user_to_memory",
-                "move_memory_to_user",
-                "merge_with_existing",
-                "convert_to_skill_update",
-                "skip_noise",
+                "move_memory_to_user" if current_store == "memory" else "move_user_to_memory",
+                "memory_to_skill",
+                "skip",
+                "defer",
             ],
         },
     }
@@ -137,7 +137,7 @@ def test_memory_placement_without_operation_is_deferred_for_routing():
         "placement": {
             "target": "memory",
             "reason": "already diagnostic context only",
-            "allowed_recommendations": ["keep", "convert_to_skill_update", "skip_noise"],
+            "allowed_decisions": ["keep", "memory_to_skill", "skip", "defer"],
         },
     }
 
@@ -148,7 +148,6 @@ def test_memory_placement_without_operation_is_deferred_for_routing():
         "evidence_id": "memory-place-1",
         "decision": "defer",
         "reason": "memory_placement_needs_routing",
-        "suggested_route": "memory_planner",
         "changed": False,
     }]
 
@@ -165,8 +164,8 @@ def test_user_placement_without_planner_operation_keeps_current_user_store():
         "evidence_id": "user-preference",
         "decision": "skip",
         "reason": "keep_current_user",
-        "suggested_route": "none",
         "changed": False,
+        "placement_observations": ["mentions_tool_or_runtime_term"],
         "operation": {"operation": "memory_keep", "target": "user", "reason": "planner omitted existing placement candidate; keep current store"},
     }]
 
@@ -190,7 +189,6 @@ def test_memory_placement_keep_decision_is_skip_noop_not_defer():
         "evidence_id": "memory-place-keep",
         "decision": "skip",
         "reason": "keep_current_memory",
-        "suggested_route": "none",
         "changed": False,
         "operation": {"operation": "memory_keep", "target": "memory", "reason": "stable environment fact already belongs in MEMORY"},
     }]

@@ -857,11 +857,18 @@ Resolved review blockers:
 
 Second independent plan review: **PASS**.
 
-Implementation status: completed and verified in this worktree.
+Implementation status: completed, independently re-reviewed after post-push skepticism, and patched for review blockers in this worktree.
+
+Post-push review follow-up:
+
+- Ryo challenged the completion claim, so the implementation was re-checked against this plan and an independent reviewer was run on `HEAD~2..HEAD`.
+- Review result: **BLOCKED** because memory placement preview/diagnostic paths still exposed `suggested_route` (`placement_review` / `memory_planner` / `none`) and placement candidates still carried legacy `allowed_recommendations`.
+- Follow-up fix removed `allowed_recommendations` from memory placement candidate inventory and editor handoff, replaced it with direction-valid `allowed_decisions`, and removed memory-placement `suggested_route` from preview/default keep/defer diagnostics.
 
 Verification:
 
 - `.venv/bin/python -m pytest tests/test_skill_planner.py -q -k 'memory_placement or cross_store_duplicate'` → 17 passed.
 - `.venv/bin/python -m pytest tests/test_evidence_inventory_candidates.py tests/test_skill_planner.py -q` → 86 passed.
 - `.venv/bin/python -m pytest -q` → 949 passed, 2 skipped.
-- Source-directed dry-run from this repo with `PYTHONPATH=$PWD .venv/bin/python` wrote `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260601T113151Z.json`; artifact scan found zero `suggested_route`, `route_reasons`, `likely_*` placement routes, `by_suggested_route`, `default_defer_by_route`, or `unhandled_by_route`.
+- Initial source-directed dry-run from this repo with `PYTHONPATH=$PWD .venv/bin/python` wrote `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260601T113151Z.json`; artifact scan found zero `suggested_route`, `route_reasons`, `likely_*` placement routes, `by_suggested_route`, `default_defer_by_route`, or `unhandled_by_route`.
+- Post-review dry-run from this repo wrote `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260601T132421Z.json`; run artifact scan found zero `suggested_route`, `route_reasons`, `likely_*`, `by_suggested_route`, `default_defer_by_route`, `unhandled_by_route`, or `allowed_recommendations`. Latest evidence artifact still contains route strings only inside ignored historical tool/result previews, while live `memory_placement_candidate` inventory has `allowed_decisions` / `placement_observations` and no `allowed_recommendations` / `suggested_route`.

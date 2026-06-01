@@ -84,7 +84,9 @@ def _placement_candidate(candidate_id: str = "memory_place_1", *, old_text: str 
             "current_store": current_store,
             "old_text": old_text,
             "summary": old_text,
-            "allowed_recommendations": ["keep", "move_user_to_memory", "move_memory_to_user", "convert_to_skill_update", "convert_to_new_skill", "skip_noise"],
+            "placement_observations": ["contains_operational_or_procedural_language"],
+            "allowed_decisions": ["keep", "move_memory_to_user" if current_store == "memory" else "move_user_to_memory", "memory_to_skill", "skip", "defer"],
+            "official_boundary": "USER=user preferences; MEMORY=agent notes; Skill=procedures.",
         },
         "risk": "medium",
     }
@@ -341,7 +343,10 @@ def test_run_memory_improvement_step_previews_suspicious_placement_candidates_fo
     assert handed["candidate_kind"] == "memory_placement_candidate"
     assert handed["current_store"] == "memory"
     assert handed["placement_text"] == "Run `pytest tests -q` after editing."
-    assert handed["suggested_route"] == "placement_review"
+    assert handed["placement_observations"] == ["contains_operational_or_procedural_language"]
+    assert handed["allowed_decisions"] == ["keep", "move_memory_to_user", "memory_to_skill", "skip", "defer"]
+    assert "allowed_recommendations" not in handed
+    assert "suggested_route" not in handed
 
 
 def test_run_memory_improvement_step_previews_plain_user_preference_placement_candidates_for_editor():

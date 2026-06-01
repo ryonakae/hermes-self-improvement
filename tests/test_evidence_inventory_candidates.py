@@ -461,6 +461,8 @@ def test_memory_placement_candidate_exposes_observations_not_route_recommendatio
         "mentions_tool_or_runtime_term",
         "contains_policy_or_preference_language",
     }
+    assert "allowed_recommendations" not in inventory
+    assert inventory["allowed_decisions"] == ["keep", "move_user_to_memory", "memory_to_skill", "skip", "defer"]
     assert "likely_targets" not in candidate
 
 
