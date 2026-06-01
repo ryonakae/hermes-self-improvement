@@ -681,3 +681,9 @@ $PY -m pytest tests/test_skill_planner.py -q
 $PY -m py_compile __init__.py hermes_self_improvement/*.py && $PY -m pytest -q && git diff --check && git status --short
 # 943 passed, 2 skipped
 ```
+
+Known-incident smoke:
+
+- Replayed the incident-shaped public planner path with `memory_place_2217e1ddb538`, `current_store=user`, `suggested_route=likely_keep`, and a bad planner-emitted `move_memory_to_user` transaction.
+- Current result: no executable `placement_move`; normalized output is a single `defer` transaction with `reason=memory_placement_candidate_not_selected_by_planner`.
+- Diagnostics preserve `raw_memory_placement_decision_ids=["memory_place_2217e1ddb538"]` and report `diagnosis=planner_emitted_but_normalization_rejected`.
