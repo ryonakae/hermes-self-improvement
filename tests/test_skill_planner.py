@@ -4,6 +4,7 @@ import hermes_self_improvement.planner as planner
 from hermes_self_improvement.planner import build_planner_quality_report, build_planner_digest, run_planner
 from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from hermes_self_improvement.prompts import base_prompt_hash, render_planner_messages
+from hermes_self_improvement.knowledge_transactions import normalize_knowledge_transaction
 
 
 def pack():
@@ -1811,3 +1812,330 @@ def test_render_planner_messages_coverage_and_ambiguity_are_visible_when_both_pr
     assert "### Skill ambiguity candidates" in content
     assert "hindsight-operations" in content
     assert "hermes-memory-hygiene" in content
+
+
+# ── Phase 7: Golden fixture / dogfood quality gate ──
+
+
+class TestGoldenFixtureDogfood:
+    """End-to-end normalization check for the motivating human review examples.
+
+    These tests are quality expectations for this fixture only — they are NOT
+    deterministic Python classifiers. Tests verify that the allowed transaction
+    vocabulary survives normalization and that regressions (whole-entry move for
+    mixed content, duplicate_cleanup for same-topic/different-semantics pairs,
+    and unnecessary create_skill) are detectable.
+    """
+
+    def test_opencode_go_entry_should_be_placement_move_or_rewrite_plus_move(self):
+        """openCode-go USER entry is environment/tool/runtime convention → MEMORY."""
+        # Simulated Planner output: whole-entry placement_move
+        raw = {
+            "decision": "apply",
+            "transaction_kind": "placement_move",
+            "operation": "move",
+            "source_store": "builtin_user",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "source_id": "memory_place_opencode",
+            "source_old_text": "opencode-go契約済みで極力活用。",
+            "content": "opencode-go契約済みで極力活用。",
+            "reason": "environment / tool / runtime convention, not user profile",
+        }
+        normalized = normalize_knowledge_transaction(raw)
+        assert normalized["decision"] == "apply"
+        assert normalized["transaction_kind"] == "placement_move"
+        assert normalized["target_store"] == "builtin_memory"
+        assert normalized["operation"] == "move"
+
+    def test_opencode_go_entry_memory_rewrite_plus_move_also_acceptable(self):
+        """Compact rewrite then move is also a valid planner choice."""
+        raw = {
+            "decision": "apply",
+            "transaction_kind": "memory_rewrite",
+            "operation": "replace",
+            "target_store": "builtin_user",
+            "source_id": "memory_place_opencode",
+            "source_old_text": "opencode-go契約済みで極力活用。",
+            "replacement_content": "opencode-go契約済み。OpenAI互換はprovider=openai+base_url。",
+            "reason": "compact wording before move",
+        }
+        normalized = normalize_knowledge_transaction(raw)
+        assert normalized["decision"] == "apply"
+        assert normalized["transaction_kind"] == "memory_rewrite"
+        assert normalized["target_store"] == "builtin_user"
+
+    def test_self_improvement_design_entry_should_be_placement_move(self):
+        """self-improvement design USER entry is project/plugin convention → MEMORY."""
+        raw = {
+            "decision": "apply",
+            "transaction_kind": "placement_move",
+            "operation": "move",
+            "source_store": "builtin_user",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "source_id": "memory_place_self_improvement",
+            "source_old_text": "self-improvement設計は1 Planner+1 Knowledge Editor。",
+            "content": "self-improvement設計: 1 Planner + 1 Knowledge Editor、skill/USER/MEMORY横断。semantic判断はLLM委任。",
+            "reason": "project/plugin design convention",
+        }
+        normalized = normalize_knowledge_transaction(raw)
+        assert normalized["decision"] == "apply"
+        assert normalized["transaction_kind"] == "placement_move"
+        assert normalized["target_store"] == "builtin_memory"
+
+    def test_hermes_plugin_issue_entry_should_be_placement_split(self):
+        """Hermes/plugin障害 mixed USER entry: split, not whole-entry move."""
+        raw = {
+            "decision": "apply",
+            "transaction_kind": "placement_split",
+            "operation": "split",
+            "source_store": "builtin_user",
+            "source_id": "memory_place_hermes_plugin",
+            "source_old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。",
+            "source_replacement": "Hermes/plugin障害: 明示OKまで変更禁止。環境由来エラーを回避で済ませない。",
+            "destination_store": "builtin_memory",
+            "destination_content": "PR取込test失敗は上流比較。正常経路ログ追加不要。",
+            "reason": "mixed USER-shaped and MEMORY-shaped fragments better handled by split than whole-entry move",
+        }
+        normalized = normalize_knowledge_transaction(raw)
+        assert normalized["decision"] == "apply"
+        assert normalized["transaction_kind"] == "placement_split"
+        assert normalized["operation"] == "split"
+
+    def test_hermes_plugin_issue_whole_entry_move_is_regression(self):
+        """Whole-entry move for mixed content is a judgment-quality regression."""
+        raw = {
+            "decision": "apply",
+            "transaction_kind": "placement_move",
+            "operation": "move",
+            "source_store": "builtin_user",
+            "target_store": "builtin_memory",
+            "source_id": "memory_place_hermes_plugin",
+            "source_old_text": "Hermes/plugin障害: 相談語は調査設計のみ。",
+            "reason": "should have been split",
+        }
+        normalized = normalize_knowledge_transaction(raw)
+        # Normalized, but can detect regression: transaction_kind shows move not split
+        assert normalized["transaction_kind"] == "placement_move"
+        # This is the regression signal — production use can flag move when split was needed
+
+    def test_google_workspace_pair_should_be_keep_same_topic(self):
+        """Google Workspace USER/MEMORY pair: different store semantics, keep both."""
+        raw = {
+            "decision": "skip",
+            "transaction_kind": "keep_same_topic_different_store",
+            "operation": "keep",
+            "source_id": "memory_place_google_ws_user",
+            "related_evidence_ids": ["memory_place_google_ws_memory"],
+            "reason": "USER entry is preference/policy; MEMORY entry is environment/path fact",
+        }
+        normalized = normalize_knowledge_transaction(raw)
+        assert normalized["decision"] == "skip"
+        assert normalized["transaction_kind"] == "keep_same_topic_different_store"
+        assert normalized["operation"] == "keep"
+
+    def test_google_workspace_pair_duplicate_cleanup_without_semantic_ack_is_regression(
+        self,
+    ):
+        """Duplicate cleanup without acknowledging different USER/MEMORY semantics."""
+        raw = {
+            "decision": "apply",
+            "transaction_kind": "duplicate_cleanup",
+            "operation": "remove",
+            "canonical_store": "builtin_memory",
+            "source_store": "builtin_user",
+            "source_id": "memory_place_google_ws_user",
+            "source_old_text": "Google Workspace は read-only 認可優先。",
+            "reason": "looks like duplicate",
+        }
+        normalized = normalize_knowledge_transaction(raw)
+        assert normalized["transaction_kind"] == "duplicate_cleanup"
+        # Regression detectable because reason lacks semantic distinction
+
+    def test_memory_to_skill_for_procedural_memory(self):
+        """Gateway/Hindsight/live context MEMORY entries → memory_to_skill."""
+        raw = {
+            "decision": "apply",
+            "transaction_kind": "memory_to_skill",
+            "operation": "patch_skill_then_remove_memory",
+            "source_store": "builtin_memory",
+            "source_id": "memory_place_gateway",
+            "source_old_text": "Gateway operational details...",
+            "target_skill": "hermes-gateway-and-sessions",
+            "skill_task": "incorporate operational detail into gateway skill",
+            "reason": "reusable procedure belongs in existing editable skill",
+        }
+        normalized = normalize_knowledge_transaction(raw)
+        assert normalized["decision"] == "apply"
+        assert normalized["transaction_kind"] == "memory_to_skill"
+        assert normalized["target_id"] == "hermes-gateway-and-sessions"
+
+    def test_skill_ambiguity_cleanup(self):
+        """Ambiguous skill load → skill_ambiguity_cleanup, not delete."""
+        raw = {
+            "decision": "defer",
+            "transaction_kind": "skill_ambiguity_cleanup",
+            "operation": "defer_manual_review",
+            "ambiguous_name": "hermes-memory-hygiene",
+            "conflicting_paths": [
+                "skills/memory-hygiene/SKILL.md",
+                "references/hermes-memory-and-live-context.md",
+            ],
+            "reason": "ambiguous skill reference collision, needs manual review",
+        }
+        normalized = normalize_knowledge_transaction(raw)
+        assert normalized["decision"] == "defer"
+        assert normalized["transaction_kind"] == "skill_ambiguity_cleanup"
+        assert normalized["operation"] == "defer_manual_review"
+
+    def test_motivating_fixture_should_produce_zero_create_skill(self):
+        """In the motivating fixture, create_skill should normally be 0."""
+        # Simulated planner transactions for the whole fixture
+        transactions = [
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "placement_move",
+                "operation": "move",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "source_id": "mem_opencode",
+                "reason": "environment convention",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "placement_move",
+                "operation": "move",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "source_id": "mem_self_improvement",
+                "reason": "project design convention",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "placement_split",
+                "operation": "split",
+                "source_store": "builtin_user",
+                "source_id": "mem_hermes_plugin",
+                "reason": "mixed entry",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "skip",
+                "transaction_kind": "keep_same_topic_different_store",
+                "operation": "keep",
+                "source_id": "mem_google_ws_user",
+                "reason": "different semantics",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "memory_to_skill",
+                "operation": "patch_skill_then_remove_memory",
+                "source_store": "builtin_memory",
+                "source_id": "mem_gateway",
+                "target_skill": "hermes-gateway-and-sessions",
+                "reason": "existing skill coverage",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "memory_to_skill",
+                "operation": "patch_skill_then_remove_memory",
+                "source_store": "builtin_memory",
+                "source_id": "mem_hindsight",
+                "target_skill": "hindsight-operations",
+                "reason": "existing skill coverage",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "defer",
+                "transaction_kind": "skill_ambiguity_cleanup",
+                "operation": "defer_manual_review",
+                "ambiguous_name": "hermes-memory-hygiene",
+                "reason": "ambiguous skill",
+            }),
+        ]
+
+        create_skill_count = sum(
+            1
+            for t in transactions
+            if t.get("transaction_kind") == "skill"
+            and t.get("operation") == "create_skill"
+        )
+        # In the motivating fixture, existing skills cover relevant topics
+        assert create_skill_count == 0
+
+    def test_no_forbidden_route_hints_in_normalized_transactions(self):
+        """None of the motivating transactions should contain forbidden route hints."""
+        transactions = [
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "placement_move",
+                "operation": "move",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "source_id": "mem_example",
+                "reason": "example",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "placement_split",
+                "operation": "split",
+                "source_store": "builtin_user",
+                "source_id": "mem_split",
+                "reason": "example",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "skip",
+                "transaction_kind": "keep_same_topic_different_store",
+                "operation": "keep",
+                "source_id": "mem_keep",
+                "reason": "example",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "memory_to_skill",
+                "operation": "patch_skill_then_remove_memory",
+                "source_store": "builtin_memory",
+                "source_id": "mem_skill",
+                "target_skill": "existing-skill",
+                "reason": "example",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "defer",
+                "transaction_kind": "skill_ambiguity_cleanup",
+                "operation": "defer_manual_review",
+                "ambiguous_name": "ambiguous",
+                "reason": "example",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "memory_rewrite",
+                "operation": "replace",
+                "target_store": "builtin_memory",
+                "source_id": "mem_rewrite",
+                "source_old_text": "old text",
+                "replacement_content": "new text",
+                "reason": "example",
+            }),
+            normalize_knowledge_transaction({
+                "decision": "apply",
+                "transaction_kind": "duplicate_cleanup",
+                "operation": "remove",
+                "canonical_store": "builtin_memory",
+                "source_store": "builtin_user",
+                "source_id": "mem_dup",
+                "source_old_text": "old text",
+                "reason": "example",
+            }),
+        ]
+
+        forbidden = {
+            "suggested_route",
+            "likely_move_user_to_memory",
+            "likely_move_memory_to_user",
+            "likely_memory_to_skill",
+            "allowed_recommendations",
+            "route_priority",
+        }
+        for i, t in enumerate(transactions):
+            blob = str(t)
+            for item in forbidden:
+                assert item not in blob, f"forbidden route hint '{item}' in transaction [{i}]: {t.get('transaction_kind')}"

@@ -1,8 +1,8 @@
-# LLM Semantic Knowledge Judgment Implementation Plan
+# LLM Semantic Knowledge Review Implementation Plan
 
-> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task. This is a follow-up child plan to `2026-06-01-memory-placement-heuristic-minimalization.md`: the previous plan removes route heuristics; this plan gives the Planner enough relation evidence and transaction vocabulary to make human-review-quality USER/MEMORY/Skill judgments without moving semantic logic back into code.
+> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task. This is a follow-up child plan to `2026-06-01-memory-placement-heuristic-minimalization.md`: the previous plan removes route heuristics; this plan gives the Planner enough relation evidence and transaction vocabulary to make human-review-quality USER/MEMORY/Skill reviews without moving semantic logic back into code.
 
-**Goal:** Make `hermes-self-improvement` dry-runs produce the same class of judgment a good Hermes reviewer would make when reviewing built-in memory and skills: move clear environment facts to `MEMORY.md`, keep user preferences in `USER.md`, split mixed entries, preserve same-topic entries that have different USER/MEMORY meanings, move reusable procedures into existing skills, detect skill ambiguity, and avoid unnecessary skill creation.
+**Goal:** Make `hermes-self-improvement` dry-runs produce the same class of review a good Hermes reviewer would make when reviewing built-in memory and skills: move clear environment facts to `MEMORY.md`, keep user preferences in `USER.md`, split mixed entries, preserve same-topic entries that have different USER/MEMORY meanings, move reusable procedures into existing skills, detect skill ambiguity, and avoid unnecessary skill creation.
 
 **Architecture:** Keep the existing one Planner → one Knowledge Editor path and canonical `knowledge_transactions`. Programmatic code only builds neutral evidence, relation bundles, allowed transaction shapes, and destructive-operation guards. The Planner LLM decides semantics. The Knowledge Editor executes only tool-mediated changes through official memory and skill tools.
 
@@ -67,7 +67,7 @@ Input entry from `USER.md`:
 opencode-go契約済みで極力活用。OpenAI互換はprovider=openai+base_url。Skill編集はprotected保護、localはpatch可。Safehouse注意はagent名でなく環境一般で書く。Gmail observer=~/.hermes/automations/gmail-purchase-observer、cron=~/.hermes/cron/jobs.json。
 ```
 
-Expected Planner judgment:
+Expected Planner review:
 
 - `placement_move` or `memory_rewrite + placement_move`
 - Source: `builtin_user`
@@ -83,7 +83,7 @@ Input entry from `USER.md`:
 self-improvement設計は1 Planner+1 Knowledge Editor、skill/USER/MEMORY横断。semantic判断はLLM委任、hard guardは破壊的不変条件のみ。dogfood報告は実変更/blocked/partialを分ける。
 ```
 
-Expected Planner judgment:
+Expected Planner review:
 
 - `placement_move` or `memory_rewrite + placement_move`
 - Reason: project/plugin design convention
@@ -97,7 +97,7 @@ Input entry from `USER.md`:
 Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。正常経路ログ追加不要。実行環境ファイルは必要ならリセット可、環境由来エラーを回避で済ませない。context通知は末尾/inline。
 ```
 
-Expected Planner judgment:
+Expected Planner review:
 
 - `placement_split`
 - Keep USER-shaped content in `USER.md`:
@@ -125,7 +125,7 @@ Google Workspace は read-only 認可優先。Hermes のデフォルト skill / 
 Google Workspace は built-in `google-workspace` skill を既定にし、`~/.hermes/google_token.json` を使う。古い `~/.hermes/gws` 前提は legacy。
 ```
 
-Expected Planner judgment:
+Expected Planner review:
 
 - `keep_same_topic_different_store`
 - Reason:
@@ -141,7 +141,7 @@ Examples from `MEMORY.md`:
 - Hindsight operational details
 - Hermes live context operational details
 
-Expected Planner judgment:
+Expected Planner review:
 
 - Prefer `memory_to_skill` or `skill_patch_candidate` for existing matching skills
 - Keep a short MEMORY fact if it is useful on every session start
@@ -154,7 +154,7 @@ Observed ambiguous loads:
 - `hermes-memory-hygiene`
 - `gmail-purchase-live-context`
 
-Expected Planner judgment:
+Expected Planner review:
 
 - `skill_ambiguity_cleanup` candidate
 - Not `delete_skill`
@@ -163,7 +163,7 @@ Expected Planner judgment:
 
 ### Skill creation
 
-Expected Planner judgment for this fixture:
+Expected Planner review for this fixture:
 
 - In this motivating fixture, a good Planner should usually avoid `create_skill` because existing skills appear to cover the relevant topics.
 - This is a dogfood expectation for the fixture, not a programmatic gate: if the Planner has strong uncovered-workflow evidence, it may still choose `create_skill` with a concrete reason.
@@ -276,7 +276,7 @@ Required fields:
 
 ### 5. `keep_same_topic_different_store`
 
-New no-op transaction. Use when Planner explicitly judges that two entries are related but should both remain.
+New no-op transaction. Use when Planner explicitly decides that two entries are related but should both remain.
 
 Required fields:
 
@@ -291,7 +291,7 @@ Required fields:
 }
 ```
 
-This is not an apply. It exists so healthy no-op semantic judgments are visible and not mistaken for planner omission.
+This is not an apply. It exists so healthy no-op semantic reviews are visible and not mistaken for planner omission.
 
 ### 6. `memory_to_skill`
 
@@ -477,7 +477,7 @@ Implementation guidance:
 Add a dedicated section after memory placement candidates, before generic transaction templates:
 
 ```text
-Semantic knowledge judgment rules:
+Semantic knowledge review rules:
 - You decide semantics. Observations are not recommendations.
 - Do not move a whole entry if it contains mixed USER-shaped and MEMORY/Skill-shaped content. Use placement_split or defer.
 - Do not treat same topic across USER and MEMORY as duplicate by default. If USER expresses preference/policy and MEMORY expresses environment/runtime fact, use keep_same_topic_different_store.
@@ -508,7 +508,7 @@ Remove or avoid any prompt wording that implies observations dictate action.
 
 **Files:**
 
-- Create: `.hermes/plans/2026-06-01-llm-semantic-knowledge-judgment.md`
+- Create: `.hermes/plans/2026-06-01-llm-semantic-knowledge-review.md`
 - Modify: `.hermes/plans/README.md`
 
 **Steps:**
@@ -519,7 +519,7 @@ Remove or avoid any prompt wording that implies observations dictate action.
    - this follow-up adds relation evidence and transaction vocabulary
    - no implementation yet
 3. Verify docs diff only:
-   - `git diff -- .hermes/plans/README.md .hermes/plans/2026-06-01-llm-semantic-knowledge-judgment.md`
+   - `git diff -- .hermes/plans/README.md .hermes/plans/2026-06-01-llm-semantic-knowledge-review.md`
 
 **Exit criteria:** Plan and index are readable and point to the correct next implementation slice.
 
@@ -718,7 +718,7 @@ $PY -m pytest tests/test_evidence_inventory_candidates.py tests/test_evidence_pa
 
 Expected prompt contains:
 
-- semantic knowledge judgment rules
+- semantic knowledge review rules
 - `placement_split` template
 - `memory_rewrite` template
 - `duplicate_cleanup` template
@@ -767,7 +767,7 @@ $PY -m pytest tests/test_knowledge_planner_digest.py tests/test_skill_planner.py
 
 ### Phase 4: Dry-run artifact and reporting support
 
-**Objective:** Make richer semantic judgments visible in artifacts and compact summaries even before execution is added.
+**Objective:** Make richer semantic reviews visible in artifacts and compact summaries even before execution is added.
 
 **Files likely to change:**
 
@@ -888,7 +888,7 @@ $PY -m pytest tests/test_runner_steps.py tests/test_cli_improve_memory_current_e
 
 ### Phase 6: Existing skill-first memory-to-skill and skill ambiguity handling
 
-**Objective:** Improve skill-side judgment without creating unnecessary new skills or destructive ambiguity fixes.
+**Objective:** Improve skill-side review without creating unnecessary new skills or destructive ambiguity fixes.
 
 **Files likely to change:**
 
@@ -943,7 +943,7 @@ $PY -m pytest tests/test_duplicate_skill_lifecycle_regression.py tests/test_memo
 
 ### Phase 7: Golden fixture / dogfood dry-run quality gate
 
-**Objective:** Prove the plugin can emit human-review-like judgments on the motivating examples before any mutating replay.
+**Objective:** Prove the plugin can emit human-review-like reviews on the motivating examples before any mutating replay.
 
 **Files likely to change:**
 
@@ -971,7 +971,7 @@ Expected normalized transaction shape:
 
 - opencode-go → ideally `placement_move`; `memory_rewrite + placement_move` is also acceptable if the Planner preserves the same durable facts.
 - self-improvement design → `placement_move` or `memory_rewrite + placement_move`.
-- Hermes/plugin障害 → ideally `placement_split`; `defer` is acceptable if the Planner says the split text is uncertain. A whole-entry `placement_move` should be treated as a judgment-quality regression.
+- Hermes/plugin障害 → ideally `placement_split`; `defer` is acceptable if the Planner says the split text is uncertain. A whole-entry `placement_move` should be treated as a review-quality regression.
 - Google Workspace pair → ideally `keep_same_topic_different_store`; `defer` is acceptable if the Planner cannot verify the distinction. `duplicate_cleanup` without acknowledging different USER/MEMORY semantics is a regression.
 - Gateway/Hindsight/live context → `memory_to_skill` candidate, `skill_patch` candidate, or defer with existing skill coverage context.
 - ambiguous skill names → `skill_ambiguity_cleanup` or defer with ambiguity details.
@@ -1123,7 +1123,7 @@ Docs / plans:
 
 - `.hermes/plans/README.md`
 - `.hermes/plans/2026-06-01-memory-placement-heuristic-minimalization.md`
-- `.hermes/plans/2026-06-01-llm-semantic-knowledge-judgment.md`
+- `.hermes/plans/2026-06-01-llm-semantic-knowledge-review.md`
 - `skills/operations/SKILL.md` only if implementation changes user-facing operation guidance
 
 ---
@@ -1182,10 +1182,10 @@ Mitigation:
 | 3: Planner digest + prompt templates | ✅ Complete | `_render_semantic_knowledge_section` pipes candidates into planner prompt. Template examples, explicit "Observations are not recommendations". |
 | 4: Dry-run artifact + reporting | ✅ Complete | `_canonical_knowledge_change_counts` now exposes `semantic_memory_placement` bounded counts. No full text / conflicting_paths leaks in compact tool payload. |
 | 5: Knowledge Editor execution | ✅ Complete | `memory_rewrite`, `duplicate_cleanup`, `placement_split` execution dispatch. add/replace/remove via official memory tool. Source staleness check, add-before-remove for split. |
-| 6: Existing skill-first + ambiguity | ⬜ Pending | Planner-facing existing skill coverage, skill ambiguity cleanup preview, avoid unnecessary create_skill. |
-| 7: Golden fixture / dogfood quality gate | ⬜ Pending | Deterministic fixture test for motivating examples, end-to-end dry-run artifact quality check. |
+| 6: Existing skill-first + ambiguity | ✅ Complete | Planner prompt now surfaces existing skill coverage as advisory context, prefers patching matching skills over new creation, and renders non-destructive skill ambiguity preview templates. |
+| 7: Golden fixture / dogfood quality gate | ✅ Complete | Deterministic fixture tests cover motivating examples and regression signals; source dry-run artifact has zero route leaks. |
 
-**Latest verification:** `tests/test_plugin_tools.py tests/test_knowledge_transactions.py tests/test_knowledge_transaction_view.py tests/test_evidence_inventory_candidates.py tests/test_evidence_pack.py tests/test_knowledge_planner_digest.py tests/test_skill_planner.py tests/test_memory_inventory_planner.py tests/test_memory_to_skill_migration.py tests/test_cli_improve_memory_current_entries.py tests/test_runner_steps.py` → **263 passed in 8.21s**.
+**Latest verification:** `py_compile`, full `pytest tests -q`, and `git diff --check` → **984 passed, 2 skipped in 228.42s**. `hermes self-improvement status` passed. Dry-run artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260601T164953Z.json` (`dry_run=True`, `knowledge_transactions=101`, route leaks `[]`, selected semantic transactions: `keep_same_topic_different_store=20`, `memory_to_skill=8`).
 
 ---
 
@@ -1201,13 +1201,13 @@ The plan is complete when:
    - `skill_ambiguity_cleanup`
 2. No live planner-facing surface reintroduces route recommendations.
 3. Normalizer preserves all new transaction kinds and evidence ids.
-4. Dry-run artifacts can show human-review-like judgments for the motivating fixture.
+4. Dry-run artifacts can show human-review-like reviews for the motivating fixture.
 5. Safe execution exists for:
    - `memory_rewrite`
    - `duplicate_cleanup` remove/replace
    - first-slice built-in `placement_split`
 6. Skill ambiguity cleanup is at least visible/reportable and not destructive.
-7. Existing skill coverage is visible as advisory context, and unnecessary `create_skill` proposals are reduced by Planner judgment rather than a hard programmatic gate.
+7. Existing skill coverage is visible as advisory context, and unnecessary `create_skill` proposals are reduced by Planner review rather than a hard programmatic gate.
 8. Full validation passes:
    - `py_compile`
    - full `pytest tests -q`
@@ -1232,11 +1232,11 @@ The plan is complete when:
 
 ## Recommended commit slicing
 
-1. `docs: plan semantic knowledge judgment follow-up`
+1. `docs: plan semantic knowledge review follow-up`
    - plan + README index only
 2. `feat: preserve semantic knowledge transaction kinds`
    - Phase 1
-3. `feat: add relation evidence for memory judgment`
+3. `feat: add relation evidence for memory review`
    - Phase 2
 4. `feat: teach planner semantic knowledge transactions`
    - Phase 3 + Phase 4 preview/reporting
@@ -1244,7 +1244,7 @@ The plan is complete when:
    - Phase 5
 6. `feat: surface existing skill coverage and ambiguity cleanup`
    - Phase 6
-7. `test: add semantic knowledge judgment dogfood fixture`
+7. `test: add semantic knowledge review dogfood fixture`
    - Phase 7 + plan/index update
 
 Each commit should run focused tests first. Run the full gate before reporting the whole plan complete.
