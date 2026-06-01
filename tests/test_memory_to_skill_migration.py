@@ -778,6 +778,39 @@ def test_execute_knowledge_transaction_placement_move_adds_before_removing_sourc
     ]
 
 
+def test_execute_knowledge_transaction_placement_move_defaults_content_to_source_old_text():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-placement-source-content",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "operation": "move",
+            "source_store": "builtin_user",
+            "source_id": "memory_place_env_fact",
+            "source_old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer、cron=~/.hermes/cron/jobs.json。",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["changed_memories"] == ["txn-placement-source-content"]
+    assert result["removed_memories"] == ["memory_place_env_fact"]
+    assert calls == [
+        {"action": "add", "target": "memory", "content": "Gmail observer=~/.hermes/automations/gmail-purchase-observer、cron=~/.hermes/cron/jobs.json。"},
+        {"action": "remove", "target": "user", "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer、cron=~/.hermes/cron/jobs.json。"},
+    ]
+
+
 def test_execute_knowledge_transaction_placement_move_memory_to_user_adds_before_removing_source():
     calls = []
 
@@ -810,6 +843,77 @@ def test_execute_knowledge_transaction_placement_move_memory_to_user_adds_before
         {"action": "add", "target": "user", "content": "Ryo prefers terse Slack reports."},
         {"action": "remove", "target": "memory", "old_text": "Ryo prefers terse Slack reports."},
     ]
+
+
+def test_execute_knowledge_transaction_placement_move_memory_to_user_defaults_content_to_source_old_text():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-placement-memory-source-content",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "operation": "move",
+            "source_store": "builtin_memory",
+            "source_id": "memory_place_preference",
+            "source_old_text": "Hindsight tuning preference: keep Mac mini responsive; accept Reflect ~30–40s rather than raising CPU/resources aggressively.",
+            "target_store": "builtin_user",
+            "target_id": "user",
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["changed_memories"] == ["txn-placement-memory-source-content"]
+    assert result["removed_memories"] == ["memory_place_preference"]
+    assert calls == [
+        {"action": "add", "target": "user", "content": "Hindsight tuning preference: keep Mac mini responsive; accept Reflect ~30–40s rather than raising CPU/resources aggressively."},
+        {"action": "remove", "target": "memory", "old_text": "Hindsight tuning preference: keep Mac mini responsive; accept Reflect ~30–40s rather than raising CPU/resources aggressively."},
+    ]
+
+
+def test_execute_knowledge_transaction_placement_move_dry_run_validates_required_fields():
+    missing = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-placement-missing-text",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "operation": "move",
+            "source_store": "builtin_user",
+            "source_id": "memory_place_missing_text",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+        },
+        config={},
+        mutate=False,
+    )
+    valid = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-placement-valid-preview",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "operation": "move",
+            "source_store": "builtin_user",
+            "source_id": "memory_place_env_fact",
+            "source_old_text": "Gmail observer path belongs in memory.",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+        },
+        config={},
+        mutate=False,
+    )
+
+    assert missing["success"] is False
+    assert missing["outcome"] == "blocked"
+    assert missing["reason"] == "knowledge_transaction_missing_required_fields"
+    assert valid["success"] is True
+    assert valid["outcome"] == "preview"
 
 
 def test_execute_knowledge_transaction_runs_skill_create_transaction_through_editor_backend(tmp_path):

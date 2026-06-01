@@ -1671,6 +1671,21 @@ def _knowledge_maintenance_summary_lines(decisions: list[dict[str, Any]], mainte
     return lines
 
 
+def _blocked_apply_transaction_count(knowledge_transactions: list[dict[str, Any]] | None) -> int:
+    count = 0
+    for item in knowledge_transactions or []:
+        if not isinstance(item, dict):
+            continue
+        action = _semantic_action_from_runner_decision(item, kind=_transaction_display_kind(item))
+        if action != "apply":
+            continue
+        raw_result_payload = item.get("transaction_result") if isinstance(item.get("transaction_result"), dict) else item.get("result")
+        result_payload = raw_result_payload if isinstance(raw_result_payload, dict) else {}
+        if result_payload.get("success") is False or str(result_payload.get("outcome") or "") == "blocked":
+            count += 1
+    return count
+
+
 def _knowledge_change_summary_lines(knowledge_transactions: list[dict[str, Any]]) -> list[str]:
     if not knowledge_transactions:
         return []
@@ -1680,6 +1695,7 @@ def _knowledge_change_summary_lines(knowledge_transactions: list[dict[str, Any]]
     memory_to_skill = 0
     user_to_memory = 0
     memory_to_user = 0
+    blocked_apply = 0
     deferred = 0
     skipped = 0
     for item in knowledge_transactions:
@@ -1697,6 +1713,7 @@ def _knowledge_change_summary_lines(knowledge_transactions: list[dict[str, Any]]
         raw_result_payload = item.get("transaction_result") if isinstance(item.get("transaction_result"), dict) else item.get("result")
         result_payload = raw_result_payload if isinstance(raw_result_payload, dict) else {}
         if result_payload and result_payload.get("success") is False:
+            blocked_apply += 1
             continue
         kind = str(item.get("transaction_kind") or "")
         if kind == "skill":
@@ -1721,6 +1738,8 @@ def _knowledge_change_summary_lines(knowledge_transactions: list[dict[str, Any]]
     ]
     if placement_moves:
         lines.append(f"Memory placement: USER->MEMORY {user_to_memory}, MEMORY->USER {memory_to_user}")
+    if blocked_apply:
+        lines.append(f"- blocked apply transactions: {blocked_apply}")
     if deferred:
         lines.append(f"- deferred transactions: {deferred}")
     if skipped:
@@ -1750,6 +1769,7 @@ def _actual_result_summary_lines(
     validation_unknown = 0
     validation_unknown_modes: dict[str, int] = {}
     trace_recovered = 0
+    blocked_apply = 0
     def note_names(target: list[str], values: Any) -> None:
         for value in values or []:
             name = str(value or "").strip()
@@ -1776,6 +1796,7 @@ def _actual_result_summary_lines(
     if knowledge_transactions:
         transaction_view = canonical_transaction_view({"knowledge_transactions": knowledge_transactions})
         validation = transaction_view["validation"]
+        blocked_apply = _blocked_apply_transaction_count(knowledge_transactions)
         created = len(transaction_view["created_skills"])
         patched = len(transaction_view["patched_skills"])
         archived = len(transaction_view["archived_skills"])
@@ -1865,6 +1886,8 @@ def _actual_result_summary_lines(
         lines.append(f"- validation unknown breakdown: {', '.join(parts)}")
     if trace_recovered:
         lines.append(f"- recovered accounting: created skills inferred from trace {trace_recovered}")
+    if blocked_apply:
+        lines.append(f"- blocked apply: {blocked_apply}")
     if noop_counts:
         labels = {
             "covered_by_existing_skill": "covered by existing skill",

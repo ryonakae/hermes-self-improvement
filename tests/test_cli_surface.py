@@ -1410,3 +1410,53 @@ def test_improve_summary_reports_cross_surface_knowledge_changes_from_canonical_
     assert "- skipped transactions: 1" in text
     assert "skill_agent" not in text
     assert "memory_agent" not in text
+
+
+def test_improve_summary_surfaces_blocked_apply_transactions():
+    cli = load_cli_module()
+    blocked_transactions = [
+        {
+            "transaction_id": "txn-placement-blocked-user-memory",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "target_store": "builtin_memory",
+            "operation": "move",
+            "transaction_result": {
+                "success": False,
+                "outcome": "blocked",
+                "reason": "knowledge_transaction_missing_required_fields",
+                "changed_memories": [],
+                "removed_memories": [],
+            },
+        },
+        {
+            "transaction_id": "txn-placement-blocked-memory-user",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "source_store": "builtin_memory",
+            "target_store": "builtin_user",
+            "operation": "move",
+            "transaction_result": {
+                "success": False,
+                "outcome": "blocked",
+                "reason": "knowledge_transaction_missing_required_fields",
+                "changed_memories": [],
+                "removed_memories": [],
+            },
+        },
+    ]
+    text = cli._render_improve_summary({
+        "dry_run": False,
+        "summary": {"skill_changes": 0, "memory_changes": 0, "scorer_evaluator_changed": False},
+        "action_summary": {"apply": 2, "defer": 0, "skip": 0, "block": 0},
+        "knowledge_transactions": blocked_transactions,
+        "step_decisions": {"knowledge_transactions": blocked_transactions, "knowledge_routing": {}},
+        "evidence_pack": {"summary": {}},
+    })
+
+    assert "Knowledge changes: skills 0, memory 0, placement moves 0, memory-to-skill 0" in text
+    assert "- blocked apply transactions: 2" in text
+    assert "Actual results:" in text
+    assert "- actual mutations: skill created 0, skill patched 0, skill archived 0, references rewritten 0, memory 0" in text
+    assert "- blocked apply: 2" in text

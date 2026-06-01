@@ -1760,8 +1760,8 @@ def run_knowledge_improvement_step(
     changed_memories: list[str] = []
     quality = build_planner_runtime_quality_report(digest=digest, planner=planner, runner_decisions=transactions)
     for transaction in transactions:
-        if mutate and transaction.get("decision") == "apply":
-            result = execute_knowledge_transaction(transaction, config=config, mutate=True)
+        if transaction.get("decision") == "apply":
+            result = execute_knowledge_transaction(transaction, config=config, mutate=mutate)
         else:
             result = _knowledge_transaction_dry_run_result(transaction)
         transaction["transaction_result"] = result
@@ -2039,9 +2039,9 @@ def _execute_skill_transaction(transaction: dict[str, Any], *, config: dict[str,
 
 
 def _execute_placement_move_transaction(transaction: dict[str, Any], *, config: dict[str, Any], result: dict[str, Any], mutate: bool) -> dict[str, Any]:
-    content = _knowledge_transaction_content(transaction)
     source_store = str(transaction.get("source_store") or "").strip()
     source_old_text = str(transaction.get("source_old_text") or "").strip()
+    content = _knowledge_transaction_content(transaction) or source_old_text
     target_store = str(transaction.get("target_store") or "").strip()
     if not content or not source_store or not source_old_text or not target_store:
         return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}

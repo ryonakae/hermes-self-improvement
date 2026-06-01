@@ -1085,3 +1085,134 @@ def test_run_knowledge_improvement_step_dry_run_returns_canonical_transactions(m
     assert result["editor_validation"]["summary"]["preview"] == 5
     assert result["editor_validation"]["summary"]["deferred"] == 1
     assert result["editor_validation"]["summary"]["skipped"] == 1
+
+
+def test_run_knowledge_improvement_step_dry_run_validates_malformed_placement_move_apply(monkeypatch, tmp_path):
+    import hermes_self_improvement.runner_steps as runner_steps
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("split runner must not be called")
+
+    monkeypatch.setattr(runner_steps, "run_skill_improvement_step", forbidden)
+    monkeypatch.setattr(runner_steps, "run_memory_improvement_step", forbidden)
+
+    def fake_planner(*, digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_store": "builtin_user",
+                    "source_id": "memory_place_missing_text",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "evidence_ids": ["m1"],
+                }
+            ],
+        }
+
+    pack = evidence_pack_for("demo-skill")
+    result = run_knowledge_improvement_step(
+        evidence_pack=pack,
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_planner_runtime_func": fake_planner},
+        mutate=False,
+    )
+
+    assert result["status"] == "completed"
+    assert result["transaction_results"][0]["outcome"] == "blocked"
+    assert result["transaction_results"][0]["reason"] in {"knowledge_transaction_missing_required_fields", "transaction_missing_source_fields"}
+    assert result["knowledge_transactions"][0]["transaction_result"]["outcome"] == "blocked"
+
+
+def test_run_knowledge_improvement_step_dry_run_routes_apply_through_executor(monkeypatch, tmp_path):
+    import hermes_self_improvement.runner_steps as runner_steps
+
+    execute_calls = []
+
+    def fake_execute(transaction, *, config=None, mutate=False):
+        execute_calls.append({"transaction": transaction, "mutate": mutate})
+        return {
+            "success": False,
+            "outcome": "blocked",
+            "reason": "executor_validation_sentinel",
+            "transaction_id": transaction["transaction_id"],
+            "transaction_kind": transaction["transaction_kind"],
+            "changed_skills": [],
+            "created_skills": [],
+            "changed_memories": [],
+            "removed_memories": [],
+            "executed_steps": [],
+            "verification_notes": [],
+            "rollback_hints": [],
+        }
+
+    monkeypatch.setattr(runner_steps, "execute_knowledge_transaction", fake_execute)
+
+    def fake_planner(*, digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_store": "builtin_user",
+                    "source_id": "memory_place_env_fact",
+                    "source_old_text": "Gmail observer path belongs in memory.",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "evidence_ids": ["m1"],
+                }
+            ],
+        }
+
+    result = run_knowledge_improvement_step(
+        evidence_pack=evidence_pack_for("demo-skill"),
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_planner_runtime_func": fake_planner},
+        mutate=False,
+    )
+
+    assert execute_calls
+    assert execute_calls[0]["mutate"] is False
+    assert result["transaction_results"][0]["reason"] == "executor_validation_sentinel"
+
+
+def test_run_knowledge_improvement_step_dry_run_previews_valid_placement_move_without_content(monkeypatch, tmp_path):
+    import hermes_self_improvement.runner_steps as runner_steps
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("split runner must not be called")
+
+    monkeypatch.setattr(runner_steps, "run_skill_improvement_step", forbidden)
+    monkeypatch.setattr(runner_steps, "run_memory_improvement_step", forbidden)
+
+    def fake_planner(*, digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_store": "builtin_user",
+                    "source_id": "memory_place_env_fact",
+                    "source_old_text": "Gmail observer path belongs in memory.",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "evidence_ids": ["m1"],
+                }
+            ],
+        }
+
+    pack = evidence_pack_for("demo-skill")
+    result = run_knowledge_improvement_step(
+        evidence_pack=pack,
+        config={"_self_improvement_root": str(tmp_path / "self-improvement"), "_planner_runtime_func": fake_planner},
+        mutate=False,
+    )
+
+    assert result["status"] == "completed"
+    assert result["transaction_results"][0]["outcome"] == "preview"
+    assert result["knowledge_transactions"][0]["transaction_result"]["outcome"] == "preview"
