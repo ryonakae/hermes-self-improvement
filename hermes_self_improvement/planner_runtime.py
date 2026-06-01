@@ -265,28 +265,27 @@ def _memory_placement_candidates_digest(evidence_pack: dict[str, Any], editable_
         if len(candidates) >= 40:
             omitted += 1
             continue
-        raw_reasons = inventory.get("route_reasons")
-        route_reasons = [
-            _redacted_preview(reason, max_chars=80)
-            for reason in (raw_reasons if isinstance(raw_reasons, list) else [])
-            if str(reason)
+        raw_observations = inventory.get("placement_observations")
+        observations = [
+            _redacted_preview(observation, max_chars=80)
+            for observation in (raw_observations if isinstance(raw_observations, list) else [])
+            if str(observation)
         ][:6]
         candidate = {
             "evidence_id": str(item.get("id") or ""),
             "current_store": {"builtin_memory": "memory", "builtin_user": "user"}.get(current_store, current_store),
-            "suggested_route": str(inventory.get("suggested_route") or "likely_defer"),
-            "route_reasons": route_reasons or ["missing_route_reason"],
+            "placement_observations": observations or ["no_obvious_surface_signal"],
             "old_text": _redacted_preview(old_text, max_chars=260),
             "summary": _redacted_preview(inventory.get("summary") or old_text, max_chars=180),
+            "official_boundary": _redacted_preview(inventory.get("official_boundary") or "", max_chars=360),
             "allowed_decisions": memory_placement_allowed_decisions({"builtin_memory": "memory", "builtin_user": "user"}.get(current_store, current_store)),
         }
-        if candidate["suggested_route"] == "likely_memory_to_skill":
-            target_skills = _candidate_target_skills_for_memory_text(
-                " ".join([old_text, str(inventory.get("summary") or "")]),
-                editable_skills or [],
-            )
-            if target_skills:
-                candidate["candidate_target_skills"] = target_skills
+        target_skills = _candidate_target_skills_for_memory_text(
+            " ".join([old_text, str(inventory.get("summary") or "")]),
+            editable_skills or [],
+        )
+        if target_skills:
+            candidate["candidate_target_skills"] = target_skills
         candidates.append(candidate)
     return {"candidate_count": len(candidates), "omitted_count": omitted, "candidates": candidates}
 
@@ -1653,9 +1652,6 @@ def _memory_placement_actionability_report(
             default_deferred_ids.update(ids)
         else:
             planner_selected_ids.update(ids)
-    by_route: dict[str, int] = {}
-    unhandled_by_route: dict[str, int] = {}
-    default_defer_by_route: dict[str, int] = {}
     default_defer_details: list[dict[str, Any]] = []
     selected_count = 0
     planner_decision_count = 0
@@ -1669,33 +1665,27 @@ def _memory_placement_actionability_report(
     }
     for item in candidates:
         evidence_id = str(item.get("evidence_id") or "").strip()
-        route = str(item.get("suggested_route") or "unknown")
-        by_route[route] = by_route.get(route, 0) + 1
         if evidence_id and evidence_id in selected_ids:
             selected_count += 1
             if evidence_id in planner_selected_ids:
                 planner_decision_count += 1
             if evidence_id in default_deferred_ids:
                 default_defer_count += 1
-                default_defer_by_route[route] = default_defer_by_route.get(route, 0) + 1
-                raw_reasons = item.get("route_reasons")
-                route_reasons = [str(reason) for reason in (raw_reasons if isinstance(raw_reasons, list) else []) if str(reason)][:6]
                 diagnosis = (
                     "planner_emitted_but_normalization_rejected"
                     if evidence_id in raw_memory_placement_decision_ids
                     else "planner_omitted_candidate_default_defer"
                 )
+                observations = item.get("placement_observations") if isinstance(item.get("placement_observations"), list) else []
                 default_defer_details.append({
                     "evidence_id": evidence_id,
                     "current_store": str(item.get("current_store") or ""),
-                    "suggested_route": route,
-                    "route_reasons": route_reasons,
+                    "placement_observations": [str(observation) for observation in observations if str(observation)][:6],
                     "old_text": _redacted_preview(item.get("old_text") or "", max_chars=260),
                     "diagnosis": diagnosis,
                 })
             continue
         unhandled_count += 1
-        unhandled_by_route[route] = unhandled_by_route.get(route, 0) + 1
     return {
         "candidate_count": len(candidates),
         "selected_count": selected_count,
@@ -1703,10 +1693,7 @@ def _memory_placement_actionability_report(
         "default_handled_count": default_defer_count,
         "unhandled_count": unhandled_count,
         "default_defer_count": default_defer_count,
-        "default_defer_by_route": dict(sorted(default_defer_by_route.items())),
         "default_defer_details": default_defer_details[:20],
-        "by_suggested_route": dict(sorted(by_route.items())),
-        "unhandled_by_route": dict(sorted(unhandled_by_route.items())),
     }
 
 

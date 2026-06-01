@@ -376,6 +376,45 @@ def test_run_improve_wires_curator_lifecycle_and_telemetry(monkeypatch, tmp_path
 
 
 
+def test_run_improve_memory_placement_target_hints_do_not_expose_suggested_route(monkeypatch, tmp_path):
+    cli = load_cli_module()
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+    monkeypatch.setattr(cli, "run_planner", lambda *args, **kwargs: {"candidates": []})
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", lambda **kwargs: {
+        "status": "completed",
+        "knowledge_transactions": [],
+        "transaction_results": [],
+        "changed_skills": [],
+        "changed_memories": [],
+        "editor_validation": {"summary": {}},
+        "prompt_sources": {},
+        "planner_digest": {
+            "memory_placement_candidates": {
+                "candidates": [{
+                    "evidence_id": "memory-place-procedure",
+                    "placement_observations": ["contains_operational_or_procedural_language"],
+                    "candidate_target_skills": [{"skill": "hermes-gateway-and-sessions", "match_reason": "name_token_overlap"}],
+                }]
+            }
+        },
+    })
+
+    result = cli.run_improve(config=config, dry_run=True)
+    hints = result["step_decisions"]["memory_placement_target_hints"]
+
+    assert hints == [{
+        "evidence_id": "memory-place-procedure",
+        "placement_observations": ["contains_operational_or_procedural_language"],
+        "candidate_target_skills": [{"skill": "hermes-gateway-and-sessions", "match_reason": "name_token_overlap"}],
+    }]
+    assert "suggested_route" not in str(hints)
+
+
+
 def test_run_improve_does_not_run_calibration_optimizer(monkeypatch, tmp_path):
     cli = load_cli_module()
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}

@@ -1097,7 +1097,7 @@ def run_improve(
     memory_placement_target_hints = [
         {
             "evidence_id": str(item.get("evidence_id") or ""),
-            "suggested_route": str(item.get("suggested_route") or ""),
+            "placement_observations": item.get("placement_observations"),
             "candidate_target_skills": item.get("candidate_target_skills"),
         }
         for item in (raw_placement_candidates if isinstance(raw_placement_candidates, list) else [])

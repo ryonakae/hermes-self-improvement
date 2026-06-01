@@ -84,8 +84,7 @@ def test_planner_digest_exposes_memory_placement_candidates():
             "current_store": "user",
             "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
             "summary": "Gmail observer path.",
-            "suggested_route": "likely_move_user_to_memory",
-            "route_reasons": ["contains_runtime_path"],
+            "placement_observations": ["mentions_tool_or_runtime_term"],
         },
         "likely_targets": [{"target": "memory", "weight": 0.7}, {"target": "skill", "weight": 0.3}],
     })
@@ -97,8 +96,9 @@ def test_planner_digest_exposes_memory_placement_candidates():
     row = placements["candidates"][0]
     assert row["evidence_id"] == "memory-place-user-runtime"
     assert row["current_store"] == "user"
-    assert row["suggested_route"] == "likely_move_user_to_memory"
-    assert row["route_reasons"] == ["contains_runtime_path"]
+    assert row["placement_observations"] == ["mentions_tool_or_runtime_term"]
+    assert "suggested_route" not in row
+    assert "route_reasons" not in row
     assert row["old_text"] == "Gmail observer=~/.hermes/automations/gmail-purchase-observer."
     assert "move_user_to_memory" in row["allowed_decisions"]
 
@@ -114,8 +114,7 @@ def test_planner_digest_limits_memory_placement_move_decisions_by_current_store(
                 "current_store": "user",
                 "old_text": "日本語docsは日本語中心、英語は必要時のみ。",
                 "summary": "Japanese docs preference.",
-                "suggested_route": "likely_keep",
-                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "placement_observations": ["no_obvious_surface_signal"],
             },
         },
         {
@@ -126,8 +125,7 @@ def test_planner_digest_limits_memory_placement_move_decisions_by_current_store(
                 "current_store": "memory",
                 "old_text": "Hermes runtime root is ~/.hermes.",
                 "summary": "Runtime root.",
-                "suggested_route": "likely_keep",
-                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "placement_observations": ["no_obvious_surface_signal"],
             },
         },
     ])
@@ -167,8 +165,7 @@ def test_planner_digest_exposes_memory_placement_target_skill_hints_as_context()
             "current_store": "memory",
             "old_text": "Gateway restart: check host script, KeepAlive, Safehouse bootstrap, then verify Slack delivery logs.",
             "summary": "Gateway restart workflow.",
-            "suggested_route": "likely_memory_to_skill",
-            "route_reasons": ["procedural_or_operational_workflow"],
+            "placement_observations": ["contains_operational_or_procedural_language"],
         },
     })
 
@@ -192,8 +189,7 @@ def test_render_planner_messages_exposes_memory_placement_candidates():
         "candidates": [{
             "evidence_id": "memory-place-user-runtime",
             "current_store": "user",
-            "suggested_route": "likely_move_user_to_memory",
-            "route_reasons": ["contains_runtime_path"],
+            "placement_observations": ["mentions_tool_or_runtime_term"],
             "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
             "summary": "Gmail observer path.",
             "allowed_decisions": ["keep", "move_user_to_memory", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
@@ -207,8 +203,9 @@ def test_render_planner_messages_exposes_memory_placement_candidates():
     assert "one explicit decision per memory placement candidate" in user_content
     assert "evidence_id=memory-place-user-runtime" in user_content
     assert "current_store=user" in user_content
-    assert "suggested_route=likely_move_user_to_memory" in user_content
-    assert "route_reasons=[contains_runtime_path]" in user_content
+    assert "placement_observations=[mentions_tool_or_runtime_term]" in user_content
+    assert "suggested_route" not in user_content
+    assert "route_reasons" not in user_content
     assert "Gmail observer=~/.hermes/automations/gmail-purchase-observer." in user_content
 
 
@@ -221,8 +218,7 @@ def test_render_planner_messages_includes_memory_placement_transaction_templates
             {
                 "evidence_id": "memory-place-user-runtime",
                 "current_store": "user",
-                "suggested_route": "likely_move_user_to_memory",
-                "route_reasons": ["contains_runtime_path"],
+                "placement_observations": ["mentions_tool_or_runtime_term"],
                 "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
                 "summary": "Gmail observer path.",
                 "allowed_decisions": ["keep", "move_user_to_memory", "memory_to_skill", "skip", "defer"],
@@ -230,8 +226,7 @@ def test_render_planner_messages_includes_memory_placement_transaction_templates
             {
                 "evidence_id": "memory-place-keep",
                 "current_store": "memory",
-                "suggested_route": "likely_keep",
-                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "placement_observations": ["no_obvious_surface_signal"],
                 "old_text": "Gateway uses host restart wrapper.",
                 "summary": "Gateway runtime fact.",
                 "allowed_decisions": ["keep", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
@@ -259,8 +254,7 @@ def test_render_planner_messages_only_shows_store_valid_memory_placement_move_te
             {
                 "evidence_id": "memory-place-user",
                 "current_store": "user",
-                "suggested_route": "likely_keep",
-                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "placement_observations": ["no_obvious_surface_signal"],
                 "old_text": "日本語docsは日本語中心、英語は必要時のみ。",
                 "summary": "Japanese docs preference.",
                 "allowed_decisions": ["keep", "move_user_to_memory", "memory_to_skill", "skip", "defer"],
@@ -268,8 +262,7 @@ def test_render_planner_messages_only_shows_store_valid_memory_placement_move_te
             {
                 "evidence_id": "memory-place-memory",
                 "current_store": "memory",
-                "suggested_route": "likely_keep",
-                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "placement_observations": ["no_obvious_surface_signal"],
                 "old_text": "Hermes runtime root is ~/.hermes.",
                 "summary": "Runtime root.",
                 "allowed_decisions": ["keep", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
@@ -354,7 +347,7 @@ def test_run_planner_accepts_memory_inventory_duplicate_cleanup_remove_transacti
     assert tx["evidence_ids"] == ["memory-inv-user-dup"]
 
 
-def test_render_planner_messages_prioritizes_memory_to_skill_placement_candidates():
+def test_render_planner_messages_does_not_prioritize_by_memory_placement_route():
     digest = build_planner_digest(pack())
     digest["memory_placement_candidates"] = {
         "candidate_count": 2,
@@ -363,8 +356,7 @@ def test_render_planner_messages_prioritizes_memory_to_skill_placement_candidate
             {
                 "evidence_id": "memory-place-keep",
                 "current_store": "memory",
-                "suggested_route": "likely_keep",
-                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "placement_observations": ["no_obvious_surface_signal"],
                 "old_text": "Gateway uses host restart wrapper.",
                 "summary": "Gateway runtime fact.",
                 "allowed_decisions": ["keep", "memory_to_skill", "skip", "defer"],
@@ -372,8 +364,7 @@ def test_render_planner_messages_prioritizes_memory_to_skill_placement_candidate
             {
                 "evidence_id": "memory-place-procedure",
                 "current_store": "memory",
-                "suggested_route": "likely_memory_to_skill",
-                "route_reasons": ["procedural_or_operational_workflow"],
+                "placement_observations": ["contains_operational_or_procedural_language"],
                 "old_text": "Gateway restart workflow: check logs, then restart host wrapper.",
                 "summary": "Gateway restart workflow.",
                 "allowed_decisions": ["keep", "memory_to_skill", "skip", "defer"],
@@ -384,22 +375,12 @@ def test_render_planner_messages_prioritizes_memory_to_skill_placement_candidate
     rendered = render_planner_messages(digest=digest)
     user_content = rendered["messages"][1]["content"]
 
-    priority_header = "Priority placement candidates requiring semantic judgment"
-    assert priority_header in user_content
-    priority_section = user_content.split(priority_header, 1)[1].split("## Memory placement candidates", 1)[0]
-    assert "put one transaction for each of them at the beginning of knowledge_transactions" in priority_section
-    assert "use the priority defer template with evidence_ids" in priority_section
-    assert "evidence_id=memory-place-procedure" in priority_section
-    assert "suggested_route=likely_memory_to_skill" in priority_section
-    assert "evidence_id=memory-place-keep" not in priority_section
-    assert '"transaction_kind":"memory_to_skill"' in priority_section
-    assert '"source_evidence_id":"memory-place-procedure"' in priority_section
-    assert '"reason":"procedural_memory_belongs_in_skill"' in priority_section
-    assert '"evidence_ids":["memory-place-procedure"]' in priority_section
-    assert '"reason":"memory_to_skill_target_unclear"' in priority_section
+    assert "Priority placement candidates requiring semantic judgment" not in user_content
+    assert "suggested_route" not in user_content
+    assert "likely_memory_to_skill" not in user_content
+    assert "Placement observations are observations, not recommendations" in user_content
     main_section = user_content.split("## Memory placement candidates", 1)[1]
-    assert main_section.index("evidence_id=memory-place-procedure") < main_section.index("evidence_id=memory-place-keep")
-
+    assert main_section.index("evidence_id=memory-place-keep") < main_section.index("evidence_id=memory-place-procedure")
 
 def test_render_planner_messages_uses_markdown_context_not_digest_dump():
     digest = build_planner_digest(pack())
@@ -499,15 +480,13 @@ def test_planner_quality_report_counts_memory_placement_actionability():
             {
                 "evidence_id": "memory-place-user-runtime",
                 "current_store": "user",
-                "suggested_route": "likely_move_user_to_memory",
-                "route_reasons": ["contains_runtime_path"],
+                "placement_observations": ["mentions_tool_or_runtime_term"],
                 "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
             },
             {
                 "evidence_id": "memory-place-procedure",
                 "current_store": "memory",
-                "suggested_route": "likely_memory_to_skill",
-                "route_reasons": ["procedural_or_operational_workflow"],
+                "placement_observations": ["contains_operational_or_procedural_language"],
                 "old_text": "Gateway restart: check logs.",
             },
         ],
@@ -532,8 +511,8 @@ def test_planner_quality_report_counts_memory_placement_actionability():
     assert placement["planner_decision_count"] == 1
     assert placement["default_handled_count"] == 0
     assert placement["unhandled_count"] == 1
-    assert placement["by_suggested_route"] == {"likely_memory_to_skill": 1, "likely_move_user_to_memory": 1}
-    assert placement["unhandled_by_route"] == {"likely_memory_to_skill": 1}
+    assert "by_suggested_route" not in placement
+    assert "unhandled_by_route" not in placement
 
 
 def test_planner_quality_report_separates_default_memory_placement_defers_from_planner_decisions():
@@ -544,8 +523,7 @@ def test_planner_quality_report_separates_default_memory_placement_defers_from_p
         "candidates": [{
             "evidence_id": "memory-place-user-runtime",
             "current_store": "user",
-            "suggested_route": "likely_move_user_to_memory",
-            "route_reasons": ["contains_runtime_path"],
+            "placement_observations": ["mentions_tool_or_runtime_term"],
             "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
         }],
     }
@@ -578,15 +556,13 @@ def test_planner_quality_report_explains_default_deferred_memory_placement_candi
             {
                 "evidence_id": "memory-place-procedure",
                 "current_store": "memory",
-                "suggested_route": "likely_memory_to_skill",
-                "route_reasons": ["procedural_or_operational_workflow"],
+                "placement_observations": ["contains_operational_or_procedural_language"],
                 "old_text": "Gateway restart workflow: check logs, then restart host wrapper.",
             },
             {
                 "evidence_id": "memory-place-user-runtime",
                 "current_store": "user",
-                "suggested_route": "likely_move_user_to_memory",
-                "route_reasons": ["contains_runtime_path"],
+                "placement_observations": ["mentions_tool_or_runtime_term"],
                 "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
             },
         ],
@@ -611,13 +587,12 @@ def test_planner_quality_report_explains_default_deferred_memory_placement_candi
     quality = build_planner_quality_report(digest=digest, planner=planner_result)
     placement = quality["memory_placement_actionability"]
 
-    assert placement["default_defer_by_route"] == {"likely_memory_to_skill": 1}
+    assert "default_defer_by_route" not in placement
     assert placement["default_defer_details"] == [
         {
             "evidence_id": "memory-place-procedure",
             "current_store": "memory",
-            "suggested_route": "likely_memory_to_skill",
-            "route_reasons": ["procedural_or_operational_workflow"],
+            "placement_observations": ["contains_operational_or_procedural_language"],
             "old_text": "Gateway restart workflow: check logs, then restart host wrapper.",
             "diagnosis": "planner_omitted_candidate_default_defer",
         }
@@ -632,8 +607,7 @@ def test_run_planner_defaults_unhandled_memory_placement_candidate_to_defer():
         "candidates": [{
             "evidence_id": "memory-place-user-runtime",
             "current_store": "user",
-            "suggested_route": "likely_move_user_to_memory",
-            "route_reasons": ["contains_runtime_path"],
+            "placement_observations": ["mentions_tool_or_runtime_term"],
             "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
         }],
     }
@@ -659,15 +633,13 @@ def test_run_planner_reports_raw_and_normalized_memory_placement_diagnostics():
             {
                 "evidence_id": "memory-place-procedure",
                 "current_store": "memory",
-                "suggested_route": "likely_memory_to_skill",
-                "route_reasons": ["procedural_or_operational_workflow"],
+                "placement_observations": ["contains_operational_or_procedural_language"],
                 "old_text": "Gateway restart workflow: check logs.",
             },
             {
                 "evidence_id": "memory-place-user-runtime",
                 "current_store": "user",
-                "suggested_route": "likely_move_user_to_memory",
-                "route_reasons": ["contains_runtime_path"],
+                "placement_observations": ["mentions_tool_or_runtime_term"],
                 "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
             },
         ],
@@ -709,8 +681,7 @@ def test_planner_quality_report_marks_raw_memory_placement_decision_dropped_by_n
         "candidates": [{
             "evidence_id": "memory-place-procedure",
             "current_store": "memory",
-            "suggested_route": "likely_memory_to_skill",
-            "route_reasons": ["procedural_or_operational_workflow"],
+            "placement_observations": ["contains_operational_or_procedural_language"],
             "old_text": "Gateway restart workflow: check logs.",
         }],
     }
@@ -742,8 +713,7 @@ def test_run_planner_rejects_memory_placement_move_direction_that_conflicts_with
         "candidates": [{
             "evidence_id": "memory-place-user-preference",
             "current_store": "user",
-            "suggested_route": "likely_keep",
-            "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+            "placement_observations": ["no_obvious_surface_signal"],
             "old_text": "日本語docsは日本語中心、英語は必要時のみ。",
         }],
     }
@@ -779,8 +749,7 @@ def test_run_planner_treats_memory_placement_decision_source_id_as_handled():
         "candidates": [{
             "evidence_id": "memory-place-user-runtime",
             "current_store": "user",
-            "suggested_route": "likely_move_user_to_memory",
-            "route_reasons": ["contains_runtime_path"],
+            "placement_observations": ["mentions_tool_or_runtime_term"],
             "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
         }],
     }

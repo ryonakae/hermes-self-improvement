@@ -248,7 +248,7 @@ def test_collect_memory_inventory_candidates_groups_near_duplicates(tmp_path):
     assert all("old_text" in entry for entry in inv["entries"])
 
 
-def test_exact_cross_store_duplicate_prefers_removing_memory_when_user_is_canonical(tmp_path):
+def test_exact_cross_store_duplicate_defers_without_route_derived_canonical_store(tmp_path):
     memory = tmp_path / "MEMORY.md"
     user = tmp_path / "USER.md"
     text = "Ryo prefers concise implementation reports with completed and remaining work clearly stated."
@@ -260,34 +260,12 @@ def test_exact_cross_store_duplicate_prefers_removing_memory_when_user_is_canoni
     assert item["inventory"]["group_kind"] == "semantic_duplicate"
     hint = item["target_resolution_hint"]
     assert hint["resolution_kind"] == "mutate_memory"
-    assert hint["suggested_action"] == "apply"
-    assert hint["reason"] == "duplicate_already_in_canonical_store"
-    assert hint["memory_operation_hint"] == {
-        "operation": "memory_remove",
-        "target": "memory",
-        "old_text": text,
-        "reason": "remove duplicate memory entry after preserving canonical user entry",
-    }
+    assert hint["suggested_action"] == "defer"
+    assert hint["reason"] == "cross_store_duplicate_requires_review"
+    assert "memory_operation_hint" not in hint
 
 
-def test_exact_cross_store_duplicate_cleanup_handles_larger_user_canonical_cluster(tmp_path):
-    memory = tmp_path / "MEMORY.md"
-    user = tmp_path / "USER.md"
-    text = "Ryo prefers concise implementation reports with completed and remaining work clearly stated."
-    memory.write_text(text + "\n§\n" + text + "\n", encoding="utf-8")
-    user.write_text(text + "\n", encoding="utf-8")
-
-    item = collect_memory_inventory_candidates(memory_paths={"memory": memory, "user": user})[0]
-
-    assert item["inventory"]["group_kind"] == "semantic_duplicate"
-    hint = item["target_resolution_hint"]
-    assert hint["suggested_action"] == "apply"
-    assert hint["reason"] == "duplicate_already_in_canonical_store"
-    assert hint["memory_operation_hint"]["target"] == "memory"
-    assert hint["memory_operation_hint"]["old_text"] == text
-
-
-def test_exact_cross_store_duplicate_cleanup_handles_larger_memory_canonical_cluster(tmp_path):
+def test_exact_cross_store_duplicate_with_runtime_text_still_defers_without_canonical_store(tmp_path):
     memory = tmp_path / "MEMORY.md"
     user = tmp_path / "USER.md"
     text = "Hermes runtime config lives in ~/.hermes/config.yaml."
@@ -298,14 +276,9 @@ def test_exact_cross_store_duplicate_cleanup_handles_larger_memory_canonical_clu
 
     assert item["inventory"]["group_kind"] == "semantic_duplicate"
     hint = item["target_resolution_hint"]
-    assert hint["suggested_action"] == "apply"
-    assert hint["reason"] == "duplicate_already_in_canonical_store"
-    assert hint["memory_operation_hint"] == {
-        "operation": "memory_remove",
-        "target": "user",
-        "old_text": text,
-        "reason": "remove duplicate user entry after preserving canonical memory entry",
-    }
+    assert hint["suggested_action"] == "defer"
+    assert hint["reason"] == "cross_store_duplicate_requires_review"
+    assert "memory_operation_hint" not in hint
 
 
 def test_near_duplicate_memory_group_has_defer_action_hint(tmp_path):
@@ -467,79 +440,39 @@ def test_build_evidence_pack_includes_memory_placement_candidates_when_both_stor
     assert any(item["kind"] == "memory_placement_candidate" for item in pack["evidence"])
 
 
-def test_memory_placement_candidate_hints_user_runtime_fact_should_move_to_memory(tmp_path):
+def test_memory_placement_candidate_exposes_observations_not_route_recommendations(tmp_path):
     user = tmp_path / "USER.md"
     memory = tmp_path / "MEMORY.md"
     user.write_text(
-        "Gmail observer=~/.hermes/automations/gmail-purchase-observer, cron=~/.hermes/cron/jobs.json.\n",
+        "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は独自修正せず上流比較。\n",
         encoding="utf-8",
     )
-    memory.write_text("Ryo prefers concise reports.\n", encoding="utf-8")
+    memory.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
 
     items = collect_memory_placement_candidates({"user": user, "memory": memory})
-    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "user")
-
     candidate = next(item for item in items if item["inventory"]["current_store"] == "user")
-    assert inventory["suggested_route"] == "likely_move_user_to_memory"
-    assert "contains_runtime_path" in inventory["route_reasons"]
-    assert inventory["old_text"].startswith("Gmail observer=")
+    inventory = candidate["inventory"]
+
+    assert "suggested_route" not in inventory
+    assert "route_reasons" not in inventory
+    assert not any(str(value).startswith("likely_") for value in json.dumps(inventory, ensure_ascii=False).split('"'))
+    assert inventory["old_text"].startswith("Hermes/plugin障害")
+    assert set(inventory["placement_observations"]) >= {
+        "mentions_tool_or_runtime_term",
+        "contains_policy_or_preference_language",
+    }
     assert "likely_targets" not in candidate
 
 
-def test_memory_placement_candidate_keeps_user_preference_even_with_runtime_words(tmp_path):
+def test_memory_placement_observations_do_not_encode_destination_recommendations(tmp_path):
     user = tmp_path / "USER.md"
     memory = tmp_path / "MEMORY.md"
-    user.write_text(
-        "Ryoの状況確認依頼ではplan/commit/repo/runtime/cron/runを確認し、完了/残件を答える。\n",
-        encoding="utf-8",
-    )
-    memory.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
-
-    items = collect_memory_placement_candidates({"user": user, "memory": memory})
-    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "user")
-
-    assert inventory["suggested_route"] == "likely_keep"
-    assert "user_preference_language" in inventory["route_reasons"]
-
-
-def test_memory_placement_candidate_defers_user_diary_even_with_ryo_and_reports_words(tmp_path):
-    user = tmp_path / "USER.md"
-    memory = tmp_path / "MEMORY.md"
-    user.write_text("Ryo completed the PR and reports are ready.\n", encoding="utf-8")
-    memory.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
-
-    items = collect_memory_placement_candidates({"user": user, "memory": memory})
-    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "user")
-
-    assert inventory["suggested_route"] == "likely_defer"
-    assert "stale_or_diary_language" in inventory["route_reasons"]
-
-
-def test_memory_placement_candidate_hints_memory_user_preference_should_move_to_user(tmp_path):
-    user = tmp_path / "USER.md"
-    memory = tmp_path / "MEMORY.md"
-    user.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
-    memory.write_text("Ryo prefers concise implementation reports with completed and remaining work clearly stated.\n", encoding="utf-8")
-
-    items = collect_memory_placement_candidates({"memory": memory, "user": user})
-    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "memory")
-
-    candidate = next(item for item in items if item["inventory"]["current_store"] == "memory")
-    assert inventory["suggested_route"] == "likely_move_memory_to_user"
-    assert "user_preference_language" in inventory["route_reasons"]
-    assert "likely_targets" not in candidate
-
-
-def test_memory_placement_candidate_hints_procedural_memory_should_route_to_skill(tmp_path):
-    user = tmp_path / "USER.md"
-    memory = tmp_path / "MEMORY.md"
-    user.write_text("Ryo prefers concise Japanese replies.\n", encoding="utf-8")
+    user.write_text("Gmail observer=~/.hermes/automations/gmail-purchase-observer, cron=~/.hermes/cron/jobs.json.\n", encoding="utf-8")
     memory.write_text("Gateway restart: check host script, then KeepAlive, then verify logs before retrying.\n", encoding="utf-8")
 
-    items = collect_memory_placement_candidates({"memory": memory, "user": user})
-    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "memory")
+    items = collect_memory_placement_candidates({"user": user, "memory": memory})
+    observations = [obs for item in items for obs in item["inventory"].get("placement_observations", [])]
 
-    candidate = next(item for item in items if item["inventory"]["current_store"] == "memory")
-    assert inventory["suggested_route"] == "likely_memory_to_skill"
-    assert "procedural_or_operational_workflow" in inventory["route_reasons"]
-    assert "likely_targets" not in candidate
+    assert observations
+    assert all("move" not in obs and "user_to_memory" not in obs and "memory_to_user" not in obs for obs in observations)
+    assert all(not obs.startswith("likely_") for obs in observations)

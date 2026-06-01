@@ -243,29 +243,41 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
     if not candidates:
         return "## Memory placement candidates\n- n/a\n"
     lines = [
-        "### Priority placement candidates requiring semantic judgment",
-        "These entries have suggested_route=likely_memory_to_skill. They are the highest-value placement candidates: put one transaction for each of them at the beginning of knowledge_transactions. Decide memory_to_skill when an exact editable target_skill is known; this means update/verify the existing skill first, then remove the source memory only after the skill-side change is safe. Do not skip merely because the skill already exists: if the memory duplicates or belongs in that skill, use memory_to_skill for source cleanup. Otherwise use the priority defer template with evidence_ids. Candidate target skills are context hints, not commands; if none is a good semantic fit, defer with reason=memory_to_skill_target_unclear. Do this before reviewing low-action likely_keep entries.",
+        "## Memory placement candidates",
+        "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, move_user_to_memory, move_memory_to_user, memory_to_skill, skip, or defer. Placement observations are observations, not recommendations; do not follow them mechanically. Decide semantic destination from old_text, current_store, official_boundary, candidate_target_skills, and full context. If mixed or unclear, keep current store or defer. Move operations are directions from the current store: use move_user_to_memory only when current_store=user; use move_memory_to_user only when current_store=memory. Use exact old_text when moving/removing.",
+        "For each memory placement candidate, copy exactly one template into knowledge_transactions and fill only the fields that are already known. Do not omit a candidate just because the answer is keep/skip/defer. Candidate target skills are context hints, not commands.",
     ]
-    priority_candidates = [item for item in candidates if str(item.get("suggested_route") or "") == "likely_memory_to_skill"]
-    if priority_candidates:
-        for item in priority_candidates[:12]:
-            evidence_id = _clip(item.get("evidence_id"), max_chars=80)
-            old_text = _clip(item.get("old_text"), max_chars=260)
-            reasons = item.get("route_reasons") if isinstance(item.get("route_reasons"), list) else []
-            reasons_str = ",".join(str(reason) for reason in reasons[:6]) if reasons else "missing_route_reason"
-            raw_target_skills = item.get("candidate_target_skills")
-            target_skills: list[Any] = raw_target_skills if isinstance(raw_target_skills, list) else []
-            target_skill_bits = []
-            for skill in target_skills[:3]:
-                if not isinstance(skill, dict) or not skill.get("skill"):
-                    continue
-                target_skill_bits.append(
-                    f"{_clip(skill.get('skill'), max_chars=80)}({_clip(skill.get('match_reason'), max_chars=60)})"
-                )
-            target_skill_str = ",".join(target_skill_bits) or "none"
-            lines.append(
-                f"- evidence_id={evidence_id}; current_store={_clip(item.get('current_store'), max_chars=40)}; suggested_route={_clip(item.get('suggested_route'), max_chars=80)}; route_reasons=[{reasons_str}]; candidate_target_skills=[{target_skill_str}]; old_text={old_text}"
+    ordered_candidates = sorted(candidates, key=lambda item: str(item.get("evidence_id") or ""))
+    for item in ordered_candidates[:40]:
+        evidence_id = _clip(item.get("evidence_id"), max_chars=80)
+        old_text = _clip(item.get("old_text"), max_chars=260)
+        observations = item.get("placement_observations") if isinstance(item.get("placement_observations"), list) else []
+        observations_str = ",".join(str(observation) for observation in observations[:6]) if observations else "no_obvious_surface_signal"
+        decisions = item.get("allowed_decisions") if isinstance(item.get("allowed_decisions"), list) else []
+        decisions_str = ",".join(str(decision) for decision in decisions[:8]) if decisions else "keep,move_user_to_memory,move_memory_to_user,memory_to_skill,skip,defer"
+        raw_target_skills = item.get("candidate_target_skills")
+        target_skills: list[Any] = raw_target_skills if isinstance(raw_target_skills, list) else []
+        target_skill_bits = []
+        for skill in target_skills[:3]:
+            if not isinstance(skill, dict) or not skill.get("skill"):
+                continue
+            target_skill_bits.append(
+                f"{_clip(skill.get('skill'), max_chars=80)}({_clip(skill.get('match_reason'), max_chars=60)})"
             )
+        target_skill_str = ",".join(target_skill_bits) or "none"
+        official_boundary = _clip(item.get("official_boundary"), max_chars=360)
+        boundary_part = f"; official_boundary={official_boundary}" if official_boundary else ""
+        lines.append(
+            f"- evidence_id={evidence_id}; current_store={_clip(item.get('current_store'), max_chars=40)}; placement_observations=[{observations_str}]; allowed_decisions=[{decisions_str}]; candidate_target_skills=[{target_skill_str}]{boundary_part}; old_text={old_text}"
+        )
+        template_base = {"source_evidence_id": evidence_id, "source_old_text": old_text}
+        move_operation = placement_move_operation_for_current_store(str(item.get("current_store") or ""))
+        if move_operation:
+            lines.append(
+                "  - move template: "
+                + json.dumps({"operation": move_operation, **template_base, "reason": "placement_boundary"}, ensure_ascii=False, separators=(",", ":"))
+            )
+        if target_skill_bits:
             lines.append(
                 "  - memory_to_skill template when target_skill is known: "
                 + json.dumps({
@@ -279,49 +291,6 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
                     "reason": "procedural_memory_belongs_in_skill",
                 }, ensure_ascii=False, separators=(",", ":"))
             )
-            lines.append(
-                "  - priority defer template when no exact target_skill is known: "
-                + json.dumps({
-                    "decision": "defer",
-                    "target_store": "unresolved",
-                    "operation": "none",
-                    "evidence_ids": [evidence_id],
-                    "reason": "memory_to_skill_target_unclear",
-                }, ensure_ascii=False, separators=(",", ":"))
-            )
-    else:
-        lines.append("- n/a")
-    lines.extend([
-        "",
-        "## Memory placement candidates",
-        "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, move_user_to_memory, move_memory_to_user, memory_to_skill, skip, or defer. Treat suggested_route as advisory, not authority. Move operations are directions from the current store: use move_user_to_memory only when current_store=user; use move_memory_to_user only when current_store=memory. If the entry already belongs where it is, use the keep/skip template. Use exact old_text when moving/removing. Defer if the entry is valuable but too broad, too long, or ambiguous.",
-        "For each memory placement candidate, copy exactly one template into knowledge_transactions and fill only the fields that are already known. Do not omit a candidate just because the answer is keep/skip/defer.",
-    ])
-    priority_order = {
-        "likely_memory_to_skill": 0,
-        "likely_move_user_to_memory": 1,
-        "likely_move_memory_to_user": 1,
-        "likely_defer": 2,
-        "likely_keep": 3,
-    }
-    ordered_candidates = sorted(candidates, key=lambda item: (priority_order.get(str(item.get("suggested_route") or ""), 2), str(item.get("evidence_id") or "")))
-    for item in ordered_candidates[:40]:
-        evidence_id = _clip(item.get("evidence_id"), max_chars=80)
-        old_text = _clip(item.get("old_text"), max_chars=260)
-        reasons = item.get("route_reasons") if isinstance(item.get("route_reasons"), list) else []
-        reasons_str = ",".join(str(reason) for reason in reasons[:6]) if reasons else "missing_route_reason"
-        decisions = item.get("allowed_decisions") if isinstance(item.get("allowed_decisions"), list) else []
-        decisions_str = ",".join(str(decision) for decision in decisions[:8]) if decisions else "keep,move_user_to_memory,move_memory_to_user,memory_to_skill,skip,defer"
-        lines.append(
-            f"- evidence_id={evidence_id}; current_store={_clip(item.get('current_store'), max_chars=40)}; suggested_route={_clip(item.get('suggested_route'), max_chars=80)}; route_reasons=[{reasons_str}]; allowed_decisions=[{decisions_str}]; old_text={old_text}"
-        )
-        template_base = {"source_evidence_id": evidence_id, "source_old_text": old_text}
-        move_operation = placement_move_operation_for_current_store(str(item.get("current_store") or ""))
-        if move_operation:
-            lines.append(
-                "  - move template: "
-                + json.dumps({"operation": move_operation, **template_base, "reason": "placement_boundary"}, ensure_ascii=False, separators=(",", ":"))
-            )
         lines.append(
             "  - keep/skip template: "
             + json.dumps({"decision": "skip", "target_store": "none", "operation": "none", "evidence_ids": [evidence_id], "reason": "keep_current_store"}, ensure_ascii=False, separators=(",", ":"))
@@ -333,7 +302,6 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
     if int(placement.get("omitted_count") or 0):
         lines.append(f"- omitted memory placement candidates: {int(placement.get('omitted_count') or 0)}")
     return "\n".join(lines).rstrip() + "\n"
-
 
 def _overlay_addendum(overlay: dict[str, Any] | None, key: str = "system_addendum") -> str:
     if not isinstance(overlay, dict):

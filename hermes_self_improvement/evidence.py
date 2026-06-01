@@ -1866,41 +1866,19 @@ def _stale_memory_pair_action_hint(entries: list[dict[str, Any]]) -> dict[str, A
     }
 
 
-def _canonical_store_for_memory_text(old_text: str) -> str | None:
-    memory_route = _memory_placement_route_hint("memory", old_text).get("suggested_route")
-    user_route = _memory_placement_route_hint("user", old_text).get("suggested_route")
-    if memory_route == "likely_move_memory_to_user":
-        return "user"
-    if user_route == "likely_move_user_to_memory":
-        return "memory"
-    return None
-
-
 def _cross_store_duplicate_action_hint(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
     entry_texts = {str(entry.get("old_text") or "").strip() for entry in entries}
     entry_texts.discard("")
     if len(entry_texts) != 1:
         return None
-    old_text = next(iter(entry_texts))
     targets = {str(entry.get("target") or "memory") for entry in entries}
     if not {"memory", "user"}.issubset(targets):
         return None
-    canonical_target = _canonical_store_for_memory_text(old_text)
-    if canonical_target not in {"memory", "user"}:
-        return None
-    duplicate_target = "memory" if canonical_target == "user" else "user"
-    if not any(str(entry.get("target") or "memory") == duplicate_target for entry in entries):
-        return None
     return {
         "resolution_kind": "mutate_memory",
-        "suggested_action": "apply",
-        "reason": "duplicate_already_in_canonical_store",
-        "memory_operation_hint": {
-            "operation": "memory_remove",
-            "target": duplicate_target,
-            "old_text": _redact_text(old_text, max_chars=500),
-            "reason": f"remove duplicate {duplicate_target} entry after preserving canonical {canonical_target} entry",
-        },
+        "suggested_action": "defer",
+        "reason": "cross_store_duplicate_requires_review",
+        "entry_count": len(entries),
     }
 
 
@@ -1994,76 +1972,22 @@ def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
     return any(marker in text for marker in markers)
 
 
-def _memory_placement_route_hint(current_store: str, old_text: str) -> dict[str, Any]:
+def _memory_placement_observations(old_text: str) -> list[str]:
     lowered = old_text.lower()
-    user_markers = (
-        "prefers",
-        "preference",
-        "expects",
-        "communication",
-        "文体",
-        "好む",
-        "望む",
-        "報告",
-        "質問では",
-        "依頼では",
-        "完了/残件",
-    )
-    runtime_markers = (
-        "~/",
-        "/users/",
-        "/opt/",
-        "cron",
-        "config",
-        "socket",
-        "provider",
-        "gateway",
-        "docker",
-        "compose",
-        "api",
-        "token",
-        "plugin",
-    )
-    procedural_markers = (
-        "when ",
-        "before ",
-        "after ",
-        "run ",
-        "check ",
-        "verify",
-        "restart",
-        "troubleshoot",
-        "workflow",
-        "手順",
-        "検証",
-        "確認",
-        "運用",
-    )
-    diary_markers = (
-        "completed",
-        "fixed",
-        "submitted",
-        "merged",
-        "phase",
-        " done",
-        "yesterday",
-        "today",
-        "pr ",
-        "issue ",
-    )
-    if current_store == "memory" and _contains_any(lowered, user_markers):
-        return {"suggested_route": "likely_move_memory_to_user", "route_reasons": ["user_preference_language"]}
-    if current_store == "user" and _contains_any(lowered, user_markers):
-        return {"suggested_route": "likely_keep", "route_reasons": ["user_preference_language"]}
-    if _contains_any(lowered, diary_markers):
-        return {"suggested_route": "likely_defer", "route_reasons": ["stale_or_diary_language"]}
-    if current_store == "memory" and _contains_any(lowered, procedural_markers):
-        return {"suggested_route": "likely_memory_to_skill", "route_reasons": ["procedural_or_operational_workflow"]}
-    if current_store == "user" and _contains_any(lowered, runtime_markers):
-        return {"suggested_route": "likely_move_user_to_memory", "route_reasons": ["contains_runtime_path"]}
+    observations: list[str] = []
+    if _contains_any(lowered, ("~/", "/users/", "/opt/", "cron", "config", "socket", "provider", "gateway", "docker", "compose", "api", "token", "plugin")):
+        observations.append("mentions_tool_or_runtime_term")
+    if _contains_any(lowered, ("prefers", "preference", "expects", "communication", "文体", "好む", "望む", "報告", "質問では", "依頼では", "完了/残件", "変更禁止")):
+        observations.append("contains_policy_or_preference_language")
+    if _contains_any(lowered, ("completed", "fixed", "submitted", "merged", "phase", " done", "yesterday", "today", "pr ", "issue ")):
+        observations.append("mentions_timebound_work_item")
+    if _contains_any(lowered, ("when ", "before ", "after ", "run ", "check ", "verify", "restart", "troubleshoot", "workflow", "手順", "検証", "確認", "運用")):
+        observations.append("contains_operational_or_procedural_language")
     if len(old_text) > 300:
-        return {"suggested_route": "likely_defer", "route_reasons": ["too_verbose"]}
-    return {"suggested_route": "likely_keep", "route_reasons": ["store_matches_known_boundary_or_low_signal"]}
+        observations.append("long_entry")
+    if not observations:
+        observations.append("no_obvious_surface_signal")
+    return observations[:6]
 
 
 def collect_memory_placement_candidates(memory_paths: dict[str, Any] | None, *, limit: int = 40) -> list[dict[str, Any]]:
@@ -2082,7 +2006,7 @@ def collect_memory_placement_candidates(memory_paths: dict[str, Any] | None, *, 
             "old_text": _redact_text(old_text, max_chars=500),
             "summary": _redact_text(str(entry.get("summary") or old_text), max_chars=240),
             "official_boundary": MEMORY_PLACEMENT_BOUNDARY,
-            **_memory_placement_route_hint(current_store, old_text),
+            "placement_observations": _memory_placement_observations(old_text),
             "allowed_recommendations": [
                 "keep",
                 "move_user_to_memory",
