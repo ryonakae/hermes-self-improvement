@@ -290,6 +290,65 @@ def _memory_placement_candidates_digest(evidence_pack: dict[str, Any], editable_
     return {"candidate_count": len(candidates), "omitted_count": omitted, "candidates": candidates}
 
 
+def _semantic_knowledge_candidates_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    raw_evidence = evidence_pack.get("evidence")
+    evidence = raw_evidence if isinstance(raw_evidence, list) else []
+    out = {
+        "mixed_entries": [],
+        "cross_store_related_pairs": [],
+        "skill_coverage": [],
+        "skill_ambiguity": [],
+    }
+    for item in evidence:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("kind") or "")
+        if kind == "mixed_entry_candidate" and len(out["mixed_entries"]) < 20:
+            out["mixed_entries"].append({
+                "evidence_id": str(item.get("id") or item.get("evidence_id") or ""),
+                "source_evidence_id": str(item.get("source_evidence_id") or ""),
+                "current_store": str(item.get("current_store") or ""),
+                "old_text": _redacted_preview(item.get("old_text"), max_chars=260),
+                "observations": [str(value) for value in (item.get("observations") or [])[:6] if str(value)],
+                "official_boundary": _redacted_preview(item.get("official_boundary"), max_chars=260),
+            })
+        elif kind == "cross_store_related_pair" and len(out["cross_store_related_pairs"]) < 20:
+            out["cross_store_related_pairs"].append({
+                "evidence_id": str(item.get("id") or item.get("evidence_id") or ""),
+                "user_evidence_id": str(item.get("user_evidence_id") or ""),
+                "memory_evidence_id": str(item.get("memory_evidence_id") or ""),
+                "user_text": _redacted_preview(item.get("user_text"), max_chars=220),
+                "memory_text": _redacted_preview(item.get("memory_text"), max_chars=220),
+                "relation_observations": [str(value) for value in (item.get("relation_observations") or [])[:6] if str(value)],
+            })
+        elif kind == "skill_coverage_candidate" and len(out["skill_coverage"]) < 20:
+            matches = []
+            for match in item.get("matching_skills") or []:
+                if isinstance(match, dict):
+                    matches.append({
+                        "name": str(match.get("name") or ""),
+                        "editable": bool(match.get("editable")),
+                        "match_reason": _redacted_preview(match.get("match_reason"), max_chars=80),
+                        "excerpt": _redacted_preview(match.get("excerpt"), max_chars=140),
+                    })
+            out["skill_coverage"].append({
+                "evidence_id": str(item.get("id") or item.get("evidence_id") or ""),
+                "source_evidence_id": str(item.get("source_evidence_id") or ""),
+                "source_old_text": _redacted_preview(item.get("source_old_text"), max_chars=220),
+                "matching_skills": matches[:3],
+                "notes": _redacted_preview(item.get("notes"), max_chars=220),
+            })
+        elif kind == "skill_ambiguity_candidate" and len(out["skill_ambiguity"]) < 20:
+            out["skill_ambiguity"].append({
+                "evidence_id": str(item.get("id") or item.get("evidence_id") or ""),
+                "ambiguous_name": str(item.get("ambiguous_name") or ""),
+                "conflicting_paths": [_redacted_preview(value, max_chars=160) for value in (item.get("conflicting_paths") or [])[:4]],
+                "observations": [str(value) for value in (item.get("observations") or [])[:6] if str(value)],
+            })
+    out["counts"] = {key: len(value) for key, value in out.items() if isinstance(value, list)}
+    return out
+
+
 def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
     event = item.get("event") if isinstance(item.get("event"), dict) else {}
     out = {
@@ -717,6 +776,7 @@ def build_planner_runtime_digest(
         "knowledge_maintenance": knowledge_maintenance,
         "built_in_memory_inventory": _built_in_memory_inventory_digest(evidence_pack),
         "memory_placement_candidates": _memory_placement_candidates_digest(evidence_pack, candidate_rows),
+        "semantic_knowledge_candidates": _semantic_knowledge_candidates_digest(evidence_pack),
         "memory_inventory_groups": _memory_inventory_groups_digest(evidence_pack),
         "unresolved_observations": unresolved_observations[:20],
         "filtered_skill_candidate_count_by_reason": filtered_skill_candidate_count_by_reason,
@@ -1180,7 +1240,7 @@ def _is_canonical_knowledge_transaction(raw: dict[str, Any]) -> bool:
         return True
     if target_store in {"builtin_user", "builtin_memory", "external_memory", "unresolved", "none"}:
         return True
-    if transaction_kind in {"memory", "placement_move", "unresolved", "none"}:
+    if transaction_kind in {"memory", "placement_move", "placement_split", "memory_rewrite", "duplicate_cleanup", "keep_same_topic_different_store", "skill_ambiguity_cleanup", "unresolved", "none"}:
         return True
     if transaction_kind == "memory_to_skill" and target_store == "skill":
         return True

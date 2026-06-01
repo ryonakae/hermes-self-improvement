@@ -1990,6 +1990,211 @@ def _memory_placement_observations(old_text: str) -> list[str]:
     return observations[:6]
 
 
+def _neutral_mixed_entry_observations(old_text: str) -> list[str]:
+    lowered = old_text.lower()
+    observations: list[str] = []
+    clause_count = sum(old_text.count(sep) for sep in ("。", ";", "；", "、"))
+    if clause_count >= 2 or len(old_text) > 120:
+        observations.append("contains_multiple_policy_or_convention_phrases")
+    if _contains_any(lowered, ("hermes", "plugin", "skill", "cron", "gateway", "runtime", "repo", "provider", "docker", "api", "~/.")):
+        observations.append("mentions_tool_project_or_runtime_terms")
+    if _contains_any(lowered, ("test", "比較", "確認", "検証", "変更禁止", "workflow", "手順", "when ", "before ", "after ")):
+        observations.append("mentions_procedure_or_operational_terms")
+    if len(old_text) > 300:
+        observations.append("long_entry")
+    return observations[:4]
+
+
+def _memory_place_id_for_entry(entry: dict[str, Any]) -> str:
+    old_text = str(entry.get("old_text") or "").strip()
+    inventory = {
+        "group_kind": "placement_review",
+        "current_store": str(entry.get("target") or "").strip(),
+        "old_text": _redact_text(old_text, max_chars=500),
+        "summary": _redact_text(str(entry.get("summary") or old_text), max_chars=240),
+        "official_boundary": MEMORY_PLACEMENT_BOUNDARY,
+        "placement_observations": _memory_placement_observations(old_text),
+        "allowed_decisions": [
+            "keep",
+            "move_user_to_memory" if str(entry.get("target") or "").strip() == "user" else "move_memory_to_user",
+            "memory_to_skill",
+            "skip",
+            "defer",
+        ],
+        "hints": [
+            "LLM decides USER vs MEMORY vs Skill placement",
+            "program only enforces hard stops and official tool execution",
+            "move requires exact old_text and add-before-remove execution",
+        ],
+    }
+    return _stable_id("memory_place", inventory)
+
+
+def _shared_memory_relation_observations(user_text: str, memory_text: str) -> list[str]:
+    user_lower = user_text.lower()
+    memory_lower = memory_text.lower()
+    anchors = ("google workspace", "hermes", "hindsight", "gateway", "gmail", "cron", "skill", "plugin", "workspace")
+    if any(anchor in user_lower and anchor in memory_lower for anchor in anchors) or len(_memory_tokens(user_text) & _memory_tokens(memory_text)) >= 1:
+        return ["shared_topic_terms", "shared_named_entities", "bounded_text_overlap"]
+    return []
+
+
+def _skill_match_score(memory_text: str, skill: dict[str, Any]) -> int:
+    haystack = " ".join(str(skill.get(key) or "") for key in ("name", "description", "path"))
+    tokens = _memory_tokens(memory_text)
+    skill_tokens = _memory_tokens(haystack)
+    score = len(tokens & skill_tokens)
+    lowered = memory_text.lower()
+    name = str(skill.get("name") or "").lower()
+    for part in name.replace("-", " ").split():
+        if len(part) >= 4 and part in lowered:
+            score += 2
+    return score
+
+
+def _skill_coverage_candidates(entries: list[dict[str, Any]], skill_candidates: list[dict[str, Any]], *, limit: int = 10) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for entry in entries:
+        old_text = str(entry.get("old_text") or "").strip()
+        if not old_text:
+            continue
+        matches = []
+        for skill in skill_candidates:
+            if not isinstance(skill, dict) or not skill.get("name"):
+                continue
+            score = _skill_match_score(old_text, skill)
+            if score <= 0:
+                continue
+            matches.append((score, str(skill.get("name") or ""), skill))
+        if not matches:
+            continue
+        matches.sort(key=lambda item: (-item[0], item[1]))
+        matching_skills = []
+        for _, _, skill in matches[:3]:
+            matching_skills.append({
+                "name": str(skill.get("name") or ""),
+                "editable": bool(skill.get("mutable", skill.get("editable", False))),
+                "protected_reason": skill.get("protected_reason"),
+                "match_reason": "title/reference/topic overlap",
+                "excerpt": _redact_text(str(skill.get("description") or skill.get("path") or ""), max_chars=180),
+            })
+        source_id = _memory_place_id_for_entry(entry)
+        out.append({
+            "id": _stable_id("skill_cov", {"source": source_id, "skills": [item["name"] for item in matching_skills]}),
+            "kind": "skill_coverage_candidate",
+            "source": "inventory",
+            "evidence_id": _stable_id("skill_cov", {"source": source_id, "skills": [item["name"] for item in matching_skills]}),
+            "source_evidence_id": source_id,
+            "source_old_text": _redact_text(old_text, max_chars=500),
+            "matching_skills": matching_skills,
+            "notes": "Advisory context only. Planner decides whether existing skill coverage is enough, needs patch, has no fit, or whether a new skill is still justified by strong uncovered evidence.",
+            "risk": "low",
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _skill_ambiguity_candidates(skill_candidates: list[dict[str, Any]], *, limit: int = 10) -> list[dict[str, Any]]:
+    paths_by_basename: dict[str, list[str]] = {}
+    for skill in skill_candidates:
+        if not isinstance(skill, dict):
+            continue
+        path = str(skill.get("path") or skill.get("file_path") or "")
+        name = str(skill.get("name") or "").strip()
+        if path and name:
+            paths_by_basename.setdefault(name, []).append(path)
+        for ref in skill.get("references") or []:
+            ref_path = str(ref or "")
+            basename = Path(ref_path).stem
+            if basename:
+                paths_by_basename.setdefault(basename, []).append(ref_path)
+    out: list[dict[str, Any]] = []
+    for basename, paths in sorted(paths_by_basename.items()):
+        unique_paths = sorted({path for path in paths if path})
+        if len(unique_paths) < 2:
+            continue
+        out.append({
+            "id": _stable_id("skill_ambiguous", {"name": basename, "paths": unique_paths}),
+            "kind": "skill_ambiguity_candidate",
+            "source": "inventory",
+            "evidence_id": _stable_id("skill_ambiguous", {"name": basename, "paths": unique_paths}),
+            "ambiguous_name": basename,
+            "conflicting_paths": unique_paths[:4],
+            "observations": ["skill_view_ambiguous", "reference_basename_collides_with_skill_name"],
+            "notes": "Planner may defer, patch docs, or propose reference rename; do not remove blindly.",
+            "risk": "low",
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def collect_memory_relation_candidates(
+    memory_paths: dict[str, Any] | None,
+    *,
+    skill_candidates: list[dict[str, Any]] | None = None,
+    limit: int = 40,
+) -> list[dict[str, Any]]:
+    if not isinstance(memory_paths, dict) or not {"memory", "user"}.issubset(set(memory_paths)):
+        return []
+    entries = _memory_entries(memory_paths)
+    out: list[dict[str, Any]] = []
+    for entry in entries:
+        if len(out) >= limit:
+            break
+        old_text = str(entry.get("old_text") or "").strip()
+        if not old_text:
+            continue
+        observations = _neutral_mixed_entry_observations(old_text)
+        if len(observations) >= 2:
+            source_id = _memory_place_id_for_entry(entry)
+            out.append({
+                "id": _stable_id("mixed_memory", {"source": source_id, "text": old_text}),
+                "kind": "mixed_entry_candidate",
+                "source": "inventory",
+                "evidence_id": _stable_id("mixed_memory", {"source": source_id, "text": old_text}),
+                "source_evidence_id": source_id,
+                "current_store": str(entry.get("target") or ""),
+                "old_text": _redact_text(old_text, max_chars=500),
+                "observations": observations,
+                "official_boundary": MEMORY_PLACEMENT_BOUNDARY,
+                "notes": "Observations are not recommendations. Planner decides keep/move/split/defer.",
+                "risk": "medium",
+            })
+    users = [entry for entry in entries if str(entry.get("target") or "") == "user"]
+    memories = [entry for entry in entries if str(entry.get("target") or "") == "memory"]
+    for user_entry in users:
+        for memory_entry in memories:
+            if len(out) >= limit:
+                break
+            user_text = str(user_entry.get("old_text") or "").strip()
+            memory_text = str(memory_entry.get("old_text") or "").strip()
+            observations = _shared_memory_relation_observations(user_text, memory_text)
+            if not observations:
+                continue
+            user_id = _memory_place_id_for_entry(user_entry)
+            memory_id = _memory_place_id_for_entry(memory_entry)
+            out.append({
+                "id": _stable_id("cross_store_pair", {"user": user_id, "memory": memory_id}),
+                "kind": "cross_store_related_pair",
+                "source": "inventory",
+                "evidence_id": _stable_id("cross_store_pair", {"user": user_id, "memory": memory_id}),
+                "user_evidence_id": user_id,
+                "memory_evidence_id": memory_id,
+                "user_text": _redact_text(user_text, max_chars=500),
+                "memory_text": _redact_text(memory_text, max_chars=500),
+                "relation_observations": observations,
+                "official_boundary": MEMORY_PLACEMENT_BOUNDARY,
+                "notes": "Planner may choose duplicate_cleanup, keep_same_topic_different_store, rewrite, or defer.",
+                "risk": "low",
+            })
+    if skill_candidates:
+        out.extend(_skill_coverage_candidates(entries, skill_candidates, limit=max(0, limit - len(out))))
+        out.extend(_skill_ambiguity_candidates(skill_candidates, limit=max(0, limit - len(out))))
+    return out[:limit]
+
+
 def collect_memory_placement_candidates(memory_paths: dict[str, Any] | None, *, limit: int = 40) -> list[dict[str, Any]]:
     if not isinstance(memory_paths, dict) or not {"memory", "user"}.issubset(set(memory_paths)):
         return []
@@ -2141,7 +2346,8 @@ def build_evidence_pack(
     )
     memory_inventory_evidence = collect_memory_inventory_candidates(memory_paths)
     memory_placement_evidence = collect_memory_placement_candidates(memory_paths)
-    inventory_evidence = skill_inventory_evidence + built_in_memory_inventory_evidence + memory_inventory_evidence + memory_placement_evidence
+    memory_relation_evidence = collect_memory_relation_candidates(memory_paths, skill_candidates=skill_candidates)
+    inventory_evidence = skill_inventory_evidence + built_in_memory_inventory_evidence + memory_inventory_evidence + memory_placement_evidence + memory_relation_evidence
     if inventory_evidence:
         evidence.extend(inventory_evidence)
         if skill_inventory_evidence:
@@ -2150,6 +2356,10 @@ def build_evidence_pack(
             kind_counts["memory_inventory_candidate"] += len(built_in_memory_inventory_evidence) + len(memory_inventory_evidence)
         if memory_placement_evidence:
             kind_counts["memory_placement_candidate"] += len(memory_placement_evidence)
+        for item in memory_relation_evidence:
+            kind = str(item.get("kind") or "")
+            if kind:
+                kind_counts[kind] += 1
     views = _views_for_evidence(evidence)
     inventory_health = build_inventory_health_snapshot(
         raw_skill_candidates=raw_skill_candidates,

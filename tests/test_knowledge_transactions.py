@@ -322,3 +322,121 @@ def test_normalize_knowledge_transaction_preserves_memory_to_skill_product_field
     assert none["transaction_kind"] == "none"
     assert none["operation"] == "none"
     assert none["source_old_text"] == ""
+
+
+
+def test_normalize_new_semantic_memory_transactions_preserves_source_fields():
+    split = normalize_knowledge_transaction({
+        "transaction_kind": "placement_split",
+        "decision": "apply",
+        "operation": "split",
+        "source_store": "builtin_user",
+        "source_id": "memory_place_mixed",
+        "source_old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。",
+        "source_replacement": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。",
+        "destination_store": "builtin_memory",
+        "destination_content": "Hermes/plugin障害: PR取込test失敗は上流比較。",
+        "reason": "mixed preference and project convention",
+    })
+
+    assert split["decision"] == "apply"
+    assert split["transaction_kind"] == "placement_split"
+    assert split["operation"] == "split"
+    assert split["target_store"] == "builtin_memory"
+    assert split["target_id"] == "memory"
+    assert split["source_id"] == "memory_place_mixed"
+    assert split["source_old_text"].startswith("Hermes/plugin障害")
+    assert split["source_replacement"] == "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。"
+    assert split["destination_content"] == "Hermes/plugin障害: PR取込test失敗は上流比較。"
+    assert "memory_place_mixed" in split["evidence_ids"]
+
+    rewrite = normalize_knowledge_transaction({
+        "transaction_kind": "memory_rewrite",
+        "decision": "apply",
+        "operation": "replace",
+        "target_store": "builtin_memory",
+        "source_id": "memory_place_verbose",
+        "source_old_text": "old verbose durable fact",
+        "replacement_content": "compact durable fact",
+        "reason": "same store compaction",
+    })
+
+    assert rewrite["decision"] == "apply"
+    assert rewrite["transaction_kind"] == "memory_rewrite"
+    assert rewrite["operation"] == "replace"
+    assert rewrite["target_store"] == "builtin_memory"
+    assert rewrite["target_id"] == "memory"
+    assert rewrite["source_store"] == "builtin_memory"
+    assert rewrite["source_old_text"] == "old verbose durable fact"
+    assert rewrite["replacement_content"] == "compact durable fact"
+
+    duplicate = normalize_knowledge_transaction({
+        "transaction_kind": "duplicate_cleanup",
+        "decision": "apply",
+        "operation": "remove",
+        "canonical_store": "builtin_memory",
+        "source_store": "builtin_user",
+        "source_id": "user_duplicate",
+        "source_old_text": "duplicate text",
+        "related_evidence_ids": ["memory_canonical"],
+        "reason": "exact duplicate",
+    })
+
+    assert duplicate["decision"] == "apply"
+    assert duplicate["transaction_kind"] == "duplicate_cleanup"
+    assert duplicate["operation"] == "remove"
+    assert duplicate["target_store"] == "builtin_user"
+    assert duplicate["target_id"] == "user"
+    assert duplicate["source_old_text"] == "duplicate text"
+    assert duplicate["canonical_store"] == "builtin_memory"
+    assert duplicate["related_evidence_ids"] == ["memory_canonical"]
+
+
+def test_normalize_new_semantic_report_only_transactions_survive():
+    keep = normalize_knowledge_transaction({
+        "transaction_kind": "keep_same_topic_different_store",
+        "decision": "skip",
+        "operation": "keep",
+        "source_id": "cross_store_pair_google",
+        "related_evidence_ids": ["user_google", "memory_google"],
+        "reason": "same topic but different USER/MEMORY semantics",
+    })
+
+    assert keep["decision"] == "skip"
+    assert keep["transaction_kind"] == "keep_same_topic_different_store"
+    assert keep["operation"] == "keep"
+    assert keep["target_store"] == "none"
+    assert keep["source_id"] == "cross_store_pair_google"
+    assert keep["related_evidence_ids"] == ["user_google", "memory_google"]
+
+    ambiguity = normalize_knowledge_transaction({
+        "transaction_kind": "skill_ambiguity_cleanup",
+        "decision": "defer",
+        "operation": "defer_manual_review",
+        "ambiguous_name": "gmail-purchase-live-context",
+        "conflicting_paths": ["skills/gmail-purchase-live-context/SKILL.md", "skills/hermes-memory-and-live-context/references/gmail-purchase-live-context.md"],
+        "reason": "ambiguous skill/reference basename",
+    })
+
+    assert ambiguity["decision"] == "defer"
+    assert ambiguity["transaction_kind"] == "skill_ambiguity_cleanup"
+    assert ambiguity["operation"] == "defer_manual_review"
+    assert ambiguity["target_store"] == "unresolved"
+    assert ambiguity["ambiguous_name"] == "gmail-purchase-live-context"
+    assert len(ambiguity["conflicting_paths"]) == 2
+
+
+def test_normalize_new_destructive_semantic_transaction_blocks_missing_source_text():
+    normalized = normalize_knowledge_transaction({
+        "transaction_kind": "placement_split",
+        "decision": "apply",
+        "operation": "split",
+        "source_store": "builtin_user",
+        "source_id": "memory_place_mixed",
+        "destination_store": "builtin_memory",
+        "destination_content": "destination fragment",
+    })
+
+    assert normalized["decision"] == "block"
+    assert normalized["operation"] == "none"
+    assert normalized["reason"] == "transaction_missing_source_fields"

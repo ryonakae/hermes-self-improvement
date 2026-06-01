@@ -7,8 +7,9 @@ from typing import Any
 _CANONICAL_STORES = {"skill", "builtin_user", "builtin_memory", "external_memory", "unresolved", "none"}
 _MEMORY_STORES = {"builtin_user", "builtin_memory", "external_memory"}
 _NON_EXECUTABLE_STORES = {"unresolved", "none"}
-_SOURCE_REQUIRED_OPERATIONS = {"memory_replace", "memory_remove", "memory_delete", "move"}
+_SOURCE_REQUIRED_OPERATIONS = {"memory_replace", "memory_remove", "memory_delete", "move", "split", "replace", "remove"}
 _BUILTIN_MEMORY_TARGET_IDS = {"builtin_user": "user", "builtin_memory": "memory"}
+_SEMANTIC_REPORT_ONLY_KINDS = {"keep_same_topic_different_store", "skill_ambiguity_cleanup"}
 _MEMORY_PRODUCT_OPERATIONS = {
     "move_user_to_memory": ("placement_move", "builtin_user", "builtin_memory", "move"),
     "move_memory_to_user": ("placement_move", "builtin_memory", "builtin_user", "move"),
@@ -237,6 +238,29 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
         target_store = target_store or "skill"
         operation = "move"
         target_id = target_id or str(raw.get("target_skill") or "")
+    elif transaction_kind == "placement_split":
+        decision = "apply" if decision in {"apply", "accepted", "preview"} else decision
+        target_store = target_store or str(raw.get("destination_store") or "")
+        target_id = target_id or _BUILTIN_MEMORY_TARGET_IDS.get(target_store, "")
+        operation = operation or "split"
+    elif transaction_kind == "memory_rewrite":
+        decision = "apply" if decision in {"apply", "accepted", "preview"} else decision
+        target_store = target_store or str(raw.get("source_store") or "")
+        target_id = target_id or _BUILTIN_MEMORY_TARGET_IDS.get(target_store, "")
+        source_store = source_store or target_store
+        operation = operation or "replace"
+    elif transaction_kind == "duplicate_cleanup":
+        decision = "apply" if decision in {"apply", "accepted", "preview"} else decision
+        target_store = target_store or str(source_store or "")
+        target_id = target_id or _BUILTIN_MEMORY_TARGET_IDS.get(target_store, "")
+        operation = operation or "remove"
+    elif transaction_kind == "keep_same_topic_different_store":
+        decision = "skip"
+        target_store = target_store or "none"
+        operation = operation or "keep"
+    elif transaction_kind == "skill_ambiguity_cleanup":
+        target_store = target_store or "unresolved"
+        operation = operation or "defer_manual_review"
     elif target_store in _MEMORY_STORES:
         transaction_kind = transaction_kind or "memory"
         operation = operation or _memory_operation(raw)
@@ -277,6 +301,19 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
     }
     if raw.get("content") is not None:
         transaction["content"] = str(raw.get("content"))
+    for key in (
+        "source_replacement",
+        "destination_store",
+        "destination_content",
+        "replacement_content",
+        "canonical_store",
+        "related_evidence_ids",
+        "ambiguous_name",
+        "conflicting_paths",
+        "semantic_boundary_notes",
+    ):
+        if raw.get(key) is not None:
+            transaction[key] = raw.get(key)
     return transaction
 
 
@@ -311,6 +348,11 @@ def _transaction_kind_for_store(target_store: str) -> str:
 
 def _apply_non_executable_store_rules(transaction: dict[str, Any]) -> dict[str, Any]:
     target_store = transaction.get("target_store")
+    transaction_kind = str(transaction.get("transaction_kind") or "")
+    if transaction_kind == "keep_same_topic_different_store":
+        return {**transaction, "decision": "skip", "target_store": "none", "target_id": "", "editor_task": None}
+    if transaction_kind == "skill_ambiguity_cleanup" and transaction.get("decision") != "apply":
+        return {**transaction, "decision": transaction.get("decision") or "defer", "target_store": "unresolved", "target_id": "", "editor_task": None}
     if target_store == "unresolved":
         return {
             **transaction,

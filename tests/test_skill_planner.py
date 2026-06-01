@@ -1648,3 +1648,88 @@ def test_planner_accepts_memory_inventory_product_operations_without_skill_targe
     assert transaction["target_store"] == "builtin_memory"
     assert transaction["source_old_text"] == "Hermes runtime root is ~/.hermes."
     assert transaction["operation"] == "move"
+
+
+
+def test_planner_digest_exposes_semantic_relation_candidates():
+    pack_data = pack()
+    pack_data["evidence"].extend([
+        {
+            "id": "mixed-1",
+            "kind": "mixed_entry_candidate",
+            "source_evidence_id": "memory-place-mixed",
+            "current_store": "user",
+            "old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。",
+            "observations": ["contains_multiple_policy_or_convention_phrases", "mentions_tool_project_or_runtime_terms"],
+            "official_boundary": "USER vs MEMORY vs Skill boundary",
+        },
+        {
+            "id": "pair-1",
+            "kind": "cross_store_related_pair",
+            "user_evidence_id": "memory-place-user-google",
+            "memory_evidence_id": "memory-place-memory-google",
+            "user_text": "Google Workspace は read-only 認可優先。",
+            "memory_text": "Google Workspace は built-in google-workspace skill を既定にする。",
+            "relation_observations": ["shared_topic_terms", "shared_named_entities", "bounded_text_overlap"],
+        },
+        {
+            "id": "coverage-1",
+            "kind": "skill_coverage_candidate",
+            "source_evidence_id": "memory-place-hindsight",
+            "source_old_text": "Hindsight: Docker socket ~/.docker/run/docker.sock.",
+            "matching_skills": [{"name": "hindsight-operations", "editable": True, "match_reason": "title/reference/topic overlap"}],
+            "notes": "Advisory context only. Planner decides.",
+        },
+        {
+            "id": "amb-1",
+            "kind": "skill_ambiguity_candidate",
+            "ambiguous_name": "gmail-purchase-live-context",
+            "conflicting_paths": ["skills/gmail-purchase-live-context/SKILL.md", "references/gmail-purchase-live-context.md"],
+            "observations": ["skill_view_ambiguous"],
+        },
+    ])
+
+    digest = build_planner_digest(pack_data)
+
+    semantic = digest["semantic_knowledge_candidates"]
+    assert semantic["mixed_entries"][0]["evidence_id"] == "mixed-1"
+    assert semantic["cross_store_related_pairs"][0]["relation_observations"] == ["shared_topic_terms", "shared_named_entities", "bounded_text_overlap"]
+    assert semantic["skill_coverage"][0]["matching_skills"][0]["name"] == "hindsight-operations"
+    assert semantic["skill_ambiguity"][0]["ambiguous_name"] == "gmail-purchase-live-context"
+
+
+def test_render_planner_messages_includes_semantic_knowledge_rules_and_templates():
+    digest = build_planner_digest(pack())
+    digest["semantic_knowledge_candidates"] = {
+        "mixed_entries": [{
+            "evidence_id": "mixed-1",
+            "source_evidence_id": "memory-place-mixed",
+            "current_store": "user",
+            "old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。",
+            "observations": ["contains_multiple_policy_or_convention_phrases", "mentions_tool_project_or_runtime_terms"],
+        }],
+        "cross_store_related_pairs": [{
+            "evidence_id": "pair-1",
+            "user_evidence_id": "memory-place-user-google",
+            "memory_evidence_id": "memory-place-memory-google",
+            "user_text": "Google Workspace は read-only 認可優先。",
+            "memory_text": "Google Workspace は built-in google-workspace skill を既定にする。",
+            "relation_observations": ["shared_topic_terms"],
+        }],
+        "skill_coverage": [],
+        "skill_ambiguity": [{
+            "evidence_id": "amb-1",
+            "ambiguous_name": "gmail-purchase-live-context",
+            "conflicting_paths": ["skills/gmail-purchase-live-context/SKILL.md", "references/gmail-purchase-live-context.md"],
+        }],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    content = rendered["messages"][1]["content"]
+
+    assert "## Semantic knowledge judgment rules" in content
+    assert "Observations are not recommendations" in content
+    for token in ("placement_split", "memory_rewrite", "duplicate_cleanup", "keep_same_topic_different_store", "skill_ambiguity_cleanup"):
+        assert token in content
+    for forbidden in ("suggested_route", "likely_move_user_to_memory", "likely_move_memory_to_user", "likely_memory_to_skill"):
+        assert forbidden not in content

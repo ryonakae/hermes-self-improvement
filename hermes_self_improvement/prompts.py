@@ -303,6 +303,50 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
         lines.append(f"- omitted memory placement candidates: {int(placement.get('omitted_count') or 0)}")
     return "\n".join(lines).rstrip() + "\n"
 
+
+def _render_semantic_knowledge_section(digest: dict[str, Any]) -> str:
+    raw_semantic = digest.get("semantic_knowledge_candidates")
+    semantic = raw_semantic if isinstance(raw_semantic, dict) else {}
+    mixed = [item for item in semantic.get("mixed_entries") or [] if isinstance(item, dict)]
+    pairs = [item for item in semantic.get("cross_store_related_pairs") or [] if isinstance(item, dict)]
+    coverage = [item for item in semantic.get("skill_coverage") or [] if isinstance(item, dict)]
+    ambiguity = [item for item in semantic.get("skill_ambiguity") or [] if isinstance(item, dict)]
+    lines = [
+        "## Semantic knowledge judgment rules",
+        "Observations are not recommendations. You decide semantics from exact text, current store, official boundaries, and advisory context.",
+        "Use placement_move only when the whole source entry clearly belongs in the opposite built-in store. Use placement_split for mixed entries, memory_rewrite for same-store cleanup, duplicate_cleanup for true duplicates, keep_same_topic_different_store for healthy USER/MEMORY coexistence, and skill_ambiguity_cleanup for ambiguous skill-name/path collisions.",
+        "If exact target, split text, or safe operation is unclear, defer with a concrete reason rather than forcing a move.",
+        "Transaction templates include: placement_split, memory_rewrite, duplicate_cleanup, keep_same_topic_different_store, skill_ambiguity_cleanup.",
+    ]
+    if not any((mixed, pairs, coverage, ambiguity)):
+        lines.append("- semantic candidates: n/a")
+        return "\n".join(lines).rstrip() + "\n"
+    if mixed:
+        lines.append("### Mixed memory entries")
+        for item in mixed[:20]:
+            observations = ",".join(str(value) for value in (item.get("observations") or [])[:6])
+            lines.append(f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; source_evidence_id={_clip(item.get('source_evidence_id'), max_chars=80)}; current_store={_clip(item.get('current_store'), max_chars=40)}; observations=[{observations}]; old_text={_clip(item.get('old_text'), max_chars=260)}")
+            lines.append("  - placement_split template: " + json.dumps({"transaction_kind": "placement_split", "decision": "defer", "operation": "split", "source_id": item.get("source_evidence_id"), "source_old_text": item.get("old_text"), "reason": "mixed_entry_needs_exact_split_text"}, ensure_ascii=False, separators=(",", ":")))
+    if pairs:
+        lines.append("### Cross-store related memory pairs")
+        for item in pairs[:20]:
+            observations = ",".join(str(value) for value in (item.get("relation_observations") or [])[:6])
+            lines.append(f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; user_evidence_id={_clip(item.get('user_evidence_id'), max_chars=80)}; memory_evidence_id={_clip(item.get('memory_evidence_id'), max_chars=80)}; relation_observations=[{observations}]")
+            lines.append("  - keep_same_topic_different_store template: " + json.dumps({"transaction_kind": "keep_same_topic_different_store", "decision": "skip", "operation": "keep", "source_id": item.get("evidence_id"), "related_evidence_ids": [item.get("user_evidence_id"), item.get("memory_evidence_id")], "reason": "same_topic_different_store_semantics"}, ensure_ascii=False, separators=(",", ":")))
+            lines.append("  - duplicate_cleanup template only if truly redundant: " + json.dumps({"transaction_kind": "duplicate_cleanup", "decision": "defer", "operation": "remove", "source_id": item.get("evidence_id"), "related_evidence_ids": [item.get("user_evidence_id"), item.get("memory_evidence_id")], "reason": "duplicate_status_requires_review"}, ensure_ascii=False, separators=(",", ":")))
+    if coverage:
+        lines.append("### Existing skill coverage for memory entries")
+        for item in coverage[:20]:
+            skills = ",".join(str(match.get("name") or "") for match in (item.get("matching_skills") or []) if isinstance(match, dict)) or "none"
+            lines.append(f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; source_evidence_id={_clip(item.get('source_evidence_id'), max_chars=80)}; matching_skills=[{skills}]; notes={_clip(item.get('notes'), max_chars=180)}")
+    if ambiguity:
+        lines.append("### Skill ambiguity candidates")
+        for item in ambiguity[:20]:
+            paths = ",".join(_clip(value, max_chars=120) for value in (item.get("conflicting_paths") or [])[:4])
+            lines.append(f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; ambiguous_name={_clip(item.get('ambiguous_name'), max_chars=100)}; conflicting_paths=[{paths}]")
+            lines.append("  - skill_ambiguity_cleanup template: " + json.dumps({"transaction_kind": "skill_ambiguity_cleanup", "decision": "defer", "operation": "defer_manual_review", "ambiguous_name": item.get("ambiguous_name"), "conflicting_paths": item.get("conflicting_paths") or [], "reason": "ambiguous_skill_reference_collision"}, ensure_ascii=False, separators=(",", ":")))
+    return "\n".join(lines).rstrip() + "\n"
+
 def _overlay_addendum(overlay: dict[str, Any] | None, key: str = "system_addendum") -> str:
     if not isinstance(overlay, dict):
         return ""
@@ -405,6 +449,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
         _render_knowledge_maintenance_section(digest),
         _render_builtin_memory_inventory_section(digest),
         _render_memory_placement_candidates_section(digest),
+        _render_semantic_knowledge_section(digest),
         _render_memory_inventory_groups_section(digest),
         *([quality_section] if quality_section else []),
         render_cluster_evidence_section(digest.get("cluster_evidence") or {}),

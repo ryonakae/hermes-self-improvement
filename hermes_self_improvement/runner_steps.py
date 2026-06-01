@@ -2099,6 +2099,158 @@ def _execute_placement_move_transaction(transaction: dict[str, Any], *, config: 
     }
 
 
+def _execute_memory_rewrite_transaction(transaction: dict[str, Any], *, config: dict[str, Any], result: dict[str, Any], mutate: bool) -> dict[str, Any]:
+    target_store = str(transaction.get("target_store") or "builtin_memory").strip()
+    source_old_text = str(transaction.get("source_old_text") or "").strip()
+    replacement_content = str(transaction.get("replacement_content") or "").strip()
+    if not source_old_text or not replacement_content:
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    if not mutate:
+        return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+    source_target = _knowledge_transaction_source_target(target_store)
+    if not _memory_to_skill_old_text_is_current(config, target=source_target, old_text=source_old_text):
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_source_old_text_not_current"}
+    rewrite_transaction = {
+        "transaction_kind": "memory",
+        "operation": "memory_replace",
+        "target_store": target_store,
+        "source_old_text": source_old_text,
+        "content": replacement_content,
+        "editor_task": {"content": replacement_content, "old_text": source_old_text},
+    }
+    rewrite_result = _execute_memory_transaction(rewrite_transaction, config=config, result=_base_knowledge_transaction_result(rewrite_transaction), mutate=True)
+    if not rewrite_result.get("success"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "blocked",
+            "reason": rewrite_result.get("reason") or "knowledge_transaction_memory_rewrite_failed",
+            "executed_steps": [{"step": "memory_replace", "status": "failed", "target": target_store}],
+            "memory_result": rewrite_result,
+        }
+    return {
+        **result,
+        "success": True,
+        "outcome": "applied",
+        "changed_memories": rewrite_result.get("changed_memories") or [str(transaction.get("transaction_id") or "memory_rewrite")],
+        "executed_steps": [{"step": "memory_replace", "status": "applied", "target": target_store}],
+        "memory_result": rewrite_result,
+    }
+
+
+def _execute_duplicate_cleanup_transaction(transaction: dict[str, Any], *, config: dict[str, Any], result: dict[str, Any], mutate: bool) -> dict[str, Any]:
+    source_store = str(transaction.get("source_store") or "builtin_memory").strip()
+    source_old_text = str(transaction.get("source_old_text") or "").strip()
+    operation = str(transaction.get("operation") or "remove").strip()
+    if not source_old_text:
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    if not mutate:
+        return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+    source_target = _knowledge_transaction_source_target(source_store)
+    if not _memory_to_skill_old_text_is_current(config, target=source_target, old_text=source_old_text):
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_source_old_text_not_current"}
+    memory_operation = "memory_delete" if operation == "remove" else "memory_replace"
+    cleanup_transaction = {
+        "transaction_kind": "memory",
+        "operation": memory_operation,
+        "target_store": source_store,
+        "source_old_text": source_old_text,
+        "old_text": source_old_text,
+        "editor_task": {"old_text": source_old_text},
+    }
+    if operation == "replace":
+        cleanup_transaction["content"] = str(transaction.get("replacement_content") or "")
+        cleanup_transaction["editor_task"]["content"] = cleanup_transaction["content"]
+    cleanup_result = _execute_memory_transaction(cleanup_transaction, config=config, result=_base_knowledge_transaction_result(cleanup_transaction), mutate=True)
+    if not cleanup_result.get("success"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "blocked",
+            "reason": cleanup_result.get("reason") or "knowledge_transaction_duplicate_cleanup_failed",
+            "executed_steps": [{"step": f"memory_{operation.split('_', 1)[-1]}", "status": "failed", "target": source_target}],
+            "memory_result": cleanup_result,
+        }
+    return {
+        **result,
+        "success": True,
+        "outcome": "applied",
+        "changed_memories": cleanup_result.get("changed_memories") or [str(transaction.get("transaction_id") or "duplicate_cleanup")],
+        "executed_steps": [{"step": f"memory_{operation}", "status": "applied", "target": source_target}],
+        "memory_result": cleanup_result,
+    }
+
+
+def _execute_placement_split_transaction(transaction: dict[str, Any], *, config: dict[str, Any], result: dict[str, Any], mutate: bool) -> dict[str, Any]:
+    source_store = str(transaction.get("source_store") or "builtin_user").strip()
+    source_old_text = str(transaction.get("source_old_text") or "").strip()
+    source_replacement = str(transaction.get("source_replacement") or "").strip()
+    destination_store = str(transaction.get("destination_store") or transaction.get("target_store") or "").strip()
+    destination_content = str(transaction.get("destination_content") or "").strip()
+    if not source_old_text or not source_replacement or not destination_store or not destination_content:
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    if not mutate:
+        return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+    source_target = _knowledge_transaction_source_target(source_store)
+    if not _memory_to_skill_old_text_is_current(config, target=source_target, old_text=source_old_text):
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_source_old_text_not_current"}
+    # Step 1: add destination content
+    dest_add_transaction = {
+        "transaction_kind": "memory",
+        "operation": "memory_add",
+        "target_store": destination_store,
+        "content": destination_content,
+        "editor_task": {"content": destination_content},
+    }
+    dest_result = _execute_memory_transaction(dest_add_transaction, config=config, result=_base_knowledge_transaction_result(dest_add_transaction), mutate=True)
+    if not dest_result.get("success"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "blocked",
+            "reason": "split_destination_failed",
+            "executed_steps": [{"step": "destination_add", "status": "failed", "target": destination_store}],
+            "destination_result": dest_result,
+        }
+    # Step 2: replace source with the reduced text
+    replace_content = source_replacement or ""
+    src_replace_transaction = {
+        "transaction_kind": "memory",
+        "operation": "memory_replace",
+        "target_store": source_store,
+        "source_old_text": source_old_text,
+        "content": replace_content,
+        "editor_task": {"content": replace_content, "old_text": source_old_text},
+    }
+    replace_result = _execute_memory_transaction(src_replace_transaction, config=config, result=_base_knowledge_transaction_result(src_replace_transaction), mutate=True)
+    if not replace_result.get("success"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "partial",
+            "reason": "split_source_replace_failed",
+            "changed_memories": dest_result.get("changed_memories") or [str(transaction.get("transaction_id") or "placement_split_dest")],
+            "executed_steps": [
+                {"step": "destination_add", "status": "applied", "target": destination_store},
+                {"step": "source_replace", "status": "failed", "target": source_target},
+            ],
+            "destination_result": dest_result,
+            "replace_result": replace_result,
+        }
+    return {
+        **result,
+        "success": True,
+        "outcome": "applied",
+        "changed_memories": _unique_nonempty_strings(list(replace_result.get("changed_memories") or []) + list(dest_result.get("changed_memories") or [])),
+        "executed_steps": [
+            {"step": "destination_add", "status": "applied", "target": destination_store},
+            {"step": "source_replace", "status": "applied", "target": source_target},
+        ],
+        "destination_result": dest_result,
+        "replace_result": replace_result,
+    }
+
+
 def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[str, Any] | None = None, mutate: bool = False) -> dict[str, Any]:
     cfg = config or {}
     result = _base_knowledge_transaction_result(transaction)
@@ -2109,6 +2261,12 @@ def execute_knowledge_transaction(transaction: dict[str, Any], *, config: dict[s
         return _execute_memory_transaction(transaction, config=cfg, result=result, mutate=mutate)
     if transaction_kind == "placement_move":
         return _execute_placement_move_transaction(transaction, config=cfg, result=result, mutate=mutate)
+    if transaction_kind == "memory_rewrite":
+        return _execute_memory_rewrite_transaction(transaction, config=cfg, result=result, mutate=mutate)
+    if transaction_kind == "duplicate_cleanup":
+        return _execute_duplicate_cleanup_transaction(transaction, config=cfg, result=result, mutate=mutate)
+    if transaction_kind == "placement_split":
+        return _execute_placement_split_transaction(transaction, config=cfg, result=result, mutate=mutate)
     if transaction_kind != "memory_to_skill":
         return {**result, "success": False, "outcome": "blocked", "reason": "unsupported_knowledge_transaction_kind"}
     target_skill = str(transaction.get("target_skill") or transaction.get("target_id") or "")

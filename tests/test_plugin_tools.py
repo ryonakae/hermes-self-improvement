@@ -433,10 +433,84 @@ def test_compact_improve_tool_result_uses_canonical_knowledge_transactions_over_
         "placement_moves": 0,
         "memory_to_skill": 0,
         "memory_placement": {"USER->MEMORY": 0, "MEMORY->USER": 0},
+        "semantic_memory_placement": {
+            "placement_split": 0,
+            "memory_rewrite": 0,
+            "duplicate_cleanup": 0,
+            "same_topic_keep": 0,
+            "skill_ambiguity": 0,
+        },
         "deferred_transactions": 1,
         "skipped_transactions": 1,
     }
     assert payload["steps"]["skill_planner"]["quality"] == {"attached_candidate_count": 0, "unmatched_evidence_count": 0, "selected_with_evidence": 0, "action_like_skips": 0, "editor_task_count": 0, "hint_attached_evidence_count": 0, "hint_attached_candidate_count": 0, "cluster_evidence_count": 0, "cluster_attached_candidate_count": 0, "cluster_selected_count": 0, "weak_only_candidate_count": 0, "weak_only_selected_count": 0, "attachments_by_match_kind": {}, "evidence_strength_counts": {}, "selected_by_strength": {}, "skip_class_counts": {}, "skip_reasons_by_class": {}, "matched_candidate_count": 0, "matched_but_not_selected_count": 0, "matched_but_not_selected_by_reason": {}, "matched_noop_class_counts": {}, "benign_skip_count": 0, "safe_stop_count": 0, "actionability_loss_count": 0, "needs_follow_up_skip_count": 0, "editor_prompt_chars": {}}
+
+
+def test_compact_improve_tool_result_exposes_bounded_semantic_transaction_counts_only():
+    import hermes_self_improvement.tool_handlers as tools
+
+    raw_result = {
+        "summary": {"skill_changes": 0, "memory_changes": 0, "scorer_evaluator_changed": False},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-split",
+                "transaction_kind": "placement_split",
+                "decision": "apply",
+                "operation": "split",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "source_old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。",
+                "source_replacement": "Hermes/plugin障害: 明示OKまで変更禁止。",
+                "destination_content": "PR取込test失敗は上流比較。",
+                "transaction_result": {"outcome": "preview"},
+            },
+            {
+                "transaction_id": "txn-keep",
+                "transaction_kind": "keep_same_topic_different_store",
+                "decision": "skip",
+                "operation": "keep",
+                "target_store": "none",
+                "reason": "same topic has different USER/MEMORY semantics",
+            },
+            {
+                "transaction_id": "txn-ambiguous-skill",
+                "transaction_kind": "skill_ambiguity_cleanup",
+                "decision": "defer",
+                "operation": "defer_manual_review",
+                "target_store": "unresolved",
+                "ambiguous_name": "gmail-purchase-live-context",
+                "conflicting_paths": ["skills/gmail-purchase-live-context/SKILL.md", "references/gmail-purchase-live-context.md"],
+            },
+        ],
+        "step_decisions": {"summary": {"total": 3}},
+    }
+
+    payload = tools._compact_improve_tool_result(raw_result)
+
+    assert payload["action_summary"] == {"apply": 1, "defer": 1, "skip": 1, "block": 0}
+    assert payload["steps"]["knowledge_transactions"] == {
+        "total": 3,
+        "apply": 1,
+        "defer": 1,
+        "skip": 1,
+        "block": 0,
+        "by_kind": {
+            "keep_same_topic_different_store": 1,
+            "placement_split": 1,
+            "skill_ambiguity_cleanup": 1,
+        },
+        "cross_store": 1,
+    }
+    assert payload["steps"]["knowledge_changes"]["semantic_memory_placement"] == {
+        "placement_split": 1,
+        "memory_rewrite": 0,
+        "duplicate_cleanup": 0,
+        "same_topic_keep": 1,
+        "skill_ambiguity": 1,
+    }
+    compact_blob = json.dumps(payload, ensure_ascii=False)
+    assert "PR取込test失敗" not in compact_blob
+    assert "conflicting_paths" not in compact_blob
 
 
 def test_report_and_improve_tool_schemas_do_not_expose_scorer_selector():

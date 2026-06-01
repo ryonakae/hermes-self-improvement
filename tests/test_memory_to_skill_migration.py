@@ -1148,3 +1148,252 @@ def test_execute_knowledge_transaction_memory_and_memory_to_skill_results_includ
         {"step": "memory_remove", "status": "applied", "target": "memory"},
     ]
     assert any("Use these exact steps for live context cleanup." in hint for hint in mts_result["rollback_hints"])
+
+
+# --- Phase 5: memory_rewrite execution ---
+
+def test_execute_knowledge_transaction_memory_rewrite_replaces_memory_entry():
+    memory_calls = []
+
+    def fake_memory(**args):
+        memory_calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "memory_rewrite",
+            "decision": "apply",
+            "target_store": "builtin_memory",
+            "source_old_text": "Hermes root is /opt/data.",
+            "replacement_content": "Hermes runtime root is ~/.hermes.",
+        },
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_memory_current_entries": [{"target": "memory", "old_text": "Hermes root is /opt/data.", "text": "Hermes root is /opt/data."}],
+        },
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    replaced = [call for call in memory_calls if call.get("action") == "replace"]
+    assert len(replaced) == 1
+    assert replaced[0]["old_text"] == "Hermes root is /opt/data."
+    assert result["executed_steps"] == [{"step": "memory_replace", "status": "applied", "target": "builtin_memory"}]
+
+
+def test_execute_knowledge_transaction_memory_rewrite_dry_run_shows_preview():
+    result = execute_knowledge_transaction(
+        {"transaction_kind": "memory_rewrite", "decision": "apply", "target_store": "builtin_memory", "source_old_text": "Hermes root is /opt/data.", "replacement_content": "Hermes runtime root is ~/.hermes."},
+        mutate=False,
+    )
+    assert result["success"] is True
+    assert result["outcome"] == "preview"
+
+
+def test_execute_knowledge_transaction_memory_rewrite_blocks_stale_source():
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "memory_rewrite",
+            "decision": "apply",
+            "target_store": "builtin_memory",
+            "source_old_text": "Hermes root is /opt/data.",
+            "replacement_content": "Hermes runtime root is ~/.hermes.",
+        },
+        config={
+            "_memory_current_entries": [{"target": "memory", "old_text": "Something else entirely.", "text": "Something else entirely."}],
+        },
+        mutate=True,
+    )
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+    assert "source_old_text_not_current" in result["reason"]
+
+
+def test_execute_knowledge_transaction_memory_rewrite_blocks_missing_source_text():
+    result = execute_knowledge_transaction(
+        {"transaction_kind": "memory_rewrite", "decision": "apply", "target_store": "builtin_memory", "source_old_text": "", "replacement_content": "Hermes runtime root is ~/.hermes."},
+        mutate=True,
+    )
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+
+
+# --- Phase 5: duplicate_cleanup execution ---
+
+def test_execute_knowledge_transaction_duplicate_cleanup_removes_duplicate_entry():
+    memory_calls = []
+
+    def fake_memory(**args):
+        memory_calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "duplicate_cleanup",
+            "decision": "apply",
+            "operation": "remove",
+            "source_store": "builtin_user",
+            "source_old_text": "Duplicate entry.",
+        },
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_memory_current_entries": [{"target": "user", "old_text": "Duplicate entry.", "text": "Duplicate entry."}],
+        },
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert result["executed_steps"] == [{"step": "memory_remove", "status": "applied", "target": "user"}]
+
+
+def test_execute_knowledge_transaction_duplicate_cleanup_dry_run_shows_preview():
+    result = execute_knowledge_transaction(
+        {"transaction_kind": "duplicate_cleanup", "decision": "apply", "operation": "remove", "source_store": "builtin_user", "source_old_text": "Old duplicate."},
+        mutate=False,
+    )
+    assert result["success"] is True
+    assert result["outcome"] == "preview"
+
+
+def test_execute_knowledge_transaction_duplicate_cleanup_blocks_without_source_text():
+    result = execute_knowledge_transaction(
+        {"transaction_kind": "duplicate_cleanup", "decision": "apply", "operation": "remove", "source_store": "builtin_user", "source_old_text": ""},
+        mutate=True,
+    )
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+
+
+# --- Phase 5: placement_split execution ---
+
+def test_execute_knowledge_transaction_placement_split_splits_entry_between_stores(tmp_path):
+    user = tmp_path / "USER.md"
+    memory = tmp_path / "MEMORY.md"
+    user.write_text("Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。\n", encoding="utf-8")
+    memory.write_text("\n", encoding="utf-8")
+    calls = {}
+
+    def fake_memory(**args):
+        action = args.get("action")
+        target = args.get("target")
+        key = f"{target}:{action}"
+        calls.setdefault(key, []).append(dict(args))
+        if action in {"replace", "remove"} and args.get("old_text") == "stale":
+            return {"success": False, "error": "stale"}
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "placement_split",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "target_store": "builtin_memory",
+            "source_old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。",
+            "source_replacement": "Hermes/plugin障害: 明示OKまで変更禁止。",
+            "destination_content": "PR取込test失敗は上流比較。",
+        },
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_memory_current_entries": [{"target": "user", "old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。", "text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。"}],
+        },
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert calls.get("memory:add") and calls["memory:add"][0]["content"] == "PR取込test失敗は上流比較。"
+    assert result["executed_steps"][0] == {"step": "destination_add", "status": "applied", "target": "builtin_memory"}
+    assert result["executed_steps"][1] == {"step": "source_replace", "status": "applied", "target": "user"}
+    assert "PR取込test失敗" not in calls.get("memory:replace", [{}])[0].get("content", "")
+
+
+def test_execute_knowledge_transaction_placement_split_dry_run_shows_preview():
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "placement_split",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "target_store": "builtin_memory",
+            "source_old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。",
+            "source_replacement": "Hermes/plugin障害: 明示OKまで変更禁止。",
+            "destination_content": "PR取込test失敗は上流比較。",
+        },
+        mutate=False,
+    )
+    assert result["success"] is True
+    assert result["outcome"] == "preview"
+
+
+def test_execute_knowledge_transaction_placement_split_destination_failure_leaves_source_intact():
+    calls = {}
+
+    def fake_memory(**args):
+        action = args.get("action")
+        target = args.get("target")
+        key = f"{target}:{action}"
+        calls.setdefault(key, []).append(dict(args))
+        if action == "add" and target == "memory":
+            return {"success": False, "error": "destination add failed"}
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "placement_split",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "target_store": "builtin_memory",
+            "source_old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。",
+            "source_replacement": "Hermes/plugin障害: 明示OKまで変更禁止。",
+            "destination_content": "PR取込test失敗は上流比較。",
+        },
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_memory_current_entries": [{"target": "user", "old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。", "text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。"}],
+        },
+        mutate=True,
+    )
+
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+    assert "user:replace" not in calls
+    assert "user:remove" not in calls
+    assert result["reason"] == "split_destination_failed"
+
+
+def test_execute_knowledge_transaction_placement_split_source_replacement_failure_after_destination_success_reports_partial():
+    calls = {}
+
+    def fake_memory(**args):
+        action = args.get("action")
+        target = args.get("target")
+        key = f"{target}:{action}"
+        calls.setdefault(key, []).append(dict(args))
+        if action == "replace" and target == "user":
+            return {"success": False, "error": "source replace failed"}
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "placement_split",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "target_store": "builtin_memory",
+            "source_old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。",
+            "source_replacement": "Hermes/plugin障害: 明示OKまで変更禁止。",
+            "destination_content": "PR取込test失敗は上流比較。",
+        },
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_memory_current_entries": [{"target": "user", "old_text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。", "text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。"}],
+        },
+        mutate=True,
+    )
+
+    assert result["success"] is False
+    assert result["outcome"] == "partial"
+    assert calls.get("memory:add")
+    assert calls.get("user:replace")
+    assert result["executed_steps"][0] == {"step": "destination_add", "status": "applied", "target": "builtin_memory"}
+    assert result["executed_steps"][1] == {"step": "source_replace", "status": "failed", "target": "user"}

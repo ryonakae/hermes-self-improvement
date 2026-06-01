@@ -104,3 +104,29 @@ def test_canonical_transaction_view_counts_validation_error_without_failed_statu
     })
 
     assert view["validation"] == {"post_validated": 0, "rejected": 1, "unknown": 0, "unknown_modes": {}}
+
+
+
+def test_canonical_transaction_view_counts_new_semantic_transaction_kinds():
+    view = canonical_transaction_view({
+        "knowledge_transactions": [
+            {"transaction_kind": "placement_split", "decision": "apply", "operation": "split", "source_store": "builtin_user", "target_store": "builtin_memory"},
+            {"transaction_kind": "memory_rewrite", "decision": "apply", "operation": "replace", "target_store": "builtin_memory"},
+            {"transaction_kind": "duplicate_cleanup", "decision": "apply", "operation": "remove", "source_store": "builtin_user", "target_store": "builtin_user"},
+            {"transaction_kind": "keep_same_topic_different_store", "decision": "skip", "operation": "keep", "target_store": "none"},
+            {"transaction_kind": "skill_ambiguity_cleanup", "decision": "defer", "operation": "defer_manual_review", "target_store": "unresolved"},
+        ]
+    })
+
+    assert view["transaction_summary"]["total"] == 5
+    assert view["transaction_summary"]["apply"] == 3
+    assert view["transaction_summary"]["skip"] == 1
+    assert view["transaction_summary"]["defer"] == 1
+    assert view["transaction_summary"]["by_kind"] == {
+        "duplicate_cleanup": 1,
+        "keep_same_topic_different_store": 1,
+        "memory_rewrite": 1,
+        "placement_split": 1,
+        "skill_ambiguity_cleanup": 1,
+    }
+    assert view["transaction_summary"]["cross_store"] == 1

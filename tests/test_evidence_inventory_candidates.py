@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from hermes_self_improvement.evidence import (
     build_evidence_pack,
     collect_memory_inventory_candidates,
+    collect_memory_relation_candidates,
     collect_memory_placement_candidates,
     collect_skill_inventory_candidates,
     make_memory_inventory_candidate,
@@ -478,3 +479,79 @@ def test_memory_placement_observations_do_not_encode_destination_recommendations
     assert observations
     assert all("move" not in obs and "user_to_memory" not in obs and "memory_to_user" not in obs for obs in observations)
     assert all(not obs.startswith("likely_") for obs in observations)
+
+
+
+def test_mixed_memory_entry_candidate_is_observation_only(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    user = tmp_path / "USER.md"
+    user_text = "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。PR取込test失敗は上流比較。正常経路ログ追加不要。context通知は末尾/inline。"
+    user.write_text(user_text + "\n", encoding="utf-8")
+    memory.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
+
+    items = collect_memory_relation_candidates({"memory": memory, "user": user})
+    mixed = [item for item in items if item["kind"] == "mixed_entry_candidate"]
+
+    assert mixed
+    candidate = mixed[0]
+    assert candidate["source"] == "inventory"
+    assert candidate["source_evidence_id"].startswith("memory_place_")
+    assert candidate["current_store"] == "user"
+    assert candidate["old_text"] == user_text
+    assert candidate["official_boundary"]
+    assert set(candidate["observations"]) <= {
+        "contains_multiple_policy_or_convention_phrases",
+        "mentions_tool_project_or_runtime_terms",
+        "mentions_procedure_or_operational_terms",
+        "long_entry",
+    }
+    forbidden_blob = json.dumps(candidate, ensure_ascii=False)
+    for forbidden in ("suggested_route", "likely_", "user_preference", "runtime_fact", "skill_workflow", "should_split"):
+        assert forbidden not in forbidden_blob
+
+
+def test_cross_store_related_pair_candidate_is_neutral(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    user = tmp_path / "USER.md"
+    user_text = "Google Workspace は read-only 認可優先。Hermes のデフォルト skill / built-in files は編集しない方針。"
+    memory_text = "Google Workspace は built-in `google-workspace` skill を既定にし、`~/.hermes/google_token.json` を使う。古い `~/.hermes/gws` 前提は legacy。"
+    user.write_text(user_text + "\n", encoding="utf-8")
+    memory.write_text(memory_text + "\n", encoding="utf-8")
+
+    items = collect_memory_relation_candidates({"memory": memory, "user": user})
+    pairs = [item for item in items if item["kind"] == "cross_store_related_pair"]
+
+    assert pairs
+    pair = pairs[0]
+    assert pair["user_text"] == user_text
+    assert pair["memory_text"] == memory_text
+    assert pair["user_evidence_id"].startswith("memory_place_")
+    assert pair["memory_evidence_id"].startswith("memory_place_")
+    assert pair["relation_observations"] == ["shared_topic_terms", "shared_named_entities", "bounded_text_overlap"]
+    assert "canonical_store" not in pair
+    assert "different_store_semantics_possible" not in json.dumps(pair, ensure_ascii=False)
+
+
+def test_skill_coverage_and_ambiguity_candidates_are_advisory(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    user = tmp_path / "USER.md"
+    memory.write_text("Hindsight: Docker socket `~/.docker/run/docker.sock`; worker=`hindsight-local`, stop_grace=2m。\n", encoding="utf-8")
+    user.write_text("Ryo prefers short reports.\n", encoding="utf-8")
+    skill_candidates = [
+        {"name": "hindsight-operations", "mutable": True, "state": "active", "provenance": "agent_created", "description": "Operate and troubleshoot Hindsight memory service."},
+        {"name": "gmail-purchase-live-context", "mutable": True, "path": "skills/gmail-purchase-live-context/SKILL.md", "description": "Gmail purchase observer."},
+        {"name": "hermes-memory-and-live-context", "mutable": True, "references": ["references/gmail-purchase-live-context.md"], "description": "Hermes memory and live context."},
+    ]
+
+    items = collect_memory_relation_candidates({"memory": memory, "user": user}, skill_candidates=skill_candidates)
+    coverage = [item for item in items if item["kind"] == "skill_coverage_candidate"]
+    ambiguity = [item for item in items if item["kind"] == "skill_ambiguity_candidate"]
+
+    assert coverage
+    assert coverage[0]["matching_skills"][0]["name"] == "hindsight-operations"
+    assert coverage[0]["notes"].startswith("Advisory context only")
+    assert "create_skill_blocked" not in json.dumps(coverage[0], ensure_ascii=False)
+    assert ambiguity
+    assert ambiguity[0]["ambiguous_name"] == "gmail-purchase-live-context"
+    assert len(ambiguity[0]["conflicting_paths"]) == 2
+    assert "delete" not in json.dumps(ambiguity[0], ensure_ascii=False).lower()

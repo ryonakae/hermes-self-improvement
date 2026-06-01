@@ -98,12 +98,30 @@ def _canonical_knowledge_change_counts(knowledge_transactions: Any) -> dict[str,
         "placement_moves": 0,
         "memory_to_skill": 0,
         "memory_placement": {"USER->MEMORY": 0, "MEMORY->USER": 0},
+        "semantic_memory_placement": {
+            "placement_split": 0,
+            "memory_rewrite": 0,
+            "duplicate_cleanup": 0,
+            "same_topic_keep": 0,
+            "skill_ambiguity": 0,
+        },
         "deferred_transactions": 0,
         "skipped_transactions": 0,
+    }
+    semantic_kind_keys = {
+        "placement_split": "placement_split",
+        "memory_rewrite": "memory_rewrite",
+        "duplicate_cleanup": "duplicate_cleanup",
+        "keep_same_topic_different_store": "same_topic_keep",
+        "skill_ambiguity_cleanup": "skill_ambiguity",
     }
     for item in knowledge_transactions:
         if not isinstance(item, dict):
             continue
+        kind = str(item.get("transaction_kind") or "")
+        semantic_key = semantic_kind_keys.get(kind)
+        if semantic_key:
+            counts["semantic_memory_placement"][semantic_key] += 1
         decision = str(item.get("decision") or "")
         if decision in {"defer", "deferred"}:
             counts["deferred_transactions"] += 1
@@ -117,7 +135,6 @@ def _canonical_knowledge_change_counts(knowledge_transactions: Any) -> dict[str,
         result_payload = raw_result_payload if isinstance(raw_result_payload, dict) else {}
         if result_payload and result_payload.get("success") is False:
             continue
-        kind = str(item.get("transaction_kind") or "")
         if kind == "skill":
             counts["skills"] += 1
         elif kind == "memory":
