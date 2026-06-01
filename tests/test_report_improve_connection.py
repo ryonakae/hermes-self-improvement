@@ -494,8 +494,10 @@ def test_run_replay_improve_executes_canonical_apply_transactions_and_strips_spl
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     calls = []
 
+    monkeypatch.setattr(cli, "_current_builtin_memory_entries", lambda config: [{"target": "memory", "old_text": "current text"}])
+
     def fake_execute(transaction, *, config=None, mutate=False):
-        calls.append((transaction["transaction_id"], mutate))
+        calls.append((transaction["transaction_id"], mutate, config.get("_memory_current_entries") if isinstance(config, dict) else None))
         return {"success": True, "outcome": "applied", "changed_skills": [transaction["target_id"]], "changed_memories": []}
 
     monkeypatch.setattr(cli, "execute_knowledge_transaction", fake_execute)
@@ -504,7 +506,7 @@ def test_run_replay_improve_executes_canonical_apply_transactions_and_strips_spl
 
     result = cli.run_replay_improve(config=config, source_run_path=str(source_path))
 
-    assert calls == [("txn-apply", True)]
+    assert calls == [("txn-apply", True, [{"target": "memory", "old_text": "current text"}])]
     assert result["skill_changes"] == ["canonical-skill"]
     assert result["memory_changes"] == []
     assert result["action_summary"] == {"apply": 1, "defer": 0, "skip": 1, "block": 0}

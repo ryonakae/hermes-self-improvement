@@ -2047,6 +2047,9 @@ def _execute_placement_move_transaction(transaction: dict[str, Any], *, config: 
         return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
     if not mutate:
         return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+    source_target = _knowledge_transaction_source_target(source_store)
+    if not _memory_to_skill_old_text_is_current(config, target=source_target, old_text=source_old_text):
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_source_old_text_not_current"}
     add_transaction = {**transaction, "transaction_kind": "memory", "operation": "memory_add", "target_store": target_store, "editor_task": {"content": content}}
     add_result = _execute_memory_transaction(add_transaction, config=config, result=_base_knowledge_transaction_result(add_transaction), mutate=True)
     if not add_result.get("success"):
@@ -2060,7 +2063,6 @@ def _execute_placement_move_transaction(transaction: dict[str, Any], *, config: 
         }
     remove_transaction = {**transaction, "transaction_kind": "memory", "operation": "memory_delete", "target_store": source_store, "source_old_text": source_old_text}
     remove_result = _execute_memory_transaction(remove_transaction, config=config, result=_base_knowledge_transaction_result(remove_transaction), mutate=True)
-    source_target = _knowledge_transaction_source_target(source_store)
     if not remove_result.get("success"):
         return {
             **result,

@@ -1212,8 +1212,12 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
         raise SystemExit("--from-run requires an improve dry-run artifact")
     raw_steps = source.get("step_decisions")
     steps: dict[str, Any] = raw_steps if isinstance(raw_steps, dict) else {}
-    backend = build_editor_backend(config)
-    external_provider = _external_memory_provider(config)
+    replay_config = dict(config)
+    replay_config["_memory_current_entries"] = _current_builtin_memory_entries(config)
+    replay_config.setdefault("_hermes_home", str(get_hermes_home()))
+    backend = build_editor_backend(replay_config)
+    replay_config["_editor_backend"] = backend
+    external_provider = _external_memory_provider(replay_config)
     source_knowledge_transactions = source.get("knowledge_transactions") if isinstance(source.get("knowledge_transactions"), list) else []
 
     if source_knowledge_transactions:
@@ -1225,7 +1229,7 @@ def run_replay_improve(*, config: dict[str, Any], source_run_path: str) -> dict[
                 continue
             transaction = dict(item)
             if transaction.get("decision") == "apply":
-                raw_result = execute_knowledge_transaction(transaction, config=config, mutate=True)
+                raw_result = execute_knowledge_transaction(transaction, config=replay_config, mutate=True)
                 result: dict[str, Any] = raw_result if isinstance(raw_result, dict) else {"success": False, "outcome": "blocked", "reason": "replay_transaction_result_missing"}
             else:
                 existing_result = transaction.get("transaction_result")

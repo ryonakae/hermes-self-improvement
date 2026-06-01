@@ -744,6 +744,10 @@ def test_execute_knowledge_transaction_external_memory_add_is_provider_capabilit
     assert blocked["reason"] == "unsupported_memory_operation"
 
 
+def _current_memory_entry(target: str, old_text: str) -> dict:
+    return {"target": target, "old_text": old_text}
+
+
 def test_execute_knowledge_transaction_placement_move_adds_before_removing_source():
     calls = []
 
@@ -764,7 +768,7 @@ def test_execute_knowledge_transaction_placement_move_adds_before_removing_sourc
             "operation": "move",
             "editor_task": {"content": "Use TDD for behavior changes."},
         },
-        config={"_memory_tool_fn": fake_memory},
+        config={"_memory_tool_fn": fake_memory, "_memory_current_entries": [_current_memory_entry("user", "Use TDD for behavior changes.")]},
         mutate=True,
     )
 
@@ -797,7 +801,7 @@ def test_execute_knowledge_transaction_placement_move_defaults_content_to_source
             "target_store": "builtin_memory",
             "target_id": "memory",
         },
-        config={"_memory_tool_fn": fake_memory},
+        config={"_memory_tool_fn": fake_memory, "_memory_current_entries": [_current_memory_entry("user", "Gmail observer=~/.hermes/automations/gmail-purchase-observer、cron=~/.hermes/cron/jobs.json。")]},
         mutate=True,
     )
 
@@ -831,7 +835,7 @@ def test_execute_knowledge_transaction_placement_move_memory_to_user_adds_before
             "operation": "move",
             "editor_task": {"content": "Ryo prefers terse Slack reports."},
         },
-        config={"_memory_tool_fn": fake_memory},
+        config={"_memory_tool_fn": fake_memory, "_memory_current_entries": [_current_memory_entry("memory", "Ryo prefers terse Slack reports.")]},
         mutate=True,
     )
 
@@ -864,7 +868,7 @@ def test_execute_knowledge_transaction_placement_move_memory_to_user_defaults_co
             "target_store": "builtin_user",
             "target_id": "user",
         },
-        config={"_memory_tool_fn": fake_memory},
+        config={"_memory_tool_fn": fake_memory, "_memory_current_entries": [_current_memory_entry("memory", "Hindsight tuning preference: keep Mac mini responsive; accept Reflect ~30–40s rather than raising CPU/resources aggressively.")]},
         mutate=True,
     )
 
@@ -914,6 +918,38 @@ def test_execute_knowledge_transaction_placement_move_dry_run_validates_required
     assert missing["reason"] == "knowledge_transaction_missing_required_fields"
     assert valid["success"] is True
     assert valid["outcome"] == "preview"
+
+
+def test_execute_knowledge_transaction_placement_move_validates_source_before_destination_add():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_id": "txn-placement-stale-source",
+            "transaction_kind": "placement_move",
+            "decision": "apply",
+            "operation": "move",
+            "source_store": "builtin_memory",
+            "source_id": "memory_place_stale",
+            "source_old_text": "日本語docsは日本語中心、英語は必要時のみ。",
+            "target_store": "builtin_user",
+            "target_id": "user",
+        },
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_memory_current_entries": [_current_memory_entry("user", "日本語docsは日本語中心、英語は必要時のみ。")],
+        },
+        mutate=True,
+    )
+
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+    assert result["reason"] == "knowledge_transaction_source_old_text_not_current"
+    assert calls == []
 
 
 def test_execute_knowledge_transaction_runs_skill_create_transaction_through_editor_backend(tmp_path):
@@ -1006,7 +1042,7 @@ def test_execute_knowledge_transaction_placement_move_keeps_source_when_destinat
             "operation": "move",
             "content": "Hermes runtime root is ~/.hermes.",
         },
-        config={"_memory_tool_fn": fake_memory},
+        config={"_memory_tool_fn": fake_memory, "_memory_current_entries": [_current_memory_entry("user", "Hermes runtime root is ~/.hermes.")]},
         mutate=True,
     )
 
@@ -1046,6 +1082,7 @@ def test_execute_knowledge_transaction_placement_move_recovers_capacity_before_s
         },
         config={
             "_memory_tool_fn": fake_memory,
+            "_memory_current_entries": [_current_memory_entry("user", "Hermes runtime root is ~/.hermes.")],
             "_memory_capacity_planner_fn": lambda **kwargs: [
                 {"action": "remove", "target": "memory", "old_text": "Old stale runtime root is /opt/data."}
             ],
