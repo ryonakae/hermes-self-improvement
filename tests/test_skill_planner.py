@@ -103,6 +103,44 @@ def test_planner_digest_exposes_memory_placement_candidates():
     assert "move_user_to_memory" in row["allowed_decisions"]
 
 
+def test_planner_digest_limits_memory_placement_move_decisions_by_current_store():
+    pack_data = pack()
+    pack_data["evidence"].extend([
+        {
+            "id": "memory-place-user",
+            "kind": "memory_placement_candidate",
+            "inventory": {
+                "group_kind": "placement_review",
+                "current_store": "user",
+                "old_text": "日本語docsは日本語中心、英語は必要時のみ。",
+                "summary": "Japanese docs preference.",
+                "suggested_route": "likely_keep",
+                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+            },
+        },
+        {
+            "id": "memory-place-memory",
+            "kind": "memory_placement_candidate",
+            "inventory": {
+                "group_kind": "placement_review",
+                "current_store": "memory",
+                "old_text": "Hermes runtime root is ~/.hermes.",
+                "summary": "Runtime root.",
+                "suggested_route": "likely_keep",
+                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+            },
+        },
+    ])
+
+    digest = build_planner_digest(pack_data)
+    by_id = {row["evidence_id"]: row for row in digest["memory_placement_candidates"]["candidates"]}
+
+    assert "move_user_to_memory" in by_id["memory-place-user"]["allowed_decisions"]
+    assert "move_memory_to_user" not in by_id["memory-place-user"]["allowed_decisions"]
+    assert "move_memory_to_user" in by_id["memory-place-memory"]["allowed_decisions"]
+    assert "move_user_to_memory" not in by_id["memory-place-memory"]["allowed_decisions"]
+
+
 def test_planner_digest_exposes_memory_placement_target_skill_hints_as_context():
     pack_data = pack()
     pack_data["skill_candidates"] = [
@@ -187,7 +225,7 @@ def test_render_planner_messages_includes_memory_placement_transaction_templates
                 "route_reasons": ["contains_runtime_path"],
                 "old_text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
                 "summary": "Gmail observer path.",
-                "allowed_decisions": ["keep", "move_user_to_memory", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
+                "allowed_decisions": ["keep", "move_user_to_memory", "memory_to_skill", "skip", "defer"],
             },
             {
                 "evidence_id": "memory-place-keep",
@@ -196,7 +234,7 @@ def test_render_planner_messages_includes_memory_placement_transaction_templates
                 "route_reasons": ["store_matches_known_boundary_or_low_signal"],
                 "old_text": "Gateway uses host restart wrapper.",
                 "summary": "Gateway runtime fact.",
-                "allowed_decisions": ["keep", "move_user_to_memory", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
+                "allowed_decisions": ["keep", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
             },
         ],
     }
@@ -210,6 +248,46 @@ def test_render_planner_messages_includes_memory_placement_transaction_templates
     assert '"source_old_text":"Gmail observer=~/.hermes/automations/gmail-purchase-observer."' in user_content
     assert '"target_store":"none"' in user_content
     assert '"reason":"keep_current_store"' in user_content
+
+
+def test_render_planner_messages_only_shows_store_valid_memory_placement_move_templates():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 2,
+        "omitted_count": 0,
+        "candidates": [
+            {
+                "evidence_id": "memory-place-user",
+                "current_store": "user",
+                "suggested_route": "likely_keep",
+                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "old_text": "日本語docsは日本語中心、英語は必要時のみ。",
+                "summary": "Japanese docs preference.",
+                "allowed_decisions": ["keep", "move_user_to_memory", "memory_to_skill", "skip", "defer"],
+            },
+            {
+                "evidence_id": "memory-place-memory",
+                "current_store": "memory",
+                "suggested_route": "likely_keep",
+                "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+                "old_text": "Hermes runtime root is ~/.hermes.",
+                "summary": "Runtime root.",
+                "allowed_decisions": ["keep", "move_memory_to_user", "memory_to_skill", "skip", "defer"],
+            },
+        ],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    content = rendered["messages"][1]["content"]
+    user_move_lines = [line for line in content.splitlines() if '"source_evidence_id":"memory-place-user"' in line and "move template" in line]
+    memory_move_lines = [line for line in content.splitlines() if '"source_evidence_id":"memory-place-memory"' in line and "move template" in line]
+
+    assert len(user_move_lines) == 1
+    assert '"operation":"move_user_to_memory"' in user_move_lines[0]
+    assert '"operation":"move_memory_to_user"' not in user_move_lines[0]
+    assert len(memory_move_lines) == 1
+    assert '"operation":"move_memory_to_user"' in memory_move_lines[0]
+    assert '"operation":"move_user_to_memory"' not in memory_move_lines[0]
 
 
 def test_render_planner_messages_prioritizes_memory_to_skill_placement_candidates():
@@ -590,6 +668,43 @@ def test_planner_quality_report_marks_raw_memory_placement_decision_dropped_by_n
     assert result["planner_diagnostics"]["raw_memory_placement_decision_ids"] == ["memory-place-procedure"]
     assert result["planner_diagnostics"]["dropped_raw_decision_count"] == 1
     assert placement["default_defer_details"][0]["diagnosis"] == "planner_emitted_but_normalization_rejected"
+
+
+def test_run_planner_rejects_memory_placement_move_direction_that_conflicts_with_current_store():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 1,
+        "omitted_count": 0,
+        "candidates": [{
+            "evidence_id": "memory-place-user-preference",
+            "current_store": "user",
+            "suggested_route": "likely_keep",
+            "route_reasons": ["store_matches_known_boundary_or_low_signal"],
+            "old_text": "日本語docsは日本語中心、英語は必要時のみ。",
+        }],
+    }
+
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [{
+                "decision": "move_memory_to_user",
+                "source_evidence_id": "memory-place-user-preference",
+                "source_old_text": "日本語docsは日本語中心、英語は必要時のみ。",
+                "reason": "user_profile_shaped",
+            }]
+        }
+
+    result = run_planner(digest, config={"_planner_func": fake_planner})
+    rows = [item for item in result["knowledge_transactions"] if "memory-place-user-preference" in set(item.get("evidence_ids") or []) | {str(item.get("source_id") or "")}]
+
+    assert len(rows) == 1
+    tx = rows[0]
+    assert tx["decision"] == "defer"
+    assert tx["transaction_kind"] == "unresolved"
+    assert tx["reason"] == "memory_placement_candidate_not_selected_by_planner"
+    assert result["planner_diagnostics"]["raw_memory_placement_decision_ids"] == ["memory-place-user-preference"]
+    quality = build_planner_quality_report(digest=digest, planner=result)
+    assert quality["memory_placement_actionability"]["default_defer_details"][0]["diagnosis"] == "planner_emitted_but_normalization_rejected"
 
 
 def test_run_planner_treats_memory_placement_decision_source_id_as_handled():

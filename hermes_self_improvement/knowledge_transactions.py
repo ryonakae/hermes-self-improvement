@@ -19,6 +19,24 @@ _MEMORY_PRODUCT_OPERATIONS = {
 }
 
 
+def placement_move_operation_for_current_store(current_store: str) -> str | None:
+    normalized = {"builtin_user": "user", "builtin_memory": "memory"}.get(str(current_store or ""), str(current_store or ""))
+    if normalized == "user":
+        return "move_user_to_memory"
+    if normalized == "memory":
+        return "move_memory_to_user"
+    return None
+
+
+def memory_placement_allowed_decisions(current_store: str) -> list[str]:
+    decisions = ["keep"]
+    operation = placement_move_operation_for_current_store(current_store)
+    if operation:
+        decisions.append(operation)
+    decisions.extend(["memory_to_skill", "skip", "defer"])
+    return decisions
+
+
 def normalize_knowledge_transaction(raw: dict[str, Any]) -> dict[str, Any]:
     transaction = _canonicalize(raw)
     transaction = _apply_non_executable_store_rules(transaction)

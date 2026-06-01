@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from .markdown_artifacts import render_evidence_markdown, render_candidate_markdown, render_cluster_evidence_section
+from .knowledge_transactions import placement_move_operation_for_current_store
 
 PROMPT_SCHEMA_VERSION = "1.0"
 
@@ -265,7 +266,7 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
     lines.extend([
         "",
         "## Memory placement candidates",
-        "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, move_user_to_memory, move_memory_to_user, memory_to_skill, skip, or defer. Treat suggested_route as advisory, not authority. Use exact old_text when moving/removing. Defer if the entry is valuable but too broad, too long, or ambiguous.",
+        "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, move_user_to_memory, move_memory_to_user, memory_to_skill, skip, or defer. Treat suggested_route as advisory, not authority. Move operations are directions from the current store: use move_user_to_memory only when current_store=user; use move_memory_to_user only when current_store=memory. If the entry already belongs where it is, use the keep/skip template. Use exact old_text when moving/removing. Defer if the entry is valuable but too broad, too long, or ambiguous.",
         "For each memory placement candidate, copy exactly one template into knowledge_transactions and fill only the fields that are already known. Do not omit a candidate just because the answer is keep/skip/defer.",
     ])
     priority_order = {
@@ -287,12 +288,12 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
             f"- evidence_id={evidence_id}; current_store={_clip(item.get('current_store'), max_chars=40)}; suggested_route={_clip(item.get('suggested_route'), max_chars=80)}; route_reasons=[{reasons_str}]; allowed_decisions=[{decisions_str}]; old_text={old_text}"
         )
         template_base = {"source_evidence_id": evidence_id, "source_old_text": old_text}
-        lines.append(
-            "  - move template: "
-            + json.dumps({"operation": "move_user_to_memory", **template_base, "reason": "placement_boundary"}, ensure_ascii=False, separators=(",", ":"))
-            + " or "
-            + json.dumps({"operation": "move_memory_to_user", **template_base, "reason": "placement_boundary"}, ensure_ascii=False, separators=(",", ":"))
-        )
+        move_operation = placement_move_operation_for_current_store(str(item.get("current_store") or ""))
+        if move_operation:
+            lines.append(
+                "  - move template: "
+                + json.dumps({"operation": move_operation, **template_base, "reason": "placement_boundary"}, ensure_ascii=False, separators=(",", ":"))
+            )
         lines.append(
             "  - keep/skip template: "
             + json.dumps({"decision": "skip", "target_store": "none", "operation": "none", "evidence_ids": [evidence_id], "reason": "keep_current_store"}, ensure_ascii=False, separators=(",", ":"))

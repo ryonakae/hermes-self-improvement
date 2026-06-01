@@ -15,7 +15,7 @@ from .evidence import (
 )
 from .observer import _redact_text
 from .llm_utils import _coerce_int, _extract_json_object
-from .knowledge_transactions import normalize_knowledge_transaction
+from .knowledge_transactions import memory_placement_allowed_decisions, normalize_knowledge_transaction, placement_move_operation_for_current_store
 from .constrained_agent import run_constrained_role_agent
 from .target_hints import extract_target_hints
 from .prompt_overlays import load_active_prompt_overlay
@@ -278,14 +278,7 @@ def _memory_placement_candidates_digest(evidence_pack: dict[str, Any], editable_
             "route_reasons": route_reasons or ["missing_route_reason"],
             "old_text": _redacted_preview(old_text, max_chars=260),
             "summary": _redacted_preview(inventory.get("summary") or old_text, max_chars=180),
-            "allowed_decisions": [
-                "keep",
-                "move_user_to_memory",
-                "move_memory_to_user",
-                "memory_to_skill",
-                "skip",
-                "defer",
-            ],
+            "allowed_decisions": memory_placement_allowed_decisions({"builtin_memory": "memory", "builtin_user": "user"}.get(current_store, current_store)),
         }
         if candidate["suggested_route"] == "likely_memory_to_skill":
             target_skills = _candidate_target_skills_for_memory_text(
@@ -1244,6 +1237,54 @@ def _normalize_canonical_skill_transaction(
     return normalize_knowledge_transaction(raw)
 
 
+def _memory_placement_candidate_by_evidence_id(digest: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    raw_placement = digest.get("memory_placement_candidates")
+    placement = raw_placement if isinstance(raw_placement, dict) else {}
+    candidates: dict[str, dict[str, Any]] = {}
+    for item in placement.get("candidates") or []:
+        if not isinstance(item, dict):
+            continue
+        evidence_id = str(item.get("evidence_id") or "").strip()
+        if evidence_id:
+            candidates[evidence_id] = item
+    return candidates
+
+
+def _memory_placement_operation_from_raw(raw: dict[str, Any]) -> str:
+    operation = str(raw.get("operation") or "").strip()
+    decision = str(raw.get("decision") or "").strip()
+    if operation in {"move_user_to_memory", "move_memory_to_user"}:
+        return operation
+    if decision in {"move_user_to_memory", "move_memory_to_user"}:
+        return decision
+    return ""
+
+
+def _normalize_context_checked_memory_placement_transaction(
+    raw: dict[str, Any],
+    *,
+    memory_placement_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    operation = _memory_placement_operation_from_raw(raw)
+    if not operation:
+        return normalize_knowledge_transaction(raw)
+    raw_ids = _raw_decision_evidence_ids(raw)
+    evidence_id = raw_ids[0] if raw_ids else ""
+    if not evidence_id:
+        return normalize_knowledge_transaction(raw)
+    candidate = memory_placement_by_id.get(evidence_id)
+    if not candidate:
+        return None
+    expected_operation = placement_move_operation_for_current_store(str(candidate.get("current_store") or ""))
+    if operation != expected_operation:
+        return None
+    source_old_text = str(raw.get("source_old_text") or raw.get("old_text") or "")
+    candidate_old_text = str(candidate.get("old_text") or "")
+    if source_old_text and candidate_old_text and source_old_text != candidate_old_text:
+        return None
+    return normalize_knowledge_transaction(raw)
+
+
 def _raw_decision_evidence_ids(raw: dict[str, Any]) -> list[str]:
     ids: list[str] = []
     for key in ("source_evidence_id", "source_id", "evidence_id"):
@@ -1263,7 +1304,7 @@ def _raw_planner_diagnostics(raw_transactions: list[Any]) -> dict[str, Any]:
     for raw in raw_decisions:
         kind = str(raw.get("transaction_kind") or raw.get("decision") or "unknown")
         by_kind[kind] = by_kind.get(kind, 0) + 1
-        if kind in {"memory_to_skill", "placement_move", "memory", "unresolved"}:
+        if kind in {"memory_to_skill", "placement_move", "memory", "unresolved", "move_user_to_memory", "move_memory_to_user"}:
             memory_placement_decision_ids.extend(_raw_decision_evidence_ids(raw))
         elif str(raw.get("target_store") or "") in {"builtin_user", "builtin_memory", "unresolved"}:
             memory_placement_decision_ids.extend(_raw_decision_evidence_ids(raw))
@@ -1304,6 +1345,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
         candidate_rows=candidate_rows,
         maintenance_candidates=maintenance_candidates,
     )
+    memory_placement_by_id = _memory_placement_candidate_by_evidence_id(digest)
     decisions: list[dict[str, Any]] = []
     seen: set[str] = set()
     seen_evidence_ids: set[str] = set()
@@ -1320,7 +1362,7 @@ def _normalize_planner_payload(payload: Any, digest: dict[str, Any]) -> dict[str
                 required_maintenance_evidence_by_candidate=required_maintenance_evidence_by_candidate,
             )
         elif _is_canonical_knowledge_transaction(raw):
-            item = normalize_knowledge_transaction(raw)
+            item = _normalize_context_checked_memory_placement_transaction(raw, memory_placement_by_id=memory_placement_by_id)
         elif str(raw.get("transaction_kind") or "") == "memory_to_skill":
             item = _normalize_memory_to_skill_transaction(raw, candidate_names=candidate_names, available_evidence_ids=available_evidence_ids)
         elif str(raw.get("decision") or "") == "create_skill":

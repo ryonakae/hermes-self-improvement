@@ -662,3 +662,22 @@ git push
 ## Expected next implementation slice
 
 Start with Task 1 RED. Do not begin implementation from executor code; the root bug is planner/normalizer direction semantics.
+
+---
+
+## Implementation progress
+
+- [x] Task 1 — Added shared placement-direction helpers and narrowed digest `allowed_decisions` by `current_store`.
+- [x] Task 2 — Prompt rendering now shows only the store-valid move template for each memory placement candidate.
+- [x] Task 3 — Public `run_planner` path now rejects placement move decisions whose direction conflicts with candidate `current_store`, preserves raw diagnostics, and defaults the candidate to bounded defer diagnostics.
+
+Verification so far:
+
+```bash
+PY=${PYTHON:-.venv/bin/python}
+$PY -m pytest tests/test_skill_planner.py -q
+# 55 passed
+
+$PY -m py_compile __init__.py hermes_self_improvement/*.py && $PY -m pytest -q && git diff --check && git status --short
+# 943 passed, 2 skipped
+```
