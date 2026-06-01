@@ -1282,6 +1282,9 @@ def _normalize_context_checked_memory_placement_transaction(
     candidate_old_text = str(candidate.get("old_text") or "")
     if source_old_text and candidate_old_text and source_old_text != candidate_old_text:
         return None
+    raw_evidence_ids = [str(item) for item in (raw.get("evidence_ids") or []) if str(item)]
+    if evidence_id not in raw_evidence_ids:
+        raw = {**raw, "evidence_ids": [evidence_id, *raw_evidence_ids]}
     return normalize_knowledge_transaction(raw)
 
 

@@ -742,6 +742,7 @@ def test_run_planner_treats_memory_placement_decision_source_id_as_handled():
     assert tx["source_store"] == "builtin_user"
     assert tx["target_store"] == "builtin_memory"
     assert tx["source_id"] == "memory-place-user-runtime"
+    assert tx["evidence_ids"] == ["memory-place-user-runtime"]
 
 
 def test_planner_allows_mutate_skill_with_inventory_evidence():
