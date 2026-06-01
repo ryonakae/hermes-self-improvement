@@ -259,7 +259,7 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
     evidence_ids = sorted({str(item) for item in (raw.get("evidence_ids") or []) if str(item)})
     if operation in _SOURCE_REQUIRED_OPERATIONS and source_id and source_id not in evidence_ids:
         evidence_ids = sorted({*evidence_ids, source_id})
-    if operation in _SOURCE_REQUIRED_OPERATIONS and source_old_text and not source_id:
+    if transaction_kind != "memory_to_skill" and operation in _SOURCE_REQUIRED_OPERATIONS and source_old_text and not source_id:
         source_id = evidence_ids[0] if evidence_ids else target_id
     transaction = {
         "transaction_id": str(raw.get("transaction_id") or ""),
@@ -353,6 +353,8 @@ def _validate_apply_transaction(transaction: dict[str, Any]) -> dict[str, Any]:
     if not str(transaction.get("target_id") or ""):
         return _blocked(transaction, "transaction_missing_target_id")
     operation = str(transaction.get("operation") or "")
+    if transaction.get("transaction_kind") == "memory_to_skill" and operation in _SOURCE_REQUIRED_OPERATIONS and not str(transaction.get("source_id") or ""):
+        return _blocked(transaction, "transaction_missing_source_evidence_id")
     if operation in _SOURCE_REQUIRED_OPERATIONS and not _has_source_fields(transaction):
         return _blocked(transaction, "transaction_missing_source_fields")
     return transaction

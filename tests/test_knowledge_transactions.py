@@ -82,6 +82,38 @@ def test_normalize_knowledge_transaction_maps_legacy_actions_to_canonical_contra
     assert move["target_id"] == "test-driven-development"
     assert move["operation"] == "move"
 
+def test_normalize_memory_to_skill_blocks_when_source_id_would_be_guessed_from_unrelated_evidence():
+    normalized = normalize_knowledge_transaction({
+        "transaction_kind": "memory_to_skill",
+        "decision": "apply",
+        "source_store": "builtin_memory",
+        "source_old_text": "When patch fails, re-read and retry with a smaller anchor.",
+        "target_store": "skill",
+        "target_skill": "safe-patch-usage",
+        "evidence_ids": ["unrelated-evidence"],
+    })
+
+    assert normalized["decision"] == "block"
+    assert normalized["operation"] == "none"
+    assert normalized["source_id"] == ""
+    assert normalized["reason"] == "transaction_missing_source_evidence_id"
+
+
+def test_normalize_memory_to_skill_blocks_when_source_id_would_be_guessed_from_target_skill():
+    normalized = normalize_knowledge_transaction({
+        "transaction_kind": "memory_to_skill",
+        "decision": "apply",
+        "source_store": "builtin_memory",
+        "source_old_text": "When patch fails, re-read and retry with a smaller anchor.",
+        "target_store": "skill",
+        "target_skill": "safe-patch-usage",
+    })
+
+    assert normalized["decision"] == "block"
+    assert normalized["operation"] == "none"
+    assert normalized["source_id"] == ""
+    assert normalized["reason"] == "transaction_missing_source_evidence_id"
+
 
 def test_normalize_knowledge_transaction_ids_are_deterministic_and_evidence_order_independent():
     raw = {

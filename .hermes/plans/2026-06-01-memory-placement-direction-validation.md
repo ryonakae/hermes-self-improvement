@@ -695,3 +695,19 @@ Follow-up cleanup slice:
 - Canonical transaction normalization preserves `source_evidence_id` in `evidence_ids` for source-directed memory cleanup operations.
 - Prompt guidance now explicitly says existing skill coverage is not a skip reason when source cleanup is needed: use `memory_to_skill` to update/verify the skill and remove source memory after the skill-side change is safe.
 - Dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260601T065204Z.json` produced `apply=4 / defer=29 / skip=66 / block=0`, with three `memory_to_skill` candidates selected for existing skills (`hermes-gateway-and-sessions`, `hindsight-operations`, `hermes-lcm`) and zero dropped memory-routed-to-skill candidates.
+
+Post-review correction slice:
+
+- Independent review found two real blockers in commit `1009010`:
+  - exact USER/MEMORY duplicate cleanup only handled two-entry clusters and deferred 3+ exact duplicate clusters;
+  - `memory_to_skill` normalization could fabricate `source_id` from unrelated `evidence_ids[0]` or `target_id` when `source_evidence_id` was missing.
+- Added RED regressions and fixed both:
+  - 3+ exact cross-store duplicate clusters now still produce canonical duplicate-side `memory_remove` hints;
+  - `memory_to_skill` apply transactions without explicit source id now block with `transaction_missing_source_evidence_id` instead of guessing.
+- Dry-run then exposed a route-hint false positive where USER preferences containing runtime words could be moved to MEMORY. Added route precedence tests so clear USER preference language stays `likely_keep`.
+- A second review found the initial route marker set was too broad (`ryo`/`reports`) and could keep diary/noise. Added the diary regression and narrowed markers so diary content still defers.
+- Verification after final correction:
+  - related suite: `102 passed`;
+  - full suite: `952 passed, 2 skipped`;
+  - dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260601T075153Z.json`: `apply=2 / defer=7 / skip=68 / block=0`, with apply direction/reason aligned;
+  - final independent focused review: approved, no blockers.

@@ -1877,21 +1877,20 @@ def _canonical_store_for_memory_text(old_text: str) -> str | None:
 
 
 def _cross_store_duplicate_action_hint(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
-    if len(entries) != 2:
+    entry_texts = {str(entry.get("old_text") or "").strip() for entry in entries}
+    entry_texts.discard("")
+    if len(entry_texts) != 1:
         return None
-    first, second = entries
-    first_text = str(first.get("old_text") or "").strip()
-    second_text = str(second.get("old_text") or "").strip()
-    first_target = str(first.get("target") or "memory")
-    second_target = str(second.get("target") or "memory")
-    if not first_text or first_text != second_text or {first_target, second_target} != {"memory", "user"}:
+    old_text = next(iter(entry_texts))
+    targets = {str(entry.get("target") or "memory") for entry in entries}
+    if not {"memory", "user"}.issubset(targets):
         return None
-    canonical_target = _canonical_store_for_memory_text(first_text)
+    canonical_target = _canonical_store_for_memory_text(old_text)
     if canonical_target not in {"memory", "user"}:
         return None
     duplicate_target = "memory" if canonical_target == "user" else "user"
-    duplicate_entry = first if first_target == duplicate_target else second
-    old_text = str(duplicate_entry.get("old_text") or "").strip()
+    if not any(str(entry.get("target") or "memory") == duplicate_target for entry in entries):
+        return None
     return {
         "resolution_kind": "mutate_memory",
         "suggested_action": "apply",
@@ -2002,12 +2001,13 @@ def _memory_placement_route_hint(current_store: str, old_text: str) -> dict[str,
         "preference",
         "expects",
         "communication",
-        "reports",
         "文体",
         "好む",
         "望む",
         "報告",
         "質問では",
+        "依頼では",
+        "完了/残件",
     )
     runtime_markers = (
         "~/",
@@ -2053,6 +2053,8 @@ def _memory_placement_route_hint(current_store: str, old_text: str) -> dict[str,
     )
     if current_store == "memory" and _contains_any(lowered, user_markers):
         return {"suggested_route": "likely_move_memory_to_user", "route_reasons": ["user_preference_language"]}
+    if current_store == "user" and _contains_any(lowered, user_markers):
+        return {"suggested_route": "likely_keep", "route_reasons": ["user_preference_language"]}
     if _contains_any(lowered, diary_markers):
         return {"suggested_route": "likely_defer", "route_reasons": ["stale_or_diary_language"]}
     if current_store == "memory" and _contains_any(lowered, procedural_markers):

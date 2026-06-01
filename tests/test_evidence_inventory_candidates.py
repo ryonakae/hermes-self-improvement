@@ -270,6 +270,44 @@ def test_exact_cross_store_duplicate_prefers_removing_memory_when_user_is_canoni
     }
 
 
+def test_exact_cross_store_duplicate_cleanup_handles_larger_user_canonical_cluster(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    user = tmp_path / "USER.md"
+    text = "Ryo prefers concise implementation reports with completed and remaining work clearly stated."
+    memory.write_text(text + "\n§\n" + text + "\n", encoding="utf-8")
+    user.write_text(text + "\n", encoding="utf-8")
+
+    item = collect_memory_inventory_candidates(memory_paths={"memory": memory, "user": user})[0]
+
+    assert item["inventory"]["group_kind"] == "semantic_duplicate"
+    hint = item["target_resolution_hint"]
+    assert hint["suggested_action"] == "apply"
+    assert hint["reason"] == "duplicate_already_in_canonical_store"
+    assert hint["memory_operation_hint"]["target"] == "memory"
+    assert hint["memory_operation_hint"]["old_text"] == text
+
+
+def test_exact_cross_store_duplicate_cleanup_handles_larger_memory_canonical_cluster(tmp_path):
+    memory = tmp_path / "MEMORY.md"
+    user = tmp_path / "USER.md"
+    text = "Hermes runtime config lives in ~/.hermes/config.yaml."
+    memory.write_text(text + "\n", encoding="utf-8")
+    user.write_text(text + "\n§\n" + text + "\n", encoding="utf-8")
+
+    item = collect_memory_inventory_candidates(memory_paths={"memory": memory, "user": user})[0]
+
+    assert item["inventory"]["group_kind"] == "semantic_duplicate"
+    hint = item["target_resolution_hint"]
+    assert hint["suggested_action"] == "apply"
+    assert hint["reason"] == "duplicate_already_in_canonical_store"
+    assert hint["memory_operation_hint"] == {
+        "operation": "memory_remove",
+        "target": "user",
+        "old_text": text,
+        "reason": "remove duplicate user entry after preserving canonical memory entry",
+    }
+
+
 def test_near_duplicate_memory_group_has_defer_action_hint(tmp_path):
     memory = tmp_path / "MEMORY.md"
     memory.write_text("Hermes runtime root is ~/.hermes.\nHermes runtime config lives in ~/.hermes/config.yaml.\n", encoding="utf-8")
@@ -446,6 +484,35 @@ def test_memory_placement_candidate_hints_user_runtime_fact_should_move_to_memor
     assert "contains_runtime_path" in inventory["route_reasons"]
     assert inventory["old_text"].startswith("Gmail observer=")
     assert "likely_targets" not in candidate
+
+
+def test_memory_placement_candidate_keeps_user_preference_even_with_runtime_words(tmp_path):
+    user = tmp_path / "USER.md"
+    memory = tmp_path / "MEMORY.md"
+    user.write_text(
+        "Ryoの状況確認依頼ではplan/commit/repo/runtime/cron/runを確認し、完了/残件を答える。\n",
+        encoding="utf-8",
+    )
+    memory.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
+
+    items = collect_memory_placement_candidates({"user": user, "memory": memory})
+    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "user")
+
+    assert inventory["suggested_route"] == "likely_keep"
+    assert "user_preference_language" in inventory["route_reasons"]
+
+
+def test_memory_placement_candidate_defers_user_diary_even_with_ryo_and_reports_words(tmp_path):
+    user = tmp_path / "USER.md"
+    memory = tmp_path / "MEMORY.md"
+    user.write_text("Ryo completed the PR and reports are ready.\n", encoding="utf-8")
+    memory.write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
+
+    items = collect_memory_placement_candidates({"user": user, "memory": memory})
+    inventory = next(item["inventory"] for item in items if item["inventory"]["current_store"] == "user")
+
+    assert inventory["suggested_route"] == "likely_defer"
+    assert "stale_or_diary_language" in inventory["route_reasons"]
 
 
 def test_memory_placement_candidate_hints_memory_user_preference_should_move_to_user(tmp_path):
