@@ -336,11 +336,13 @@ def _render_semantic_knowledge_section(digest: dict[str, Any]) -> str:
             lines.append("  - duplicate_cleanup template only if truly redundant: " + json.dumps({"transaction_kind": "duplicate_cleanup", "decision": "defer", "operation": "remove", "source_id": item.get("evidence_id"), "related_evidence_ids": [item.get("user_evidence_id"), item.get("memory_evidence_id")], "reason": "duplicate_status_requires_review"}, ensure_ascii=False, separators=(",", ":")))
     if coverage:
         lines.append("### Existing skill coverage for memory entries")
+        lines.append("Prefer patching an existing matching skill over creating a new one. Existing coverage is advisory context — the Planner decides patch/merge/skip/defer based on the evidence and the existing skill's current state.")
         for item in coverage[:20]:
             skills = ",".join(str(match.get("name") or "") for match in (item.get("matching_skills") or []) if isinstance(match, dict)) or "none"
             lines.append(f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; source_evidence_id={_clip(item.get('source_evidence_id'), max_chars=80)}; matching_skills=[{skills}]; notes={_clip(item.get('notes'), max_chars=180)}")
     if ambiguity:
         lines.append("### Skill ambiguity candidates")
+        lines.append("Do not delete or archive ambiguous skills. Default action is defer with manual review. Skill ambiguity is report-only until exact editable target and safe operation are confirmed.")
         for item in ambiguity[:20]:
             paths = ",".join(_clip(value, max_chars=120) for value in (item.get("conflicting_paths") or [])[:4])
             lines.append(f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; ambiguous_name={_clip(item.get('ambiguous_name'), max_chars=100)}; conflicting_paths=[{paths}]")

@@ -1733,3 +1733,81 @@ def test_render_planner_messages_includes_semantic_knowledge_rules_and_templates
         assert token in content
     for forbidden in ("suggested_route", "likely_move_user_to_memory", "likely_move_memory_to_user", "likely_memory_to_skill"):
         assert forbidden not in content
+
+
+def test_render_planner_messages_emphasizes_existing_skill_coverage_over_create_skill():
+    digest = build_planner_digest(pack())
+    digest["semantic_knowledge_candidates"] = {
+        "mixed_entries": [],
+        "cross_store_related_pairs": [],
+        "skill_coverage": [{
+            "evidence_id": "coverage-1",
+            "source_evidence_id": "memory-place-procedural",
+            "matching_skills": [{"name": "hindsight-operations", "mutable": True}],
+            "notes": "Advisory context only. Planner decides patch/merge/skip/defer.",
+        }],
+        "skill_ambiguity": [],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    content = rendered["messages"][1]["content"]
+
+    assert "### Existing skill coverage for memory entries" in content
+    assert "hindsight-operations" in content
+    assert "Prefer patching an existing matching skill over creating a new one" in content
+
+
+def test_render_planner_messages_skill_ambiguity_cleanup_is_non_destructive_preview():
+    digest = build_planner_digest(pack())
+    digest["semantic_knowledge_candidates"] = {
+        "mixed_entries": [],
+        "cross_store_related_pairs": [],
+        "skill_coverage": [],
+        "skill_ambiguity": [{
+            "evidence_id": "amb-1",
+            "ambiguous_name": "gmail-purchase-live-context",
+            "conflicting_paths": ["skills/gmail-purchase-live-context/SKILL.md", "references/gmail-purchase-live-context.md"],
+        }],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    content = rendered["messages"][1]["content"]
+
+    assert "### Skill ambiguity candidates" in content
+    assert "gmail-purchase-live-context" in content
+    assert "skill_ambiguity_cleanup template" in content
+    assert "\"decision\":\"defer\"" in content
+    assert "defer_manual_review" in content
+    # Must not suggest delete or destructive action in ambiguity section
+    amb_start = content.find("### Skill ambiguity candidates")
+    amb_end = content.find("##", amb_start + 1) if amb_start >= 0 else -1
+    amb_section = content[amb_start:amb_end] if amb_start >= 0 and amb_end >= 0 else content[amb_start:] if amb_start >= 0 else ""
+    for forbidden in ("delete_skill", "archive_skill", "remove ambiguity"):
+        assert forbidden not in amb_section, f"'{forbidden}' found in ambiguity section"
+
+
+def test_render_planner_messages_coverage_and_ambiguity_are_visible_when_both_present():
+    digest = build_planner_digest(pack())
+    digest["semantic_knowledge_candidates"] = {
+        "mixed_entries": [],
+        "cross_store_related_pairs": [],
+        "skill_coverage": [{
+            "evidence_id": "coverage-2",
+            "source_evidence_id": "memory-place-hindsight",
+            "matching_skills": [{"name": "hindsight-operations", "mutable": True}],
+            "notes": "Advisory context only.",
+        }],
+        "skill_ambiguity": [{
+            "evidence_id": "amb-2",
+            "ambiguous_name": "hermes-memory-hygiene",
+            "conflicting_paths": ["skills/memory-hygiene/SKILL.md", "references/hermes-memory-and-live-context.md"],
+        }],
+    }
+
+    rendered = render_planner_messages(digest=digest)
+    content = rendered["messages"][1]["content"]
+
+    assert "### Existing skill coverage for memory entries" in content
+    assert "### Skill ambiguity candidates" in content
+    assert "hindsight-operations" in content
+    assert "hermes-memory-hygiene" in content
