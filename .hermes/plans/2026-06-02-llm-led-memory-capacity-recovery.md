@@ -44,6 +44,17 @@
 
 ---
 
+## Execution status (2026-06-02)
+
+Tasks 1-7 are implemented, reviewed, and dogfood-verified.
+Full verification: `py_compile` OK, `git diff --check` OK, full suite `1001 passed, 2 skipped`.
+Dogfood artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260602T095235Z.json`
+- `source_memory_capacity_followups.blocked_count=6`, `memory_capacity_followups.blocked_count=6`
+- Planner received capacity follow-ups and produced `block=4` for capacity-blocked transactions plus `apply=7` for other canonical transactions.
+- `dry_run=true`, `target_changed=false`.
+
+---
+
 ## Non-goals / guardrails
 
 - Do not add deterministic route heuristics such as `likely_*`, `suggested_route`, `route_reasons`, `allowed_recommendations`, `default_defer_by_route`, or `unhandled_by_route`.

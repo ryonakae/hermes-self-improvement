@@ -1114,6 +1114,7 @@ def test_execute_knowledge_transaction_placement_move_recovers_capacity_before_s
             "_memory_capacity_planner_fn": lambda **kwargs: [
                 {"action": "remove", "target": "memory", "old_text": "Old stale runtime root is /opt/data."}
             ],
+            "_allow_test_capacity_planner": True,
         },
         mutate=True,
     )

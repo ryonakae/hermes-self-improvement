@@ -201,6 +201,29 @@ def _compact_skill_lifecycle(decisions: Any) -> dict[str, Any]:
     }
 
 
+def _memory_capacity_summary(result: dict[str, Any], knowledge_transactions: Any) -> dict[str, int]:
+    raw_followups = result.get("memory_capacity_followups")
+    followups = raw_followups if isinstance(raw_followups, dict) else {}
+    items = [item for item in followups.get("items") or [] if isinstance(item, dict)]
+    blocked = int(followups.get("blocked_count") or len(items))
+    partial = 0
+    resolved = 0
+    for item in knowledge_transactions if isinstance(knowledge_transactions, list) else []:
+        if not isinstance(item, dict):
+            continue
+        raw_tx_result = item.get("transaction_result") if isinstance(item.get("transaction_result"), dict) else item.get("result") if isinstance(item.get("result"), dict) else {}
+        tx_result: dict[str, Any] = raw_tx_result if isinstance(raw_tx_result, dict) else {}
+        outcome = str(tx_result.get("outcome") or "")
+        reason = str(tx_result.get("reason") or tx_result.get("error") or "")
+        if outcome == "partial":
+            partial += 1
+        if reason == "memory_capacity_exceeded":
+            continue
+        if item.get("decision") == "apply" and outcome == "applied":
+            resolved += 1
+    return {"blocked": blocked, "followup_items": len(items), "resolved": resolved, "partial": partial}
+
+
 def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     evidence_pack = result.get("evidence_pack") if isinstance(result.get("evidence_pack"), dict) else {}
     evidence_summary = evidence_pack.get("summary") if isinstance(evidence_pack.get("summary"), dict) else {}
@@ -246,6 +269,7 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "artifact_path": artifact_path,
         "summary": result.get("summary") if isinstance(result.get("summary"), dict) else {},
         "action_summary": action_summary,
+        "memory_capacity": _memory_capacity_summary(result, knowledge_transactions),
         "skill_lifecycle": skill_lifecycle,
         "actionable": _actionable_summary(action_summary),
         "autonomous_policy": autonomous_policy,

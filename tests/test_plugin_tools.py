@@ -369,6 +369,33 @@ def test_improve_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path):
     assert len(raw) < 6000
 
 
+def test_compact_improve_tool_result_reports_capacity_without_entry_text():
+    import hermes_self_improvement.tool_handlers as tools
+
+    raw_result = {
+        "dry_run": False,
+        "execute": True,
+        "memory_capacity_followups": {
+            "blocked_count": 1,
+            "items": [{"source_id": "memory_place_capacity", "current_entries": [{"old_text": "Sensitive old memory text"}]}],
+        },
+        "knowledge_transactions": [
+            {
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "transaction_result": {"success": False, "outcome": "blocked", "reason": "memory_capacity_exceeded"},
+            }
+        ],
+        "step_decisions": {"summary": {}},
+    }
+
+    payload = tools._compact_improve_tool_result(raw_result)
+    raw = json.dumps(payload, ensure_ascii=False)
+
+    assert payload["memory_capacity"] == {"blocked": 1, "followup_items": 1, "resolved": 0, "partial": 0}
+    assert "Sensitive old memory text" not in raw
+
+
 def test_compact_improve_tool_result_uses_canonical_knowledge_transactions_over_split_lanes():
     import hermes_self_improvement.tool_handlers as tools
 

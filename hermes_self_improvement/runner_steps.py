@@ -666,6 +666,8 @@ def _capacity_compaction_operations(*, failed_operation: dict[str, Any] | None, 
     # memory_capacity_planner の LLM 呼び出しは廃止 (PR2-c)。
     # capacity 圧迫時の compaction は editor memory lane (editor_backend_memory.py) に集約する。
     # 一時的に互換注入用フックは残し、deterministic な計画は外部から渡されたときだけ採用する。
+    if not config.get("_allow_test_capacity_planner"):
+        return []
     planner = config.get("_memory_capacity_planner_fn")
     raw: list[Any] = []
     if callable(planner):
@@ -1723,6 +1725,96 @@ def _knowledge_transaction_result_summary(results: list[dict[str, Any]]) -> dict
     return summary
 
 
+def _knowledge_transaction_capacity_failure_result(payload: dict[str, Any]) -> dict[str, Any]:
+    nested_keys = ("add_result", "memory_result", "fallback_result", "destination_result", "replace_result", "remove_result", "result", "transaction_result", "capacity_recovery")
+    seen: set[int] = set()
+
+    def visit(item: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(item, dict):
+            return {}
+        marker = id(item)
+        if marker in seen:
+            return {}
+        seen.add(marker)
+        for key in nested_keys:
+            nested = item.get(key)
+            if isinstance(nested, dict):
+                found = visit(nested)
+                if found:
+                    return found
+        if str(item.get("error") or "") == "memory_capacity_exceeded" or str(item.get("reason") or "") == "memory_capacity_exceeded" or _is_memory_capacity_error(item):
+            return item
+        return {}
+
+    return visit(payload)
+
+
+def build_memory_capacity_followups(transactions: list[dict[str, Any]]) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    for tx in transactions:
+        if not isinstance(tx, dict):
+            continue
+        tx_result = tx.get("transaction_result") if isinstance(tx.get("transaction_result"), dict) else tx.get("result") if isinstance(tx.get("result"), dict) else {}
+        if not isinstance(tx_result, dict):
+            continue
+        failure_result = _knowledge_transaction_capacity_failure_result(tx_result)
+        if not failure_result:
+            continue
+        current_entries_raw = failure_result.get("current_entries")
+        if not isinstance(current_entries_raw, list):
+            memory_result = failure_result.get("memory_result")
+            memory_result_dict = memory_result if isinstance(memory_result, dict) else {}
+            current_entries_raw = memory_result_dict.get("current_entries") if isinstance(memory_result_dict.get("current_entries"), list) else []
+        current_entries: list[dict[str, Any]] = []
+        for entry in current_entries_raw[:12]:
+            if isinstance(entry, str):
+                old_text = entry.strip()
+                if old_text:
+                    current_entries.append({"target": str(tx.get("target_store") or ""), "old_text": old_text[:500], "summary": ""})
+                continue
+            if not isinstance(entry, dict):
+                continue
+            old_text = str(entry.get("old_text") or entry.get("content") or entry.get("text") or "").strip()
+            if not old_text:
+                continue
+            current_entries.append(
+                {
+                    "target": str(entry.get("target") or tx.get("target_store") or ""),
+                    "old_text": old_text[:500],
+                    "summary": str(entry.get("summary") or "")[:180],
+                }
+            )
+        usage = ""
+        memory_result = failure_result.get("memory_result")
+        if isinstance(memory_result, dict):
+            usage = str(memory_result.get("usage") or "")
+        if not usage:
+            add_result = failure_result.get("add_result")
+            if isinstance(add_result, dict):
+                usage = str(add_result.get("usage") or "")
+        if not usage:
+            usage = str(failure_result.get("usage") or "")
+        items.append(
+            {
+                "transaction_id": str(tx.get("transaction_id") or ""),
+                "transaction_kind": str(tx.get("transaction_kind") or ""),
+                "source_id": str(tx.get("source_id") or tx.get("source_evidence_id") or ""),
+                "source_store": str(tx.get("source_store") or ""),
+                "target_store": str(tx.get("target_store") or ""),
+                "operation": str(tx.get("operation") or ""),
+                "source_old_text": str(tx.get("source_old_text") or "")[:500],
+                "attempted_content": str(tx.get("content") or tx.get("source_old_text") or "")[:500],
+                "failure_reason": "memory_capacity_exceeded",
+                "usage": usage,
+                "current_entries": current_entries,
+                "allowed_followup_decisions": ["apply", "defer", "skip", "block"],
+                "allowed_transaction_kinds": ["memory_rewrite", "duplicate_cleanup", "placement_split", "memory_to_skill", "placement_move"],
+                "program_notes": "Facts only. The executor recorded a capacity failure; do not choose a removal or replacement in code.",
+            }
+        )
+    return {"blocked_count": len(items), "items": items}
+
+
 def run_knowledge_improvement_step(
     *,
     evidence_pack: dict[str, Any],
@@ -1741,6 +1833,7 @@ def run_knowledge_improvement_step(
     )
     planner = run_planner_runtime(digest, config=config)
     prompt_sources: dict[str, Any] = {}
+    memory_capacity_followups: dict[str, Any] = {"blocked_count": 0, "items": []}
     if isinstance(planner.get("prompt_source"), dict) and isinstance(planner["prompt_source"].get("planner"), dict):
         prompt_sources["planner"] = planner["prompt_source"]["planner"]
     if planner.get("status") != "completed":
@@ -1757,6 +1850,7 @@ def run_knowledge_improvement_step(
             "knowledge_routing": {},
             "cluster_evidence": digest.get("cluster_evidence") if isinstance(digest.get("cluster_evidence"), dict) else {},
             "prompt_sources": prompt_sources,
+            "memory_capacity_followups": memory_capacity_followups,
         }
     transactions = [
         normalize_knowledge_transaction(item)
@@ -1778,6 +1872,7 @@ def run_knowledge_improvement_step(
         changed_skills.extend(str(item) for item in (result.get("created_skills") or []) if str(item))
         changed_memories.extend(str(item) for item in (result.get("changed_memories") or []) if str(item))
         changed_memories.extend(str(item) for item in (result.get("removed_memories") or []) if str(item))
+    memory_capacity_followups = build_memory_capacity_followups(transactions)
     return {
         "status": "completed",
         "planner": planner,
@@ -1796,6 +1891,7 @@ def run_knowledge_improvement_step(
         ),
         "cluster_evidence": digest.get("cluster_evidence") if isinstance(digest.get("cluster_evidence"), dict) else {},
         "prompt_sources": prompt_sources,
+        "memory_capacity_followups": memory_capacity_followups,
     }
 
 

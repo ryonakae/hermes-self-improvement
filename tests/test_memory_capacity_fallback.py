@@ -29,7 +29,7 @@ def test_memory_add_compacts_built_in_store_before_retrying_add():
 
     result = run_memory_improvement_step(
         evidence_pack=_pack({"operation": "memory_add", "target": "memory", "content": "new durable fact"}),
-        config={"_memory_tool_fn": fake_memory, "_memory_capacity_planner_fn": capacity_planner},
+        config={"_memory_tool_fn": fake_memory, "_memory_capacity_planner_fn": capacity_planner, "_allow_test_capacity_planner": True},
         mutate=True,
     )
 
@@ -77,6 +77,35 @@ def test_memory_capacity_falls_back_to_active_external_provider_when_still_full(
     assert decision["result"]["fallback_context"]["external_provider"] == "hindsight"
 
 
+def test_memory_capacity_planner_injection_is_quarantined_without_test_flag():
+    calls = []
+    planner_called = False
+
+    def fake_memory(**args):
+        calls.append(args)
+        return json.dumps({
+            "success": False,
+            "error": "Memory at 2,195/2,200 chars. Adding this entry (80 chars) would exceed the limit. Replace or remove existing entries first.",
+            "current_entries": ["old verbose entry"],
+        })
+
+    def injected_planner(**kwargs):
+        nonlocal planner_called
+        planner_called = True
+        return [{"action": "remove", "target": kwargs["target"], "old_text": "old verbose entry"}]
+
+    result = run_memory_improvement_step(
+        evidence_pack=_pack({"operation": "memory_add", "target": "memory", "content": "new durable fact"}),
+        config={"_memory_tool_fn": fake_memory, "_memory_capacity_planner_fn": injected_planner},
+        mutate=True,
+    )
+
+    assert planner_called is False
+    assert calls == [{"action": "add", "target": "memory", "content": "new durable fact"}]
+    assert result["changed"] == 0
+    assert result["decisions"][0]["reason"] == "memory_capacity_exceeded"
+
+
 def test_memory_capacity_uses_injected_compaction_planner_when_provided():
     # PR2-c: memory_capacity_planner の LLM 呼び出しは廃止された。
     # 互換注入フック `_memory_capacity_planner_fn` から compaction を受け取れる
@@ -102,6 +131,7 @@ def test_memory_capacity_uses_injected_compaction_planner_when_provided():
         config={
             "_memory_tool_fn": fake_memory,
             "_memory_capacity_planner_fn": injected_planner,
+            "_allow_test_capacity_planner": True,
         },
         mutate=True,
     )

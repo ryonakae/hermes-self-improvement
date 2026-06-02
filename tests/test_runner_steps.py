@@ -1179,6 +1179,139 @@ def test_run_knowledge_improvement_step_dry_run_routes_apply_through_executor(mo
     assert result["transaction_results"][0]["reason"] == "executor_validation_sentinel"
 
 
+def test_run_knowledge_improvement_step_records_capacity_blocked_placement_move_followup(monkeypatch, tmp_path):
+    def fake_memory_tool(**args):
+        if args.get("action") == "add" and args.get("target") == "memory":
+            return {
+                "success": False,
+                "error": "memory_capacity_exceeded",
+                "usage": "2,131/2,200",
+                "current_entries": [
+                    {"target": "memory", "old_text": "Old durable runtime fact.", "summary": "runtime fact"},
+                    {"target": "memory", "old_text": "Obsolete duplicate detail.", "summary": "duplicate"},
+                ],
+            }
+        return {"success": True, "changed": True}
+
+    def fake_planner(*, digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_store": "builtin_user",
+                    "source_id": "memory_place_capacity",
+                    "source_old_text": "Project convention belongs in MEMORY.",
+                    "content": "Project convention belongs in MEMORY.",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "evidence_ids": ["m1"],
+                }
+            ],
+        }
+
+    result = run_knowledge_improvement_step(
+        evidence_pack=evidence_pack_for("demo-skill"),
+        config={
+            "_self_improvement_root": str(tmp_path / "self-improvement"),
+            "_planner_runtime_func": fake_planner,
+            "_memory_tool_fn": fake_memory_tool,
+            "_memory_current_entries": [
+                {"target": "user", "old_text": "Project convention belongs in MEMORY."},
+                {"target": "memory", "old_text": "Old durable runtime fact.", "summary": "runtime fact"},
+                {"target": "memory", "old_text": "Obsolete duplicate detail.", "summary": "duplicate"},
+            ],
+        },
+        mutate=True,
+    )
+
+    followups = result["memory_capacity_followups"]
+    assert followups["blocked_count"] == 1
+    item = followups["items"][0]
+    assert item["transaction_kind"] == "placement_move"
+    assert item["source_id"] == "memory_place_capacity"
+    assert item["source_store"] == "builtin_user"
+    assert item["target_store"] == "builtin_memory"
+    assert item["failure_reason"] == "memory_capacity_exceeded"
+    assert item["usage"] == "2,131/2,200"
+    assert item["attempted_content"] == "Project convention belongs in MEMORY."
+    assert [entry["old_text"] for entry in item["current_entries"]] == [
+        "Old durable runtime fact.",
+        "Obsolete duplicate detail.",
+    ]
+    tx = result["knowledge_transactions"][0]
+    assert tx["transaction_result"]["outcome"] == "blocked"
+    assert tx["transaction_result"]["reason"] == "memory_capacity_exceeded"
+    assert tx["transaction_result"]["add_result"]["memory_result"]["error"] == "memory_capacity_exceeded"
+    assert result["changed_memories"] == []
+
+
+def test_run_knowledge_improvement_step_executes_llm_capacity_resolution_before_retry(monkeypatch, tmp_path):
+    calls = []
+    capacity_available = False
+
+    def fake_memory_tool(**args):
+        nonlocal capacity_available
+        calls.append(args)
+        if args == {"action": "replace", "target": "memory", "old_text": "Old long entry", "content": "Old compact entry"}:
+            capacity_available = True
+            return {"success": True, "changed": True}
+        if args.get("action") == "add" and args.get("target") == "memory":
+            return {"success": True, "changed": True} if capacity_available else {"success": False, "error": "memory_capacity_exceeded"}
+        return {"success": True, "changed": True}
+
+    def fake_planner(*, digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_kind": "memory_rewrite",
+                    "decision": "apply",
+                    "operation": "replace",
+                    "target_store": "builtin_memory",
+                    "source_id": "capacity-resolution",
+                    "source_old_text": "Old long entry",
+                    "replacement_content": "Old compact entry",
+                },
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_store": "builtin_user",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_id": "memory_place_capacity",
+                    "source_old_text": "Project convention belongs in MEMORY.",
+                    "content": "Project convention belongs in MEMORY.",
+                },
+            ],
+        }
+
+    result = run_knowledge_improvement_step(
+        evidence_pack=evidence_pack_for("demo-skill"),
+        config={
+            "_self_improvement_root": str(tmp_path / "self-improvement"),
+            "_planner_runtime_func": fake_planner,
+            "_memory_tool_fn": fake_memory_tool,
+            "_memory_current_entries": [
+                {"target": "memory", "old_text": "Old long entry"},
+                {"target": "user", "old_text": "Project convention belongs in MEMORY."},
+            ],
+        },
+        mutate=True,
+    )
+
+    assert calls == [
+        {"action": "replace", "target": "memory", "old_text": "Old long entry", "content": "Old compact entry"},
+        {"action": "add", "target": "memory", "content": "Project convention belongs in MEMORY."},
+        {"action": "remove", "target": "user", "old_text": "Project convention belongs in MEMORY."},
+    ]
+    assert result["editor_validation"]["summary"]["applied"] == 2
+    assert result["memory_capacity_followups"] == {"blocked_count": 0, "items": []}
+
+
 def test_run_knowledge_improvement_step_dry_run_previews_valid_placement_move_without_content(monkeypatch, tmp_path):
     import hermes_self_improvement.runner_steps as runner_steps
 

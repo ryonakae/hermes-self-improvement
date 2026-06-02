@@ -1831,6 +1831,47 @@ def test_render_planner_messages_includes_semantic_knowledge_rules_and_templates
         assert forbidden not in content
 
 
+def test_planner_digest_preserves_injected_memory_capacity_followups():
+    pack_data = pack()
+    pack_data["memory_capacity_followups"] = {
+        "blocked_count": 1,
+        "items": [{"source_id": "memory_place_capacity", "failure_reason": "memory_capacity_exceeded"}],
+    }
+
+    digest = build_planner_digest(pack_data)
+
+    assert digest["memory_capacity_followups"] == pack_data["memory_capacity_followups"]
+
+
+def test_render_planner_messages_capacity_followups_are_facts_not_routes():
+    digest = build_planner_digest(pack())
+    digest["memory_capacity_followups"] = {
+        "blocked_count": 1,
+        "items": [
+            {
+                "transaction_id": "kt-capacity",
+                "source_id": "memory_place_capacity",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "failure_reason": "memory_capacity_exceeded",
+                "usage": "2,131/2,200",
+                "attempted_content": "Project convention belongs in MEMORY.",
+                "current_entries": [{"target": "memory", "old_text": "Old durable runtime fact."}],
+            }
+        ],
+    }
+
+    content = render_planner_messages(digest=digest)["messages"][1]["content"]
+
+    assert "## Memory capacity blocked transactions" in content
+    assert "memory_capacity_exceeded" in content
+    assert "Project convention belongs in MEMORY" in content
+    assert "Old durable runtime fact" in content
+    assert "facts, not recommendations" in content
+    for forbidden in ("suggested_route", "likely_", "route_reasons", "allowed_recommendations"):
+        assert forbidden not in content
+
+
 def test_render_planner_messages_emphasizes_existing_skill_coverage_over_create_skill():
     digest = build_planner_digest(pack())
     digest["semantic_knowledge_candidates"] = {

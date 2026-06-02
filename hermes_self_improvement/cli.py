@@ -49,6 +49,7 @@ from .runner_steps import (
     _external_memory_provider,
     apply_memory_to_skill_migrations,
     execute_knowledge_transaction,
+    build_memory_capacity_followups,
     run_knowledge_improvement_step,
 )
 from .skill_archive_evidence import attach_active_skill_references, build_active_skill_references
@@ -965,12 +966,34 @@ def _render_calibration_summary(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def extract_memory_capacity_followups_from_run(run: dict[str, Any]) -> dict[str, Any]:
+    existing = run.get("memory_capacity_followups")
+    if isinstance(existing, dict) and isinstance(existing.get("items"), list):
+        items = [item for item in existing.get("items") or [] if isinstance(item, dict)]
+        return {"blocked_count": int(existing.get("blocked_count") or len(items)), "items": items[:10]}
+    transactions = [item for item in (run.get("knowledge_transactions") or []) if isinstance(item, dict)]
+    return build_memory_capacity_followups(transactions)
+
+
+def _load_memory_capacity_followups_from_run(path: str | None) -> dict[str, Any]:
+    if not path:
+        return {"blocked_count": 0, "items": []}
+    source_path = Path(path).expanduser()
+    if not source_path.exists() or not source_path.is_file():
+        raise SystemExit(f"capacity follow-up artifact not found: {source_path}")
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    if not isinstance(source, dict):
+        raise SystemExit("capacity follow-up artifact must be a JSON object")
+    return extract_memory_capacity_followups_from_run(source)
+
+
 def run_improve(
     *,
     config: dict[str, Any],
     since_hours: int = 24,
     dry_run: bool = False,
     from_report: str | None = None,
+    capacity_followups_from_run: str | None = None,
 ) -> dict[str, Any]:
     """Run the self-improvement loop.
 
@@ -1007,6 +1030,15 @@ def run_improve(
         report_signals = source_report_context.get("diagnostic_signals") if isinstance(source_report_context.get("diagnostic_signals"), list) else []
         if report_signals:
             evidence_pack = _attach_diagnostic_signals_to_evidence_pack(evidence_pack, report_signals)
+    memory_capacity_followups = _load_memory_capacity_followups_from_run(capacity_followups_from_run)
+    if memory_capacity_followups.get("blocked_count") or memory_capacity_followups.get("items"):
+        evidence_pack["memory_capacity_followups"] = memory_capacity_followups
+        raw_summary = evidence_pack.get("summary")
+        summary = raw_summary if isinstance(raw_summary, dict) else {}
+        evidence_pack["summary"] = {
+            **summary,
+            "memory_capacity_followup_count": int(memory_capacity_followups.get("blocked_count") or len(memory_capacity_followups.get("items") or [])),
+        }
     conversation_windows = build_planner_windows(events)
     planner_memory_digest = build_planner_digest(conversation_windows, existing_memories=existing_memories, recent_candidates=[])
     memory_gap_payload = reconcile_planner_payload_with_existing_memories(
@@ -1115,6 +1147,10 @@ def run_improve(
         "evaluator": {"status": "calibration_only", "changed": 1 if calibration.get("active_changed") else 0},
     }
     action_summary = _action_summary_from_result({"knowledge_transactions": knowledge_transactions}, step_decisions_payload)
+    raw_memory_capacity_followups = knowledge_step.get("memory_capacity_followups")
+    output_memory_capacity_followups = raw_memory_capacity_followups if isinstance(raw_memory_capacity_followups, dict) else {}
+    if not (output_memory_capacity_followups.get("blocked_count") or output_memory_capacity_followups.get("items")):
+        output_memory_capacity_followups = memory_capacity_followups
     run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
     result_payload = {
         "schema_name": "self_improvement_run_result",
@@ -1151,6 +1187,8 @@ def run_improve(
             else None
         ),
         **({"source_report": source_report_context} if source_report_context else {}),
+        **({"source_memory_capacity_followups": {"artifact_path": str(Path(capacity_followups_from_run).expanduser()), "blocked_count": int(memory_capacity_followups.get("blocked_count") or 0)}} if capacity_followups_from_run else {}),
+        "memory_capacity_followups": output_memory_capacity_followups,
         "knowledge_transactions": knowledge_transactions,
         "step_decisions": step_decisions_payload,
         "action_summary": action_summary,
@@ -2626,6 +2664,7 @@ def _setup_cli(parser: argparse.ArgumentParser) -> None:
     p_improve.add_argument("--since-hours", type=int, default=24)
     p_improve.add_argument("--dry-run", action="store_true", help="Preview without mutation")
     p_improve.add_argument("--from-report", default=None, help="Use a report JSON artifact as reference-only diagnostic context")
+    p_improve.add_argument("--capacity-followups-from-run", default=None, help="Use capacity-blocked facts from a previous run artifact as planner context")
     p_improve.add_argument("--from-run", default=None, help="Execute a previous dry-run artifact instead of replanning")
     p_improve.add_argument("--json", action="store_true", dest="as_json")
     _add_config_argument(p_improve)
@@ -2682,6 +2721,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
             raise SystemExit("--from-run cannot be combined with --dry-run")
         if from_run and getattr(args, "from_report", None):
             raise SystemExit("--from-run cannot be combined with --from-report")
+        if from_run and getattr(args, "capacity_followups_from_run", None):
+            raise SystemExit("--from-run cannot be combined with --capacity-followups-from-run")
         if from_run:
             payload = run_replay_improve(config=config, source_run_path=str(from_run))
         else:
@@ -2692,6 +2733,8 @@ def _handle_cli(args: argparse.Namespace) -> None:
             }
             if getattr(args, "from_report", None):
                 improve_kwargs["from_report"] = getattr(args, "from_report")
+            if getattr(args, "capacity_followups_from_run", None):
+                improve_kwargs["capacity_followups_from_run"] = getattr(args, "capacity_followups_from_run")
             payload = run_improve(**improve_kwargs)
         if getattr(args, "as_json", False):
             print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))

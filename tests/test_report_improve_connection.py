@@ -393,6 +393,51 @@ def test_run_improve_from_report_adds_reference_only_diagnostic_evidence(monkeyp
     assert [item for item in captured["evidence_pack"]["evidence"] if item.get("kind") == "diagnostic_signal"]
 
 
+def test_run_improve_from_capacity_followup_run_feeds_normal_planner_path(monkeypatch, tmp_path):
+    import hermes_self_improvement.cli as cli
+
+    source_path = tmp_path / "capacity-run.json"
+    source_path.write_text(json.dumps({
+        "run_id": "run-capacity",
+        "dry_run": False,
+        "memory_capacity_followups": {
+            "blocked_count": 1,
+            "items": [{
+                "source_id": "memory_place_capacity",
+                "failure_reason": "memory_capacity_exceeded",
+                "attempted_content": "Project convention belongs in MEMORY.",
+            }],
+        },
+    }), encoding="utf-8")
+    captured = {}
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    monkeypatch.setattr(cli, "_load_events", lambda *args, **kwargs: [])
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda **kwargs: {"status": "dry_run"})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda cfg: {"available": False, "source": "curator", "candidates": [], "rejected": [], "summary": {"candidate_count": 0, "rejected_count": 0}})
+    monkeypatch.setattr(cli, "run_pipeline", lambda *args, **kwargs: {"proposals": [], "summary": {}})
+    def fake_run_knowledge_improvement_step(**kwargs):
+        captured["evidence_pack"] = kwargs["evidence_pack"]
+        return {
+            "status": "skipped",
+            "knowledge_transactions": [],
+            "transaction_results": [],
+            "changed_skills": [],
+            "changed_memories": [],
+            "editor_validation": {"summary": {}},
+            "prompt_sources": {},
+            "planner_digest": {"memory_capacity_followups": kwargs["evidence_pack"].get("memory_capacity_followups")},
+            "memory_capacity_followups": {"blocked_count": 0, "items": []},
+        }
+
+    monkeypatch.setattr(cli, "run_knowledge_improvement_step", fake_run_knowledge_improvement_step)
+
+    result = cli.run_improve(config=config, dry_run=True, capacity_followups_from_run=str(source_path))
+
+    assert captured["evidence_pack"]["memory_capacity_followups"]["blocked_count"] == 1
+    assert captured["evidence_pack"]["memory_capacity_followups"]["items"][0]["source_id"] == "memory_place_capacity"
+    assert result["memory_capacity_followups"]["blocked_count"] == 1
+
+
 def test_run_replay_improve_executes_dry_run_artifact_without_replanning(monkeypatch, tmp_path):
     import hermes_self_improvement.cli as cli
 

@@ -306,6 +306,28 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _render_memory_capacity_followups_section(digest: dict[str, Any]) -> str:
+    raw_followups = digest.get("memory_capacity_followups")
+    followups = raw_followups if isinstance(raw_followups, dict) else {}
+    items = [item for item in followups.get("items") or [] if isinstance(item, dict)]
+    if not items:
+        return "## Memory capacity blocked transactions\n- n/a\n"
+    lines = [
+        "## Memory capacity blocked transactions",
+        "These are failed official memory-tool attempts from prior execution. They are facts, not recommendations. The Planner must decide semantics: compact/replace existing memory, split source text, route procedural content to skill, keep current store, defer, or block. Program code must not choose which memory to remove.",
+        "Only emit canonical knowledge_transactions with decision apply/defer/skip/block. Use exact old_text for replace/remove. If exact safe text is unclear, defer.",
+    ]
+    for item in items[:10]:
+        lines.append(
+            f"- blocked_transaction_id={_clip(item.get('transaction_id'), max_chars=80)}; source_id={_clip(item.get('source_id'), max_chars=80)}; source_store={_clip(item.get('source_store'), max_chars=40)}; target_store={_clip(item.get('target_store'), max_chars=40)}; failure={_clip(item.get('failure_reason'), max_chars=80)}; usage={_clip(item.get('usage'), max_chars=40)}; attempted_content={_clip(item.get('attempted_content'), max_chars=260)}"
+        )
+        for entry in (item.get("current_entries") or [])[:8]:
+            if isinstance(entry, dict):
+                lines.append(f"  - current_destination_entry target={_clip(entry.get('target'), max_chars=40)}; old_text={_clip(entry.get('old_text'), max_chars=220)}")
+        lines.append("  - examples: memory_rewrite, duplicate_cleanup, placement_split, memory_to_skill, skip keep_current_store, defer capacity_resolution_unclear")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _render_semantic_knowledge_section(digest: dict[str, Any]) -> str:
     raw_semantic = digest.get("semantic_knowledge_candidates")
     semantic = raw_semantic if isinstance(raw_semantic, dict) else {}
@@ -454,6 +476,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
         _render_knowledge_maintenance_section(digest),
         _render_builtin_memory_inventory_section(digest),
         _render_memory_placement_candidates_section(digest),
+        _render_memory_capacity_followups_section(digest),
         _render_semantic_knowledge_section(digest),
         _render_memory_inventory_groups_section(digest),
         *([quality_section] if quality_section else []),

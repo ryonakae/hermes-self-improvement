@@ -430,6 +430,7 @@ def test_memory_inventory_move_compacts_destination_before_removing_source():
         "_memory_capacity_planner_fn": lambda **kwargs: [
             {"action": "remove", "target": kwargs["target"], "old_text": "obsolete MEMORY entry"}
         ],
+        "_allow_test_capacity_planner": True,
         "_memory_tool_fn": fake_memory,
     }
 
@@ -473,6 +474,7 @@ def test_memory_capacity_recovery_records_placement_options_and_uses_fallback_af
             {"action": "remove", "target": "memory", "old_text": "obsolete low-value entry"},
             {"action": "move_to_skill", "target": "skill", "content": "procedural guidance"},
         ],
+        "_allow_test_capacity_planner": True,
         "_memory_tool_fn": fake_memory,
         "_memory_provider_tool_fn": fake_provider,
         "memory": {"provider": "hindsight"},

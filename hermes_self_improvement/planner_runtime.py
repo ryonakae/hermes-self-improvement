@@ -349,6 +349,13 @@ def _semantic_knowledge_candidates_digest(evidence_pack: dict[str, Any]) -> dict
     return out
 
 
+def _memory_capacity_followups_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    raw_followups = evidence_pack.get("memory_capacity_followups")
+    followups = raw_followups if isinstance(raw_followups, dict) else {}
+    items = [item for item in followups.get("items") or [] if isinstance(item, dict)]
+    return {"blocked_count": int(followups.get("blocked_count") or len(items)), "items": items[:10]}
+
+
 def _representative_evidence(item: dict[str, Any]) -> dict[str, Any]:
     event = item.get("event") if isinstance(item.get("event"), dict) else {}
     out = {
@@ -776,6 +783,7 @@ def build_planner_runtime_digest(
         "knowledge_maintenance": knowledge_maintenance,
         "built_in_memory_inventory": _built_in_memory_inventory_digest(evidence_pack),
         "memory_placement_candidates": _memory_placement_candidates_digest(evidence_pack, candidate_rows),
+        "memory_capacity_followups": _memory_capacity_followups_digest(evidence_pack),
         "semantic_knowledge_candidates": _semantic_knowledge_candidates_digest(evidence_pack),
         "memory_inventory_groups": _memory_inventory_groups_digest(evidence_pack),
         "unresolved_observations": unresolved_observations[:20],
