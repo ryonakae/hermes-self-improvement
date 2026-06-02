@@ -5,7 +5,13 @@ from pathlib import Path
 
 from hermes_self_improvement.prompt_overlays import promote_prompt_candidate, write_prompt_candidate
 from hermes_self_improvement.prompts import base_prompt_hash
-from hermes_self_improvement.runner_steps import build_editor_task, run_knowledge_improvement_step, run_memory_improvement_step, run_skill_improvement_step
+from hermes_self_improvement.runner_steps import (
+    build_editor_task,
+    build_memory_capacity_followups,
+    run_knowledge_improvement_step,
+    run_memory_improvement_step,
+    run_skill_improvement_step,
+)
 
 
 def write_skill(root, name="demo-skill"):
@@ -1246,6 +1252,41 @@ def test_run_knowledge_improvement_step_records_capacity_blocked_placement_move_
     assert tx["transaction_result"]["reason"] == "memory_capacity_exceeded"
     assert tx["transaction_result"]["add_result"]["memory_result"]["error"] == "memory_capacity_exceeded"
     assert result["changed_memories"] == []
+
+
+def test_memory_capacity_followup_preserves_exact_text_for_llm_resolution():
+    long_old_text = "memory entry requiring exact replace/remove: " + "x" * 700
+    long_source_text = "source entry requiring exact split/move: " + "y" * 700
+    followups = build_memory_capacity_followups(
+        [
+            {
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "operation": "move",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "source_id": "memory_place_capacity_long",
+                "source_old_text": long_source_text,
+                "content": long_source_text,
+                "transaction_result": {
+                    "outcome": "blocked",
+                    "reason": "memory_capacity_exceeded",
+                    "add_result": {
+                        "memory_result": {
+                            "success": False,
+                            "error": "memory_capacity_exceeded",
+                            "current_entries": [{"target": "memory", "old_text": long_old_text}],
+                        }
+                    },
+                },
+            }
+        ]
+    )
+
+    item = followups["items"][0]
+    assert item["source_old_text"] == long_source_text
+    assert item["attempted_content"] == long_source_text
+    assert item["current_entries"][0]["old_text"] == long_old_text
 
 
 def test_run_knowledge_improvement_step_executes_llm_capacity_resolution_before_retry(monkeypatch, tmp_path):

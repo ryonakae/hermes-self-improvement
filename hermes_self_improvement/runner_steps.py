@@ -1770,7 +1770,7 @@ def build_memory_capacity_followups(transactions: list[dict[str, Any]]) -> dict[
             if isinstance(entry, str):
                 old_text = entry.strip()
                 if old_text:
-                    current_entries.append({"target": str(tx.get("target_store") or ""), "old_text": old_text[:500], "summary": ""})
+                    current_entries.append({"target": str(tx.get("target_store") or ""), "old_text": old_text, "summary": ""})
                 continue
             if not isinstance(entry, dict):
                 continue
@@ -1780,7 +1780,7 @@ def build_memory_capacity_followups(transactions: list[dict[str, Any]]) -> dict[
             current_entries.append(
                 {
                     "target": str(entry.get("target") or tx.get("target_store") or ""),
-                    "old_text": old_text[:500],
+                    "old_text": old_text,
                     "summary": str(entry.get("summary") or "")[:180],
                 }
             )
@@ -1802,8 +1802,8 @@ def build_memory_capacity_followups(transactions: list[dict[str, Any]]) -> dict[
                 "source_store": str(tx.get("source_store") or ""),
                 "target_store": str(tx.get("target_store") or ""),
                 "operation": str(tx.get("operation") or ""),
-                "source_old_text": str(tx.get("source_old_text") or "")[:500],
-                "attempted_content": str(tx.get("content") or tx.get("source_old_text") or "")[:500],
+                "source_old_text": str(tx.get("source_old_text") or ""),
+                "attempted_content": str(tx.get("content") or tx.get("source_old_text") or ""),
                 "failure_reason": "memory_capacity_exceeded",
                 "usage": usage,
                 "current_entries": current_entries,

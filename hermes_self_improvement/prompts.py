@@ -319,11 +319,11 @@ def _render_memory_capacity_followups_section(digest: dict[str, Any]) -> str:
     ]
     for item in items[:10]:
         lines.append(
-            f"- blocked_transaction_id={_clip(item.get('transaction_id'), max_chars=80)}; source_id={_clip(item.get('source_id'), max_chars=80)}; source_store={_clip(item.get('source_store'), max_chars=40)}; target_store={_clip(item.get('target_store'), max_chars=40)}; failure={_clip(item.get('failure_reason'), max_chars=80)}; usage={_clip(item.get('usage'), max_chars=40)}; attempted_content={_clip(item.get('attempted_content'), max_chars=260)}"
+            f"- blocked_transaction_id={_clip(item.get('transaction_id'), max_chars=80)}; source_id={_clip(item.get('source_id'), max_chars=80)}; source_store={_clip(item.get('source_store'), max_chars=40)}; target_store={_clip(item.get('target_store'), max_chars=40)}; failure={_clip(item.get('failure_reason'), max_chars=80)}; usage={_clip(item.get('usage'), max_chars=40)}; attempted_content={str(item.get('attempted_content') or '')}"
         )
         for entry in (item.get("current_entries") or [])[:8]:
             if isinstance(entry, dict):
-                lines.append(f"  - current_destination_entry target={_clip(entry.get('target'), max_chars=40)}; old_text={_clip(entry.get('old_text'), max_chars=220)}")
+                lines.append(f"  - current_destination_entry target={_clip(entry.get('target'), max_chars=40)}; old_text={str(entry.get('old_text') or '')}")
         lines.append("  - examples: memory_rewrite, duplicate_cleanup, placement_split, memory_to_skill, skip keep_current_store, defer capacity_resolution_unclear")
     return "\n".join(lines).rstrip() + "\n"
 

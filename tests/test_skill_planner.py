@@ -1872,6 +1872,32 @@ def test_render_planner_messages_capacity_followups_are_facts_not_routes():
         assert forbidden not in content
 
 
+def test_render_planner_messages_capacity_followups_include_exact_action_text():
+    long_old_text = "memory entry requiring exact replace/remove: " + "x" * 700
+    long_attempted_content = "source entry requiring exact split/move: " + "y" * 700
+    digest = build_planner_digest(pack())
+    digest["memory_capacity_followups"] = {
+        "blocked_count": 1,
+        "items": [
+            {
+                "transaction_id": "kt-capacity-long",
+                "source_id": "memory_place_capacity_long",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "failure_reason": "memory_capacity_exceeded",
+                "attempted_content": long_attempted_content,
+                "current_entries": [{"target": "memory", "old_text": long_old_text}],
+            }
+        ],
+    }
+
+    content = render_planner_messages(digest=digest)["messages"][1]["content"]
+
+    assert long_attempted_content in content
+    assert long_old_text in content
+    assert "…" not in content.split("## Memory capacity blocked transactions", 1)[1].split("##", 1)[0]
+
+
 def test_render_planner_messages_emphasizes_existing_skill_coverage_over_create_skill():
     digest = build_planner_digest(pack())
     digest["semantic_knowledge_candidates"] = {
