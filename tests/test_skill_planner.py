@@ -1732,6 +1732,14 @@ def test_render_planner_messages_includes_semantic_knowledge_rules_and_templates
     assert "Observations are not recommendations" in content
     for token in ("placement_split", "memory_rewrite", "duplicate_cleanup", "keep_same_topic_different_store", "skill_ambiguity_cleanup"):
         assert token in content
+    for token in ("source_evidence_id", "source_old_text", "target_skill", "skill_task", "destination_content", "source_replacement", "replacement_content"):
+        assert token in content
+    assert "Do not infer source_evidence_id" in content
+    assert "exact text" in content
+    assert '"decision":"apply"' in content
+    assert '"decision":"defer"' in content
+    split_section = content.split("placement_split", 1)[1]
+    assert "source_evidence_id" in split_section
     for forbidden in ("suggested_route", "likely_move_user_to_memory", "likely_move_memory_to_user", "likely_memory_to_skill"):
         assert forbidden not in content
 
@@ -1967,9 +1975,79 @@ class TestGoldenFixtureDogfood:
             "reason": "reusable procedure belongs in existing editable skill",
         }
         normalized = normalize_knowledge_transaction(raw)
-        assert normalized["decision"] == "apply"
+        assert normalized["decision"] == "block"
         assert normalized["transaction_kind"] == "memory_to_skill"
         assert normalized["target_id"] == "hermes-gateway-and-sessions"
+        assert normalized["reason"] == "memory_to_skill_missing_editor_task"
+
+    def test_dogfood_memory_to_skill_with_source_evidence_id_is_actionable(self):
+        raw = {
+            "transaction_kind": "memory_to_skill",
+            "decision": "apply",
+            "source_evidence_id": "memory_place_298a033826ec",
+            "source_store": "builtin_memory",
+            "source_old_text": "When a workflow repeats, patch the existing skill first.",
+            "target_store": "skill",
+            "target_skill": "safe-patch-usage",
+            "skill_task": {"maintenance_action": "patch"},
+            "reason": "procedural_memory_belongs_in_skill",
+        }
+
+        normalized = normalize_knowledge_transaction(raw)
+
+        assert normalized["decision"] == "apply"
+        assert normalized["transaction_kind"] == "memory_to_skill"
+        assert normalized["source_id"] == "memory_place_298a033826ec"
+        assert normalized["evidence_ids"] == ["memory_place_298a033826ec"]
+        assert normalized["target_id"] == "safe-patch-usage"
+        assert normalized["editor_task"] == {"maintenance_action": "patch"}
+
+    def test_run_planner_memory_to_skill_preserves_source_identity_and_task_fields(self):
+        digest = build_planner_digest(pack())
+        digest["available_skill_evidence_ids"] = ["memory_place_298a033826ec", "memory_place_editor_task"]
+        digest["skill_candidates"] = [{"name": "safe-patch-usage", "state": "active", "source": "curator"}]
+
+        def fake_planner(*, digest, config):
+            return {
+                "knowledge_transactions": [
+                    {
+                        "transaction_kind": "memory_to_skill",
+                        "decision": "apply",
+                        "source_evidence_id": "memory_place_298a033826ec",
+                        "source_store": "builtin_memory",
+                        "source_old_text": "When a workflow repeats, patch the existing skill first.",
+                        "target_store": "skill",
+                        "target_skill": "safe-patch-usage",
+                        "skill_task": {"maintenance_action": "patch"},
+                    },
+                    {
+                        "transaction_kind": "memory_to_skill",
+                        "decision": "apply",
+                        "source_evidence_id": "memory_place_editor_task",
+                        "source_store": "builtin_memory",
+                        "source_old_text": "Patch existing skills before adding new duplicate skills.",
+                        "target_store": "skill",
+                        "target_skill": "safe-patch-usage",
+                        "editor_task": {"maintenance_action": "merge_into_skill"},
+                    },
+                ]
+            }
+
+        result = run_planner(digest, config={"_planner_func": fake_planner})
+        transactions = [
+            tx for tx in result["knowledge_transactions"]
+            if tx.get("transaction_kind") == "memory_to_skill"
+        ]
+
+        assert len(transactions) == 2
+        assert transactions[0]["decision"] == "apply"
+        assert transactions[0]["source_id"] == "memory_place_298a033826ec"
+        assert transactions[0]["evidence_ids"] == ["memory_place_298a033826ec"]
+        assert transactions[0]["editor_task"] == {"maintenance_action": "patch"}
+        assert transactions[1]["decision"] == "apply"
+        assert transactions[1]["source_id"] == "memory_place_editor_task"
+        assert transactions[1]["evidence_ids"] == ["memory_place_editor_task"]
+        assert transactions[1]["editor_task"] == {"maintenance_action": "merge_into_skill"}
 
     def test_skill_ambiguity_cleanup(self):
         """Ambiguous skill load → skill_ambiguity_cleanup, not delete."""

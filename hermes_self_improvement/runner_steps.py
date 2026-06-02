@@ -2187,8 +2187,12 @@ def _execute_placement_split_transaction(transaction: dict[str, Any], *, config:
     source_replacement = str(transaction.get("source_replacement") or "").strip()
     destination_store = str(transaction.get("destination_store") or transaction.get("target_store") or "").strip()
     destination_content = str(transaction.get("destination_content") or "").strip()
-    if not source_old_text or not source_replacement or not destination_store or not destination_content:
+    if not source_old_text or not destination_store:
         return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    if not destination_content:
+        return {**result, "success": False, "outcome": "blocked", "reason": "split_missing_destination_content"}
+    if not source_replacement:
+        return {**result, "success": False, "outcome": "blocked", "reason": "split_missing_source_replacement"}
     if not mutate:
         return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
     source_target = _knowledge_transaction_source_target(source_store)

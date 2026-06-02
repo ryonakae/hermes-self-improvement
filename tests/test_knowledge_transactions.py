@@ -76,11 +76,30 @@ def test_normalize_knowledge_transaction_maps_legacy_actions_to_canonical_contra
         "source_old_text": "procedural preference",
         "target_store": "skill",
         "target_skill": "test-driven-development",
+        "skill_task": {"type": "skill_editor_task", "task_kind": "mutate_skill"},
     })
     assert move["decision"] == "apply"
     assert move["transaction_kind"] == "memory_to_skill"
     assert move["target_id"] == "test-driven-development"
     assert move["operation"] == "move"
+
+def test_normalize_memory_to_skill_blocks_when_editor_task_is_missing():
+    normalized = normalize_knowledge_transaction({
+        "transaction_kind": "memory_to_skill",
+        "decision": "apply",
+        "source_store": "builtin_memory",
+        "source_evidence_id": "memory_place_patch",
+        "source_old_text": "When patch fails, re-read and retry with a smaller anchor.",
+        "target_store": "skill",
+        "target_skill": "safe-patch-usage",
+    })
+
+    assert normalized["decision"] == "block"
+    assert normalized["operation"] == "none"
+    assert normalized["source_id"] == "memory_place_patch"
+    assert normalized["evidence_ids"] == ["memory_place_patch"]
+    assert normalized["reason"] == "memory_to_skill_missing_editor_task"
+
 
 def test_normalize_memory_to_skill_blocks_when_source_id_would_be_guessed_from_unrelated_evidence():
     normalized = normalize_knowledge_transaction({
@@ -294,6 +313,7 @@ def test_normalize_knowledge_transaction_maps_builtin_memory_cleanup_product_ope
 
 
 def test_normalize_knowledge_transaction_preserves_memory_to_skill_product_fields_and_none_skip():
+    skill_task = {"maintenance_action": "patch"}
     memory_to_skill = normalize_knowledge_transaction({
         "transaction_kind": "memory_to_skill",
         "decision": "apply",
@@ -302,14 +322,33 @@ def test_normalize_knowledge_transaction_preserves_memory_to_skill_product_field
         "source_old_text": "When patch fails, re-read and retry with a smaller anchor.",
         "target_store": "skill",
         "target_skill": "safe-patch-usage",
+        "skill_task": skill_task,
         "content": "When patch fails, re-read and retry with a smaller anchor.",
     })
     assert memory_to_skill["transaction_kind"] == "memory_to_skill"
     assert memory_to_skill["source_id"] == "mem-inv-3"
+    assert memory_to_skill["evidence_ids"] == ["mem-inv-3"]
     assert memory_to_skill["target_id"] == "safe-patch-usage"
+    assert memory_to_skill["editor_task"] == skill_task
     assert memory_to_skill["source_old_text"] == "When patch fails, re-read and retry with a smaller anchor."
     assert memory_to_skill["content"] == "When patch fails, re-read and retry with a smaller anchor."
     assert memory_to_skill["operation"] == "move"
+
+    editor_task = {"maintenance_action": "merge_into_skill"}
+    memory_to_skill_editor_task = normalize_knowledge_transaction({
+        "transaction_kind": "memory_to_skill",
+        "decision": "apply",
+        "source_store": "builtin_memory",
+        "source_evidence_id": "mem-inv-4",
+        "source_old_text": "Repeated patch workflows belong in safe-patch-usage.",
+        "target_store": "skill",
+        "target_skill": "safe-patch-usage",
+        "editor_task": editor_task,
+    })
+    assert memory_to_skill_editor_task["decision"] == "apply"
+    assert memory_to_skill_editor_task["source_id"] == "mem-inv-4"
+    assert memory_to_skill_editor_task["evidence_ids"] == ["mem-inv-4"]
+    assert memory_to_skill_editor_task["editor_task"] == editor_task
 
     none = normalize_knowledge_transaction({
         "decision": "skip",
@@ -440,3 +479,51 @@ def test_normalize_new_destructive_semantic_transaction_blocks_missing_source_te
     assert normalized["decision"] == "block"
     assert normalized["operation"] == "none"
     assert normalized["reason"] == "transaction_missing_source_fields"
+
+
+def test_normalize_placement_split_requires_exact_destination_and_source_replacement():
+    missing_destination = normalize_knowledge_transaction({
+        "transaction_kind": "placement_split",
+        "decision": "apply",
+        "operation": "split",
+        "source_store": "builtin_user",
+        "source_evidence_id": "memory_place_mixed",
+        "source_old_text": "Mixed USER and MEMORY text.",
+        "destination_store": "builtin_memory",
+        "source_replacement": "USER-shaped text.",
+    })
+    assert missing_destination["decision"] == "block"
+    assert missing_destination["operation"] == "none"
+    assert missing_destination["reason"] == "split_missing_destination_content"
+
+    missing_source_replacement = normalize_knowledge_transaction({
+        "transaction_kind": "placement_split",
+        "decision": "apply",
+        "operation": "split",
+        "source_store": "builtin_user",
+        "source_evidence_id": "memory_place_mixed",
+        "source_old_text": "Mixed USER and MEMORY text.",
+        "destination_store": "builtin_memory",
+        "destination_content": "MEMORY-shaped text.",
+    })
+    assert missing_source_replacement["decision"] == "block"
+    assert missing_source_replacement["operation"] == "none"
+    assert missing_source_replacement["reason"] == "split_missing_source_replacement"
+
+    executable = normalize_knowledge_transaction({
+        "transaction_kind": "placement_split",
+        "decision": "apply",
+        "operation": "split",
+        "source_store": "builtin_user",
+        "source_evidence_id": "memory_place_mixed",
+        "source_old_text": "Mixed USER and MEMORY text.",
+        "destination_store": "builtin_memory",
+        "destination_content": "MEMORY-shaped text.",
+        "source_replacement": "USER-shaped text.",
+    })
+    assert executable["decision"] == "apply"
+    assert executable["operation"] == "split"
+    assert executable["source_id"] == "memory_place_mixed"
+    assert executable["evidence_ids"] == ["memory_place_mixed"]
+    assert executable["destination_content"] == "MEMORY-shaped text."
+    assert executable["source_replacement"] == "USER-shaped text."

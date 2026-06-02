@@ -399,6 +399,13 @@ def _validate_apply_transaction(transaction: dict[str, Any]) -> dict[str, Any]:
         return _blocked(transaction, "transaction_missing_source_evidence_id")
     if operation in _SOURCE_REQUIRED_OPERATIONS and not _has_source_fields(transaction):
         return _blocked(transaction, "transaction_missing_source_fields")
+    if transaction.get("transaction_kind") == "memory_to_skill" and not isinstance(transaction.get("editor_task"), dict):
+        return _blocked(transaction, "memory_to_skill_missing_editor_task")
+    if transaction.get("transaction_kind") == "placement_split":
+        if not str(transaction.get("destination_content") or "").strip():
+            return _blocked(transaction, "split_missing_destination_content")
+        if not str(transaction.get("source_replacement") or "").strip():
+            return _blocked(transaction, "split_missing_source_replacement")
     return transaction
 
 

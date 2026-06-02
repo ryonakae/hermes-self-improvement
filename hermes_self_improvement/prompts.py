@@ -31,7 +31,9 @@ PLANNER_USER_PREFIX = (
     "Allowed planner decision vocabulary: mutate_skill, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator, plus canonical apply/skip transactions for built-in memory placement and cleanup.\n"
     "For mutate_skill, also set maintenance_action: \"patch\" (in-place edit) or \"merge\" (with target_skill of the consolidation target).\n"
     "New skill creation is one maintenance option, not the default; prefer mutate_skill or archive_skill when evidence supports existing local mutable skill maintenance.\n"
-    "When you provide structured decisions, return JSON with a top-level knowledge_transactions array. Each transaction may use fields: skill/proposed_skill_name, decision, operation, maintenance_action, target_store, target_skill, source_store, source_evidence_id, old_text, source_old_text, content, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n\n"
+    "When you provide structured decisions, return JSON with a top-level knowledge_transactions array. Each transaction may use fields: skill/proposed_skill_name, decision, operation, maintenance_action, target_store, target_skill, source_store, source_evidence_id, old_text, source_old_text, source_replacement, destination_store, destination_content, replacement_content, skill_task, content, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n"
+    "For memory_to_skill, source_evidence_id and exact source_old_text are required. Do not infer source_evidence_id from unrelated evidence_ids, target_skill, or candidate target hints.\n"
+    "For placement_split, exact text is required: source_evidence_id, source_old_text, destination_store, destination_content, and source_replacement. Do not use source_id-only templates for Planner-facing split payloads.\n\n"
 )
 
 SKILL_EDITOR_BASE_SECTIONS = [
@@ -326,7 +328,8 @@ def _render_semantic_knowledge_section(digest: dict[str, Any]) -> str:
         for item in mixed[:20]:
             observations = ",".join(str(value) for value in (item.get("observations") or [])[:6])
             lines.append(f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; source_evidence_id={_clip(item.get('source_evidence_id'), max_chars=80)}; current_store={_clip(item.get('current_store'), max_chars=40)}; observations=[{observations}]; old_text={_clip(item.get('old_text'), max_chars=260)}")
-            lines.append("  - placement_split template: " + json.dumps({"transaction_kind": "placement_split", "decision": "defer", "operation": "split", "source_id": item.get("source_evidence_id"), "source_old_text": item.get("old_text"), "reason": "mixed_entry_needs_exact_split_text"}, ensure_ascii=False, separators=(",", ":")))
+            lines.append("  - placement_split apply template with exact text required: " + json.dumps({"transaction_kind": "placement_split", "decision": "apply", "operation": "split", "source_evidence_id": item.get("source_evidence_id"), "source_store": item.get("current_store"), "source_old_text": item.get("old_text"), "destination_store": "builtin_memory", "destination_content": "<exact extracted durable environment/procedure text>", "source_replacement": "<exact remaining source text after split>", "reason": "mixed_entry_split_exact_text"}, ensure_ascii=False, separators=(",", ":")))
+            lines.append("  - placement_split defer template when exact text is unclear: " + json.dumps({"transaction_kind": "placement_split", "decision": "defer", "operation": "none", "source_evidence_id": item.get("source_evidence_id"), "reason": "mixed_entry_needs_exact_split_text"}, ensure_ascii=False, separators=(",", ":")))
     if pairs:
         lines.append("### Cross-store related memory pairs")
         for item in pairs[:20]:

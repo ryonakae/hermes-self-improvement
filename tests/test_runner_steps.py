@@ -1035,7 +1035,7 @@ def test_run_knowledge_improvement_step_dry_run_returns_canonical_transactions(m
                 {"decision": "mutate_memory", "target_store": "builtin_user", "target_id": "user", "operation": "memory_add", "evidence_ids": ["m1"]},
                 {"decision": "mutate_memory", "target_store": "builtin_memory", "target_id": "memory", "operation": "memory_replace", "source_store": "builtin_memory", "source_id": "mem-entry", "source_old_text": "old memory", "evidence_ids": ["m1"]},
                 {"decision": "mutate_memory", "target_store": "external_memory", "target_id": "hindsight", "operation": "memory_add", "evidence_ids": ["m1"]},
-                {"transaction_kind": "memory_to_skill", "decision": "apply", "source_store": "builtin_user", "source_evidence_id": "m1", "source_old_text": "old user pref", "target_store": "skill", "target_skill": "demo-skill", "evidence_ids": ["m1"]},
+                {"transaction_kind": "memory_to_skill", "decision": "apply", "source_store": "builtin_user", "source_evidence_id": "m1", "source_old_text": "old user pref", "target_store": "skill", "target_skill": "demo-skill", "skill_task": {"type": "skill_editor_task", "task_kind": "mutate_skill", "targets": {"primary_skill": "demo-skill"}, "instructions": "Move old user pref into demo-skill."}, "evidence_ids": ["m1"]},
                 {"target_store": "unresolved", "reason": "target_uncertain", "evidence_ids": ["m1"]},
                 {"target_store": "none", "reason": "noise", "evidence_ids": ["m1"]},
             ]

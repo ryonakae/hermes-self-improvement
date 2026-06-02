@@ -114,6 +114,34 @@ def test_execute_knowledge_transaction_patches_skill_then_removes_memory(tmp_pat
     assert calls[1] == ("memory", {"action": "remove", "target": "memory", "old_text": "Use these exact steps for live context cleanup."})
 
 
+def test_execute_placement_split_blocks_underspecified_payload_before_memory_tool():
+    calls = []
+
+    def fake_memory(**args):
+        calls.append(args)
+        return {"success": True, "changed": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "placement_split",
+            "decision": "apply",
+            "operation": "split",
+            "source_store": "builtin_user",
+            "source_evidence_id": "memory_place_mixed",
+            "source_old_text": "Mixed USER and MEMORY text.",
+            "destination_store": "builtin_memory",
+            "destination_content": "MEMORY-shaped text.",
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+    assert result["reason"] == "split_missing_source_replacement"
+    assert calls == []
+
+
 def test_execute_knowledge_transaction_accepts_normalized_memory_to_skill_target_id_and_removes_source(tmp_path):
     root = tmp_path / "skills"
     write_skill(root, "hermes-lcm")

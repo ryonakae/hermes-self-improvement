@@ -267,6 +267,12 @@ def test_run_improve_fixture_proves_all_canonical_transaction_stores_without_spl
             "source_old_text": "Use these exact steps for canonical routing.",
             "target_store": "skill",
             "target_skill": "workflow-skill",
+            "skill_task": {
+                "type": "skill_editor_task",
+                "task_kind": "mutate_skill",
+                "targets": {"primary_skill": "workflow-skill"},
+                "instructions": "Move canonical routing steps into workflow-skill.",
+            },
             "reason": "move procedure to skill",
         },
     ]
