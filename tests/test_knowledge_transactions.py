@@ -258,6 +258,66 @@ def test_normalize_knowledge_transaction_maps_memory_placement_product_operation
     assert move_memory_to_user["source_old_text"] == "Ryo prefers terse Slack reports."
 
 
+def test_normalize_move_user_to_memory_decision_ignores_none_operation():
+    normalized = normalize_knowledge_transaction({
+        "decision": "move_user_to_memory",
+        "transaction_kind": "memory",
+        "target_store": "builtin_memory",
+        "target_id": "memory",
+        "operation": "none",
+        "source_id": "memory_place_bd8e594afd41",
+        "source_old_text": "self-improvement design belongs in memory.",
+        "evidence_ids": ["memory_place_bd8e594afd41"],
+        "reason": "project_convention_belongs_in_memory",
+    })
+
+    assert normalized["decision"] == "apply"
+    assert normalized["transaction_kind"] == "placement_move"
+    assert normalized["source_store"] == "builtin_user"
+    assert normalized["target_store"] == "builtin_memory"
+    assert normalized["target_id"] == "memory"
+    assert normalized["operation"] == "move"
+    assert normalized["source_id"] == "memory_place_bd8e594afd41"
+    assert normalized["reason"] == "project_convention_belongs_in_memory"
+
+
+def test_normalize_move_memory_to_user_decision_ignores_none_operation():
+    normalized = normalize_knowledge_transaction({
+        "decision": "move_memory_to_user",
+        "target_store": "builtin_user",
+        "target_id": "user",
+        "operation": "none",
+        "source_id": "memory_place_e4613415ff97",
+        "source_old_text": "User prefers keeping Mac mini responsive.",
+        "evidence_ids": ["memory_place_e4613415ff97"],
+        "reason": "user_preference_belongs_in_user_store",
+    })
+
+    assert normalized["decision"] == "apply"
+    assert normalized["transaction_kind"] == "placement_move"
+    assert normalized["source_store"] == "builtin_memory"
+    assert normalized["target_store"] == "builtin_user"
+    assert normalized["target_id"] == "user"
+    assert normalized["operation"] == "move"
+    assert normalized["source_id"] == "memory_place_e4613415ff97"
+    assert normalized["reason"] == "user_preference_belongs_in_user_store"
+
+
+def test_normalize_move_decision_without_source_fields_blocks():
+    normalized = normalize_knowledge_transaction({
+        "decision": "move_user_to_memory",
+        "target_store": "builtin_memory",
+        "target_id": "memory",
+        "operation": "none",
+        "reason": "project_convention_belongs_in_memory",
+    })
+
+    assert normalized["decision"] == "block"
+    assert normalized["transaction_kind"] == "placement_move"
+    assert normalized["operation"] == "none"
+    assert normalized["reason"] == "transaction_missing_source_fields"
+
+
 def test_normalize_knowledge_transaction_maps_builtin_memory_cleanup_product_operations():
     replace_user = normalize_knowledge_transaction({
         "decision": "apply",

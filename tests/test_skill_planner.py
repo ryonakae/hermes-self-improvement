@@ -348,6 +348,93 @@ def test_run_planner_accepts_memory_inventory_duplicate_cleanup_remove_transacti
     assert tx["evidence_ids"] == ["memory-inv-user-dup"]
 
 
+def test_run_planner_canonicalizes_artifact_shaped_placement_move_decisions():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 2,
+        "omitted_count": 0,
+        "candidates": [
+            {
+                "evidence_id": "memory_place_bd8e594afd41",
+                "source_evidence_id": "memory_place_bd8e594afd41",
+                "current_store": "user",
+                "old_text": "self-improvement設計は1 Planner+1 Knowledge Editor。",
+            },
+            {
+                "evidence_id": "memory_place_e4613415ff97",
+                "source_evidence_id": "memory_place_e4613415ff97",
+                "current_store": "memory",
+                "old_text": "Hindsight tuning preference: keep Mac mini responsive.",
+            },
+        ],
+    }
+
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [
+                {
+                    "decision": "move_user_to_memory",
+                    "transaction_kind": "memory",
+                    "target_store": "builtin_memory",
+                    "operation": "none",
+                    "source_id": "memory_place_bd8e594afd41",
+                    "source_old_text": "self-improvement設計は1 Planner+1 Knowledge Editor。",
+                    "reason": "project_convention_belongs_in_memory",
+                },
+                {
+                    "decision": "move_memory_to_user",
+                    "target_store": "user",
+                    "operation": "none",
+                    "source_id": "memory_place_e4613415ff97",
+                    "source_old_text": "Hindsight tuning preference: keep Mac mini responsive.",
+                    "reason": "user_preference_belongs_in_user_store",
+                },
+            ]
+        }
+
+    result = run_planner(digest, config={"_planner_func": fake_planner})
+    transactions = [tx for tx in result["knowledge_transactions"] if tx.get("transaction_kind") == "placement_move"]
+
+    assert len(transactions) == 2
+    assert {tx["decision"] for tx in transactions} == {"apply"}
+    assert {tx["transaction_kind"] for tx in transactions} == {"placement_move"}
+    assert {tx["operation"] for tx in transactions} == {"move"}
+    assert {tx["source_store"] for tx in transactions} == {"builtin_user", "builtin_memory"}
+    assert {tx["target_store"] for tx in transactions} == {"builtin_memory", "builtin_user"}
+    assert "move_user_to_memory" not in {tx["decision"] for tx in transactions}
+    assert "move_memory_to_user" not in {tx["decision"] for tx in transactions}
+
+
+
+def test_run_planner_rejects_wrong_direction_placement_move_decision():
+    digest = build_planner_digest(pack())
+    digest["memory_placement_candidates"] = {
+        "candidate_count": 1,
+        "omitted_count": 0,
+        "candidates": [{
+            "evidence_id": "memory-place-user",
+            "source_evidence_id": "memory-place-user",
+            "current_store": "user",
+            "old_text": "日本語docsは日本語中心、英語は必要時のみ。",
+        }],
+    }
+
+    def fake_planner(*, digest, config):
+        return {
+            "knowledge_transactions": [{
+                "decision": "move_memory_to_user",
+                "operation": "none",
+                "source_id": "memory-place-user",
+                "source_old_text": "日本語docsは日本語中心、英語は必要時のみ。",
+                "reason": "wrong_direction",
+            }]
+        }
+
+    result = run_planner(digest, config={"_planner_func": fake_planner})
+
+    assert all(tx.get("decision") != "apply" for tx in result["knowledge_transactions"])
+
+
 def test_render_planner_messages_does_not_prioritize_by_memory_placement_route():
     digest = build_planner_digest(pack())
     digest["memory_placement_candidates"] = {

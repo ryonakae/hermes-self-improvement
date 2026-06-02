@@ -481,26 +481,48 @@ def test_compact_improve_tool_result_exposes_bounded_semantic_transaction_counts
                 "ambiguous_name": "gmail-purchase-live-context",
                 "conflicting_paths": ["skills/gmail-purchase-live-context/SKILL.md", "references/gmail-purchase-live-context.md"],
             },
+            {
+                "transaction_id": "txn-user-to-memory",
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "operation": "move",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "transaction_result": {"outcome": "preview"},
+            },
+            {
+                "transaction_id": "txn-memory-to-user",
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "operation": "move",
+                "source_store": "builtin_memory",
+                "target_store": "builtin_user",
+                "transaction_result": {"outcome": "preview"},
+            },
         ],
-        "step_decisions": {"summary": {"total": 3}},
+        "step_decisions": {"summary": {"total": 5}},
     }
 
     payload = tools._compact_improve_tool_result(raw_result)
 
-    assert payload["action_summary"] == {"apply": 1, "defer": 1, "skip": 1, "block": 0}
+    assert payload["action_summary"] == {"apply": 3, "defer": 1, "skip": 1, "block": 0}
     assert payload["steps"]["knowledge_transactions"] == {
-        "total": 3,
-        "apply": 1,
+        "total": 5,
+        "apply": 3,
         "defer": 1,
         "skip": 1,
         "block": 0,
         "by_kind": {
             "keep_same_topic_different_store": 1,
+            "placement_move": 2,
             "placement_split": 1,
             "skill_ambiguity_cleanup": 1,
         },
-        "cross_store": 1,
+        "cross_store": 3,
     }
+    assert payload["steps"]["knowledge_changes"]["placement_moves"] == 2
+    assert payload["steps"]["knowledge_changes"]["memory"] == 2
+    assert payload["steps"]["knowledge_changes"]["memory_placement"] == {"USER->MEMORY": 1, "MEMORY->USER": 1}
     assert payload["steps"]["knowledge_changes"]["semantic_memory_placement"] == {
         "placement_split": 1,
         "memory_rewrite": 0,
@@ -509,6 +531,8 @@ def test_compact_improve_tool_result_exposes_bounded_semantic_transaction_counts
         "skill_ambiguity": 1,
     }
     compact_blob = json.dumps(payload, ensure_ascii=False)
+    assert "move_user_to_memory" not in compact_blob
+    assert "move_memory_to_user" not in compact_blob
     assert "PR取込test失敗" not in compact_blob
     assert "conflicting_paths" not in compact_blob
 
