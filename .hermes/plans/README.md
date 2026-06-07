@@ -3,6 +3,11 @@
 ## Current source of truth
 
 
+### Current planned next slice — 2026-06-07
+
+`2026-06-07-capacity-exact-rewrite-application.md` is the next implementation plan. It follows the completed capacity prompt/reporting slice and targets the remaining gap from dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T120303Z.json`: capacity follow-ups were seen and selected (`seen=3 / selected=3`) but all three deferred because exact `source_old_text` / `replacement_content` were missing. The planned slice keeps semantic ownership with the Planner, avoids deterministic compaction and same-run recursion, and only strengthens prompt/test/reporting so safe exact `memory_rewrite apply` transactions can be emitted and dogfooded before any mutating run.
+
+
 
 ### Latest completed slice — 2026-06-07
 
