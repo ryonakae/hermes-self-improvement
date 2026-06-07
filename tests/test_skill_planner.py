@@ -1913,6 +1913,43 @@ def test_render_planner_messages_capacity_followups_are_facts_not_routes():
         assert forbidden not in content
 
 
+def test_render_planner_messages_capacity_followups_require_exact_rewrite_apply():
+    digest = build_planner_digest(pack())
+    digest["memory_capacity_followups"] = {
+        "blocked_count": 1,
+        "items": [
+            {
+                "transaction_id": "kt_capacity_verbose",
+                "source_id": "memory_place_capacity_verbose",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "failure_reason": "memory_capacity_exceeded",
+                "usage": "2,199/2,200",
+                "attempted_content": "New compact durable fact.",
+                "current_entries": [
+                    {
+                        "target": "memory",
+                        "old_text": "Verbose older convention entry with repeated details.",
+                    }
+                ],
+            }
+        ],
+    }
+
+    content = render_planner_messages(digest=digest)["messages"][1]["content"]
+
+    assert "memory_rewrite apply template" in content
+    assert '"decision":"apply"' in content
+    assert '"operation":"replace"' in content
+    assert '"target_id":"memory"' in content
+    assert '"source_old_text":"<exact current_destination_entry old_text>"' in content
+    assert '"replacement_content":"<exact compact replacement text>"' in content
+    assert '"capacity_resolution_transaction_id":"kt_capacity_verbose"' in content
+    assert "Do not defer solely because rewrite requires judgment; defer only when exact replacement text is unsafe or unclear." in content
+    for forbidden in ("suggested_route", "route_reasons", "likely_", "allowed_recommendations"):
+        assert forbidden not in content
+
+
 def test_render_planner_messages_capacity_followups_include_exact_action_text():
     long_old_text = "memory entry requiring exact replace/remove: " + "x" * 700
     long_attempted_content = "source entry requiring exact split/move: " + "y" * 700

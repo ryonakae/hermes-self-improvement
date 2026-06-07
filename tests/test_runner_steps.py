@@ -1539,3 +1539,110 @@ def test_capacity_followup_allows_explicit_resolution_plan(monkeypatch):
     assert [tx["decision"] for tx in result["knowledge_transactions"]] == ["apply", "apply"]
     assert [tx["transaction_result"]["outcome"] for tx in result["knowledge_transactions"]] == ["preview", "preview"]
     assert result["editor_validation"]["execution"]["planner_apply_count"] == 2
+
+
+def test_capacity_followup_exact_memory_rewrite_apply_survives_dry_run(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    def fake_planner(digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_id": "resolve_capacity_verbose",
+                    "transaction_kind": "memory_rewrite",
+                    "decision": "apply",
+                    "operation": "replace",
+                    "source_id": "memory_capacity_existing_entry",
+                    "source_store": "builtin_memory",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_old_text": "Verbose older convention entry with repeated details.",
+                    "replacement_content": "Compact convention entry.",
+                    "capacity_resolution_transaction_id": "kt_capacity_verbose",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(runner_steps, "run_planner_runtime", fake_planner)
+    result = runner_steps.run_knowledge_improvement_step(
+        evidence_pack={
+            "summary": {},
+            "evidence": [],
+            "skill_candidates": [],
+            "memory_capacity_followups": {
+                "blocked_count": 1,
+                "items": [
+                    {
+                        "transaction_id": "kt_capacity_verbose",
+                        "source_id": "memory_place_capacity_verbose",
+                        "failure_reason": "memory_capacity_exceeded",
+                    }
+                ],
+            },
+        },
+        config={},
+        mutate=False,
+    )
+
+    tx = result["knowledge_transactions"][0]
+    assert tx["decision"] == "apply"
+    assert tx["transaction_kind"] == "memory_rewrite"
+    assert tx["operation"] == "replace"
+    assert tx["source_old_text"] == "Verbose older convention entry with repeated details."
+    assert tx["replacement_content"] == "Compact convention entry."
+    assert tx["capacity_resolution_transaction_id"] == "kt_capacity_verbose"
+    assert tx["transaction_result"]["outcome"] == "preview"
+    assert result["editor_validation"]["execution"]["planner_apply_count"] == 1
+
+
+def test_capacity_followup_memory_rewrite_apply_without_replacement_blocks(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    memory_calls = []
+
+    def fake_planner(digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_id": "resolve_capacity_missing_text",
+                    "transaction_kind": "memory_rewrite",
+                    "decision": "apply",
+                    "operation": "replace",
+                    "source_id": "memory_capacity_existing_entry",
+                    "source_store": "builtin_memory",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_old_text": "Verbose older convention entry with repeated details.",
+                    "replacement_content": "",
+                    "capacity_resolution_transaction_id": "kt_capacity_verbose",
+                }
+            ],
+        }
+
+    def fake_memory_tool(**kwargs):
+        memory_calls.append(kwargs)
+        return {"success": True}
+
+    monkeypatch.setattr(runner_steps, "run_planner_runtime", fake_planner)
+    result = runner_steps.run_knowledge_improvement_step(
+        evidence_pack={
+            "summary": {},
+            "evidence": [],
+            "skill_candidates": [],
+            "memory_capacity_followups": {
+                "blocked_count": 1,
+                "items": [{"transaction_id": "kt_capacity_verbose", "source_id": "memory_place_capacity_verbose"}],
+            },
+        },
+        config={"_memory_tool_fn": fake_memory_tool},
+        mutate=True,
+    )
+
+    tx = result["knowledge_transactions"][0]
+    assert tx["decision"] == "block"
+    assert tx["operation"] == "none"
+    assert tx["reason"] == "planner_task_missing_replacement_content"
+    assert tx["transaction_result"]["outcome"] == "blocked"
+    assert memory_calls == []

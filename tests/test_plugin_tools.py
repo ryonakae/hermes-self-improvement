@@ -420,6 +420,9 @@ def test_compact_improve_tool_result_reports_capacity_without_entry_text():
         "capacity_resolutions_applied": 1,
         "capacity_resolution_deferred": 1,
         "capacity_retry_blocked": 1,
+        "capacity_exact_rewrite_selected": 1,
+        "capacity_exact_rewrite_apply": 1,
+        "capacity_exact_rewrite_missing_text": 0,
     }
     assert "Sensitive old memory text" not in raw
 

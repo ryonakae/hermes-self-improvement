@@ -1,5 +1,7 @@
 # Capacity Exact Rewrite Application Plan
 
+**Status (2026-06-07):** Implemented and verified through source-directed dry-run dogfood. Prompt now explicitly says not to defer solely because rewrite requires judgment when exact replacement text is safe; runner regressions prove exact capacity `memory_rewrite apply` survives dry-run and missing replacement text blocks before memory tools; compact tool output now includes exact-rewrite counts without memory text. Verification: focused suites `150 passed`, full `pytest tests -q` → `1015 passed, 2 skipped`, `py_compile`, `git diff --check`, and source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T134704Z.json` from `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json` with `dry_run=true`, `target_changed=false`, no route leaks, `semantic_override_count=0`, `apply=1 / defer=23 / skip=55 / block=3`. The dry-run did not produce exact capacity `memory_rewrite apply`; capacity followups remained handled as two `memory_to_skill_missing_editor_task` blocks and one `not_worth_capacity_pressure` block. No mutating run was executed.
+
 > **For Hermes:** Use test-driven-development. Implement task-by-task. Keep the implementation simple: prompt/digest/test/reporting only unless a RED test proves an executor boundary gap.
 
 **Goal:** Move capacity follow-ups from “selected but deferred” to safe `apply memory_rewrite` transactions when the Planner can produce exact `source_old_text` and exact `replacement_content`.
@@ -335,6 +337,26 @@ git add .hermes/plans/2026-06-07-capacity-exact-rewrite-application.md .hermes/p
 git commit -m "fix: require exact capacity rewrite applications"
 git push
 ```
+
+---
+
+## Dogfood result
+
+Source-directed dry-run after implementation:
+
+- Artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T134704Z.json`
+- Source follow-up artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json`
+- `dry_run=true`, `target_changed=false`
+- action summary: `apply=1 / defer=23 / skip=55 / block=3`
+- editor execution: `semantic_override_count=0`, `planner_apply_count=1`, `executed_apply_count=0`, `mechanical_block_count=1` with dry-run preview only
+- route leaks: none found for `suggested_route`, `route_reasons`, `likely_`, `allowed_recommendations`, `default_defer_by_route`, `unhandled_by_route`, or `by_suggested_route`
+- capacity followups: `blocked_count=3`; no exact capacity `memory_rewrite apply` appeared in the live Planner output
+- capacity-related outcomes:
+  - `memory_to_skill_missing_editor_task` for `memory_place_9fcd4c656e27`
+  - `not_worth_capacity_pressure` for `memory_place_e4613415ff97` linked to `kt_f4464e12a5f51b8f`
+  - `memory_to_skill_missing_editor_task` for `memory_place_ec2b951b306d`
+
+Decision: the code slice is complete and safe, but mutating execution is **not ready** because the live Planner did not emit an exact capacity rewrite. The next slice should target capacity `memory_to_skill` actionability if we want the two blocked procedural candidates to move forward, or accept the `not_worth_capacity_pressure` block as a semantic no-op.
 
 ---
 

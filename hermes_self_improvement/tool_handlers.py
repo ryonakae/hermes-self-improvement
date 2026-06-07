@@ -206,14 +206,16 @@ def _memory_capacity_summary(result: dict[str, Any], knowledge_transactions: Any
     followups = raw_followups if isinstance(raw_followups, dict) else {}
     items = [item for item in followups.get("items") or [] if isinstance(item, dict)]
     blocked = int(followups.get("blocked_count") or len(items))
+    txs = [item for item in knowledge_transactions if isinstance(item, dict)] if isinstance(knowledge_transactions, list) else []
     partial = 0
     resolved = 0
     selected = 0
     deferred = 0
     retry_blocked = 0
-    for item in knowledge_transactions if isinstance(knowledge_transactions, list) else []:
-        if not isinstance(item, dict):
-            continue
+    exact_rewrite_selected = 0
+    exact_rewrite_apply = 0
+    exact_rewrite_missing_text = 0
+    for item in txs:
         raw_tx_result = item.get("transaction_result") if isinstance(item.get("transaction_result"), dict) else item.get("result") if isinstance(item.get("result"), dict) else {}
         tx_result: dict[str, Any] = raw_tx_result if isinstance(raw_tx_result, dict) else {}
         outcome = str(tx_result.get("outcome") or "")
@@ -221,12 +223,17 @@ def _memory_capacity_summary(result: dict[str, Any], knowledge_transactions: Any
         normalized_reason = reason.replace("-", "_").replace(" ", "_")
         kind = str(item.get("transaction_kind") or "")
         decision = str(item.get("decision") or "")
+        has_capacity_resolution = bool(item.get("capacity_resolution_transaction_id") or normalized_reason.startswith("capacity_resolution_"))
         if outcome == "partial":
             partial += 1
-        if kind in {"memory_rewrite", "duplicate_cleanup", "memory_to_skill", "placement_split"} and (
-            item.get("capacity_resolution_transaction_id") or normalized_reason.startswith("capacity_resolution_")
-        ):
+        if kind in {"memory_rewrite", "duplicate_cleanup", "memory_to_skill", "placement_split"} and has_capacity_resolution:
             selected += 1
+        if kind == "memory_rewrite" and has_capacity_resolution:
+            exact_rewrite_selected += 1
+            if decision == "apply" and outcome in {"applied", "preview"}:
+                exact_rewrite_apply += 1
+        if kind == "memory_rewrite" and reason == "planner_task_missing_replacement_content":
+            exact_rewrite_missing_text += 1
         if decision == "defer" and normalized_reason.startswith("capacity_resolution_"):
             deferred += 1
         if reason == "planner_task_capacity_followup_requires_explicit_resolution":
@@ -245,6 +252,9 @@ def _memory_capacity_summary(result: dict[str, Any], knowledge_transactions: Any
         "capacity_resolutions_applied": resolved,
         "capacity_resolution_deferred": deferred,
         "capacity_retry_blocked": retry_blocked,
+        "capacity_exact_rewrite_selected": exact_rewrite_selected,
+        "capacity_exact_rewrite_apply": exact_rewrite_apply,
+        "capacity_exact_rewrite_missing_text": exact_rewrite_missing_text,
     }
 
 

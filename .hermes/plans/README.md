@@ -3,10 +3,9 @@
 ## Current source of truth
 
 
-### Current planned next slice — 2026-06-07
+### Latest completed slice — 2026-06-07
 
-`2026-06-07-capacity-exact-rewrite-application.md` is the next implementation plan. It follows the completed capacity prompt/reporting slice and targets the remaining gap from dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T120303Z.json`: capacity follow-ups were seen and selected (`seen=3 / selected=3`) but all three deferred because exact `source_old_text` / `replacement_content` were missing. The planned slice keeps semantic ownership with the Planner, avoids deterministic compaction and same-run recursion, and only strengthens prompt/test/reporting so safe exact `memory_rewrite apply` transactions can be emitted and dogfooded before any mutating run.
-
+`2026-06-07-capacity-exact-rewrite-application.md` is implemented as a narrow prompt/test/reporting slice. It strengthened the capacity follow-up prompt so exact safe rewrites should apply instead of deferring solely because rewrite requires judgment, added runner regressions for exact capacity `memory_rewrite apply` and missing replacement blocking, and added compact exact-rewrite counts without memory text. Verification: focused suites `150 passed`, full `pytest tests -q` → `1015 passed, 2 skipped`, `py_compile`, `git diff --check`, and source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T134704Z.json` from `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json` with `dry_run=true`, `target_changed=false`, no route leaks, `semantic_override_count=0`, and `apply=1 / defer=23 / skip=55 / block=3`. The live Planner did not emit exact capacity `memory_rewrite apply`; capacity followups ended as two `memory_to_skill_missing_editor_task` blocks and one `not_worth_capacity_pressure` block, so no mutating run was executed.
 
 
 ### Latest completed slice — 2026-06-07
