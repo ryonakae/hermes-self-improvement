@@ -1,5 +1,7 @@
 # Memory Placement Direction Validation Implementation Plan
 
+> **Status note — 2026-06-07:** Historical / absorbed. This plan was not implemented as a standalone slice. Its core safety requirements were absorbed by the later `2026-06-01-memory-placement-heuristic-minimalization.md`, `2026-06-02-placement-move-canonical-decision-followup.md`, and `2026-06-07-planner-owned-knowledge-decision-and-editor-execution.md` work: route hints were removed from the Planner boundary, invalid/underspecified placement moves fail closed, mixed whole-entry moves are blocked/deferred, and dry-run dogfood showed no whole-entry placement moves for the known mixed cases. Do not continue this checklist directly; create a new timestamped plan if new live artifacts show a fresh direction-validation bug.
+
 > **For Hermes:** Use test-driven-development and requesting-code-review. Implement task-by-task; do not start a later task until the focused RED/GREEN check for the current task has passed.
 
 **Goal:** Prevent the planner/normalizer from turning “this entry belongs in USER/MEMORY” into an impossible USER↔MEMORY move when the entry is already in that store.

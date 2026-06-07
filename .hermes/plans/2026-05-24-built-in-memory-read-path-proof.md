@@ -1,5 +1,7 @@
 # Built-in Memory Read Path Proof Plan
 
+> **Status note — 2026-06-07:** Deferred proof, not an active implementation slice. Current runtime already attempts the official `MemoryStore` read path first when no explicit `memory_inventory_paths` override is configured, while keeping the direct `§` parser as a fallback/fixture path. Removing that fallback remains optional cleanup and should only be reopened with a new timestamped proof plan and equivalence tests.
+
 **Goal:** Prove whether `hermes-self-improvement` can replace its read-only built-in memory `§` parser with Hermes' official `MemoryStore`/current-entry source without changing mutation behavior.
 
 ## Scope

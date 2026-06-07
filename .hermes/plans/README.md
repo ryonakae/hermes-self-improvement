@@ -2,6 +2,19 @@
 
 ## Current source of truth
 
+
+### Current unfinished work classification — 2026-06-07
+
+There are no active unimplemented code slices at the current source-of-truth layer. Remaining work is intentionally limited to:
+
+1. **Approval-gated mutating dogfood:** run `hermes self-improvement improve --json` only after Ryo approval, using pre/post memory hashes and artifact inspection.
+2. **Scheduled operational observation:** continue reading daily maintenance output for naturally low-risk actionable mutations; do not force `apply > 0`.
+3. **Deferred proof / historical plans:** old top-level plans with open checkboxes or “not started” language are historical unless explicitly reopened by a new timestamped plan. Notable examples:
+   - `2026-06-01-memory-placement-direction-validation.md` is absorbed by the later heuristic-minimalization / planner-owned knowledge decision work.
+   - `2026-05-24-built-in-memory-read-path-proof.md` remains a deferred proof for removing fallback direct parsing; current execution already prefers official `MemoryStore` where available.
+
+Future work that reopens any archived/deferred item must create a fresh plan and link it here instead of continuing stale checklist items in-place.
+
 Latest completed follow-up (2026-06-07): `2026-06-07-report-diagnostic-signal-reference-only.md` is implemented as a narrow report/improve boundary fix. Report heuristic output remains diagnostic-only when passed into `improve --from-report`; `diagnostic_signal` evidence preserves attention metadata but no longer carries synthetic `likely_targets` or route/decision fields. Verification: focused RED/GREEN test `1 passed`, related suite `37 passed`, full `pytest tests -q` → `1009 passed, 2 skipped`, `py_compile`, and `git diff --check` passed.
 
 Latest completed follow-up (2026-06-07): `2026-06-07-planner-owned-knowledge-decision-and-editor-execution.md` is code-complete through dry-run dogfood. It makes Planner own USER/MEMORY/Skill placement and capacity decisions, keeps Knowledge Editor as an executor with mechanical guards, blocks mixed-entry whole moves and underspecified apply plans, adds built-in memory capacity facts, prevents built-in memory capacity failures from falling back to external providers unless Planner emits an explicit external-memory transaction, and exposes compact `steps.editor_execution` reporting. Verification: `py_compile`, full `pytest tests -q` → `1009 passed, 2 skipped`, `git diff --check`, and source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T014043Z.json` with `target_changed=false`, `semantic_override_count=0`, whole-entry placement moves `[]`, memory-to-skill applies missing editor task `[]`, route leaks `[]`, and compact editor execution counts present. No mutating self-improvement run has been executed; it requires Ryo approval.
