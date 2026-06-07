@@ -743,3 +743,32 @@ Result: focused suite `82 passed`; full suite `1009 passed, 2 skipped`.
 Source-directed dry-run + compact tool summary check artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T014043Z.json`; `target_changed=false`; compact `steps.editor_execution` shows `semantic_override_count=0`, `planner_apply_count=8`, `executed_apply_count=0`, `mechanical_block_count=8`, `blocked_apply_reasons={"dry_run_would_execute_knowledge_transaction": 8}`.
 
 No mutating self-improvement run has been executed. Mutation and push remain approval-gated.
+
+
+---
+
+## Mutating dogfood — 2026-06-07 after approval
+
+Ryo approved the mutation dogfood after plan hygiene. Preflight status was clean: repo `main...origin/main`, runtime initialized, prompt overlays ready, and memory hashes recorded.
+
+Command run from repo worktree:
+
+```bash
+hermes self-improvement improve --json > /tmp/hermes-si-dogfood/improve-mutation-20260607T073631Z.json
+```
+
+Artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T074036Z.json`.
+
+Result:
+
+- `dry_run=false`
+- `target_changed=false`
+- skill changes: 0
+- memory changes: 0
+- action summary: `apply=5 / defer=6 / skip=102 / block=1`
+- transaction outcomes: `applied=0`, `blocked=6`, `partial=0`
+- blocked reasons: `memory_capacity_exceeded=5`, `memory_to_skill_missing_editor_task=1`
+- editor execution: `semantic_override_count=0`, `planner_apply_count=5`, `executed_apply_count=0`, `mechanical_block_count=5`, `blocked_apply_reasons={"memory_capacity_exceeded": 5}`
+- pre/post `USER.md` and `MEMORY.md` hashes matched; no source memory removal or partial mutation occurred.
+
+Interpretation: the mutating path is safe and honest, but no real update was applied. The next code/product follow-up, if Ryo wants actual autonomous progress rather than safe no-op, should be LLM-led built-in memory capacity resolution from the recorded `memory_capacity_followups`, not a guard loosening or forced mutation.
