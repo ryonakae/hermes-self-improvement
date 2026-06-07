@@ -179,8 +179,8 @@ def test_editor_prompt_includes_native_tool_editor_contract(tmp_path):
         "constraints": ["Use only skills_list, skill_view, skill_manage."],
     })
 
-    assert "planner handoff is evidence-backed intent" in prompt
-    assert "not an exact patch command" in prompt
+    assert "Planner's semantic decision is the source of truth" in prompt
+    assert "Do not choose a different target store, skill, memory entry, or semantic action" in prompt
     assert "read the current target" in prompt
     assert ("submit_" + "mutation_result") not in prompt
     assert "Final assistant response must be a JSON object" in prompt

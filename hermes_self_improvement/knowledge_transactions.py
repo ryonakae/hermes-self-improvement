@@ -300,6 +300,10 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
         "evidence_ids": evidence_ids,
         "reason": str(raw.get("reason") or raw.get("rationale") or ""),
     }
+    if raw.get("mixed_entry") is not None:
+        transaction["mixed_entry"] = raw.get("mixed_entry")
+    if raw.get("whole_entry_move_allowed") is not None:
+        transaction["whole_entry_move_allowed"] = raw.get("whole_entry_move_allowed")
     if raw.get("content") is not None:
         transaction["content"] = str(raw.get("content"))
     for key in (
@@ -312,9 +316,12 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
         "ambiguous_name",
         "conflicting_paths",
         "semantic_boundary_notes",
+        "semantic_basis",
     ):
         if raw.get(key) is not None:
             transaction[key] = raw.get(key)
+    if isinstance(raw.get("capacity_plan"), dict):
+        transaction["capacity_plan"] = raw.get("capacity_plan")
     return transaction
 
 
@@ -400,8 +407,12 @@ def _validate_apply_transaction(transaction: dict[str, Any]) -> dict[str, Any]:
         return _blocked(transaction, "transaction_missing_source_evidence_id")
     if operation in _SOURCE_REQUIRED_OPERATIONS and not _has_source_fields(transaction):
         return _blocked(transaction, "transaction_missing_source_fields")
+    if transaction.get("transaction_kind") == "placement_move" and (transaction.get("mixed_entry") is True or transaction.get("whole_entry_move_allowed") is False):
+        return _blocked(transaction, "planner_task_whole_move_not_allowed_for_mixed_entry")
     if transaction.get("transaction_kind") == "memory_to_skill" and not isinstance(transaction.get("editor_task"), dict):
         return _blocked(transaction, "memory_to_skill_missing_editor_task")
+    if transaction.get("transaction_kind") == "memory_rewrite" and not str(transaction.get("replacement_content") or transaction.get("content") or "").strip():
+        return _blocked(transaction, "planner_task_missing_replacement_content")
     if transaction.get("transaction_kind") == "placement_split":
         if not str(transaction.get("destination_content") or "").strip():
             return _blocked(transaction, "split_missing_destination_content")

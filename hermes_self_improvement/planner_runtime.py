@@ -136,6 +136,33 @@ def _built_in_memory_inventory_digest(evidence_pack: dict[str, Any]) -> dict[str
     }
 
 
+def _built_in_memory_capacity_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    inventory = _built_in_memory_inventory_digest(evidence_pack)
+    stores: dict[str, dict[str, Any]] = {
+        "builtin_user": {"entry_count": 0, "approx_chars_used": 0, "entries": []},
+        "builtin_memory": {"entry_count": 0, "approx_chars_used": 0, "entries": []},
+    }
+    for entry in inventory.get("entries") or []:
+        if not isinstance(entry, dict):
+            continue
+        store = str(entry.get("store") or "")
+        if store not in stores:
+            continue
+        old_text = str(entry.get("old_text") or "")
+        stores[store]["entry_count"] += 1
+        stores[store]["approx_chars_used"] += len(old_text)
+        if len(stores[store]["entries"]) < 12:
+            stores[store]["entries"].append({
+                "evidence_id": str(entry.get("evidence_id") or ""),
+                "old_text": old_text,
+                "chars": len(old_text),
+            })
+    for store, payload in stores.items():
+        payload["remaining_chars_estimate"] = None
+        payload["usage"] = f"approx {payload['approx_chars_used']} chars across {payload['entry_count']} entries"
+    return stores
+
+
 def _memory_inventory_groups_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
     groups: list[dict[str, Any]] = []
@@ -782,6 +809,7 @@ def build_planner_runtime_digest(
         "skill_candidates": candidate_rows,
         "knowledge_maintenance": knowledge_maintenance,
         "built_in_memory_inventory": _built_in_memory_inventory_digest(evidence_pack),
+        "built_in_memory_capacity": _built_in_memory_capacity_digest(evidence_pack),
         "memory_placement_candidates": _memory_placement_candidates_digest(evidence_pack, candidate_rows),
         "memory_capacity_followups": _memory_capacity_followups_digest(evidence_pack),
         "semantic_knowledge_candidates": _semantic_knowledge_candidates_digest(evidence_pack),

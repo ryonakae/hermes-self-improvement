@@ -1725,6 +1725,32 @@ def _knowledge_transaction_result_summary(results: list[dict[str, Any]]) -> dict
     return summary
 
 
+def _editor_execution_summary(transactions: list[dict[str, Any]], results: list[dict[str, Any]]) -> dict[str, Any]:
+    planner_apply_count = sum(1 for tx in transactions if isinstance(tx, dict) and tx.get("decision") == "apply")
+    executed_apply_count = 0
+    mechanical_block_count = 0
+    blocked_apply_reasons: dict[str, int] = {}
+    for tx, result in zip(transactions, results):
+        if not isinstance(tx, dict) or tx.get("decision") != "apply" or not isinstance(result, dict):
+            continue
+        if result.get("success") and result.get("outcome") == "applied":
+            executed_apply_count += 1
+        elif result.get("outcome") in {"blocked", "preview", "partial"} or not result.get("success"):
+            mechanical_block_count += 1
+            reason = str(result.get("reason") or result.get("error") or result.get("outcome") or "unknown")
+            blocked_apply_reasons[reason] = blocked_apply_reasons.get(reason, 0) + 1
+    return {
+        "semantic_override_count": 0,
+        "planner_task_invalid_count": sum(
+            count for reason, count in blocked_apply_reasons.items() if reason.startswith("planner_task_") or reason.startswith("transaction_missing_") or reason.startswith("knowledge_transaction_missing_")
+        ),
+        "planner_apply_count": planner_apply_count,
+        "executed_apply_count": executed_apply_count,
+        "mechanical_block_count": mechanical_block_count,
+        "blocked_apply_reasons": dict(sorted(blocked_apply_reasons.items())),
+    }
+
+
 def _knowledge_transaction_capacity_failure_result(payload: dict[str, Any]) -> dict[str, Any]:
     nested_keys = ("add_result", "memory_result", "fallback_result", "destination_result", "replace_result", "remove_result", "result", "transaction_result", "capacity_recovery")
     seen: set[int] = set()
@@ -1845,7 +1871,7 @@ def run_knowledge_improvement_step(
             "transaction_results": [],
             "changed_skills": [],
             "changed_memories": [],
-            "editor_validation": {"summary": {}},
+            "editor_validation": {"summary": {}, "execution": _editor_execution_summary([], [])},
             "planner_quality": {},
             "knowledge_routing": {},
             "cluster_evidence": digest.get("cluster_evidence") if isinstance(digest.get("cluster_evidence"), dict) else {},
@@ -1881,7 +1907,10 @@ def run_knowledge_improvement_step(
         "transaction_results": transaction_results,
         "changed_skills": _unique_nonempty_strings(changed_skills),
         "changed_memories": _unique_nonempty_strings(changed_memories),
-        "editor_validation": {"summary": _knowledge_transaction_result_summary(transaction_results)},
+        "editor_validation": {
+            "summary": _knowledge_transaction_result_summary(transaction_results),
+            "execution": _editor_execution_summary(transactions, transaction_results),
+        },
         "planner_quality": quality,
         "knowledge_routing": build_knowledge_routing_summary(
             memory_step={},

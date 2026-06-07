@@ -587,3 +587,38 @@ def test_normalize_placement_split_requires_exact_destination_and_source_replace
     assert executable["evidence_ids"] == ["memory_place_mixed"]
     assert executable["destination_content"] == "MEMORY-shaped text."
     assert executable["source_replacement"] == "USER-shaped text."
+
+
+def test_normalize_memory_rewrite_apply_requires_exact_replacement_content():
+    normalized = normalize_knowledge_transaction({
+        "transaction_kind": "memory_rewrite",
+        "decision": "apply",
+        "operation": "replace",
+        "source_store": "builtin_memory",
+        "source_id": "memory_place_verbose",
+        "source_old_text": "old verbose durable fact",
+        "target_store": "builtin_memory",
+    })
+
+    assert normalized["decision"] == "block"
+    assert normalized["operation"] == "none"
+    assert normalized["reason"] == "planner_task_missing_replacement_content"
+
+
+def test_normalize_placement_move_apply_requires_whole_entry_move_allowed_for_explicit_false():
+    normalized = normalize_knowledge_transaction({
+        "transaction_kind": "placement_move",
+        "decision": "apply",
+        "operation": "move",
+        "source_store": "builtin_user",
+        "source_id": "memory_place_policy",
+        "source_old_text": "Google Workspace は read-only 認可優先。Hermes のデフォルト skill / built-in files は編集しない方針。",
+        "target_store": "builtin_memory",
+        "target_id": "memory",
+        "whole_entry_move_allowed": False,
+    })
+
+    assert normalized["decision"] == "block"
+    assert normalized["operation"] == "none"
+    assert normalized["reason"] == "planner_task_whole_move_not_allowed_for_mixed_entry"
+    assert normalized["whole_entry_move_allowed"] is False

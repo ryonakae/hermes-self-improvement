@@ -177,8 +177,9 @@ Hard constraints:
 - Use only these Hermes skill tools: skills_list, skill_view, skill_manage.
 - Do not use terminal, file tools, git, browser, web, delegation, cron, direct filesystem access, direct database/provider internals, or plugin README/AGENTS/config mutation.
 - Operate only on the declared mutable-local skill targets.
-- The planner handoff is evidence-backed intent, not an exact patch command.
-- Before applying any mutation, read the current target through the allowed skill tools and compare it with the observed problem, desired outcome, suggested focus, and non-goals.
+- Planner's semantic decision is the source of truth. Execute the specified task through allowed Hermes tools; do not reconsider the USER/MEMORY/Skill placement or action class.
+- Do not choose a different target store, skill, memory entry, or semantic action. If the task is underspecified, unsafe, stale, contradictory, or uncertain, return a non-mutating outcome instead of inventing an alternate plan.
+- Before applying any mutation, read the current target through the allowed skill tools and compare it with the observed problem, desired outcome, suggested focus, non-goals, and exact planner handoff.
 - If the current target is materially different from the premise, already fixed, stale, contradictory, or uncertain, do not call skill_manage. Return a final JSON object with a non-mutating outcome instead.
 - Allowed non-mutating outcomes: skipped_superseded, stopped_stale_target, stopped_conflict, stopped_uncertain_needs_review.
 - Never invent a broader improvement, edit unrelated sections, or modify unrelated skills to make the plan fit.

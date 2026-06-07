@@ -149,6 +149,27 @@ def _render_knowledge_maintenance_section(digest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _render_builtin_memory_capacity_section(digest: dict[str, Any]) -> str:
+    raw_capacity = digest.get("built_in_memory_capacity")
+    capacity = raw_capacity if isinstance(raw_capacity, dict) else {}
+    if not capacity:
+        return "## Built-in memory capacity facts\n- n/a\n"
+    lines = [
+        "## Built-in memory capacity facts",
+        "These are facts, not recommendations. Planner must decide whether a proposed add/move is worth the capacity cost. If capacity is tight, emit canonical memory_rewrite / duplicate_cleanup / memory_to_skill / placement_split / defer / skip transactions with exact text. Do not expect Editor or program code to choose compaction targets.",
+    ]
+    for store in ("builtin_user", "builtin_memory"):
+        payload = capacity.get(store)
+        payload = payload if isinstance(payload, dict) else {}
+        lines.append(
+            f"- store={store}; usage={_clip(payload.get('usage'), max_chars=80)}; entry_count={int(payload.get('entry_count') or 0)}; approx_chars_used={int(payload.get('approx_chars_used') or 0)}; remaining_chars_estimate={payload.get('remaining_chars_estimate')}"
+        )
+        for entry in (payload.get("entries") or [])[:8]:
+            if isinstance(entry, dict):
+                lines.append(f"  - entry evidence_id={_clip(entry.get('evidence_id'), max_chars=80)}; chars={int(entry.get('chars') or 0)}; old_text={_clip(entry.get('old_text'), max_chars=180)}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _render_builtin_memory_inventory_section(digest: dict[str, Any]) -> str:
     raw_inventory = digest.get("built_in_memory_inventory")
     inventory = raw_inventory if isinstance(raw_inventory, dict) else {}
@@ -338,8 +359,9 @@ def _render_semantic_knowledge_section(digest: dict[str, Any]) -> str:
     lines = [
         "## Semantic knowledge judgment rules",
         "Observations are not recommendations. You decide semantics from exact text, current store, official boundaries, and advisory context.",
-        "Use placement_move only when the whole source entry clearly belongs in the opposite built-in store. Use placement_split for mixed entries, memory_rewrite for same-store cleanup, duplicate_cleanup for true duplicates, keep_same_topic_different_store for healthy USER/MEMORY coexistence, and skill_ambiguity_cleanup for ambiguous skill-name/path collisions.",
-        "If exact target, split text, or safe operation is unclear, defer with a concrete reason rather than forcing a move.",
+        "Use placement_move only when the whole source entry clearly belongs in the opposite built-in store and whole_entry_move_allowed=true. Do not emit whole-entry placement_move for mixed entries; use placement_split only when exact source_replacement and destination_content are available, otherwise defer. Use memory_rewrite for same-store cleanup, duplicate_cleanup for true duplicates, keep_same_topic_different_store for healthy USER/MEMORY coexistence, and skill_ambiguity_cleanup for ambiguous skill-name/path collisions.",
+        "Planner is the final semantic decision maker. Editor executes your exact canonical transaction through official tools; program code will not choose a different store, skill, split text, compaction target, or memory entry for you.",
+        "For apply, emit an executable editor_task/capacity_plan with exact old_text and exact add/replace/remove text. memory_to_skill apply requires target_skill plus concrete editor_task/skill_task. memory_rewrite apply requires exact replacement_content or content. If exact target, split text, replacement text, or safe operation is unclear, defer with a concrete reason rather than forcing a move.",
         "Transaction templates include: placement_split, memory_rewrite, duplicate_cleanup, keep_same_topic_different_store, skill_ambiguity_cleanup.",
     ]
     if not any((mixed, pairs, coverage, ambiguity)):
@@ -475,6 +497,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
         render_evidence_markdown(digest, max_items=20),
         _render_knowledge_maintenance_section(digest),
         _render_builtin_memory_inventory_section(digest),
+        _render_builtin_memory_capacity_section(digest),
         _render_memory_placement_candidates_section(digest),
         _render_memory_capacity_followups_section(digest),
         _render_semantic_knowledge_section(digest),

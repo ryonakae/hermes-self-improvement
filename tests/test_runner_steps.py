@@ -1390,3 +1390,45 @@ def test_run_knowledge_improvement_step_dry_run_previews_valid_placement_move_wi
     assert result["status"] == "completed"
     assert result["transaction_results"][0]["outcome"] == "preview"
     assert result["knowledge_transactions"][0]["transaction_result"]["outcome"] == "preview"
+
+
+def test_run_knowledge_improvement_step_reports_editor_execution_counts(monkeypatch, tmp_path):
+    from hermes_self_improvement import runner_steps
+
+    def fake_planner(digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_kind": "memory_rewrite",
+                    "decision": "apply",
+                    "operation": "replace",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_store": "builtin_memory",
+                    "source_id": "memory_place_verbose",
+                    "source_old_text": "old",
+                    "replacement_content": "new",
+                },
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "block",
+                    "operation": "none",
+                    "reason": "planner_task_whole_move_not_allowed_for_mixed_entry",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(runner_steps, "run_planner_runtime", fake_planner)
+    result = runner_steps.run_knowledge_improvement_step(
+        evidence_pack={"summary": {}, "evidence": [], "skill_candidates": []},
+        config={},
+        mutate=False,
+    )
+
+    execution = result["editor_validation"]["execution"]
+    assert execution["semantic_override_count"] == 0
+    assert execution["planner_apply_count"] == 1
+    assert execution["executed_apply_count"] == 0
+    assert execution["mechanical_block_count"] == 1
+    assert execution["blocked_apply_reasons"] == {"dry_run_would_execute_knowledge_transaction": 1}

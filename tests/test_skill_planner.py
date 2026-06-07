@@ -75,6 +75,39 @@ def test_memory_placement_evidence_in_skill_view_is_not_skill_target_missing():
     assert digest["unmatched_evidence"]["by_reason"].get("skill_target_missing", 0) == 0
 
 
+
+def test_planner_digest_exposes_builtin_memory_capacity_facts():
+    pack_data = pack()
+    pack_data["evidence"].append({
+        "id": "memory-inventory-capacity",
+        "kind": "memory_inventory_candidate",
+        "inventory": {
+            "group_kind": "built_in_memory_inventory",
+            "entries": [
+                {"store": "builtin_user", "old_text": "Ryo prefers concise Slack reports.", "preview": "Ryo prefers concise Slack reports."},
+                {"store": "builtin_memory", "old_text": "Hermes runtime root is ~/.hermes.", "preview": "Hermes runtime root is ~/.hermes."},
+            ],
+        },
+        "target_resolution_hint": {"source": "runtime_current_entries"},
+    })
+
+    digest = build_planner_digest(pack_data)
+    capacity = digest["built_in_memory_capacity"]
+
+    assert capacity["builtin_user"]["entry_count"] == 1
+    assert capacity["builtin_user"]["approx_chars_used"] == len("Ryo prefers concise Slack reports.")
+    assert capacity["builtin_user"]["entries"][0]["old_text"] == "Ryo prefers concise Slack reports."
+    assert capacity["builtin_memory"]["entry_count"] == 1
+    assert capacity["builtin_memory"]["approx_chars_used"] == len("Hermes runtime root is ~/.hermes.")
+
+    rendered = render_planner_messages(digest=digest)
+    user_content = rendered["messages"][1]["content"]
+
+    assert "## Built-in memory capacity facts" in user_content
+    assert "facts, not recommendations" in user_content
+    assert "builtin_user" in user_content
+    assert "Ryo prefers concise Slack reports." in user_content
+
 def test_planner_digest_exposes_memory_placement_candidates():
     pack_data = pack()
     pack_data["evidence"].append({
