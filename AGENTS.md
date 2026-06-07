@@ -72,7 +72,7 @@ PY
 - `improve` の semantic decision は `apply / defer / skip / block` の 4 つに寄せる。新しい apply mode、承認キュー、別 lane を増やさない
 - skill mutation は `skill_manage` など公式 skill tools 経由のみ。candidate は `$HERMES_HOME/skills/` 配下の local unprotected skill に限る。built-in / hub-installed / plugin-bundled / external-dir / pinned / archived / ambiguous は LLM-facing mutation target に出さず、artifact に除外件数・理由だけ残す。edit には patch / merge・absorb / reference rewrite / Curator-style archive を含める。
 - memory mutation は memory tool / provider-native memory tool 経由のみ。built-in memory file や provider DB を直接編集しない。CLI/standalone 実行でも公式 `tools.memory_tool.MemoryStore` を load して `memory_tool(..., store=store)` で呼ぶ
-- built-in memory 満杯時は `current_entries` を見て `replace/remove` で統合してから `add` を再試行する。それでも入らなければ active external provider tool に fallback する
+- built-in memory 満杯時は Planner が `current_entries` を見て `replace/remove` / skill 化 / defer / explicit external memory routing を決める。executor は built-in memory 操作から active external provider tool へ暗黙 fallback しない
 - conversation-derived memory gap は改善対象。キーワードは window ranking にだけ使い、semantic gate にしない
 - rollback は primary feature ではない。失敗は次回の improvement run で correction する
 - plugin 自身の改善対象は target repo の commit を作らない。repo 内の手作業変更は作業者の workflow で commit する

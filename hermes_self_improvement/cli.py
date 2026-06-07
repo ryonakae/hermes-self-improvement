@@ -732,7 +732,6 @@ def _attach_diagnostic_signals_to_evidence_pack(evidence_pack: dict[str, Any], s
             "summary": signal.get("summary"),
             "suggested_attention": signal.get("suggested_attention"),
             "evidence_refs": signal.get("evidence_refs") if isinstance(signal.get("evidence_refs"), list) else [],
-            "likely_targets": [{"target": "skill", "weight": 0.6}],
             "source": "report",
         }
         signal_evidence.append({key: value for key, value in item.items() if value not in (None, "", [], {})})

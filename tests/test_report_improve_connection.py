@@ -390,7 +390,12 @@ def test_run_improve_from_report_adds_reference_only_diagnostic_evidence(monkeyp
     assert result["source_report"]["diagnostic_signal_count"] == 1
     assert result["source_report"]["artifact_path"] == str(report_path)
     assert result["evidence_pack"]["summary"]["report_diagnostic_signal_count"] == 1
-    assert [item for item in captured["evidence_pack"]["evidence"] if item.get("kind") == "diagnostic_signal"]
+    diagnostic_items = [item for item in captured["evidence_pack"]["evidence"] if item.get("kind") == "diagnostic_signal"]
+    assert diagnostic_items
+    assert diagnostic_items[0]["source"] == "report"
+    assert "likely_targets" not in diagnostic_items[0]
+    assert "suggested_route" not in diagnostic_items[0]
+    assert "decision" not in diagnostic_items[0]
 
 
 def test_run_improve_from_capacity_followup_run_feeds_normal_planner_path(monkeypatch, tmp_path):
