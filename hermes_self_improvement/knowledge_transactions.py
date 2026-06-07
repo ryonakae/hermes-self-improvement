@@ -317,6 +317,7 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
         "conflicting_paths",
         "semantic_boundary_notes",
         "semantic_basis",
+        "capacity_resolution_transaction_id",
     ):
         if raw.get(key) is not None:
             transaction[key] = raw.get(key)

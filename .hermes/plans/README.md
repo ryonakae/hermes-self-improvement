@@ -3,15 +3,14 @@
 ## Current source of truth
 
 
-### Current unfinished work classification — 2026-06-07
+### Latest completed slice — 2026-06-07
 
-There are no active unimplemented code slices at the current source-of-truth layer. Remaining work is intentionally limited to:
+`2026-06-07-capacity-followup-replan-execution.md` is implemented. It closes the gap exposed by mutating dogfood artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T074036Z.json`: capacity-blocked built-in memory transactions now feed the next normal Planner run, and repeat placement-move retries are blocked unless linked to explicit Planner-selected capacity resolution. This slice does not add deterministic compaction heuristics, same-run recursion, or implicit external-provider fallback. Verification: focused suites `97 passed`, full `pytest tests -q` → `1012 passed, 2 skipped`, `py_compile`, `git diff --check`, and source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T080941Z.json` with `target_changed=false`, `memory_capacity_followups.blocked_count=5`, no route-leak terms, and `apply=0 / defer=21 / skip=68 / block=7`.
 
-1. **Mutating dogfood:** completed after Ryo approval. Artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T074036Z.json` had `target_changed=false`, skill changes 0, memory changes 0, `apply=5 / defer=6 / skip=102 / block=1`; all apply attempts were mechanically blocked (`memory_capacity_exceeded=5`) with no memory hash changes or partial mutation.
-2. **Scheduled operational observation:** continue reading daily maintenance output for naturally low-risk actionable mutations; do not force `apply > 0`.
-3. **Deferred proof / historical plans:** old top-level plans with open checkboxes or “not started” language are historical unless explicitly reopened by a new timestamped plan. Notable examples:
-   - `2026-06-01-memory-placement-direction-validation.md` is absorbed by the later heuristic-minimalization / planner-owned knowledge decision work.
-   - `2026-05-24-built-in-memory-read-path-proof.md` remains a deferred proof for removing fallback direct parsing; current execution already prefers official `MemoryStore` where available.
+Historical/deferred plan classification remains:
+
+- `2026-06-01-memory-placement-direction-validation.md` is absorbed by later heuristic-minimalization / planner-owned knowledge decision work.
+- `2026-05-24-built-in-memory-read-path-proof.md` remains a deferred proof for removing fallback direct parsing; current execution already prefers official `MemoryStore` where available.
 
 Future work that reopens any archived/deferred item must create a fresh plan and link it here instead of continuing stale checklist items in-place.
 

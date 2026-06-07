@@ -1712,6 +1712,12 @@ def _editor_execution_summary(transactions: list[dict[str, Any]], results: list[
     executed_apply_count = 0
     mechanical_block_count = 0
     blocked_apply_reasons: dict[str, int] = {}
+    planner_block_reasons: dict[str, int] = {}
+    for tx in transactions:
+        if not isinstance(tx, dict) or tx.get("decision") != "block":
+            continue
+        reason = str(tx.get("reason") or "knowledge_transaction_blocked")
+        planner_block_reasons[reason] = planner_block_reasons.get(reason, 0) + 1
     for tx, result in zip(transactions, results):
         if not isinstance(tx, dict) or tx.get("decision") != "apply" or not isinstance(result, dict):
             continue
@@ -1721,10 +1727,13 @@ def _editor_execution_summary(transactions: list[dict[str, Any]], results: list[
             mechanical_block_count += 1
             reason = str(result.get("reason") or result.get("error") or result.get("outcome") or "unknown")
             blocked_apply_reasons[reason] = blocked_apply_reasons.get(reason, 0) + 1
+    invalid_reasons = dict(blocked_apply_reasons)
+    for reason, count in planner_block_reasons.items():
+        invalid_reasons[reason] = invalid_reasons.get(reason, 0) + count
     return {
         "semantic_override_count": 0,
         "planner_task_invalid_count": sum(
-            count for reason, count in blocked_apply_reasons.items() if reason.startswith("planner_task_") or reason.startswith("transaction_missing_") or reason.startswith("knowledge_transaction_missing_")
+            count for reason, count in invalid_reasons.items() if reason.startswith("planner_task_") or reason.startswith("transaction_missing_") or reason.startswith("knowledge_transaction_missing_")
         ),
         "planner_apply_count": planner_apply_count,
         "executed_apply_count": executed_apply_count,
@@ -1823,6 +1832,43 @@ def build_memory_capacity_followups(transactions: list[dict[str, Any]]) -> dict[
     return {"blocked_count": len(items), "items": items}
 
 
+def _capacity_followup_source_ids(digest: dict[str, Any]) -> set[str]:
+    raw_followups = digest.get("memory_capacity_followups")
+    followups = raw_followups if isinstance(raw_followups, dict) else {}
+    ids: set[str] = set()
+    for item in followups.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        source_id = str(item.get("source_id") or item.get("source_evidence_id") or "").strip()
+        if source_id:
+            ids.add(source_id)
+    return ids
+
+
+def _block_unresolved_capacity_retries(transactions: list[dict[str, Any]], *, digest: dict[str, Any]) -> list[dict[str, Any]]:
+    blocked_source_ids = _capacity_followup_source_ids(digest)
+    if not blocked_source_ids:
+        return transactions
+    out: list[dict[str, Any]] = []
+    for tx in transactions:
+        if (
+            isinstance(tx, dict)
+            and tx.get("decision") == "apply"
+            and tx.get("transaction_kind") == "placement_move"
+            and str(tx.get("source_id") or tx.get("source_evidence_id") or "").strip() in blocked_source_ids
+            and not tx.get("capacity_resolution_transaction_id")
+        ):
+            updated = dict(tx)
+            updated["decision"] = "block"
+            updated["operation"] = "none"
+            updated["reason"] = "planner_task_capacity_followup_requires_explicit_resolution"
+            updated["blocked_prior_decision"] = "apply"
+            out.append(updated)
+            continue
+        out.append(tx)
+    return out
+
+
 def run_knowledge_improvement_step(
     *,
     evidence_pack: dict[str, Any],
@@ -1865,6 +1911,7 @@ def run_knowledge_improvement_step(
         for item in (planner.get("knowledge_transactions") or [])
         if isinstance(item, dict)
     ]
+    transactions = _block_unresolved_capacity_retries(transactions, digest=digest)
     transaction_results: list[dict[str, Any]] = []
     changed_skills: list[str] = []
     changed_memories: list[str] = []

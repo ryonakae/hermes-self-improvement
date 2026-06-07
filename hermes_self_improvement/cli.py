@@ -1029,7 +1029,17 @@ def run_improve(
         report_signals = source_report_context.get("diagnostic_signals") if isinstance(source_report_context.get("diagnostic_signals"), list) else []
         if report_signals:
             evidence_pack = _attach_diagnostic_signals_to_evidence_pack(evidence_pack, report_signals)
+    capacity_followup_source_path = str(Path(capacity_followups_from_run).expanduser()) if capacity_followups_from_run else None
+    auto_capacity_followup_source = False
     memory_capacity_followups = _load_memory_capacity_followups_from_run(capacity_followups_from_run)
+    if not capacity_followup_source_path:
+        latest_capacity_path = _latest_run_artifact(config)
+        if latest_capacity_path:
+            latest_capacity_followups = _load_memory_capacity_followups_from_run(str(latest_capacity_path))
+            if latest_capacity_followups.get("blocked_count") or latest_capacity_followups.get("items"):
+                capacity_followup_source_path = str(latest_capacity_path)
+                auto_capacity_followup_source = True
+                memory_capacity_followups = latest_capacity_followups
     if memory_capacity_followups.get("blocked_count") or memory_capacity_followups.get("items"):
         evidence_pack["memory_capacity_followups"] = memory_capacity_followups
         raw_summary = evidence_pack.get("summary")
@@ -1148,7 +1158,7 @@ def run_improve(
     action_summary = _action_summary_from_result({"knowledge_transactions": knowledge_transactions}, step_decisions_payload)
     raw_memory_capacity_followups = knowledge_step.get("memory_capacity_followups")
     output_memory_capacity_followups = raw_memory_capacity_followups if isinstance(raw_memory_capacity_followups, dict) else {}
-    if not (output_memory_capacity_followups.get("blocked_count") or output_memory_capacity_followups.get("items")):
+    if not (output_memory_capacity_followups.get("blocked_count") or output_memory_capacity_followups.get("items")) and not auto_capacity_followup_source:
         output_memory_capacity_followups = memory_capacity_followups
     run_id = datetime.now(UTC).strftime("run-%Y%m%dT%H%M%SZ")
     result_payload = {
@@ -1186,7 +1196,7 @@ def run_improve(
             else None
         ),
         **({"source_report": source_report_context} if source_report_context else {}),
-        **({"source_memory_capacity_followups": {"artifact_path": str(Path(capacity_followups_from_run).expanduser()), "blocked_count": int(memory_capacity_followups.get("blocked_count") or 0)}} if capacity_followups_from_run else {}),
+        **({"source_memory_capacity_followups": {"artifact_path": capacity_followup_source_path, "blocked_count": int(memory_capacity_followups.get("blocked_count") or 0)}} if capacity_followup_source_path else {}),
         "memory_capacity_followups": output_memory_capacity_followups,
         "knowledge_transactions": knowledge_transactions,
         "step_decisions": step_decisions_payload,

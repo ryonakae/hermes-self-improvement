@@ -1441,3 +1441,101 @@ def test_run_knowledge_improvement_step_reports_editor_execution_counts(monkeypa
     assert execution["executed_apply_count"] == 0
     assert execution["mechanical_block_count"] == 1
     assert execution["blocked_apply_reasons"] == {"dry_run_would_execute_knowledge_transaction": 1}
+
+
+def test_capacity_followup_repeated_placement_move_apply_blocks_without_resolution(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    def fake_planner(digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_id": "memory_place_capacity",
+                    "source_store": "builtin_user",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_old_text": "Project convention belongs in MEMORY.",
+                    "content": "Project convention belongs in MEMORY.",
+                    "reason": "retry_prior_capacity_block_without_resolution",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(runner_steps, "run_planner_runtime", fake_planner)
+    result = runner_steps.run_knowledge_improvement_step(
+        evidence_pack={
+            "summary": {},
+            "evidence": [],
+            "skill_candidates": [],
+            "memory_capacity_followups": {
+                "blocked_count": 1,
+                "items": [{"source_id": "memory_place_capacity", "failure_reason": "memory_capacity_exceeded"}],
+            },
+        },
+        config={},
+        mutate=False,
+    )
+
+    tx = result["knowledge_transactions"][0]
+    assert tx["decision"] == "block"
+    assert tx["reason"] == "planner_task_capacity_followup_requires_explicit_resolution"
+    assert tx["transaction_result"]["outcome"] == "blocked"
+    assert result["editor_validation"]["execution"]["planner_task_invalid_count"] == 1
+
+
+def test_capacity_followup_allows_explicit_resolution_plan(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    def fake_planner(digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_id": "resolve_capacity",
+                    "transaction_kind": "memory_rewrite",
+                    "decision": "apply",
+                    "operation": "replace",
+                    "source_id": "memory_capacity_existing_entry",
+                    "source_store": "builtin_memory",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_old_text": "Verbose older convention entry.",
+                    "replacement_content": "Shorter convention entry.",
+                },
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_id": "memory_place_capacity",
+                    "source_store": "builtin_user",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_old_text": "Project convention belongs in MEMORY.",
+                    "content": "Project convention belongs in MEMORY.",
+                    "capacity_resolution_transaction_id": "resolve_capacity",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(runner_steps, "run_planner_runtime", fake_planner)
+    result = runner_steps.run_knowledge_improvement_step(
+        evidence_pack={
+            "summary": {},
+            "evidence": [],
+            "skill_candidates": [],
+            "memory_capacity_followups": {
+                "blocked_count": 1,
+                "items": [{"source_id": "memory_place_capacity", "failure_reason": "memory_capacity_exceeded"}],
+            },
+        },
+        config={},
+        mutate=False,
+    )
+
+    assert [tx["decision"] for tx in result["knowledge_transactions"]] == ["apply", "apply"]
+    assert [tx["transaction_result"]["outcome"] for tx in result["knowledge_transactions"]] == ["preview", "preview"]
+    assert result["editor_validation"]["execution"]["planner_apply_count"] == 2
