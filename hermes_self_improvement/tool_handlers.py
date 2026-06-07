@@ -236,6 +236,10 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     raw_planner = skill_step.get("planner")
     planner: dict[str, Any] = raw_planner if isinstance(raw_planner, dict) else {}
     raw_knowledge_quality = step_decisions.get("knowledge_quality")
+    raw_editor_validation = step_decisions.get("editor_validation")
+    editor_validation: dict[str, Any] = raw_editor_validation if isinstance(raw_editor_validation, dict) else {}
+    raw_editor_execution = editor_validation.get("execution")
+    editor_execution: dict[str, Any] = raw_editor_execution if isinstance(raw_editor_execution, dict) else {}
     raw_planner_summary = planner.get("summary")
     planner_summary: dict[str, Any] = raw_planner_summary if isinstance(raw_planner_summary, dict) else {}
     raw_planner_quality = raw_knowledge_quality if isinstance(raw_knowledge_quality, dict) else skill_step.get("planner_quality")
@@ -336,6 +340,14 @@ def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:
             "knowledge_transactions": knowledge_transaction_summary,
             "knowledge_changes": _canonical_knowledge_change_counts(knowledge_transactions),
             "knowledge_routing": step_decisions.get("knowledge_routing") if isinstance(step_decisions.get("knowledge_routing"), dict) else {},
+            "editor_execution": {
+                "semantic_override_count": int(editor_execution.get("semantic_override_count") or 0),
+                "planner_task_invalid_count": int(editor_execution.get("planner_task_invalid_count") or 0),
+                "planner_apply_count": int(editor_execution.get("planner_apply_count") or 0),
+                "executed_apply_count": int(editor_execution.get("executed_apply_count") or 0),
+                "mechanical_block_count": int(editor_execution.get("mechanical_block_count") or 0),
+                "blocked_apply_reasons": editor_execution.get("blocked_apply_reasons") if isinstance(editor_execution.get("blocked_apply_reasons"), dict) else {},
+            },
             "evaluator": _compact_step("evaluator", step_decisions.get("evaluator")),
         },
         "next_actions": result.get("next_actions") if isinstance(result.get("next_actions"), list) else [],

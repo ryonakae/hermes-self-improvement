@@ -718,3 +718,28 @@ Result: focused suite `82 passed`; full suite `1009 passed, 2 skipped`.
 Source-directed dry-run artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T013732Z.json`; `target_changed=false`; apply 8 / defer 0 / skip 49 / block 0; `editor_validation.execution.semantic_override_count=0`, `planner_apply_count=8`, `executed_apply_count=0`, `mechanical_block_count=8`, `blocked_apply_reasons={"dry_run_would_execute_knowledge_transaction": 8}`; whole-entry placement moves `[]`; memory-to-skill applies missing editor task `[]`; route leaks `[]`.
 
 No mutating self-improvement run has been executed. The next step is an explicit Ryo approval decision before running mutation or pushing externally visible changes.
+
+
+---
+
+## Implementation status — 2026-06-07 compact reporting slice
+
+Implemented after the built-in memory routing slice:
+
+- Task 6 compact tool reporting now exposes `steps.editor_execution` in `_compact_improve_tool_result`, including semantic override count, planner task invalid count, planner apply count, executed apply count, mechanical block count, and bounded blocked apply reasons.
+- Regression coverage ensures compact tool output includes these counts without requiring the full artifact payload.
+
+Verification run from repo worktree:
+
+```bash
+.venv/bin/python -m pytest tests/test_plugin_tools.py tests/test_report_improve_connection.py tests/test_runner_steps.py -q
+.venv/bin/python -m py_compile __init__.py hermes_self_improvement/*.py
+.venv/bin/python -m pytest tests -q
+git diff --check
+```
+
+Result: focused suite `82 passed`; full suite `1009 passed, 2 skipped`.
+
+Source-directed dry-run + compact tool summary check artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T014043Z.json`; `target_changed=false`; compact `steps.editor_execution` shows `semantic_override_count=0`, `planner_apply_count=8`, `executed_apply_count=0`, `mechanical_block_count=8`, `blocked_apply_reasons={"dry_run_would_execute_knowledge_transaction": 8}`.
+
+No mutating self-improvement run has been executed. Mutation and push remain approval-gated.

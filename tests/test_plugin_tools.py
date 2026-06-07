@@ -431,6 +431,16 @@ def test_compact_improve_tool_result_uses_canonical_knowledge_transactions_over_
         ],
         "step_decisions": {
             "summary": {"total": 999},
+            "editor_validation": {
+                "execution": {
+                    "semantic_override_count": 0,
+                    "planner_task_invalid_count": 1,
+                    "planner_apply_count": 2,
+                    "executed_apply_count": 0,
+                    "mechanical_block_count": 2,
+                    "blocked_apply_reasons": {"planner_task_missing_editor_task": 1, "dry_run_would_execute_knowledge_transaction": 1},
+                }
+            },
             "skill": {
                 "decisions": [
                     {"skill": "split-skill", "decision": "accepted", "changed": True, "result": {"created_skills": ["split-created"], "changed_skills": ["split-patched"]}},
@@ -454,6 +464,14 @@ def test_compact_improve_tool_result_uses_canonical_knowledge_transactions_over_
 
     assert payload["action_summary"] == {"apply": 1, "defer": 1, "skip": 1, "block": 0}
     assert payload["steps"]["knowledge_transactions"] == {"total": 3, "apply": 1, "defer": 1, "skip": 1, "block": 0, "by_kind": {"memory": 1, "memory_to_skill": 1, "skill": 1}, "cross_store": 1}
+    assert payload["steps"]["editor_execution"] == {
+        "semantic_override_count": 0,
+        "planner_task_invalid_count": 1,
+        "planner_apply_count": 2,
+        "executed_apply_count": 0,
+        "mechanical_block_count": 2,
+        "blocked_apply_reasons": {"planner_task_missing_editor_task": 1, "dry_run_would_execute_knowledge_transaction": 1},
+    }
     assert payload["steps"]["knowledge_changes"] == {
         "skills": 1,
         "memory": 0,
