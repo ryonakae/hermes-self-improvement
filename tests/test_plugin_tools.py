@@ -381,10 +381,28 @@ def test_compact_improve_tool_result_reports_capacity_without_entry_text():
         },
         "knowledge_transactions": [
             {
+                "transaction_kind": "memory_rewrite",
+                "decision": "apply",
+                "capacity_resolution_transaction_id": "followup-1",
+                "transaction_result": {"success": True, "outcome": "applied"},
+            },
+            {
+                "transaction_kind": "memory_to_skill",
+                "decision": "defer",
+                "reason": "capacity resolution needs exact replacement text before a safe rewrite or split",
+                "transaction_result": {"success": True, "outcome": "preview"},
+            },
+            {
+                "transaction_kind": "placement_move",
+                "decision": "block",
+                "reason": "planner_task_capacity_followup_requires_explicit_resolution",
+                "transaction_result": {"success": False, "outcome": "blocked", "reason": "planner_task_capacity_followup_requires_explicit_resolution"},
+            },
+            {
                 "transaction_kind": "placement_move",
                 "decision": "apply",
                 "transaction_result": {"success": False, "outcome": "blocked", "reason": "memory_capacity_exceeded"},
-            }
+            },
         ],
         "step_decisions": {"summary": {}},
     }
@@ -392,7 +410,17 @@ def test_compact_improve_tool_result_reports_capacity_without_entry_text():
     payload = tools._compact_improve_tool_result(raw_result)
     raw = json.dumps(payload, ensure_ascii=False)
 
-    assert payload["memory_capacity"] == {"blocked": 1, "followup_items": 1, "resolved": 0, "partial": 0}
+    assert payload["memory_capacity"] == {
+        "blocked": 1,
+        "followup_items": 1,
+        "resolved": 1,
+        "partial": 0,
+        "capacity_followups_seen": 1,
+        "capacity_resolutions_selected": 2,
+        "capacity_resolutions_applied": 1,
+        "capacity_resolution_deferred": 1,
+        "capacity_retry_blocked": 1,
+    }
     assert "Sensitive old memory text" not in raw
 
 

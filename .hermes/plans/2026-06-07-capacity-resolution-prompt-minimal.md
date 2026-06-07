@@ -1,5 +1,7 @@
 # Minimal Capacity Resolution Prompt Plan
 
+**Status (2026-06-07):** Implemented and verified through dry-run dogfood. Prompt now gives explicit capacity-resolution templates and warns against direct `placement_move` retry without `capacity_resolution_transaction_id`; existing normalization guard still blocks unresolved retries; compact tool summaries now expose capacity follow-up counts without memory text. Verification: RED tests failed for missing prompt/report fields, then focused suites `166 passed`, full `pytest tests -q` → `1012 passed, 2 skipped`, `py_compile`, `git diff --check`, and source-directed dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T120303Z.json` from `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json` with `dry_run=true`, `target_changed=false`, no route-leak terms, `semantic_override_count=0`, `apply=0 / defer=13 / skip=70 / block=9`, and compact capacity counts `seen=3 / selected=3 / applied=0 / deferred=3 / retry_blocked=0`. Mutating run was not executed.
+
 > **For Hermes:** Use test-driven-development. Implement task-by-task. Keep this slice small; do not add new roles, queues, scoring systems, or same-run recursion.
 
 **Goal:** Make capacity follow-ups produce explicit Planner decisions when safe, instead of ending as `planner_task_capacity_followup_requires_explicit_resolution` or repeated raw `memory_capacity_exceeded` blocks.

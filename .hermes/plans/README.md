@@ -4,9 +4,9 @@
 
 
 
-### Current planned next slice — 2026-06-07
+### Latest completed slice — 2026-06-07
 
-`2026-06-07-capacity-resolution-prompt-minimal.md` is the next small implementation plan. It intentionally does not add same-run recursion, deterministic compaction, a new role, or a new apply mode. The slice only makes capacity follow-ups more actionable for the existing Planner path: clearer prompt examples, simple explicit-resolution linkage, and compact operator counts. It is driven by mutating artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json`, where safety worked but real changes stayed at 0 because capacity follow-ups remained unresolved (`planner_task_capacity_followup_requires_explicit_resolution=5`, `memory_capacity_exceeded=3`).
+`2026-06-07-capacity-resolution-prompt-minimal.md` is implemented as a small capacity-resolution prompt/reporting slice. It does not add same-run recursion, deterministic compaction, a new role, or a new apply mode. It gives Planner explicit capacity-resolution templates, preserves the simple `capacity_resolution_transaction_id` retry boundary, and exposes compact capacity follow-up counts. Verification: focused suites `166 passed`, full `pytest tests -q` → `1012 passed, 2 skipped`, `py_compile`, `git diff --check`, and source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T120303Z.json` from `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json` with `dry_run=true`, `target_changed=false`, no route leaks, `semantic_override_count=0`, `apply=0 / defer=13 / skip=70 / block=9`, and compact capacity counts `seen=3 / selected=3 / applied=0 / deferred=3 / retry_blocked=0`. No mutating run was executed.
 
 ### Latest completed slice — 2026-06-07
 

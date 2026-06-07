@@ -208,20 +208,44 @@ def _memory_capacity_summary(result: dict[str, Any], knowledge_transactions: Any
     blocked = int(followups.get("blocked_count") or len(items))
     partial = 0
     resolved = 0
+    selected = 0
+    deferred = 0
+    retry_blocked = 0
     for item in knowledge_transactions if isinstance(knowledge_transactions, list) else []:
         if not isinstance(item, dict):
             continue
         raw_tx_result = item.get("transaction_result") if isinstance(item.get("transaction_result"), dict) else item.get("result") if isinstance(item.get("result"), dict) else {}
         tx_result: dict[str, Any] = raw_tx_result if isinstance(raw_tx_result, dict) else {}
         outcome = str(tx_result.get("outcome") or "")
-        reason = str(tx_result.get("reason") or tx_result.get("error") or "")
+        reason = str(tx_result.get("reason") or tx_result.get("error") or item.get("reason") or "")
+        normalized_reason = reason.replace("-", "_").replace(" ", "_")
+        kind = str(item.get("transaction_kind") or "")
+        decision = str(item.get("decision") or "")
         if outcome == "partial":
             partial += 1
+        if kind in {"memory_rewrite", "duplicate_cleanup", "memory_to_skill", "placement_split"} and (
+            item.get("capacity_resolution_transaction_id") or normalized_reason.startswith("capacity_resolution_")
+        ):
+            selected += 1
+        if decision == "defer" and normalized_reason.startswith("capacity_resolution_"):
+            deferred += 1
+        if reason == "planner_task_capacity_followup_requires_explicit_resolution":
+            retry_blocked += 1
         if reason == "memory_capacity_exceeded":
             continue
         if item.get("decision") == "apply" and outcome == "applied":
             resolved += 1
-    return {"blocked": blocked, "followup_items": len(items), "resolved": resolved, "partial": partial}
+    return {
+        "blocked": blocked,
+        "followup_items": len(items),
+        "resolved": resolved,
+        "partial": partial,
+        "capacity_followups_seen": len(items),
+        "capacity_resolutions_selected": selected,
+        "capacity_resolutions_applied": resolved,
+        "capacity_resolution_deferred": deferred,
+        "capacity_retry_blocked": retry_blocked,
+    }
 
 
 def _compact_improve_tool_result(result: dict[str, Any]) -> dict[str, Any]:

@@ -1901,6 +1901,14 @@ def test_render_planner_messages_capacity_followups_are_facts_not_routes():
     assert "Project convention belongs in MEMORY" in content
     assert "Old durable runtime fact" in content
     assert "facts, not recommendations" in content
+    assert "Do not retry placement_move directly" in content
+    assert "capacity_resolution_transaction_id" in content
+    assert "memory_rewrite apply template" in content
+    assert '"target_id":"memory"' in content
+    assert "memory_to_skill apply template" in content
+    assert "defer template" in content
+    assert "block template" in content
+    assert "capacity_resolution_needs_exact_text" in content
     for forbidden in ("suggested_route", "likely_", "route_reasons", "allowed_recommendations"):
         assert forbidden not in content
 

@@ -337,6 +337,7 @@ def _render_memory_capacity_followups_section(digest: dict[str, Any]) -> str:
         "## Memory capacity blocked transactions",
         "These are failed official memory-tool attempts from prior execution. They are facts, not recommendations. The Planner must decide semantics: compact/replace existing memory, split source text, route procedural content to skill, keep current store, defer, or block. Program code must not choose which memory to remove.",
         "Only emit canonical knowledge_transactions with decision apply/defer/skip/block. Use exact old_text for replace/remove. If exact safe text is unclear, defer.",
+        "For each memory_capacity_followup: Do not retry placement_move directly unless you first emit or reference an explicit capacity-resolution transaction with capacity_resolution_transaction_id. If one current entry can be safely compacted/replaced using exact old_text, emit memory_rewrite or duplicate_cleanup. If the blocked content is procedural and an exact existing editable skill is named, emit memory_to_skill with a concrete editor_task. If exact replacement/split text is unclear, emit defer with reason=capacity_resolution_needs_exact_text. If the move is not worth capacity pressure, emit skip or block with a concise reason.",
     ]
     for item in items[:10]:
         lines.append(
@@ -345,7 +346,15 @@ def _render_memory_capacity_followups_section(digest: dict[str, Any]) -> str:
         for entry in (item.get("current_entries") or [])[:8]:
             if isinstance(entry, dict):
                 lines.append(f"  - current_destination_entry target={_clip(entry.get('target'), max_chars=40)}; old_text={str(entry.get('old_text') or '')}")
-        lines.append("  - examples: memory_rewrite, duplicate_cleanup, placement_split, memory_to_skill, skip keep_current_store, defer capacity_resolution_unclear")
+        resolution_id = item.get("transaction_id") or item.get("source_id")
+        source_id = item.get("source_id") or item.get("source_evidence_id")
+        source_old_text = item.get("source_old_text") or item.get("attempted_content")
+        target_store = str(item.get("target_store") or "")
+        target_id = "user" if target_store == "builtin_user" else "memory" if target_store == "builtin_memory" else "<target_id>"
+        lines.append("  - memory_rewrite apply template: " + json.dumps({"transaction_kind": "memory_rewrite", "decision": "apply", "operation": "replace", "source_id": "<current_destination_entry_id>", "source_store": item.get("target_store"), "target_store": item.get("target_store"), "target_id": target_id, "source_old_text": "<exact current_destination_entry old_text>", "replacement_content": "<exact compact replacement text>", "capacity_resolution_transaction_id": resolution_id, "reason": "capacity_resolution_rewrite_exact_text"}, ensure_ascii=False, separators=(",", ":")))
+        lines.append("  - memory_to_skill apply template: " + json.dumps({"transaction_kind": "memory_to_skill", "decision": "apply", "operation": "move_to_skill", "source_id": source_id, "source_store": item.get("source_store"), "source_old_text": source_old_text, "target_store": "skill", "target_skill": "<exact existing editable skill>", "editor_task": {"action": "patch", "instruction": "<concrete skill patch task>"}, "capacity_resolution_transaction_id": resolution_id, "reason": "capacity_resolution_route_procedure_to_skill"}, ensure_ascii=False, separators=(",", ":")))
+        lines.append("  - defer template: " + json.dumps({"transaction_kind": "memory_rewrite", "decision": "defer", "operation": "none", "source_id": source_id, "reason": "capacity_resolution_needs_exact_text"}, ensure_ascii=False, separators=(",", ":")))
+        lines.append("  - block template: " + json.dumps({"transaction_kind": "placement_move", "decision": "block", "operation": "none", "source_id": source_id, "reason": "capacity_resolution_not_worth_capacity_pressure"}, ensure_ascii=False, separators=(",", ":")))
     return "\n".join(lines).rstrip() + "\n"
 
 
