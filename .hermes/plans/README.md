@@ -3,6 +3,11 @@
 ## Current source of truth
 
 
+### Current planned next slice — 2026-06-07
+
+`2026-06-07-planner-capacity-aware-transaction-planning.md` is the next implementation plan. It corrects the capacity work direction: the goal is not to force more applies, but to make Planner see built-in memory capacity and planned write costs before it emits apply transactions. If a target store is tight/full, Planner should emit preceding capacity recovery (`memory_rewrite`, `duplicate_cleanup`, `memory_to_skill`, `placement_split`) with exact text/actionability and link the dependent apply via `capacity_resolution_transaction_id`, or skip/defer/block semantically when capacity pressure is not worth it. Editor/executor remains mechanical and must block unresolved dependencies rather than choosing compaction targets.
+
+
 ### Latest completed slice — 2026-06-07
 
 `2026-06-07-capacity-exact-rewrite-application.md` is implemented as a narrow prompt/test/reporting slice. It strengthened the capacity follow-up prompt so exact safe rewrites should apply instead of deferring solely because rewrite requires judgment, added runner regressions for exact capacity `memory_rewrite apply` and missing replacement blocking, and added compact exact-rewrite counts without memory text. Verification: focused suites `150 passed`, full `pytest tests -q` → `1015 passed, 2 skipped`, `py_compile`, `git diff --check`, and source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T134704Z.json` from `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json` with `dry_run=true`, `target_changed=false`, no route leaks, `semantic_override_count=0`, and `apply=1 / defer=23 / skip=55 / block=3`. The live Planner did not emit exact capacity `memory_rewrite apply`; capacity followups ended as two `memory_to_skill_missing_editor_task` blocks and one `not_worth_capacity_pressure` block, so no mutating run was executed.
