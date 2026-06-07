@@ -692,3 +692,29 @@ Dogfood dry-run:
 - Source-directed repo run artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T013035Z.json`; `target_changed=false`; apply 8 / defer 0 / skip 49 / block 0; `editor_validation.execution.semantic_override_count=0`, `planner_apply_count=8`, `executed_apply_count=0`, `mechanical_block_count=8`, `blocked_apply_reasons={"dry_run_would_execute_knowledge_transaction": 8}`; whole-entry placement moves `[]`; known mixed whole moves `[]`; memory-to-skill applies missing editor task `[]`; route leaks `[]`.
 
 No mutating self-improvement run has been executed from this implementation slice. Mutating run still requires Ryo approval after reviewing the dry-run artifact.
+
+
+---
+
+## Implementation status — 2026-06-07 built-in memory routing slice
+
+Implemented after the initial slice:
+
+- Task 5: built-in memory capacity failures no longer automatically fall back to the active external provider. The executor now leaves capacity pressure as `memory_capacity_exceeded` with `fallback_reason=planner_must_emit_explicit_external_memory_transaction`, so Planner must explicitly choose compact/replace/remove/skill/defer/skip/external-memory routing.
+- Regression tests updated so built-in `memory`/`user` targets do not call `hindsight_retain` merely because `memory.provider=hindsight` is configured. Explicit `external_memory` transactions still use the provider-native path.
+- Task 7 dry-run dogfood rerun from the source worktree.
+
+Verification run from repo worktree:
+
+```bash
+.venv/bin/python -m pytest tests/test_memory_capacity_fallback.py tests/test_memory_inventory_planner.py tests/test_runner_steps.py -q
+.venv/bin/python -m py_compile __init__.py hermes_self_improvement/*.py
+.venv/bin/python -m pytest tests -q
+git diff --check
+```
+
+Result: focused suite `82 passed`; full suite `1009 passed, 2 skipped`.
+
+Source-directed dry-run artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T013732Z.json`; `target_changed=false`; apply 8 / defer 0 / skip 49 / block 0; `editor_validation.execution.semantic_override_count=0`, `planner_apply_count=8`, `executed_apply_count=0`, `mechanical_block_count=8`, `blocked_apply_reasons={"dry_run_would_execute_knowledge_transaction": 8}`; whole-entry placement moves `[]`; memory-to-skill applies missing editor task `[]`; route leaks `[]`.
+
+No mutating self-improvement run has been executed. The next step is an explicit Ryo approval decision before running mutation or pushing externally visible changes.

@@ -45,7 +45,7 @@ def test_memory_add_compacts_built_in_store_before_retrying_add():
     assert decision["result"]["capacity_recovery"]["compaction_changed"] == 1
 
 
-def test_memory_capacity_falls_back_to_active_external_provider_when_still_full():
+def test_builtin_memory_capacity_does_not_fall_back_to_external_provider_when_still_full():
     memory_calls = []
     provider_calls = []
 
@@ -68,13 +68,14 @@ def test_memory_capacity_falls_back_to_active_external_provider_when_still_full(
         mutate=True,
     )
 
-    assert result["changed"] == 1
+    assert result["changed"] == 0
     assert memory_calls == [{"action": "add", "target": "memory", "content": "new durable fact"}]
-    assert provider_calls == [{"content": "new durable fact", "context": "self-improvement memory add", "tags": ["self-improvement", "memory-add"]}]
+    assert provider_calls == []
     decision = result["decisions"][0]
-    assert decision["changed"] is True
-    assert decision["result"]["fallback_result"]["tool_name"] == "hindsight_retain"
-    assert decision["result"]["fallback_context"]["external_provider"] == "hindsight"
+    assert decision["changed"] is False
+    assert decision["reason"] == "memory_capacity_exceeded"
+    assert decision["result"]["capacity_recovery"]["fallback_reason"] == "planner_must_emit_explicit_external_memory_transaction"
+    assert "fallback_result" not in decision["result"]
 
 
 def test_memory_capacity_planner_injection_is_quarantined_without_test_flag():
@@ -158,4 +159,4 @@ def test_memory_capacity_without_external_provider_remains_rejected():
     decision = result["decisions"][0]
     assert decision["decision"] == "rejected"
     assert decision["reason"] == "memory_capacity_exceeded"
-    assert decision["result"]["capacity_recovery"]["fallback_reason"] == "external_memory_provider_missing"
+    assert decision["result"]["capacity_recovery"]["fallback_reason"] == "planner_must_emit_explicit_external_memory_transaction"

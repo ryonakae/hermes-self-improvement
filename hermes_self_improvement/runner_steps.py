@@ -708,7 +708,7 @@ def _execute_built_in_memory_context(
     content = str(args.get("content") or "")
     recovery: dict[str, Any] = {
         "attempted": True,
-        "placement_options": ["compact_or_replace", "remove_or_swap", "move_to_skill", "external_provider_fallback"],
+        "placement_options": ["compact_or_replace", "remove_or_swap", "move_to_skill", "defer_or_explicit_external_memory"],
         "compaction_changed": 0,
         "compaction_results": [],
         "skill_candidate_operations": [],
@@ -735,25 +735,7 @@ def _execute_built_in_memory_context(
             return retry
         result = retry
 
-    if external_provider:
-        fallback_operation = {"operation": "memory_add", "target": "external_memory", "content": content}
-        fallback_context = build_memory_mutation_context(provider=external_provider, operation=fallback_operation)
-        if fallback_context.get("execution_enabled"):
-            fallback_result = execute_memory_provider_tool_operation(fallback_context, provider_tool_fn=config.get("_memory_provider_tool_fn"))
-            fallback_payload = {
-                "success": bool(fallback_result.get("success")),
-                "tool_name": "memory",
-                "tool_args": args,
-                "direct_fallback_used": False,
-                "error": None if fallback_result.get("success") else fallback_result.get("error") or "memory_capacity_exceeded",
-                "capacity_recovery": recovery,
-                "fallback_context": fallback_context,
-                "fallback_result": fallback_result,
-            }
-            return fallback_payload
-        recovery["fallback_reason"] = (fallback_context.get("reasons") or ["external_memory_provider_unavailable"])[0]
-    else:
-        recovery["fallback_reason"] = "external_memory_provider_missing"
+    recovery["fallback_reason"] = "planner_must_emit_explicit_external_memory_transaction"
 
     return {
         **result,

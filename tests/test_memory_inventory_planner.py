@@ -482,17 +482,18 @@ def test_memory_capacity_recovery_records_placement_options_and_uses_fallback_af
 
     result = run_memory_improvement_step(evidence_pack=_pack([_inventory_evidence()]), config=config, mutate=True)
 
-    assert result["changed"] == 1
+    assert result["changed"] == 0
     capacity = result["decisions"][0]["result"]["capacity_recovery"]
     assert capacity["attempted"] is True
-    assert capacity["placement_options"] == ["compact_or_replace", "remove_or_swap", "move_to_skill", "external_provider_fallback"]
+    assert capacity["placement_options"] == ["compact_or_replace", "remove_or_swap", "move_to_skill", "defer_or_explicit_external_memory"]
     assert capacity["skill_candidate_operations"] == [{"action": "move_to_skill", "target": "skill", "content": "procedural guidance"}]
     assert calls[:3] == [
         {"action": "add", "target": "memory", "content": "Durable fact that is worth keeping."},
         {"action": "replace", "target": "memory", "old_text": "old duplicate", "content": "compact old duplicate"},
         {"action": "remove", "target": "memory", "old_text": "obsolete low-value entry"},
     ]
-    assert provider_calls == [("hindsight_retain", {"content": "Durable fact that is worth keeping.", "context": "self-improvement memory add", "tags": ["self-improvement", "memory-add"]})]
+    assert capacity["fallback_reason"] == "planner_must_emit_explicit_external_memory_transaction"
+    assert provider_calls == []
 
 
 def test_memory_inventory_rejects_conflicting_replaces_for_same_old_text_before_mutation():

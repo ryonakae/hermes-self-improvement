@@ -1186,6 +1186,8 @@ def test_run_knowledge_improvement_step_dry_run_routes_apply_through_executor(mo
 
 
 def test_run_knowledge_improvement_step_records_capacity_blocked_placement_move_followup(monkeypatch, tmp_path):
+    provider_calls = []
+
     def fake_memory_tool(**args):
         if args.get("action") == "add" and args.get("target") == "memory":
             return {
@@ -1198,6 +1200,10 @@ def test_run_knowledge_improvement_step_records_capacity_blocked_placement_move_
                 ],
             }
         return {"success": True, "changed": True}
+
+    def fake_provider_tool(**args):
+        provider_calls.append(args)
+        return {"success": True, "tool_name": "hindsight_retain"}
 
     def fake_planner(*, digest, config):
         return {
@@ -1224,6 +1230,8 @@ def test_run_knowledge_improvement_step_records_capacity_blocked_placement_move_
             "_self_improvement_root": str(tmp_path / "self-improvement"),
             "_planner_runtime_func": fake_planner,
             "_memory_tool_fn": fake_memory_tool,
+            "_memory_provider_tool_fn": fake_provider_tool,
+            "memory": {"provider": "hindsight"},
             "_memory_current_entries": [
                 {"target": "user", "old_text": "Project convention belongs in MEMORY."},
                 {"target": "memory", "old_text": "Old durable runtime fact.", "summary": "runtime fact"},
@@ -1243,6 +1251,7 @@ def test_run_knowledge_improvement_step_records_capacity_blocked_placement_move_
     assert item["failure_reason"] == "memory_capacity_exceeded"
     assert item["usage"] == "2,131/2,200"
     assert item["attempted_content"] == "Project convention belongs in MEMORY."
+    assert provider_calls == []
     assert [entry["old_text"] for entry in item["current_entries"]] == [
         "Old durable runtime fact.",
         "Obsolete duplicate detail.",
