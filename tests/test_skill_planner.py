@@ -1941,7 +1941,7 @@ def test_render_planner_messages_includes_semantic_knowledge_rules_and_templates
     assert "Observations are not recommendations" in content
     for token in ("placement_split", "memory_rewrite", "duplicate_cleanup", "keep_same_topic_different_store", "skill_ambiguity_cleanup"):
         assert token in content
-    for token in ("source_evidence_id", "source_old_text", "target_skill", "skill_task", "destination_content", "source_replacement", "replacement_content"):
+    for token in ("source_evidence_id", "source_old_text", "target_skill", "editor_task", "task_kind", "instructions", "destination_content", "source_replacement", "replacement_content"):
         assert token in content
     assert "Do not infer source_evidence_id" in content
     assert "exact text" in content
@@ -2296,10 +2296,15 @@ class TestGoldenFixtureDogfood:
             "reason": "reusable procedure belongs in existing editable skill",
         }
         normalized = normalize_knowledge_transaction(raw)
-        assert normalized["decision"] == "block"
+        assert normalized["decision"] == "apply"
         assert normalized["transaction_kind"] == "memory_to_skill"
         assert normalized["target_id"] == "hermes-gateway-and-sessions"
-        assert normalized["reason"] == "memory_to_skill_missing_editor_task"
+        assert normalized["editor_task"] == {
+            "task_kind": "skill_improve",
+            "maintenance_action": "patch",
+            "targets": {"primary_skill": "hermes-gateway-and-sessions"},
+            "instructions": "incorporate operational detail into gateway skill",
+        }
 
     def test_dogfood_memory_to_skill_with_source_evidence_id_is_actionable(self):
         raw = {
@@ -2321,7 +2326,31 @@ class TestGoldenFixtureDogfood:
         assert normalized["source_id"] == "memory_place_298a033826ec"
         assert normalized["evidence_ids"] == ["memory_place_298a033826ec"]
         assert normalized["target_id"] == "safe-patch-usage"
-        assert normalized["editor_task"] == {"maintenance_action": "patch"}
+        assert normalized["editor_task"]["task_kind"] == "skill_improve"
+        assert normalized["editor_task"]["maintenance_action"] == "patch"
+        assert normalized["editor_task"]["targets"] == {"primary_skill": "safe-patch-usage"}
+        assert "When a workflow repeats" in normalized["editor_task"]["instructions"]
+
+    def test_memory_to_skill_simple_editor_task_dict_gets_execution_contract(self):
+        raw = {
+            "transaction_kind": "memory_to_skill",
+            "decision": "apply",
+            "source_evidence_id": "memory_place_gateway",
+            "source_store": "builtin_memory",
+            "source_old_text": "Gateway restart workflow belongs in skill guidance.",
+            "target_store": "skill",
+            "target_skill": "hermes-gateway-and-sessions",
+            "editor_task": {"action": "patch", "instruction": "Add gateway restart workflow pitfall."},
+        }
+
+        normalized = normalize_knowledge_transaction(raw)
+
+        assert normalized["decision"] == "apply"
+        assert normalized["reason"] != "memory_to_skill_missing_editor_task"
+        assert normalized["editor_task"]["task_kind"] == "skill_improve"
+        assert normalized["editor_task"]["maintenance_action"] == "patch"
+        assert normalized["editor_task"]["targets"] == {"primary_skill": "hermes-gateway-and-sessions"}
+        assert normalized["editor_task"]["instructions"] == "Add gateway restart workflow pitfall."
 
     def test_run_planner_memory_to_skill_preserves_source_identity_and_task_fields(self):
         digest = build_planner_digest(pack())
@@ -2364,11 +2393,15 @@ class TestGoldenFixtureDogfood:
         assert transactions[0]["decision"] == "apply"
         assert transactions[0]["source_id"] == "memory_place_298a033826ec"
         assert transactions[0]["evidence_ids"] == ["memory_place_298a033826ec"]
-        assert transactions[0]["editor_task"] == {"maintenance_action": "patch"}
+        assert transactions[0]["editor_task"]["task_kind"] == "skill_improve"
+        assert transactions[0]["editor_task"]["maintenance_action"] == "patch"
+        assert transactions[0]["editor_task"]["targets"] == {"primary_skill": "safe-patch-usage"}
         assert transactions[1]["decision"] == "apply"
         assert transactions[1]["source_id"] == "memory_place_editor_task"
         assert transactions[1]["evidence_ids"] == ["memory_place_editor_task"]
-        assert transactions[1]["editor_task"] == {"maintenance_action": "merge_into_skill"}
+        assert transactions[1]["editor_task"]["task_kind"] == "skill_improve"
+        assert transactions[1]["editor_task"]["maintenance_action"] == "patch"
+        assert transactions[1]["editor_task"]["targets"] == {"primary_skill": "safe-patch-usage"}
 
     def test_skill_ambiguity_cleanup(self):
         """Ambiguous skill load → skill_ambiguity_cleanup, not delete."""

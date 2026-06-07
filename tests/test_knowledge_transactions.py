@@ -389,7 +389,10 @@ def test_normalize_knowledge_transaction_preserves_memory_to_skill_product_field
     assert memory_to_skill["source_id"] == "mem-inv-3"
     assert memory_to_skill["evidence_ids"] == ["mem-inv-3"]
     assert memory_to_skill["target_id"] == "safe-patch-usage"
-    assert memory_to_skill["editor_task"] == skill_task
+    assert memory_to_skill["editor_task"]["task_kind"] == "skill_improve"
+    assert memory_to_skill["editor_task"]["maintenance_action"] == "patch"
+    assert memory_to_skill["editor_task"]["targets"] == {"primary_skill": "safe-patch-usage"}
+    assert "When patch fails" in memory_to_skill["editor_task"]["instructions"]
     assert memory_to_skill["source_old_text"] == "When patch fails, re-read and retry with a smaller anchor."
     assert memory_to_skill["content"] == "When patch fails, re-read and retry with a smaller anchor."
     assert memory_to_skill["operation"] == "move"
@@ -408,7 +411,9 @@ def test_normalize_knowledge_transaction_preserves_memory_to_skill_product_field
     assert memory_to_skill_editor_task["decision"] == "apply"
     assert memory_to_skill_editor_task["source_id"] == "mem-inv-4"
     assert memory_to_skill_editor_task["evidence_ids"] == ["mem-inv-4"]
-    assert memory_to_skill_editor_task["editor_task"] == editor_task
+    assert memory_to_skill_editor_task["editor_task"]["task_kind"] == "skill_improve"
+    assert memory_to_skill_editor_task["editor_task"]["maintenance_action"] == "patch"
+    assert memory_to_skill_editor_task["editor_task"]["targets"] == {"primary_skill": "safe-patch-usage"}
 
     none = normalize_knowledge_transaction({
         "decision": "skip",

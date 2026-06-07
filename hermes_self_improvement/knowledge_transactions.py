@@ -296,7 +296,7 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
         "source_id": source_id,
         "source_old_text": source_old_text,
         "operation": operation or "none",
-        "editor_task": raw.get("editor_task") if isinstance(raw.get("editor_task"), dict) else raw.get("skill_task") if isinstance(raw.get("skill_task"), dict) else None,
+        "editor_task": _editor_task_for_memory_to_skill(raw, target_id=target_id, source_old_text=source_old_text) if transaction_kind == "memory_to_skill" else raw.get("editor_task") if isinstance(raw.get("editor_task"), dict) else raw.get("skill_task") if isinstance(raw.get("skill_task"), dict) else None,
         "evidence_ids": evidence_ids,
         "reason": str(raw.get("reason") or raw.get("rationale") or ""),
     }
@@ -324,6 +324,45 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
     if isinstance(raw.get("capacity_plan"), dict):
         transaction["capacity_plan"] = raw.get("capacity_plan")
     return transaction
+
+
+def _editor_task_for_memory_to_skill(raw: dict[str, Any], *, target_id: str, source_old_text: str) -> dict[str, Any] | None:
+    raw_task = raw.get("editor_task") if raw.get("editor_task") is not None else raw.get("skill_task")
+    task: dict[str, Any]
+    if isinstance(raw_task, dict):
+        task = dict(raw_task)
+    elif isinstance(raw_task, str) and raw_task.strip():
+        task = {"instructions": raw_task.strip()}
+    else:
+        return None
+
+    task_kind = str(task.get("task_kind") or task.get("kind") or "").strip()
+    if task_kind in {"mutate_skill", "patch_skill", "skill_patch", ""}:
+        task["task_kind"] = "skill_improve"
+
+    action = str(task.get("maintenance_action") or task.get("action") or "").strip().lower()
+    if action in {"", "patch", "mutate", "mutate_skill", "skill_patch", "patch_skill", "merge_into_skill"}:
+        task["maintenance_action"] = "patch"
+    else:
+        task["maintenance_action"] = action
+
+    raw_targets_value = task.get("targets")
+    raw_targets: dict[str, Any] = raw_targets_value if isinstance(raw_targets_value, dict) else {}
+    if target_id and not raw_targets.get("primary_skill"):
+        task["targets"] = {**raw_targets, "primary_skill": target_id}
+
+    instruction = str(
+        task.get("instructions")
+        or task.get("instruction")
+        or task.get("skill_editor_instructions")
+        or task.get("editor_instructions")
+        or ""
+    ).strip()
+    if not instruction and source_old_text:
+        instruction = "Incorporate this planner-selected source memory into the target skill without broad unrelated edits: " + source_old_text
+    if instruction:
+        task["instructions"] = instruction
+    return task
 
 
 def _canonical_decision(decision: str) -> str:

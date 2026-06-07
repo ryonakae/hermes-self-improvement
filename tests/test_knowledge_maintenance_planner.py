@@ -538,7 +538,10 @@ def test_planner_accepts_memory_to_skill_knowledge_transaction_for_maintenance_c
     assert transaction["source_id"] == candidate["id"]
     assert transaction["source_old_text"] == "Patch tool workflow guidance belongs in a skill, not memory."
     assert transaction["operation"] == "move"
-    assert transaction["editor_task"] == {"task_kind": "mutate_skill", "targets": {"primary_skill": "local-patch-workflow"}}
+    assert transaction["editor_task"]["task_kind"] == "skill_improve"
+    assert transaction["editor_task"]["maintenance_action"] == "patch"
+    assert transaction["editor_task"]["targets"] == {"primary_skill": "local-patch-workflow"}
+    assert "Patch tool workflow guidance" in transaction["editor_task"]["instructions"]
     assert transaction["reason"] == "planner_selected_cross_store_skill_route"
     assert transaction["transaction_id"].startswith("kt_")
 

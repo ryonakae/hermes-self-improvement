@@ -2,6 +2,10 @@
 
 ## Current source of truth
 
+### Latest completed slice — 2026-06-07 memory-to-skill actionability
+
+`2026-06-07-memory-to-skill-editor-task-actionability.md` is implemented. It closes the `memory_to_skill_missing_editor_task` gap by requiring concrete `editor_task` in Planner prompts and mechanically normalizing explicit string/simple-dict handoffs into canonical `skill_improve` editor tasks. Verification: focused `3 passed`, related `199 passed`, full `1023 passed, 2 skipped`, `py_compile`, `git diff --check`, and dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T161328Z.json` from `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json` with `dry_run=true`, `target_changed=false`, `apply=8 / defer=3 / skip=69 / block=2`, no `memory_to_skill_missing_editor_task`, no route leaks, and all 7 `memory_to_skill` applies carrying executable `skill_improve` editor tasks. No mutating replay was executed.
+
 
 ### Latest completed slice — 2026-06-07
 
