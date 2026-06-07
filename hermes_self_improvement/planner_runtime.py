@@ -138,6 +138,7 @@ def _built_in_memory_inventory_digest(evidence_pack: dict[str, Any]) -> dict[str
 
 def _built_in_memory_capacity_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
     inventory = _built_in_memory_inventory_digest(evidence_pack)
+    raw_limits = evidence_pack.get("built_in_memory_limits") if isinstance(evidence_pack.get("built_in_memory_limits"), dict) else {}
     stores: dict[str, dict[str, Any]] = {
         "builtin_user": {"entry_count": 0, "approx_chars_used": 0, "entries": []},
         "builtin_memory": {"entry_count": 0, "approx_chars_used": 0, "entries": []},
@@ -158,9 +159,55 @@ def _built_in_memory_capacity_digest(evidence_pack: dict[str, Any]) -> dict[str,
                 "chars": len(old_text),
             })
     for store, payload in stores.items():
-        payload["remaining_chars_estimate"] = None
+        store_limits = raw_limits.get(store) if isinstance(raw_limits.get(store), dict) else {}
+        limit_chars = _coerce_int(store_limits.get("limit_chars"), default=2200)
+        payload["limit_chars"] = limit_chars if limit_chars > 0 else None
+        remaining = payload["limit_chars"] - payload["approx_chars_used"] if payload["limit_chars"] else None
+        payload["remaining_chars_estimate"] = remaining
+        if remaining is None:
+            pressure = "unknown"
+        elif remaining <= 0:
+            pressure = "full"
+        elif remaining <= 250:
+            pressure = "tight"
+        else:
+            pressure = "ok"
+        payload["pressure"] = pressure
         payload["usage"] = f"approx {payload['approx_chars_used']} chars across {payload['entry_count']} entries"
     return stores
+
+
+def _canonical_builtin_store(value: Any) -> str:
+    text = str(value or "").strip()
+    return {"user": "builtin_user", "memory": "builtin_memory"}.get(text, text)
+
+
+def _planned_memory_write_costs_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
+    evidence = evidence_pack.get("evidence") if isinstance(evidence_pack.get("evidence"), list) else []
+    items: list[dict[str, Any]] = []
+    omitted = 0
+    for item in evidence:
+        if not isinstance(item, dict) or item.get("kind") != "memory_placement_candidate":
+            continue
+        inventory = item.get("inventory") if isinstance(item.get("inventory"), dict) else {}
+        source_store = _canonical_builtin_store(item.get("source_store") or inventory.get("current_store"))
+        target_store = _canonical_builtin_store(item.get("target_store") or inventory.get("target_store") or item.get("destination_store"))
+        if not target_store:
+            target_store = "builtin_memory" if source_store == "builtin_user" else "builtin_user" if source_store == "builtin_memory" else ""
+        candidate_text = str(item.get("content") or item.get("old_text") or inventory.get("old_text") or inventory.get("summary") or "")
+        if target_store not in {"builtin_user", "builtin_memory"} or not candidate_text:
+            continue
+        if len(items) >= 20:
+            omitted += 1
+            continue
+        items.append({
+            "source_id": str(item.get("id") or item.get("evidence_id") or ""),
+            "source_store": source_store,
+            "target_store": target_store,
+            "estimated_add_chars": len(candidate_text),
+            "candidate_text": candidate_text,
+        })
+    return {"item_count": len(items), "omitted_count": omitted, "items": items}
 
 
 def _memory_inventory_groups_digest(evidence_pack: dict[str, Any]) -> dict[str, Any]:
@@ -811,6 +858,7 @@ def build_planner_runtime_digest(
         "built_in_memory_inventory": _built_in_memory_inventory_digest(evidence_pack),
         "built_in_memory_capacity": _built_in_memory_capacity_digest(evidence_pack),
         "memory_placement_candidates": _memory_placement_candidates_digest(evidence_pack, candidate_rows),
+        "planned_memory_write_costs": _planned_memory_write_costs_digest(evidence_pack),
         "memory_capacity_followups": _memory_capacity_followups_digest(evidence_pack),
         "semantic_knowledge_candidates": _semantic_knowledge_candidates_digest(evidence_pack),
         "memory_inventory_groups": _memory_inventory_groups_digest(evidence_pack),

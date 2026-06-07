@@ -170,6 +170,25 @@ def _render_builtin_memory_capacity_section(digest: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _render_planned_memory_write_costs_section(digest: dict[str, Any]) -> str:
+    raw_costs = digest.get("planned_memory_write_costs")
+    costs = raw_costs if isinstance(raw_costs, dict) else {}
+    items = [item for item in costs.get("items") or [] if isinstance(item, dict)]
+    if not items:
+        return "## Planned memory write costs\n- n/a\n"
+    lines = [
+        "## Planned memory write costs",
+        "These are facts for capacity-aware apply planning, not recommendations. If target store is tight/full, emit capacity recovery before dependent apply or skip/defer/block. Link a dependent apply to the exact capacity transaction with capacity_resolution_transaction_id. Do not expect Editor or program code to choose compaction targets.",
+    ]
+    for item in items[:20]:
+        lines.append(
+            f"- source_id={_clip(item.get('source_id'), max_chars=80)}; source_store={_clip(item.get('source_store'), max_chars=40)}; target_store={_clip(item.get('target_store'), max_chars=40)}; estimated_add_chars={int(item.get('estimated_add_chars') or 0)}; candidate_text={_clip(item.get('candidate_text'), max_chars=220)}"
+        )
+    if int(costs.get("omitted_count") or 0):
+        lines.append(f"- omitted write-cost items: {int(costs.get('omitted_count') or 0)}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _render_builtin_memory_inventory_section(digest: dict[str, Any]) -> str:
     raw_inventory = digest.get("built_in_memory_inventory")
     inventory = raw_inventory if isinstance(raw_inventory, dict) else {}
@@ -507,6 +526,7 @@ def render_planner_messages(*, digest: dict[str, Any], overlay: dict[str, Any] |
         _render_knowledge_maintenance_section(digest),
         _render_builtin_memory_inventory_section(digest),
         _render_builtin_memory_capacity_section(digest),
+        _render_planned_memory_write_costs_section(digest),
         _render_memory_placement_candidates_section(digest),
         _render_memory_capacity_followups_section(digest),
         _render_semantic_knowledge_section(digest),

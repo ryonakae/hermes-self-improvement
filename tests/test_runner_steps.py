@@ -1646,3 +1646,136 @@ def test_capacity_followup_memory_rewrite_apply_without_replacement_blocks(monke
     assert tx["reason"] == "planner_task_missing_replacement_content"
     assert tx["transaction_result"]["outcome"] == "blocked"
     assert memory_calls == []
+
+
+def test_dependent_memory_apply_waits_for_capacity_resolution_success(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    def fake_planner(digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_id": "capacity_free_1",
+                    "transaction_kind": "memory_rewrite",
+                    "decision": "apply",
+                    "operation": "replace",
+                    "source_id": "memory_capacity_existing_entry",
+                    "source_store": "builtin_memory",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_old_text": "Verbose older convention entry.",
+                    "replacement_content": "",
+                },
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_id": "memory_place_capacity",
+                    "source_store": "builtin_user",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_old_text": "Project convention belongs in MEMORY.",
+                    "content": "Project convention belongs in MEMORY.",
+                    "capacity_resolution_transaction_id": "capacity_free_1",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(runner_steps, "run_planner_runtime", fake_planner)
+    result = runner_steps.run_knowledge_improvement_step(evidence_pack={"summary": {}, "evidence": [], "skill_candidates": []}, config={}, mutate=False)
+
+    first, second = result["knowledge_transactions"]
+    assert first["decision"] == "block"
+    assert first["transaction_result"]["outcome"] == "blocked"
+    assert second["decision"] == "block"
+    assert second["reason"] == "capacity_resolution_not_satisfied"
+    assert second["transaction_result"]["outcome"] == "blocked"
+    assert result["editor_validation"]["execution"]["planner_block_reasons"]["capacity_resolution_not_satisfied"] == 1
+
+
+def test_capacity_memory_to_skill_requires_editor_task_before_dependent_apply(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    def fake_planner(digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_id": "capacity_skill_1",
+                    "transaction_kind": "memory_to_skill",
+                    "decision": "apply",
+                    "operation": "move_to_skill",
+                    "source_id": "memory_place_procedure",
+                    "source_store": "builtin_memory",
+                    "source_old_text": "Procedural memory text.",
+                    "target_store": "skill",
+                    "target_id": "hermes-development-maintenance",
+                    "target_skill": "hermes-development-maintenance",
+                    "capacity_resolution_transaction_id": "capacity_skill_1",
+                },
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_id": "memory_place_capacity",
+                    "source_store": "builtin_user",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_old_text": "Project convention belongs in MEMORY.",
+                    "content": "Project convention belongs in MEMORY.",
+                    "capacity_resolution_transaction_id": "capacity_skill_1",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(runner_steps, "run_planner_runtime", fake_planner)
+    result = runner_steps.run_knowledge_improvement_step(evidence_pack={"summary": {}, "evidence": [], "skill_candidates": []}, config={}, mutate=False)
+
+    first, second = result["knowledge_transactions"]
+    assert first["decision"] == "block"
+    assert first["reason"] == "memory_to_skill_missing_editor_task"
+    assert second["decision"] == "block"
+    assert second["reason"] == "capacity_resolution_not_satisfied"
+
+
+def test_capacity_memory_to_skill_with_editor_task_can_satisfy_dependent_apply(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    def fake_planner(digest, config):
+        return {
+            "status": "completed",
+            "knowledge_transactions": [
+                {
+                    "transaction_id": "capacity_skill_1",
+                    "transaction_kind": "memory_to_skill",
+                    "decision": "apply",
+                    "operation": "move_to_skill",
+                    "source_id": "memory_place_procedure",
+                    "source_store": "builtin_memory",
+                    "source_old_text": "Procedural memory text.",
+                    "target_store": "skill",
+                    "target_id": "hermes-development-maintenance",
+                    "target_skill": "hermes-development-maintenance",
+                    "editor_task": {"action": "patch", "instruction": "Add the procedure if still useful."},
+                },
+                {
+                    "transaction_kind": "placement_move",
+                    "decision": "apply",
+                    "operation": "move",
+                    "source_id": "memory_place_capacity",
+                    "source_store": "builtin_user",
+                    "target_store": "builtin_memory",
+                    "target_id": "memory",
+                    "source_old_text": "Project convention belongs in MEMORY.",
+                    "content": "Project convention belongs in MEMORY.",
+                    "capacity_resolution_transaction_id": "capacity_skill_1",
+                },
+            ],
+        }
+
+    monkeypatch.setattr(runner_steps, "run_planner_runtime", fake_planner)
+    result = runner_steps.run_knowledge_improvement_step(evidence_pack={"summary": {}, "evidence": [], "skill_candidates": []}, config={}, mutate=False)
+
+    assert [tx["decision"] for tx in result["knowledge_transactions"]] == ["apply", "apply"]
+    assert [tx["transaction_result"]["outcome"] for tx in result["knowledge_transactions"]] == ["preview", "preview"]

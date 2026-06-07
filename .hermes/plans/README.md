@@ -3,9 +3,9 @@
 ## Current source of truth
 
 
-### Current planned next slice — 2026-06-07
+### Latest completed slice — 2026-06-07
 
-`2026-06-07-planner-capacity-aware-transaction-planning.md` is the next implementation plan. It corrects the capacity work direction: the goal is not to force more applies, but to make Planner see built-in memory capacity and planned write costs before it emits apply transactions. If a target store is tight/full, Planner should emit preceding capacity recovery (`memory_rewrite`, `duplicate_cleanup`, `memory_to_skill`, `placement_split`) with exact text/actionability and link the dependent apply via `capacity_resolution_transaction_id`, or skip/defer/block semantically when capacity pressure is not worth it. Editor/executor remains mechanical and must block unresolved dependencies rather than choosing compaction targets.
+`2026-06-07-planner-capacity-aware-transaction-planning.md` is implemented. It corrects the capacity direction: Planner now receives bounded built-in memory capacity pressure/limit/remaining facts and planned write-cost facts before emitting apply transactions; the prompt requires capacity-aware apply planning; executor blocks dependent memory applies when linked capacity recovery did not satisfy the dependency; compact reporting exposes capacity-aware dependency counts without memory text. Verification: focused suites `157 passed`, full `pytest tests -q` → `1022 passed, 2 skipped`, `py_compile`, `git diff --check`, and dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T141912Z.json` from `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json` with `dry_run=true`, `target_changed=false`, no route leaks, `semantic_override_count=0`, `apply=3 / defer=6 / skip=64 / block=9`, planner capacity `builtin_user ok 0/2200`, `builtin_memory ok 1424/2200 remaining 776`, and planned write costs `20` (`4` omitted). No mutating run was executed; remaining gap is concrete `editor_task` actionability for Planner-selected `memory_to_skill`.
 
 
 ### Latest completed slice — 2026-06-07

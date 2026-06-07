@@ -1,5 +1,7 @@
 # Planner Capacity-Aware Transaction Planning Plan
 
+**Status (2026-06-07):** Implemented and verified through dry-run dogfood. Planner digest now carries capacity pressure/limit/remaining facts, planned memory write costs, and prompt guidance for capacity-aware apply planning; executor blocks dependent memory applies when linked capacity recovery did not satisfy the dependency; capacity `memory_to_skill` still requires concrete editor task; compact reporting includes capacity-aware dependency counts without memory text. Verification: focused suites `157 passed`, full `pytest tests -q` → `1022 passed, 2 skipped`, `py_compile`, `git diff --check`, and dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T141912Z.json` with `dry_run=true`, `target_changed=false`, no route leaks, `semantic_override_count=0`, `apply=3 / defer=6 / skip=64 / block=9`, planner capacity `builtin_user ok 0/2200`, `builtin_memory ok 1424/2200 remaining 776`, planned write costs `20` with `4` omitted. No mutating run was executed.
+
 > **For Hermes:** Use test-driven-development. Implement task-by-task. This plan is about planning correctness, not forcing apply counts.
 
 **Goal:** Make the Planner see built-in memory capacity before it emits apply transactions, so an apply that needs capacity is planned with preceding Planner-owned capacity work instead of failing later in Editor/executor.
@@ -494,6 +496,25 @@ git add \
 git commit -m "fix: make planner capacity-aware before memory apply"
 git push
 ```
+
+---
+
+## Dogfood result
+
+Source-directed dry-run after implementation:
+
+- Artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T141912Z.json`
+- Source follow-up artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260607T100846Z.json`
+- `dry_run=true`, `target_changed=false`
+- action summary: `apply=3 / defer=6 / skip=64 / block=9`
+- editor execution: `semantic_override_count=0`, `planner_apply_count=3`, `executed_apply_count=0`, `mechanical_block_count=3`; dry-run previews only
+- planner capacity: `builtin_user pressure=ok used=0 limit=2200 remaining=2200`; `builtin_memory pressure=ok used=1424 limit=2200 remaining=776`
+- planned memory write costs: `20`, omitted `4`
+- compact memory capacity counts: `capacity_pressure_seen=0`, `capacity_aware_applies=0`, `capacity_dependencies_satisfied=0`, `capacity_dependencies_blocked=0`, `capacity_reactive_failures=0`
+- route leaks: none found for `suggested_route`, `route_reasons`, `likely_`, `allowed_recommendations`, `default_defer_by_route`, `unhandled_by_route`, or `by_suggested_route`
+- capacity followups: `blocked_count=3`; two unresolved raw placement retries still blocked with `planner_task_capacity_followup_requires_explicit_resolution`; seven `memory_to_skill_missing_editor_task` blocks remain across Planner output
+
+Decision: the capacity-aware planning slice is complete and safe. The dry-run shows Planner now sees bounded capacity facts and write-cost counts before apply. It also shows remaining actionability debt: `memory_to_skill` applies need concrete editor tasks before they can satisfy capacity or cleanup plans. Mutating run is **not ready** from this slice alone.
 
 ---
 

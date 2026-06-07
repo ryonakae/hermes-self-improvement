@@ -215,6 +215,17 @@ def _memory_capacity_summary(result: dict[str, Any], knowledge_transactions: Any
     exact_rewrite_selected = 0
     exact_rewrite_apply = 0
     exact_rewrite_missing_text = 0
+    capacity_aware_applies = 0
+    capacity_dependencies_satisfied = 0
+    capacity_dependencies_blocked = 0
+    capacity_reactive_failures = 0
+    raw_digest = result.get("planner_digest") if isinstance(result.get("planner_digest"), dict) else {}
+    raw_capacity = raw_digest.get("built_in_memory_capacity") if isinstance(raw_digest.get("built_in_memory_capacity"), dict) else {}
+    if not raw_capacity:
+        raw_steps = result.get("step_decisions") if isinstance(result.get("step_decisions"), dict) else {}
+        raw_planner_capacity = raw_steps.get("planner_capacity") if isinstance(raw_steps.get("planner_capacity"), dict) else {}
+        raw_capacity = raw_planner_capacity.get("stores") if isinstance(raw_planner_capacity.get("stores"), dict) else {}
+    capacity_pressure_seen = sum(1 for payload in raw_capacity.values() if isinstance(payload, dict) and str(payload.get("pressure") or "") in {"tight", "full"})
     for item in txs:
         raw_tx_result = item.get("transaction_result") if isinstance(item.get("transaction_result"), dict) else item.get("result") if isinstance(item.get("result"), dict) else {}
         tx_result: dict[str, Any] = raw_tx_result if isinstance(raw_tx_result, dict) else {}
@@ -224,6 +235,7 @@ def _memory_capacity_summary(result: dict[str, Any], knowledge_transactions: Any
         kind = str(item.get("transaction_kind") or "")
         decision = str(item.get("decision") or "")
         has_capacity_resolution = bool(item.get("capacity_resolution_transaction_id") or normalized_reason.startswith("capacity_resolution_"))
+        is_dependent_memory_apply = kind in {"placement_move", "placement_split"} and bool(item.get("capacity_resolution_transaction_id"))
         if outcome == "partial":
             partial += 1
         if kind in {"memory_rewrite", "duplicate_cleanup", "memory_to_skill", "placement_split"} and has_capacity_resolution:
@@ -234,11 +246,18 @@ def _memory_capacity_summary(result: dict[str, Any], knowledge_transactions: Any
                 exact_rewrite_apply += 1
         if kind == "memory_rewrite" and reason == "planner_task_missing_replacement_content":
             exact_rewrite_missing_text += 1
+        if decision == "apply" and is_dependent_memory_apply:
+            capacity_aware_applies += 1
+            if outcome in {"applied", "preview"}:
+                capacity_dependencies_satisfied += 1
+        if reason == "capacity_resolution_not_satisfied":
+            capacity_dependencies_blocked += 1
         if decision == "defer" and normalized_reason.startswith("capacity_resolution_"):
             deferred += 1
         if reason == "planner_task_capacity_followup_requires_explicit_resolution":
             retry_blocked += 1
         if reason == "memory_capacity_exceeded":
+            capacity_reactive_failures += 1
             continue
         if item.get("decision") == "apply" and outcome == "applied":
             resolved += 1
@@ -255,6 +274,11 @@ def _memory_capacity_summary(result: dict[str, Any], knowledge_transactions: Any
         "capacity_exact_rewrite_selected": exact_rewrite_selected,
         "capacity_exact_rewrite_apply": exact_rewrite_apply,
         "capacity_exact_rewrite_missing_text": exact_rewrite_missing_text,
+        "capacity_pressure_seen": capacity_pressure_seen,
+        "capacity_aware_applies": capacity_aware_applies,
+        "capacity_dependencies_satisfied": capacity_dependencies_satisfied,
+        "capacity_dependencies_blocked": capacity_dependencies_blocked,
+        "capacity_reactive_failures": capacity_reactive_failures,
     }
 
 

@@ -423,7 +423,67 @@ def test_compact_improve_tool_result_reports_capacity_without_entry_text():
         "capacity_exact_rewrite_selected": 1,
         "capacity_exact_rewrite_apply": 1,
         "capacity_exact_rewrite_missing_text": 0,
+        "capacity_pressure_seen": 0,
+        "capacity_aware_applies": 0,
+        "capacity_dependencies_satisfied": 0,
+        "capacity_dependencies_blocked": 0,
+        "capacity_reactive_failures": 1,
     }
+    assert "Sensitive old memory text" not in raw
+
+
+
+def test_compact_improve_tool_result_reports_capacity_aware_planning_without_text():
+    import hermes_self_improvement.tool_handlers as tools
+
+    raw_result = {
+        "planner_digest": {
+            "built_in_memory_capacity": {
+                "builtin_memory": {
+                    "pressure": "tight",
+                    "entries": [{"old_text": "Sensitive old memory text"}],
+                }
+            }
+        },
+        "memory_capacity_followups": {"blocked_count": 0, "items": []},
+        "knowledge_transactions": [
+            {
+                "transaction_kind": "memory_rewrite",
+                "decision": "apply",
+                "transaction_id": "capacity_free_1",
+                "capacity_resolution_transaction_id": "followup-1",
+                "transaction_result": {"success": True, "outcome": "preview"},
+            },
+            {
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "capacity_resolution_transaction_id": "capacity_free_1",
+                "transaction_result": {"success": True, "outcome": "preview"},
+            },
+            {
+                "transaction_kind": "placement_move",
+                "decision": "block",
+                "reason": "capacity_resolution_not_satisfied",
+                "capacity_resolution_transaction_id": "missing_capacity",
+                "transaction_result": {"success": False, "outcome": "blocked", "reason": "capacity_resolution_not_satisfied"},
+            },
+            {
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "transaction_result": {"success": False, "outcome": "blocked", "reason": "memory_capacity_exceeded"},
+            },
+        ],
+        "step_decisions": {"summary": {}},
+    }
+
+    payload = tools._compact_improve_tool_result(raw_result)
+    raw = json.dumps(payload, ensure_ascii=False)
+
+    assert payload["memory_capacity"]["capacity_pressure_seen"] == 1
+    assert payload["memory_capacity"]["capacity_aware_applies"] == 1
+    assert payload["memory_capacity"]["capacity_dependencies_satisfied"] == 1
+    assert payload["memory_capacity"]["capacity_dependencies_blocked"] == 1
+    assert payload["memory_capacity"]["capacity_reactive_failures"] == 1
     assert "Sensitive old memory text" not in raw
 
 

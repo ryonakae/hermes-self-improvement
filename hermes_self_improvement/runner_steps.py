@@ -1739,6 +1739,7 @@ def _editor_execution_summary(transactions: list[dict[str, Any]], results: list[
         "executed_apply_count": executed_apply_count,
         "mechanical_block_count": mechanical_block_count,
         "blocked_apply_reasons": dict(sorted(blocked_apply_reasons.items())),
+        "planner_block_reasons": dict(sorted(planner_block_reasons.items())),
     }
 
 
@@ -1917,6 +1918,21 @@ def run_knowledge_improvement_step(
     changed_memories: list[str] = []
     quality = build_planner_runtime_quality_report(digest=digest, planner=planner, runner_decisions=transactions)
     for transaction in transactions:
+        dependency_id = str(transaction.get("capacity_resolution_transaction_id") or "").strip()
+        if transaction.get("decision") == "apply" and dependency_id and dependency_id != str(transaction.get("transaction_id") or "") and transaction.get("transaction_kind") in {"placement_move", "placement_split"}:
+            prior = next((item for item in transactions[:len(transaction_results)] if str(item.get("transaction_id") or "") == dependency_id), None)
+            prior_result = next((item for item in transaction_results if str(item.get("transaction_id") or "") == dependency_id), None)
+            prior_outcome = str((prior_result or {}).get("outcome") or "")
+            required_outcomes = {"applied"} if mutate else {"applied", "preview"}
+            if prior is None or prior_outcome not in required_outcomes:
+                transaction["blocked_prior_decision"] = "apply"
+                transaction["decision"] = "block"
+                transaction["operation"] = "none"
+                transaction["reason"] = "capacity_resolution_not_satisfied"
+                result = _knowledge_transaction_dry_run_result(transaction)
+                transaction["transaction_result"] = result
+                transaction_results.append(result)
+                continue
         if transaction.get("decision") == "apply":
             result = execute_knowledge_transaction(transaction, config=config, mutate=mutate)
         else:

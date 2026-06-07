@@ -108,6 +108,95 @@ def test_planner_digest_exposes_builtin_memory_capacity_facts():
     assert "builtin_user" in user_content
     assert "Ryo prefers concise Slack reports." in user_content
 
+
+def test_planner_digest_exposes_capacity_pressure_and_limits():
+    pack_data = pack()
+    pack_data["evidence"] = [
+        {
+            "id": "memory-inventory-capacity-limits",
+            "kind": "memory_inventory_candidate",
+            "inventory": {
+                "group_kind": "built_in_memory_inventory",
+                "entries": [
+                    {"store": "builtin_user", "evidence_id": "user_1", "old_text": "A" * 900},
+                    {"store": "builtin_memory", "evidence_id": "memory_1", "old_text": "B" * 2100},
+                ],
+            },
+        }
+    ]
+    pack_data["built_in_memory_limits"] = {
+        "builtin_user": {"limit_chars": 2200},
+        "builtin_memory": {"limit_chars": 2200},
+    }
+
+    digest = build_planner_digest(pack_data)
+
+    user = digest["built_in_memory_capacity"]["builtin_user"]
+    memory = digest["built_in_memory_capacity"]["builtin_memory"]
+    assert user["limit_chars"] == 2200
+    assert user["remaining_chars_estimate"] == 1300
+    assert user["pressure"] == "ok"
+    assert memory["limit_chars"] == 2200
+    assert memory["remaining_chars_estimate"] == 100
+    assert memory["pressure"] == "tight"
+
+
+def test_planner_digest_exposes_memory_write_costs_for_candidates():
+    pack_data = pack()
+    pack_data["evidence"] = [
+        {
+            "id": "memory-place-big",
+            "kind": "memory_placement_candidate",
+            "inventory": {
+                "group_kind": "placement_review",
+                "current_store": "user",
+                "old_text": "Large durable fact. " * 80,
+            },
+            "target_store": "builtin_memory",
+        }
+    ]
+    pack_data["built_in_memory_limits"] = {"builtin_memory": {"limit_chars": 2200}}
+
+    digest = build_planner_digest(pack_data)
+
+    costs = digest["planned_memory_write_costs"]
+    assert costs["item_count"] == 1
+    assert costs["items"][0]["source_id"] == "memory-place-big"
+    assert costs["items"][0]["source_store"] == "builtin_user"
+    assert costs["items"][0]["target_store"] == "builtin_memory"
+    assert costs["items"][0]["estimated_add_chars"] > 0
+    assert "Large durable fact." in costs["items"][0]["candidate_text"]
+
+
+def test_render_planner_messages_requires_capacity_aware_apply_planning():
+    digest = build_planner_digest(pack())
+    digest["built_in_memory_capacity"] = {
+        "builtin_user": {"entry_count": 0, "approx_chars_used": 0, "limit_chars": 2200, "remaining_chars_estimate": 1200, "pressure": "ok", "entries": []},
+        "builtin_memory": {
+            "entry_count": 1,
+            "approx_chars_used": 2100,
+            "limit_chars": 2200,
+            "remaining_chars_estimate": 100,
+            "pressure": "tight",
+            "entries": [{"evidence_id": "memory_1", "old_text": "Verbose memory entry.", "chars": 21}],
+        },
+    }
+    digest["planned_memory_write_costs"] = {
+        "item_count": 1,
+        "items": [{"source_id": "memory-place-big", "source_store": "builtin_user", "target_store": "builtin_memory", "estimated_add_chars": 400, "candidate_text": "New memory content."}],
+    }
+
+    content = render_planner_messages(digest=digest)["messages"][1]["content"]
+
+    assert "## Planned memory write costs" in content
+    assert "capacity-aware apply planning" in content
+    assert "If target store is tight/full, emit capacity recovery before dependent apply or skip/defer/block" in content
+    assert "capacity_resolution_transaction_id" in content
+    assert "memory-place-big" in content
+    for forbidden in ("suggested_route", "route_reasons", "likely_", "allowed_recommendations"):
+        assert forbidden not in content
+
+
 def test_planner_digest_exposes_memory_placement_candidates():
     pack_data = pack()
     pack_data["evidence"].append({

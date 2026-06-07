@@ -1133,6 +1133,25 @@ def run_improve(
     raw_planner_diagnostics = raw_planner.get("planner_diagnostics")
     planner_diagnostics = raw_planner_diagnostics if isinstance(raw_planner_diagnostics, dict) else {}
     raw_placement_obj = planner_digest.get("memory_placement_candidates")
+    raw_capacity_obj = planner_digest.get("built_in_memory_capacity")
+    raw_capacity = raw_capacity_obj if isinstance(raw_capacity_obj, dict) else {}
+    raw_write_costs_obj = planner_digest.get("planned_memory_write_costs")
+    raw_write_costs = raw_write_costs_obj if isinstance(raw_write_costs_obj, dict) else {}
+    planner_capacity = {
+        "stores": {
+            str(store): {
+                "entry_count": int(payload.get("entry_count") or 0),
+                "approx_chars_used": int(payload.get("approx_chars_used") or 0),
+                "limit_chars": payload.get("limit_chars"),
+                "remaining_chars_estimate": payload.get("remaining_chars_estimate"),
+                "pressure": payload.get("pressure"),
+            }
+            for store, payload in raw_capacity.items()
+            if isinstance(payload, dict)
+        },
+        "planned_write_cost_count": int(raw_write_costs.get("item_count") or 0),
+        "planned_write_cost_omitted_count": int(raw_write_costs.get("omitted_count") or 0),
+    }
     raw_placement: dict[str, Any] = raw_placement_obj if isinstance(raw_placement_obj, dict) else {}
     raw_placement_candidates = raw_placement.get("candidates")
     memory_placement_target_hints = [
@@ -1150,6 +1169,7 @@ def run_improve(
         "knowledge_transactions": _knowledge_transaction_summary(knowledge_transactions),
         "knowledge_quality": knowledge_step.get("planner_quality") if isinstance(knowledge_step.get("planner_quality"), dict) else {},
         "planner_diagnostics": planner_diagnostics,
+        "planner_capacity": planner_capacity,
         "memory_placement_target_hints": memory_placement_target_hints,
         "knowledge_routing": knowledge_routing,
         "editor_validation": knowledge_step.get("editor_validation") if isinstance(knowledge_step.get("editor_validation"), dict) else {"summary": {}},
