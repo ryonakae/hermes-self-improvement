@@ -452,7 +452,64 @@ def test_normalize_new_semantic_memory_transactions_preserves_source_fields():
     assert split["source_old_text"].startswith("Hermes/plugin障害")
     assert split["source_replacement"] == "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。"
     assert split["destination_content"] == "Hermes/plugin障害: PR取込test失敗は上流比較。"
+    assert split["fragments"] == [
+        {"target_store": "builtin_memory", "text": "Hermes/plugin障害: PR取込test失敗は上流比較。"},
+        {"target_store": "builtin_user", "text": "Hermes/plugin障害: 相談語は調査設計のみ、明示OKまで変更禁止。"},
+    ]
     assert "memory_place_mixed" in split["evidence_ids"]
+
+
+def test_normalize_placement_split_preserves_llm_supplied_fragments():
+    split = normalize_knowledge_transaction({
+        "transaction_kind": "placement_split",
+        "decision": "apply",
+        "source_store": "builtin_user",
+        "source_id": "memory_place_opencode",
+        "source_old_text": "opencode-go契約済みで極力活用。OpenAI互換はprovider=openai+base_url。Gmail observer=~/.hermes/automations/gmail-purchase-observer。",
+        "fragments": [
+            {"target_store": "builtin_user", "text": "opencode-go契約済みで、可能な場面では極力活用したい。"},
+            {"target_store": "builtin_memory", "text": "OpenAI互換 provider は provider=openai+base_url。Gmail observer は ~/.hermes/automations/gmail-purchase-observer。"},
+            {"target_store": "skill", "target_id": "hermes-skill-management", "text": "Skill編集は protected 保護、local は patch 可。", "editor_task": {"task_kind": "skill_improve", "maintenance_action": "patch", "targets": {"primary_skill": "hermes-skill-management"}, "instructions": "Add the protected/local skill-editing rule."}},
+        ],
+        "reason": "mixed user preference and runtime facts",
+    })
+
+    assert split["decision"] == "apply"
+    assert split["transaction_kind"] == "placement_split"
+    assert split["operation"] == "split"
+    assert split["source_store"] == "builtin_user"
+    assert split["source_id"] == "memory_place_opencode"
+    assert split["target_store"] == "unresolved"
+    assert split["target_id"] == ""
+    assert split["fragments"] == [
+        {"target_store": "builtin_user", "text": "opencode-go契約済みで、可能な場面では極力活用したい。"},
+        {"target_store": "builtin_memory", "text": "OpenAI互換 provider は provider=openai+base_url。Gmail observer は ~/.hermes/automations/gmail-purchase-observer。"},
+        {"target_store": "skill", "target_id": "hermes-skill-management", "text": "Skill編集は protected 保護、local は patch 可。", "editor_task": {"task_kind": "skill_improve", "maintenance_action": "patch", "targets": {"primary_skill": "hermes-skill-management"}, "instructions": "Add the protected/local skill-editing rule."}},
+    ]
+    assert "memory_place_opencode" in split["evidence_ids"]
+
+
+def test_normalize_placement_split_blocks_missing_or_unsupported_fragments():
+    missing = normalize_knowledge_transaction({
+        "transaction_kind": "placement_split",
+        "decision": "apply",
+        "source_store": "builtin_user",
+        "source_id": "memory_place_mixed",
+        "source_old_text": "mixed text",
+    })
+    assert missing["decision"] == "block"
+    assert missing["reason"] == "split_missing_fragments"
+
+    unsupported = normalize_knowledge_transaction({
+        "transaction_kind": "placement_split",
+        "decision": "apply",
+        "source_store": "builtin_user",
+        "source_id": "memory_place_mixed",
+        "source_old_text": "mixed text",
+        "fragments": [{"target_store": "external_memory", "text": "do not route split fragments externally"}],
+    })
+    assert unsupported["decision"] == "block"
+    assert unsupported["reason"] == "split_unsupported_fragment_target_store"
 
     rewrite = normalize_knowledge_transaction({
         "transaction_kind": "memory_rewrite",

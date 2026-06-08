@@ -1779,3 +1779,98 @@ def test_capacity_memory_to_skill_with_editor_task_can_satisfy_dependent_apply(m
 
     assert [tx["decision"] for tx in result["knowledge_transactions"]] == ["apply", "apply"]
     assert [tx["transaction_result"]["outcome"] for tx in result["knowledge_transactions"]] == ["preview", "preview"]
+
+
+def test_placement_split_fragments_adds_destination_then_replaces_source(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    calls = []
+
+    monkeypatch.setattr(runner_steps, "_memory_to_skill_old_text_is_current", lambda config, *, target, old_text: True)
+
+    def fake_execute_memory_transaction(transaction, *, config, result, mutate):
+        calls.append({"operation": transaction.get("operation"), "target_store": transaction.get("target_store"), "content": transaction.get("content"), "source_old_text": transaction.get("source_old_text")})
+        return {"success": True, "outcome": "applied", "changed_memories": [f"{transaction.get('operation')}:{transaction.get('target_store')}"]}
+
+    monkeypatch.setattr(runner_steps, "_execute_memory_transaction", fake_execute_memory_transaction)
+
+    result = runner_steps.execute_knowledge_transaction(
+        {
+            "transaction_id": "split-mixed-user",
+            "transaction_kind": "placement_split",
+            "decision": "apply",
+            "operation": "split",
+            "source_store": "builtin_user",
+            "source_old_text": "Ryo prefers concise Slack; Gmail observer=~/.hermes/automations/gmail-purchase-observer.",
+            "fragments": [
+                {"target_store": "builtin_user", "text": "Ryo prefers concise Slack."},
+                {"target_store": "builtin_memory", "text": "Gmail observer=~/.hermes/automations/gmail-purchase-observer."},
+            ],
+        },
+        config={},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert result["outcome"] == "applied"
+    assert calls == [
+        {"operation": "memory_add", "target_store": "builtin_memory", "content": "Gmail observer=~/.hermes/automations/gmail-purchase-observer.", "source_old_text": None},
+        {"operation": "memory_replace", "target_store": "builtin_user", "content": "Ryo prefers concise Slack.", "source_old_text": "Ryo prefers concise Slack; Gmail observer=~/.hermes/automations/gmail-purchase-observer."},
+    ]
+    assert result["executed_steps"] == [
+        {"step": "fragment_add", "status": "applied", "target": "memory"},
+        {"step": "source_replace", "status": "applied", "target": "user"},
+    ]
+
+
+def test_placement_split_fragments_requires_valid_builtin_targets(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    calls = []
+    monkeypatch.setattr(runner_steps, "_execute_memory_transaction", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    result = runner_steps.execute_knowledge_transaction(
+        {
+            "transaction_kind": "placement_split",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "source_old_text": "Mixed entry.",
+            "fragments": [
+                {"target_store": "external_memory", "text": "Do not route split fragments externally."},
+            ],
+        },
+        config={},
+        mutate=True,
+    )
+
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+    assert result["reason"] == "split_invalid_fragment_target_store"
+    assert calls == []
+
+
+def test_placement_split_fragments_blocks_skill_fragments_before_memory_mutation(monkeypatch):
+    from hermes_self_improvement import runner_steps
+
+    calls = []
+    monkeypatch.setattr(runner_steps, "_execute_memory_transaction", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    result = runner_steps.execute_knowledge_transaction(
+        {
+            "transaction_kind": "placement_split",
+            "decision": "apply",
+            "source_store": "builtin_user",
+            "source_old_text": "Mixed entry with procedure.",
+            "fragments": [
+                {"target_store": "builtin_user", "text": "User preference fragment."},
+                {"target_store": "skill", "target_id": "hermes-skill-management", "text": "Procedure fragment."},
+            ],
+        },
+        config={},
+        mutate=True,
+    )
+
+    assert result["success"] is False
+    assert result["outcome"] == "blocked"
+    assert result["reason"] == "split_skill_fragment_execution_unsupported"
+    assert calls == []

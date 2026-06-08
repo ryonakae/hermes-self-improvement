@@ -31,10 +31,11 @@ PLANNER_USER_PREFIX = (
     "Allowed planner decision vocabulary: mutate_skill, archive_skill, create_skill, skip, defer, mutate_memory, calibrate_evaluator, plus canonical apply/skip transactions for built-in memory placement and cleanup.\n"
     "For mutate_skill, also set maintenance_action: \"patch\" (in-place edit) or \"merge\" (with target_skill of the consolidation target).\n"
     "New skill creation is one maintenance option, not the default; prefer mutate_skill or archive_skill when evidence supports existing local mutable skill maintenance.\n"
-    "When you provide structured decisions, return JSON with a top-level knowledge_transactions array. Each transaction may use fields: skill/proposed_skill_name, decision, operation, maintenance_action, target_store, target_skill, source_store, source_evidence_id, old_text, source_old_text, source_replacement, destination_store, destination_content, replacement_content, editor_task, content, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n"
+    "When you provide structured decisions, return JSON with a top-level knowledge_transactions array. Each transaction may use fields: skill/proposed_skill_name, decision, operation, maintenance_action, target_store, target_skill, source_store, source_evidence_id, old_text, source_old_text, source_replacement, destination_store, destination_content, replacement_content, fragments, editor_task, content, priority, risk, observed_problem, desired_outcome, suggested_focus, non_goals, evidence_ids, rationale, reason.\n"
     "For memory_to_skill, source_evidence_id, exact source_old_text, target_skill, and concrete editor_task are required. editor_task must be an object with task_kind=\"skill_improve\", maintenance_action=\"patch\", targets.primary_skill=<target_skill>, and instructions=<specific skill patch instruction>. Do not infer source_evidence_id from unrelated evidence_ids, target_skill, or candidate target hints.\n"
-    "For placement_split, exact text is required: source_evidence_id, source_old_text, destination_store, destination_content, and source_replacement. Do not use source_id-only templates for Planner-facing split payloads.\n\n"
+    "For placement_move, use it only when the whole source entry belongs in the other built-in store. For placement_split, use it when one entry mixes user preference and environment/runtime facts or workflow material; include fragments[] with final text and target_store for every durable piece. If exact split text is unclear, defer instead of a whole-entry move.\n\n"
 )
+
 
 SKILL_EDITOR_BASE_SECTIONS = [
     "You are the Hermes self-improvement editor.",
@@ -286,8 +287,8 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
         return "## Memory placement candidates\n- n/a\n"
     lines = [
         "## Memory placement candidates",
-        "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, move_user_to_memory, move_memory_to_user, memory_to_skill, skip, or defer. Placement observations are observations, not recommendations; do not follow them mechanically. Decide semantic destination from old_text, current_store, official_boundary, candidate_target_skills, and full context. If mixed or unclear, keep current store or defer. Move operations are directions from the current store: use move_user_to_memory only when current_store=user; use move_memory_to_user only when current_store=memory. Use exact old_text when moving/removing.",
-        "For each memory placement candidate, copy exactly one template into knowledge_transactions and fill only the fields that are already known. Do not omit a candidate just because the answer is keep/skip/defer. Candidate target skills are context hints, not commands.",
+        "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, placement_move, placement_split, memory_to_skill, skip, or defer. Placement observations are observations, not recommendations; do not follow them mechanically. Decide semantic destination from old_text, current_store, official_boundary, candidate_target_skills, and full context. Use placement_move only when the whole source entry belongs in the other built-in store. Use placement_split when one entry mixes user preference and environment/runtime facts or workflow material. If exact split text is unclear, defer instead of a whole-entry move. Move operations are directions from the current store: use move_user_to_memory only when current_store=user; use move_memory_to_user only when current_store=memory. Use exact old_text when moving/removing.",
+        "For each memory placement candidate, copy exactly one template into knowledge_transactions and fill only the fields that are already known. For placement_split, include fragments[] with final text and target_store for every durable piece. Do not omit a candidate just because the answer is keep/skip/defer. Candidate target skills are context hints, not commands.",
     ]
     ordered_candidates = sorted(candidates, key=lambda item: str(item.get("evidence_id") or ""))
     for item in ordered_candidates[:40]:
@@ -319,6 +320,22 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
                 "  - move template: "
                 + json.dumps({"operation": move_operation, **template_base, "reason": "placement_boundary"}, ensure_ascii=False, separators=(",", ":"))
             )
+        split_template = {
+            "transaction_kind": "placement_split",
+            "decision": "apply",
+            "operation": "split",
+            "source_store": "builtin_user" if str(item.get("current_store") or "") == "user" else "builtin_memory",
+            **template_base,
+            "fragments": [
+                {"target_store": "builtin_user", "text": "<exact final USER.md fragment or omit this fragment>"},
+                {"target_store": "builtin_memory", "text": "<exact final MEMORY.md fragment or omit this fragment>"},
+            ],
+            "reason": "mixed_user_preference_and_environment_runtime_facts",
+        }
+        lines.append(
+            "  - split template when one entry mixes user preference and environment/runtime facts: "
+            + json.dumps(split_template, ensure_ascii=False, separators=(",", ":"))
+        )
         if target_skill_bits:
             lines.append(
                 "  - memory_to_skill template when target_skill is known: "
@@ -387,7 +404,7 @@ def _render_semantic_knowledge_section(digest: dict[str, Any]) -> str:
     lines = [
         "## Semantic knowledge judgment rules",
         "Observations are not recommendations. You decide semantics from exact text, current store, official boundaries, and advisory context.",
-        "Use placement_move only when the whole source entry clearly belongs in the opposite built-in store and whole_entry_move_allowed=true. Do not emit whole-entry placement_move for mixed entries; use placement_split only when exact source_replacement and destination_content are available, otherwise defer. Use memory_rewrite for same-store cleanup, duplicate_cleanup for true duplicates, keep_same_topic_different_store for healthy USER/MEMORY coexistence, and skill_ambiguity_cleanup for ambiguous skill-name/path collisions.",
+        "Use placement_move only when the whole source entry clearly belongs in the opposite built-in store and whole_entry_move_allowed=true. Do not emit whole-entry placement_move for mixed entries; use placement_split only when exact fragments[] are available, otherwise defer. Use memory_rewrite for same-store cleanup, duplicate_cleanup for true duplicates, keep_same_topic_different_store for healthy USER/MEMORY coexistence, and skill_ambiguity_cleanup for ambiguous skill-name/path collisions.",
         "Planner is the final semantic decision maker. Editor executes your exact canonical transaction through official tools; program code will not choose a different store, skill, split text, compaction target, or memory entry for you.",
         "For apply, emit an executable editor_task/capacity_plan with exact old_text and exact add/replace/remove text. memory_to_skill apply requires target_skill plus concrete editor_task object with task_kind=\"skill_improve\", maintenance_action=\"patch\", targets.primary_skill, and instructions; do not use a bare skill_task string. memory_rewrite apply requires exact replacement_content or content. If exact target, split text, replacement text, or safe operation is unclear, defer with a concrete reason rather than forcing a move.",
         "Transaction templates include: placement_split, memory_rewrite, duplicate_cleanup, keep_same_topic_different_store, skill_ambiguity_cleanup.",
@@ -400,7 +417,8 @@ def _render_semantic_knowledge_section(digest: dict[str, Any]) -> str:
         for item in mixed[:20]:
             observations = ",".join(str(value) for value in (item.get("observations") or [])[:6])
             lines.append(f"- evidence_id={_clip(item.get('evidence_id'), max_chars=80)}; source_evidence_id={_clip(item.get('source_evidence_id'), max_chars=80)}; current_store={_clip(item.get('current_store'), max_chars=40)}; observations=[{observations}]; old_text={_clip(item.get('old_text'), max_chars=260)}")
-            lines.append("  - placement_split apply template with exact text required: " + json.dumps({"transaction_kind": "placement_split", "decision": "apply", "operation": "split", "source_evidence_id": item.get("source_evidence_id"), "source_store": item.get("current_store"), "source_old_text": item.get("old_text"), "destination_store": "builtin_memory", "destination_content": "<exact extracted durable environment/procedure text>", "source_replacement": "<exact remaining source text after split>", "reason": "mixed_entry_split_exact_text"}, ensure_ascii=False, separators=(",", ":")))
+            source_store = "builtin_user" if str(item.get("current_store") or "") == "user" else "builtin_memory"
+            lines.append("  - placement_split apply template with exact fragments required: " + json.dumps({"transaction_kind": "placement_split", "decision": "apply", "operation": "split", "source_evidence_id": item.get("source_evidence_id"), "source_store": source_store, "source_old_text": item.get("old_text"), "fragments": [{"target_store": source_store, "text": "<exact final source-store fragment or omit only if intentionally removing source>"}, {"target_store": "builtin_memory", "text": "<exact final MEMORY.md fragment>"}], "reason": "mixed_entry_split_exact_fragments"}, ensure_ascii=False, separators=(",", ":")))
             lines.append("  - placement_split defer template when exact text is unclear: " + json.dumps({"transaction_kind": "placement_split", "decision": "defer", "operation": "none", "source_evidence_id": item.get("source_evidence_id"), "reason": "mixed_entry_needs_exact_split_text"}, ensure_ascii=False, separators=(",", ":")))
     if pairs:
         lines.append("### Cross-store related memory pairs")

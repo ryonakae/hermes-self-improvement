@@ -361,7 +361,11 @@ def test_render_planner_messages_includes_memory_placement_transaction_templates
     user_content = rendered["messages"][1]["content"]
 
     assert "For each memory placement candidate, copy exactly one template into knowledge_transactions" in user_content
+    assert "Use placement_move only when the whole source entry belongs in the other built-in store" in user_content
+    assert "Use placement_split when one entry mixes user preference and environment/runtime facts" in user_content
+    assert "fragments" in user_content
     assert '"operation":"move_user_to_memory"' in user_content
+    assert '"transaction_kind":"placement_split"' in user_content
     assert '"source_evidence_id":"memory-place-user-runtime"' in user_content
     assert '"source_old_text":"Gmail observer=~/.hermes/automations/gmail-purchase-observer."' in user_content
     assert '"target_store":"none"' in user_content
@@ -1941,8 +1945,10 @@ def test_render_planner_messages_includes_semantic_knowledge_rules_and_templates
     assert "Observations are not recommendations" in content
     for token in ("placement_split", "memory_rewrite", "duplicate_cleanup", "keep_same_topic_different_store", "skill_ambiguity_cleanup"):
         assert token in content
-    for token in ("source_evidence_id", "source_old_text", "target_skill", "editor_task", "task_kind", "instructions", "destination_content", "source_replacement", "replacement_content"):
+    for token in ("source_evidence_id", "source_old_text", "target_skill", "editor_task", "task_kind", "instructions", "fragments", "target_store", "replacement_content"):
         assert token in content
+    assert "destination_content" not in content.split("## Semantic knowledge judgment rules", 1)[1].split("##", 1)[0]
+    assert "source_replacement" not in content.split("## Semantic knowledge judgment rules", 1)[1].split("##", 1)[0]
     assert "Do not infer source_evidence_id" in content
     assert "exact text" in content
     assert '"decision":"apply"' in content

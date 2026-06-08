@@ -2354,6 +2354,10 @@ def _execute_duplicate_cleanup_transaction(transaction: dict[str, Any], *, confi
 def _execute_placement_split_transaction(transaction: dict[str, Any], *, config: dict[str, Any], result: dict[str, Any], mutate: bool) -> dict[str, Any]:
     source_store = str(transaction.get("source_store") or "builtin_user").strip()
     source_old_text = str(transaction.get("source_old_text") or "").strip()
+    raw_fragments = transaction.get("fragments")
+    fragments = [item for item in raw_fragments if isinstance(item, dict)] if isinstance(raw_fragments, list) else []
+    if fragments:
+        return _execute_placement_split_fragments_transaction(transaction, config=config, result=result, mutate=mutate, source_store=source_store, source_old_text=source_old_text, fragments=fragments)
     source_replacement = str(transaction.get("source_replacement") or "").strip()
     destination_store = str(transaction.get("destination_store") or transaction.get("target_store") or "").strip()
     destination_content = str(transaction.get("destination_content") or "").strip()
@@ -2421,6 +2425,98 @@ def _execute_placement_split_transaction(transaction: dict[str, Any], *, config:
             {"step": "source_replace", "status": "applied", "target": source_target},
         ],
         "destination_result": dest_result,
+        "replace_result": replace_result,
+    }
+
+
+def _execute_placement_split_fragments_transaction(
+    transaction: dict[str, Any],
+    *,
+    config: dict[str, Any],
+    result: dict[str, Any],
+    mutate: bool,
+    source_store: str,
+    source_old_text: str,
+    fragments: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not source_old_text or source_store not in {"builtin_user", "builtin_memory"}:
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
+    normalized_fragments: list[dict[str, str]] = []
+    for fragment in fragments:
+        target_store = str(fragment.get("target_store") or "").strip()
+        text = str(fragment.get("text") or fragment.get("content") or "").strip()
+        if target_store == "skill":
+            return {**result, "success": False, "outcome": "blocked", "reason": "split_skill_fragment_execution_unsupported"}
+        if target_store not in {"builtin_user", "builtin_memory"}:
+            return {**result, "success": False, "outcome": "blocked", "reason": "split_invalid_fragment_target_store"}
+        if not text:
+            return {**result, "success": False, "outcome": "blocked", "reason": "split_missing_fragment_text"}
+        normalized_fragments.append({"target_store": target_store, "text": text})
+    source_fragments = [fragment for fragment in normalized_fragments if fragment["target_store"] == source_store]
+    if len(source_fragments) > 1:
+        return {**result, "success": False, "outcome": "blocked", "reason": "split_multiple_source_fragments"}
+    if not source_fragments:
+        return {**result, "success": False, "outcome": "blocked", "reason": "split_missing_source_fragment"}
+    if not mutate:
+        return {**result, "success": True, "outcome": "preview", "reason": "dry_run_would_execute_knowledge_transaction"}
+    source_target = _knowledge_transaction_source_target(source_store)
+    if not _memory_to_skill_old_text_is_current(config, target=source_target, old_text=source_old_text):
+        return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_source_old_text_not_current"}
+    add_results: list[dict[str, Any]] = []
+    executed_steps: list[dict[str, Any]] = []
+    for fragment in normalized_fragments:
+        target_store = fragment["target_store"]
+        if target_store == source_store:
+            continue
+        add_transaction = {
+            "transaction_kind": "memory",
+            "operation": "memory_add",
+            "target_store": target_store,
+            "content": fragment["text"],
+            "editor_task": {"content": fragment["text"]},
+        }
+        add_result = _execute_memory_transaction(add_transaction, config=config, result=_base_knowledge_transaction_result(add_transaction), mutate=True)
+        target = _knowledge_transaction_source_target(target_store)
+        if not add_result.get("success"):
+            return {
+                **result,
+                "success": False,
+                "outcome": "partial" if add_results else "blocked",
+                "reason": "split_fragment_add_failed",
+                "changed_memories": _unique_nonempty_strings([changed for prior in add_results for changed in (prior.get("changed_memories") or [])]),
+                "executed_steps": [*executed_steps, {"step": "fragment_add", "status": "failed", "target": target}],
+                "fragment_results": [*add_results, add_result],
+            }
+        add_results.append(add_result)
+        executed_steps.append({"step": "fragment_add", "status": "applied", "target": target})
+    replace_content = source_fragments[0]["text"]
+    replace_transaction = {
+        "transaction_kind": "memory",
+        "operation": "memory_replace",
+        "target_store": source_store,
+        "source_old_text": source_old_text,
+        "content": replace_content,
+        "editor_task": {"content": replace_content, "old_text": source_old_text},
+    }
+    replace_result = _execute_memory_transaction(replace_transaction, config=config, result=_base_knowledge_transaction_result(replace_transaction), mutate=True)
+    if not replace_result.get("success"):
+        return {
+            **result,
+            "success": False,
+            "outcome": "partial" if add_results else "blocked",
+            "reason": "split_source_replace_failed",
+            "changed_memories": _unique_nonempty_strings([changed for prior in add_results for changed in (prior.get("changed_memories") or [])]),
+            "executed_steps": [*executed_steps, {"step": "source_replace", "status": "failed", "target": source_target}],
+            "fragment_results": add_results,
+            "replace_result": replace_result,
+        }
+    return {
+        **result,
+        "success": True,
+        "outcome": "applied",
+        "changed_memories": _unique_nonempty_strings([changed for prior in [*add_results, replace_result] for changed in (prior.get("changed_memories") or [])]),
+        "executed_steps": [*executed_steps, {"step": "source_replace", "status": "applied", "target": source_target}],
+        "fragment_results": add_results,
         "replace_result": replace_result,
     }
 

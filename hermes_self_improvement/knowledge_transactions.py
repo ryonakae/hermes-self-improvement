@@ -204,6 +204,7 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
     source_store = raw.get("source_store")
     source_id = str(raw.get("source_id") or raw.get("source_evidence_id") or "")
     source_old_text = str(raw.get("source_old_text") or raw.get("old_text") or "")
+    fragments: list[dict[str, Any]] = []
 
     legacy_decision = str(raw.get("decision") or "")
     operation_for_product_lookup = "" if operation == "none" else operation
@@ -241,7 +242,8 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
         target_id = target_id or str(raw.get("target_skill") or "")
     elif transaction_kind == "placement_split":
         decision = "apply" if decision in {"apply", "accepted", "preview"} else decision
-        target_store = target_store or str(raw.get("destination_store") or "")
+        fragments = _normalize_split_fragments(raw)
+        target_store = target_store or str(raw.get("destination_store") or "") or "unresolved"
         target_id = target_id or _BUILTIN_MEMORY_TARGET_IDS.get(target_store, "")
         operation = operation or "split"
     elif transaction_kind == "memory_rewrite":
@@ -306,6 +308,8 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
         transaction["whole_entry_move_allowed"] = raw.get("whole_entry_move_allowed")
     if raw.get("content") is not None:
         transaction["content"] = str(raw.get("content"))
+    if transaction_kind == "placement_split":
+        transaction["fragments"] = fragments
     for key in (
         "source_replacement",
         "destination_store",
@@ -324,6 +328,38 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
     if isinstance(raw.get("capacity_plan"), dict):
         transaction["capacity_plan"] = raw.get("capacity_plan")
     return transaction
+
+
+def _normalize_split_fragments(raw: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_fragments = raw.get("fragments")
+    fragments: list[dict[str, Any]] = []
+    if isinstance(raw_fragments, list):
+        for item in raw_fragments:
+            if not isinstance(item, dict):
+                continue
+            target_store = str(item.get("target_store") or "").strip()
+            text = str(item.get("text") or item.get("content") or "").strip()
+            fragment: dict[str, Any] = {"target_store": target_store, "text": text}
+            if item.get("target_id") is not None:
+                fragment["target_id"] = str(item.get("target_id") or "").strip()
+            if isinstance(item.get("editor_task"), dict):
+                fragment["editor_task"] = item.get("editor_task")
+            fragments.append(fragment)
+        return fragments
+
+    destination_store = str(raw.get("destination_store") or raw.get("target_store") or "").strip()
+    destination_content = str(raw.get("destination_content") or "").strip()
+    if destination_store or destination_content:
+        fragment = {"target_store": destination_store, "text": destination_content}
+        target_id = str(raw.get("target_id") or "").strip()
+        if target_id and target_id != _BUILTIN_MEMORY_TARGET_IDS.get(destination_store, ""):
+            fragment["target_id"] = target_id
+        fragments.append(fragment)
+    source_replacement = str(raw.get("source_replacement") or "").strip()
+    source_store = str(raw.get("source_store") or "").strip()
+    if source_replacement:
+        fragments.append({"target_store": source_store, "text": source_replacement})
+    return fragments
 
 
 def _editor_task_for_memory_to_skill(raw: dict[str, Any], *, target_id: str, source_old_text: str) -> dict[str, Any] | None:
@@ -401,7 +437,7 @@ def _apply_non_executable_store_rules(transaction: dict[str, Any]) -> dict[str, 
         return {**transaction, "decision": "skip", "target_store": "none", "target_id": "", "editor_task": None}
     if transaction_kind == "skill_ambiguity_cleanup" and transaction.get("decision") != "apply":
         return {**transaction, "decision": transaction.get("decision") or "defer", "target_store": "unresolved", "target_id": "", "editor_task": None}
-    if target_store == "unresolved":
+    if target_store == "unresolved" and transaction_kind != "placement_split":
         return {
             **transaction,
             "decision": "defer",
@@ -436,28 +472,48 @@ def _validate_apply_transaction(transaction: dict[str, Any]) -> dict[str, Any]:
     if transaction.get("decision") != "apply":
         return transaction
     target_store = str(transaction.get("target_store") or "")
+    transaction_kind = str(transaction.get("transaction_kind") or "")
     if not target_store:
         return _blocked(transaction, "transaction_missing_target_store")
     if target_store not in _CANONICAL_STORES:
         return _blocked(transaction, "transaction_unsupported_target_store")
-    if not str(transaction.get("target_id") or ""):
+    if transaction_kind != "placement_split" and not str(transaction.get("target_id") or ""):
         return _blocked(transaction, "transaction_missing_target_id")
     operation = str(transaction.get("operation") or "")
-    if transaction.get("transaction_kind") == "memory_to_skill" and operation in _SOURCE_REQUIRED_OPERATIONS and not str(transaction.get("source_id") or ""):
+    if transaction_kind == "memory_to_skill" and operation in _SOURCE_REQUIRED_OPERATIONS and not str(transaction.get("source_id") or ""):
         return _blocked(transaction, "transaction_missing_source_evidence_id")
     if operation in _SOURCE_REQUIRED_OPERATIONS and not _has_source_fields(transaction):
         return _blocked(transaction, "transaction_missing_source_fields")
-    if transaction.get("transaction_kind") == "placement_move" and (transaction.get("mixed_entry") is True or transaction.get("whole_entry_move_allowed") is False):
+    if transaction_kind == "placement_move" and (transaction.get("mixed_entry") is True or transaction.get("whole_entry_move_allowed") is False):
         return _blocked(transaction, "planner_task_whole_move_not_allowed_for_mixed_entry")
-    if transaction.get("transaction_kind") == "memory_to_skill" and not isinstance(transaction.get("editor_task"), dict):
+    if transaction_kind == "memory_to_skill" and not isinstance(transaction.get("editor_task"), dict):
         return _blocked(transaction, "memory_to_skill_missing_editor_task")
-    if transaction.get("transaction_kind") == "memory_rewrite" and not str(transaction.get("replacement_content") or transaction.get("content") or "").strip():
+    if transaction_kind == "memory_rewrite" and not str(transaction.get("replacement_content") or transaction.get("content") or "").strip():
         return _blocked(transaction, "planner_task_missing_replacement_content")
-    if transaction.get("transaction_kind") == "placement_split":
-        if not str(transaction.get("destination_content") or "").strip():
-            return _blocked(transaction, "split_missing_destination_content")
-        if not str(transaction.get("source_replacement") or "").strip():
-            return _blocked(transaction, "split_missing_source_replacement")
+    if transaction_kind == "placement_split":
+        fragments = transaction.get("fragments") if isinstance(transaction.get("fragments"), list) else []
+        if not fragments:
+            return _blocked(transaction, "split_missing_fragments")
+        source_store = str(transaction.get("source_store") or "").strip()
+        source_fragment_count = 0
+        for fragment in fragments:
+            if not isinstance(fragment, dict) or not str(fragment.get("text") or "").strip():
+                if transaction.get("destination_store") and not str(transaction.get("destination_content") or "").strip():
+                    return _blocked(transaction, "split_missing_destination_content")
+                return _blocked(transaction, "split_missing_fragments")
+            fragment_target = str(fragment.get("target_store") or "").strip()
+            if fragment_target not in {"builtin_user", "builtin_memory", "skill"}:
+                return _blocked(transaction, "split_unsupported_fragment_target_store")
+            if fragment_target == "skill" and not str(fragment.get("target_id") or "").strip():
+                return _blocked(transaction, "split_skill_fragment_missing_target_id")
+            if fragment_target == source_store:
+                source_fragment_count += 1
+        if source_fragment_count == 0:
+            if transaction.get("destination_store") or transaction.get("destination_content"):
+                return _blocked(transaction, "split_missing_source_replacement")
+            return _blocked(transaction, "split_missing_source_fragment")
+        if source_fragment_count > 1:
+            return _blocked(transaction, "split_multiple_source_fragments")
     return transaction
 
 
