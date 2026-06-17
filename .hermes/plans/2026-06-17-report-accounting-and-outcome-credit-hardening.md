@@ -44,7 +44,27 @@ Verification:
 - `hermes self-improvement status`: passed; runtime initialized and recent telemetry visible.
 - Full suite: `1031 passed, 2 skipped`.
 
-Next implementation slice: Phase 2, unknown outcome breakdown. Do not start Phase 3/4 until Phase 2 is green and committed separately.
+Next implementation slice: Phase 3, bounded episode matching signatures. Do not start Phase 3/4 until Phase 2 is committed separately.
+
+### Phase 2 — implemented 2026-06-18 JST
+
+Implemented the conservative unknown-outcome visibility slice:
+
+- `credit_assignment.py` now assigns machine-readable `unknown_reasons` for unknown outcomes without converting them into positive credit.
+- Current reason buckets include `no_later_comparable_observation`, `weak_usage_only`, `missing_evidence_link`, `quality_signal_without_outcome`, `scored_but_not_decisive`, and `unclassified`.
+- `compact_credit_assignment_summary()` carries `outcomes.unknown_reasons` into run/report payloads.
+- CLI outcome rendering now prints a bounded `unknown breakdown` line when saved or freshly built credit assignment data contains reason counts.
+- The output keeps the existing conservative language: unknown/insufficient outcomes remain “under observation”; no “silence means success” credit was added.
+
+Verification:
+
+- RED confirmed first: new focused tests failed for missing aggregate `unknown_reasons` and missing CLI `unknown breakdown` rendering.
+- Focused new tests: `3 passed, 63 deselected`.
+- Related suite: `tests/test_credit_assignment.py tests/test_cli_surface.py tests/test_report_integration.py` → `72 passed`.
+- `py_compile`: passed.
+- `git diff --check`: passed.
+- Full suite: `1033 passed, 2 skipped`.
+- `hermes self-improvement report --since-hours 24` read-only smoke passed against the latest saved runtime artifact and still rendered the conservative outcome headline. The latest artifact predates this field, so no `unknown breakdown` line is expected until a new run writes credit assignment with `unknown_reasons`.
 
 ---
 

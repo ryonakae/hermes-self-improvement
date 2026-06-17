@@ -136,15 +136,38 @@ def _outcome_status(row: dict[str, Any]) -> str:
     return "unknown"
 
 
-def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int], dict[str, int], dict[str, list[str]], dict[str, int]]:
+def _unknown_reason(row: dict[str, Any]) -> str:
+    component_payload = row.get("components")
+    components: dict[str, Any] = component_payload if isinstance(component_payload, dict) else {}
+    if int(row.get("observation_count") or 0) <= 0:
+        return "no_later_comparable_observation"
+    if _has_only_weak_usage_positive(components):
+        return "weak_usage_only"
+    if components.get("skill_quality_missing_attached_evidence_penalty") is not None:
+        return "missing_evidence_link"
+    if (
+        components.get("skill_quality_needs_patch_penalty") is not None
+        or components.get("skill_quality_compactness_penalty") is not None
+    ):
+        return "quality_signal_without_outcome"
+    if row.get("score") is not None:
+        return "scored_but_not_decisive"
+    return "unclassified"
+
+
+def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int], dict[str, int], dict[str, list[str]], dict[str, Any]]:
     counts = {"improved": 0, "recurring": 0, "regressed": 0, "unknown": 0, "insufficient_window": 0}
     credit_windows = {window: 0 for window in WINDOWS}
     related: dict[str, list[str]] = {key: [] for key in counts}
-    quality = {"quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0}
+    quality: dict[str, Any] = {"quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0, "unknown_reasons": {}}
     for row in rows:
         status = _outcome_status(row)
         counts[status] = counts.get(status, 0) + 1
         components = row.get("components") if isinstance(row.get("components"), dict) else {}
+        if status == "unknown":
+            reason = _unknown_reason(row)
+            unknown_reasons = quality["unknown_reasons"]
+            unknown_reasons[reason] = int(unknown_reasons.get(reason) or 0) + 1
         if status == "unknown" and (
             components.get("skill_quality_needs_patch_penalty") is not None
             or components.get("skill_quality_compactness_penalty") is not None
@@ -256,10 +279,17 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
     return aggregate
 
 
+def _int_count_map(payload: Any) -> dict[str, int]:
+    if not isinstance(payload, dict):
+        return {}
+    return {str(key): int(value or 0) for key, value in payload.items()}
+
+
 def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, Any]:
     overall = aggregate.get("overall") if isinstance(aggregate.get("overall"), dict) else {}
     status_counts = aggregate.get("outcome_status_counts") if isinstance(aggregate.get("outcome_status_counts"), dict) else {}
-    quality_outcomes = aggregate.get("quality_outcomes") if isinstance(aggregate.get("quality_outcomes"), dict) else {}
+    quality_payload = aggregate.get("quality_outcomes")
+    quality_outcomes: dict[str, Any] = quality_payload if isinstance(quality_payload, dict) else {}
     by_generation = aggregate.get("by_overlay_generation_id") if isinstance(aggregate.get("by_overlay_generation_id"), dict) else {}
     return {
         "episode_count": int(aggregate.get("episode_count") or 0),
@@ -283,6 +313,7 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
             "duplicate_noop_credited": int(quality_outcomes.get("duplicate_noop_credited") or 0),
             "skill_usage_under_observation": int(quality_outcomes.get("skill_usage_under_observation") or 0),
             "missing_evidence_under_observation": int(quality_outcomes.get("missing_evidence_under_observation") or 0),
+            "unknown_reasons": _int_count_map(quality_outcomes.get("unknown_reasons")),
             "credit_windows": {
                 window: int((aggregate.get("credit_windows") or {}).get(window) or 0)
                 for window in WINDOWS

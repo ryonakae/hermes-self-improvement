@@ -1998,8 +1998,23 @@ def _format_overlay_generation_value(item: dict[str, Any] | None) -> str:
     return f"{item.get('overlay_generation_id')}{suffix}"
 
 
+UNKNOWN_REASON_ORDER = {
+    "no_later_comparable_observation": 0,
+    "weak_usage_only": 1,
+    "missing_evidence_link": 2,
+    "quality_signal_without_outcome": 3,
+    "scored_but_not_decisive": 4,
+    "unclassified": 5,
+}
+
+
+def _format_unknown_reason(reason: str) -> str:
+    return reason.replace("_", " ")
+
+
 def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
-    outcomes = credit_assignment.get("outcomes") if isinstance(credit_assignment.get("outcomes"), dict) else {}
+    outcome_payload = credit_assignment.get("outcomes")
+    outcomes: dict[str, Any] = outcome_payload if isinstance(outcome_payload, dict) else {}
     tracked = int(outcomes.get("tracked") or credit_assignment.get("episode_count") or 0)
     if not tracked:
         return []
@@ -2018,6 +2033,15 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
     ]
     if unknown or insufficient:
         lines.append("- unproven changes remain under observation")
+    unknown_reasons = outcomes.get("unknown_reasons") if isinstance(outcomes.get("unknown_reasons"), dict) else {}
+    if unknown_reasons:
+        reason_parts = [
+            f"{_format_unknown_reason(str(reason))} {int(count or 0)}"
+            for reason, count in sorted(unknown_reasons.items(), key=lambda item: (UNKNOWN_REASON_ORDER.get(str(item[0]), 99), str(item[0])))
+            if int(count or 0) > 0
+        ]
+        if reason_parts:
+            lines.append("- unknown breakdown: " + ", ".join(reason_parts))
     credit_windows = outcomes.get("credit_windows") if isinstance(outcomes.get("credit_windows"), dict) else {}
     if any(int(credit_windows.get(window) or 0) for window in ("immediate", "short", "medium", "long")):
         window_parts = [

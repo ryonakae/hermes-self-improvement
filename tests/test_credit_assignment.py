@@ -96,7 +96,7 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert aggregate["credit_windows"]["short"] == 1
     assert "episode-1" in aggregate["related_episode_ids"]["improved"]
     compact = compact_credit_assignment_summary(aggregate)
-    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0, "credit_windows": {"immediate": 1, "short": 1, "medium": 0, "long": 0}}
+    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0, "unknown_reasons": {}, "credit_windows": {"immediate": 1, "short": 1, "medium": 0, "long": 0}}
     assert compact["overlay_generations"]["tracked"] == 2
     assert compact["overlay_generations"]["best"]["overlay_generation_id"] == "overlay-set-good"
     assert compact["overlay_generations"]["worst"]["overlay_generation_id"] == "overlay-set-risky"
@@ -124,6 +124,56 @@ def test_credit_assignment_keeps_unobserved_and_ambiguous_links_low_confidence(t
     assert aggregate["by_planner_prompt_hash"]["sha256:planner-a"]["confidence"] == 0.0
     assert aggregate["by_decision"]["defer"]["episodes"] == 1
     assert aggregate["by_evidence_strength"]["unknown"]["episodes"] == 1
+    assert aggregate["quality_outcomes"]["unknown_reasons"] == {"no_later_comparable_observation": 1}
+
+
+def test_credit_assignment_splits_unknown_reasons_without_positive_credit(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "episodes" / "2026-05-03" / "executed-no-observation.json", episode_payload("executed-no-observation"))
+    write_json(root / "episodes" / "2026-05-03" / "weak-usage.json", episode_payload("weak-usage"))
+    write_json(root / "episodes" / "2026-05-03" / "missing-evidence.json", episode_payload("missing-evidence", evidence_ids=[]))
+    write_json(root / "episodes" / "2026-05-03" / "scored-zero.json", episode_payload("scored-zero"))
+    write_json(root / "outcomes" / "2026-05-03" / "weak-usage-outcome.json", outcome_payload(
+        "weak-usage",
+        "short",
+        {"skill_used_after_mutation": True},
+        confidence=0.35,
+    ))
+    write_json(root / "outcomes" / "2026-05-03" / "missing-evidence-outcome.json", outcome_payload(
+        "missing-evidence",
+        "immediate",
+        {"validation_passed": True, "skill_quality_needs_patch": True, "skill_quality_missing_attached_evidence": True},
+        confidence=0.65,
+    ))
+    write_json(root / "outcomes" / "2026-05-03" / "scored-zero-outcome.json", outcome_payload(
+        "scored-zero",
+        "immediate",
+        {},
+        confidence=0.5,
+    ))
+
+    aggregate = build_credit_assignment_aggregate(config=config, limit=100)
+    compact = compact_credit_assignment_summary(aggregate)
+
+    assert aggregate["outcome_status_counts"] == {
+        "improved": 0,
+        "recurring": 0,
+        "regressed": 0,
+        "unknown": 3,
+        "insufficient_window": 1,
+    }
+    assert aggregate["quality_outcomes"]["unknown_reasons"] == {
+        "weak_usage_only": 1,
+        "missing_evidence_link": 1,
+        "scored_but_not_decisive": 1,
+    }
+    assert compact["outcomes"]["unknown_reasons"] == {
+        "weak_usage_only": 1,
+        "missing_evidence_link": 1,
+        "scored_but_not_decisive": 1,
+    }
+    assert compact["outcomes"]["improved"] == 0
 
 
 def test_credit_assignment_counts_duplicate_noop_credit_separately(tmp_path):

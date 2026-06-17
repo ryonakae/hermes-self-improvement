@@ -883,6 +883,31 @@ def test_improve_summary_distinguishes_actual_mutations_validation_and_noops():
     assert "- scored window coverage: immediate" in text
 
 
+def test_outcome_summary_renders_unknown_breakdown_without_success_language():
+    cli = load_cli_module()
+    lines = cli._outcome_summary_lines({
+        "outcomes": {
+            "tracked": 7,
+            "improved": 0,
+            "recurring": 1,
+            "regressed": 0,
+            "unknown": 4,
+            "insufficient_window": 2,
+            "unknown_reasons": {
+                "no_later_comparable_observation": 2,
+                "weak_usage_only": 1,
+                "scored_but_not_decisive": 1,
+            },
+        },
+    })
+    text = "\n".join(lines)
+
+    assert "- unknown breakdown: no later comparable observation 2, weak usage only 1, scored but not decisive 1" in text
+    assert "- unproven changes remain under observation" in text
+    assert "assumed improved" not in text
+    assert "successful by silence" not in text
+
+
 def test_improve_summary_shows_overlay_generation_performance_when_tracked():
     cli = load_cli_module()
     text = cli._render_improve_summary({
