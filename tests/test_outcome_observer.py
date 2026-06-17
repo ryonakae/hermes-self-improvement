@@ -403,7 +403,7 @@ def test_collect_failure_cluster_recurrence_observations_matches_coverage_skill_
         "event": "post_tool_call",
         "status": "error",
         "tool_name": "terminal",
-        "error_kind": "timeout",
+        "error_kind": "interrupted_timeout",
         "session_id": "session-1",
     }
     (root / "state").mkdir(parents=True)
@@ -418,6 +418,33 @@ def test_collect_failure_cluster_recurrence_observations_matches_coverage_skill_
     assert candidates[0]["source"]["match_kind"] == "coverage_target"
     assert candidates[0]["source"]["target_id"] == "timeout-workflow"
     assert candidates[0]["confidence"] == 0.35
+    assert candidates[0]["matching_signature_hash"].startswith("sha256:")
+
+
+def test_collect_failure_cluster_recurrence_observations_keeps_generic_terminal_timeout_diagnostic_only(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    timeout_episode = episode_payload("episode-timeout", created_at="2026-05-05T09:00:00+00:00", target_id="timeout-workflow")
+    event = {
+        "ts": "2026-05-05T10:00:00+00:00",
+        "event": "post_tool_call",
+        "status": "error",
+        "tool_name": "terminal",
+        "error_kind": "timeout",
+        "session_id": "session-1",
+    }
+    (root / "state").mkdir(parents=True)
+    (root / "state" / "events.jsonl").write_text(json.dumps(event, sort_keys=True) + "\n", encoding="utf-8")
+    window = {"start": "2026-05-05T09:30:00+00:00", "end": "2026-05-05T11:00:00+00:00"}
+
+    candidates, unmatched = collect_failure_cluster_recurrence_observations(config=config, episodes=[timeout_episode], window=window)
+
+    assert candidates == []
+    assert len(unmatched) == 1
+    assert unmatched[0]["reason"] == "generic_cluster_diagnostic_only"
+    assert unmatched[0]["signal"] == "same_failure_cluster_recurrence"
+    assert unmatched[0]["cluster_id"] == "tool_error:terminal:timeout"
+    assert unmatched[0]["source_path"].endswith("events.jsonl")
 
 
 def test_collect_failure_cluster_recurrence_observations_keeps_unrelated_cluster_unmatched(tmp_path):
@@ -606,6 +633,9 @@ def test_collect_post_validation_observations_records_immediate_validation_signa
     assert by_episode["episode-1"]["signals"]["skill_quality_needs_patch"] is True
     assert by_episode["episode-1"]["outcome_score"] == 0.05
     assert by_episode["episode-1"]["confidence"] == 0.65
+    assert by_episode["episode-1"]["matching_signature_hash"].startswith("sha256:")
+    assert by_episode["episode-1"]["match_basis"] == "episode_id"
+    assert by_episode["episode-1"]["matching_signature"]["target_id"] == "demo-skill"
     assert by_episode["episode-2"]["signals"]["validation_passed"] is False
     assert by_episode["episode-2"]["confidence"] == 0.8
 

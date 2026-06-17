@@ -7,6 +7,7 @@ from typing import Any
 
 from .autonomous_loop import validate_episode
 from .observer import _reports_dir, _sha256_text, _stable_json
+from .outcome_matching import build_matching_signature
 from .prompt_overlays import DEFAULT_PROMPT_SEED_ROLES
 from .prompts import base_prompt_hash
 
@@ -125,6 +126,16 @@ def _episode_id(seed: dict[str, Any], created_at: str) -> str:
     return f"episode-{digest}"
 
 
+def _add_matching_signature(payload: dict[str, Any], *, evidence_ids: list[Any] | None = None) -> dict[str, Any]:
+    payload.update(build_matching_signature({
+        "target_kind": payload.get("target_kind"),
+        "target_id": payload.get("target_id"),
+        "action": payload.get("action"),
+        "evidence_ids": evidence_ids or payload.get("evidence_ids"),
+    }))
+    return payload
+
+
 def _base_episode(
     *,
     run_result: dict[str, Any],
@@ -158,7 +169,7 @@ def _base_episode(
     }
     if target_kind in {"skill", "memory"}:
         payload.update(_source_hashes(run_result, step))
-    return payload
+    return _add_matching_signature(payload, evidence_ids=(seed or {}).get("evidence_ids"))
 
 
 def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: dict[str, Any], created_at: str, index: int) -> dict[str, Any] | None:
@@ -194,7 +205,8 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
         episode_kind = "preview_decision"
         normalized_decision = "skip"
         action = "no_op"
-    seed = {"kind": "skill", "index": index, "skill": skill, "decision": raw_decision, "run_id": run_result.get("run_id")}
+    evidence_ids = [str(item) for item in decision.get("evidence_ids") or []]
+    seed = {"kind": "skill", "index": index, "skill": skill, "decision": raw_decision, "run_id": run_result.get("run_id"), "evidence_ids": evidence_ids}
     episode = _base_episode(
         run_result=run_result,
         created_at=created_at,
@@ -304,7 +316,7 @@ def _memory_episode(run_result: dict[str, Any], step: dict[str, Any], decision: 
     episode_kind = "executed_mutation" if executed else "preview_decision"
     normalized_decision = "mutate_memory" if raw_decision == "accepted" else "skip"
     action = _memory_action(operation, executed=executed)
-    seed = {"kind": "memory", "index": index, "evidence_id": evidence_id, "decision": raw_decision, "run_id": run_result.get("run_id")}
+    seed = {"kind": "memory", "index": index, "evidence_id": evidence_id, "decision": raw_decision, "run_id": run_result.get("run_id"), "evidence_ids": [evidence_id]}
     episode = _base_episode(
         run_result=run_result,
         created_at=created_at,
@@ -372,7 +384,13 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
         return None
     if not target_id:
         return None
-    seed = {"kind": "knowledge_transaction", "index": index, "transaction_id": transaction.get("transaction_id"), "decision": decision, "run_id": run_result.get("run_id")}
+    raw_evidence_ids = transaction.get("evidence_ids")
+    evidence_ids: list[Any] = raw_evidence_ids if isinstance(raw_evidence_ids, list) else []
+    source_evidence_id = transaction.get("source_evidence_id")
+    combined_evidence = [str(item) for item in evidence_ids if str(item)]
+    if source_evidence_id:
+        combined_evidence.append(str(source_evidence_id))
+    seed = {"kind": "knowledge_transaction", "index": index, "transaction_id": transaction.get("transaction_id"), "decision": decision, "run_id": run_result.get("run_id"), "evidence_ids": list(dict.fromkeys(combined_evidence))}
     episode = _base_episode(
         run_result=run_result,
         created_at=created_at,
@@ -509,7 +527,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
         generation_id = _calibration_overlay_generation_id(result, item)
         if generation_id:
             episode["overlay_generation_id"] = generation_id
-        episodes.append(validate_episode(episode))
+        episodes.append(validate_episode(_add_matching_signature(episode)))
     overlay_set = result.get("overlay_candidate_set") if isinstance(result.get("overlay_candidate_set"), dict) else None
     if overlay_set:
         generation_id = _calibration_overlay_generation_id(result, overlay_set)
@@ -532,7 +550,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
         }
         if generation_id:
             episode["overlay_generation_id"] = generation_id
-        episodes.append(validate_episode(episode))
+        episodes.append(validate_episode(_add_matching_signature(episode)))
     candidate = result.get("candidate") if isinstance(result.get("candidate"), dict) else None
     if candidate is not None:
         promoted = bool(result.get("active_changed"))
@@ -558,7 +576,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
         generation_id = _calibration_overlay_generation_id(result, candidate)
         if generation_id:
             episode["overlay_generation_id"] = generation_id
-        episodes.append(validate_episode(episode))
+        episodes.append(validate_episode(_add_matching_signature(episode)))
     return episodes
 
 

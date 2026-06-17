@@ -125,6 +125,12 @@ def test_record_run_episodes_uses_canonical_knowledge_transactions_without_split
     assert by_target["demo-skill"]["decision"] == "mutate_skill"
     assert by_target["demo-skill"]["action"] == "no_op"
     assert by_target["demo-skill"]["transaction_id"] == "txn-skill-1"
+    assert by_target["demo-skill"]["matching_signature_matchable"] is True
+    assert by_target["demo-skill"]["matching_signature"]["target_kind"] == "skill"
+    assert by_target["demo-skill"]["matching_signature"]["target_id"] == "demo-skill"
+    assert by_target["demo-skill"]["matching_signature"]["action"] == "no_op"
+    assert by_target["demo-skill"]["matching_signature"]["evidence_ids_hash"].startswith("sha256:")
+    assert by_target["demo-skill"]["matching_signature_hash"].startswith("sha256:")
     assert by_target["memory:mem1"]["decision"] == "mutate_memory"
     assert by_target["memory:mem1"]["action"] == "no_op"
     assert by_target["workflow-skill"]["transaction_kind"] == "memory_to_skill"

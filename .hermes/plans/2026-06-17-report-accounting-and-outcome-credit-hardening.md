@@ -44,7 +44,7 @@ Verification:
 - `hermes self-improvement status`: passed; runtime initialized and recent telemetry visible.
 - Full suite: `1031 passed, 2 skipped`.
 
-Next implementation slice: Phase 3, bounded episode matching signatures. Do not start Phase 3/4 until Phase 2 is committed separately.
+Next implementation slice: Phase 4, runtime eval case quality. Phase 3 is committed separately before Phase 4 starts.
 
 ### Phase 2 — implemented 2026-06-18 JST
 
@@ -65,6 +65,25 @@ Verification:
 - `git diff --check`: passed.
 - Full suite: `1033 passed, 2 skipped`.
 - `hermes self-improvement report --since-hours 24` read-only smoke passed against the latest saved runtime artifact and still rendered the conservative outcome headline. The latest artifact predates this field, so no `unknown breakdown` line is expected until a new run writes credit assignment with `unknown_reasons`.
+
+### Phase 3 — implemented 2026-06-18 JST
+
+Implemented bounded episode/outcome matching signatures and stricter recurrence observation handling:
+
+- Added shared `outcome_matching.build_matching_signature()` with normalized bounded fields and evidence-id hashing.
+- New skill, memory, knowledge-transaction, and calibration episodes now carry `matching_signature_version`, `matching_signature`, `matching_signature_hash`, and `matching_signature_matchable`.
+- Outcome observation producers now propagate episode matching fields and include signature hashes in dedupe keys.
+- Generic broad recurrence clusters (`tool_error:terminal:timeout`, `tool_error:patch:unknown_error`, `tool_error:skill_manage:unknown_error`) are diagnostic-only and no longer produce recurrence observations without a stronger target/signature basis.
+- Task 9 audit covered `episodes.py`, `outcome_observer.py`, `runner_steps.py`, and CLI/report episode read paths; episode writing remains centralized through `episodes.py`, while observations are produced through `outcome_observer.py` collectors.
+
+Verification:
+
+- Focused RED/GREEN signature tests: `tests/test_outcome_matching.py tests/test_episode_ledger.py` → `14 passed`.
+- Phase 3 focused suite: `tests/test_outcome_matching.py tests/test_episode_ledger.py tests/test_outcome_observer.py tests/test_outcome_scoring.py tests/test_runtime_eval_cases.py` → `63 passed`.
+- `py_compile`: passed.
+- `git diff --check`: passed.
+- Full suite: `1037 passed, 2 skipped`.
+- `hermes self-improvement report --since-hours 24` read-only smoke passed and kept the conservative outcome headline; the latest saved artifact predates signature fields.
 
 ---
 

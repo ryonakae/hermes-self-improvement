@@ -8,6 +8,7 @@ from typing import Any
 from .autonomous_loop import validate_outcome_observation
 from .episodes import load_recent_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
+from .outcome_matching import build_matching_signature
 from .outcome_scoring import load_outcome_observations, outcome_root
 from .config import normalize_calibration_config
 
@@ -22,6 +23,11 @@ COVERAGE_CLUSTER_ALIASES = {
 }
 NON_ACTIONABLE_UNMATCHED_CLUSTERS = {
     "tool_error:terminal:terminal_nonzero_exit",
+}
+GENERIC_RECURRENCE_CLUSTERS = {
+    "tool_error:terminal:timeout",
+    "tool_error:patch:unknown_error",
+    "tool_error:skill_manage:unknown_error",
 }
 ACTIONABLE_CLUSTER_GROUPS = {
     "patch_tool": {
@@ -112,11 +118,37 @@ def _source_key(candidate: dict[str, Any]) -> str:
     signal = source.get("signal") or next((key for key, value in sorted(signals.items()) if value is True), "unknown")
     return _stable_json({
         "episode_id": candidate.get("episode_id"),
+        "matching_signature_hash": candidate.get("matching_signature_hash"),
         "signal": signal,
         "source_path": source.get("source_path"),
         "source_id": source.get("source_id"),
         "match_kind": source.get("match_kind"),
     })
+
+
+def _matching_fields_from_episode(episode: dict[str, Any]) -> dict[str, Any]:
+    if episode.get("matching_signature_hash") and isinstance(episode.get("matching_signature"), dict):
+        return {
+            "matching_signature_version": episode.get("matching_signature_version"),
+            "matching_signature": episode.get("matching_signature"),
+            "matching_signature_hash": episode.get("matching_signature_hash"),
+            "matching_signature_matchable": bool(episode.get("matching_signature_matchable")),
+            "match_basis": "episode_id",
+        }
+    return {
+        **build_matching_signature({
+            "target_kind": episode.get("target_kind"),
+            "target_id": episode.get("target_id"),
+            "action": episode.get("action"),
+            "evidence_ids": episode.get("evidence_ids"),
+        }),
+        "match_basis": "episode_id",
+    }
+
+
+def _with_episode_matching(candidate: dict[str, Any], episode: dict[str, Any]) -> dict[str, Any]:
+    candidate.update(_matching_fields_from_episode(episode))
+    return candidate
 
 
 def _existing_dedupe_keys(config: dict[str, Any]) -> set[str]:
@@ -209,7 +241,7 @@ def collect_target_reedit_observations(*, episodes: list[dict[str, Any]], window
             if not _window_contains(window, later_time):
                 continue
             source_path = later.get("path") or later.get("artifact_path") or later.get("episode_id")
-            candidates.append({
+            candidates.append(_with_episode_matching({
                 "schema_name": "self_improvement_outcome_observation",
                 "schema_version": "1.0",
                 "episode_id": prior.get("episode_id"),
@@ -226,7 +258,7 @@ def collect_target_reedit_observations(*, episodes: list[dict[str, Any]], window
                     "target_kind": prior.get("target_kind"),
                     "target_id": prior.get("target_id"),
                 },
-            })
+            }, prior))
             break
     return candidates, []
 
@@ -318,7 +350,7 @@ def collect_duplicate_noop_observations(*, episodes: list[dict[str, Any]], windo
         episode_time = _parse_time(episode.get("created_at"))
         if episode_time is None or not _window_contains(window, episode_time):
             continue
-        candidates.append({
+        candidates.append(_with_episode_matching({
             "schema_name": "self_improvement_outcome_observation",
             "schema_version": "1.0",
             "episode_id": episode.get("episode_id"),
@@ -338,7 +370,7 @@ def collect_duplicate_noop_observations(*, episodes: list[dict[str, Any]], windo
                 "noop_outcome": noop_outcome,
                 "covered_by_existing_skill": episode.get("covered_by_existing_skill"),
             },
-        })
+        }, episode))
     return candidates, []
 
 
@@ -396,7 +428,7 @@ def collect_skill_usage_observations(*, config: dict[str, Any], episodes: list[d
         episode_time = _parse_time(matched_episode.get("created_at"))
         if episode_time is None:
             continue
-        candidates.append({
+        candidates.append(_with_episode_matching({
             "schema_name": "self_improvement_outcome_observation",
             "schema_version": "1.0",
             "episode_id": matched_episode.get("episode_id"),
@@ -414,7 +446,7 @@ def collect_skill_usage_observations(*, config: dict[str, Any], episodes: list[d
                 "target_kind": "skill",
                 "target_id": skill_name,
             },
-        })
+        }, matched_episode))
     return candidates, []
 
 
@@ -453,7 +485,7 @@ def collect_post_validation_observations(*, episodes: list[dict[str, Any]], wind
             if attached_count <= 0:
                 signals["skill_quality_missing_attached_evidence"] = True
         outcome_score, confidence = _post_validation_score_and_confidence(passed=passed, signals=signals)
-        candidates.append({
+        candidates.append(_with_episode_matching({
             "schema_name": "self_improvement_outcome_observation",
             "schema_version": "1.0",
             "episode_id": episode.get("episode_id"),
@@ -471,7 +503,7 @@ def collect_post_validation_observations(*, episodes: list[dict[str, Any]], wind
                 "target_kind": episode.get("target_kind"),
                 "target_id": episode.get("target_id"),
             },
-        })
+        }, episode))
     return candidates, []
 
 
@@ -535,13 +567,16 @@ def collect_failure_cluster_recurrence_observations(
         cluster_id = _event_cluster_id(event)
         if not cluster_id:
             continue
+        if cluster_id in GENERIC_RECURRENCE_CLUSTERS:
+            unmatched.append({"reason": "generic_cluster_diagnostic_only", "signal": "same_failure_cluster_recurrence", "cluster_id": cluster_id, "source_path": event.get("source_path")})
+            continue
         matched = False
         event_time = _event_time(event)
         for episode in episodes_by_cluster.get(cluster_id, []):
             episode_time = _parse_time(episode.get("created_at"))
             if event_time is None or episode_time is None or event_time <= episode_time:
                 continue
-            candidates.append({
+            candidates.append(_with_episode_matching({
                 "schema_name": "self_improvement_outcome_observation",
                 "schema_version": "1.0",
                 "episode_id": episode.get("episode_id"),
@@ -558,14 +593,14 @@ def collect_failure_cluster_recurrence_observations(
                     "match_kind": "failure_cluster",
                     "cluster_id": cluster_id,
                 },
-            })
+            }, episode))
             matched = True
         if not matched and event_time is not None:
             coverage_episode = _coverage_episode_for_cluster(episodes=episodes, cluster_id=cluster_id, event_time=event_time)
             if coverage_episode is not None:
                 episode_time = _parse_time(coverage_episode.get("created_at"))
                 if episode_time is not None:
-                    candidates.append({
+                    candidates.append(_with_episode_matching({
                         "schema_name": "self_improvement_outcome_observation",
                         "schema_version": "1.0",
                         "episode_id": coverage_episode.get("episode_id"),
@@ -584,7 +619,7 @@ def collect_failure_cluster_recurrence_observations(
                             "target_kind": coverage_episode.get("target_kind"),
                             "target_id": coverage_episode.get("target_id"),
                         },
-                    })
+                    }, coverage_episode))
                     matched = True
         if not matched:
             unmatched.append({"reason": "cluster_episode_not_matched", "signal": "same_failure_cluster_recurrence", "cluster_id": cluster_id, "source_path": event.get("source_path")})
