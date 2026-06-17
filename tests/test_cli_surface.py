@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
 import sys
 from pathlib import Path
 
@@ -1259,6 +1260,84 @@ def test_operational_report_sections_include_runner_artifact_summary():
     assert "Skill lifecycle" in text
     assert "archive candidates 2, would archive 1, archived 0, references rewritten 3, deferred references 1, blocked 1" in text
     assert "archive_blocked_by_active_reference: 1" in text
+
+
+def test_recent_run_rows_preserve_top_level_mutation_changes(tmp_path):
+    cli = load_cli_module()
+    runs_dir = tmp_path / "runs"
+    runs_dir.mkdir()
+    (runs_dir / "run.json").write_text(json.dumps({
+        "schema_name": "self_improvement_run",
+        "created_at": "2026-06-17T00:00:00+00:00",
+        "run_id": "run-1",
+        "summary": {"skill_changes": 3, "memory_changes": 3},
+        "skill_changes": [
+            "llm-context-optimization-integration",
+            "hermes-gateway-and-sessions",
+            "hermes-plugin-test-debugging",
+        ],
+        "memory_changes": ["memory_a", "memory_b", "memory_c"],
+        "action_summary": {"apply": 7, "defer": 21, "skip": 95, "block": 0},
+    }), encoding="utf-8")
+
+    rows = cli._recent_json_files(runs_dir, limit=1)
+
+    assert rows[0]["skill_changes"] == [
+        "llm-context-optimization-integration",
+        "hermes-gateway-and-sessions",
+        "hermes-plugin-test-debugging",
+    ]
+    assert rows[0]["memory_changes"] == ["memory_a", "memory_b", "memory_c"]
+    assert rows[0]["action_summary"] == {"apply": 7, "defer": 21, "skip": 95, "block": 0}
+
+
+def test_operational_report_sections_fallback_to_top_level_skill_changes():
+    cli = load_cli_module()
+    lines = cli._render_operational_report_sections({
+        "recent_runs": [{
+            "path": "/tmp/run.json",
+            "summary": {"skill_changes": 3, "memory_changes": 3, "scorer_evaluator_changed": False},
+            "skill_changes": [
+                "llm-context-optimization-integration",
+                "hermes-gateway-and-sessions",
+                "hermes-plugin-test-debugging",
+            ],
+            "memory_changes": ["memory_a", "memory_b", "memory_c"],
+        }],
+        "recent_evidence": [],
+        "runtime_eval_cases": {},
+        "calibration": {},
+    })
+    text = "\n".join(lines)
+
+    assert "- actual mutations: skill created 0, skill patched 3, skill archived 0, references rewritten 0, memory 3" in text
+    assert "- patched skills: llm-context-optimization-integration, hermes-gateway-and-sessions, hermes-plugin-test-debugging" in text
+    assert "- changed memories: memory_a, memory_b, memory_c" in text
+
+
+def test_actual_results_canonical_transactions_take_precedence_over_fallback_changes():
+    cli = load_cli_module()
+    lines = cli._actual_result_summary_lines(
+        summary={"skill_changes": 2, "memory_changes": 0},
+        skill_decisions=[],
+        memory_decisions=[],
+        planner_decisions=[],
+        knowledge_transactions=[{
+            "transaction_id": "txn-canonical",
+            "transaction_kind": "skill",
+            "decision": "apply",
+            "target_store": "skill",
+            "target_id": "canonical-skill",
+            "operation": "mutate_skill",
+            "transaction_result": {"success": True, "changed_skills": ["canonical-skill"]},
+        }],
+        artifact_skill_changes=["fallback-skill-a", "fallback-skill-b"],
+    )
+    text = "\n".join(lines)
+
+    assert "- actual mutations: skill created 0, skill patched 1, skill archived 0, references rewritten 0, memory 0" in text
+    assert "- patched skills: canonical-skill" in text
+    assert "fallback-skill" not in text
 
 
 def test_actual_results_include_archived_skills_and_rewritten_references():

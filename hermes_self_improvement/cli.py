@@ -378,6 +378,11 @@ def _recent_json_files(root: Path, pattern: str = "*.json", limit: int = 5) -> l
             row["step_decisions"] = payload.get("step_decisions")
         if isinstance(payload.get("credit_assignment"), dict):
             row["credit_assignment"] = payload.get("credit_assignment")
+        for key in ("knowledge_transactions", "skill_changes", "memory_changes"):
+            if isinstance(payload.get(key), list):
+                row[key] = payload.get(key)
+        if isinstance(payload.get("action_summary"), dict):
+            row["action_summary"] = payload.get("action_summary")
         lifecycle = _summarize_run_skill_lifecycle(payload)
         if lifecycle:
             row["skill_lifecycle"] = lifecycle
@@ -450,6 +455,8 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
                 memory_decisions=memory_step.get("decisions") if isinstance(memory_step.get("decisions"), list) else [],
                 planner_decisions=(skill_step.get("planner") or {}).get("decisions") if isinstance(skill_step.get("planner"), dict) and isinstance((skill_step.get("planner") or {}).get("decisions"), list) else [],
                 knowledge_transactions=latest_run.get("knowledge_transactions") if isinstance(latest_run.get("knowledge_transactions"), list) else None,
+                artifact_skill_changes=latest_run.get("skill_changes") if isinstance(latest_run.get("skill_changes"), list) else None,
+                artifact_memory_changes=latest_run.get("memory_changes") if isinstance(latest_run.get("memory_changes"), list) else None,
             )
             if len(actual_lines) > 1:
                 lines.extend(actual_lines[:6])
@@ -1825,6 +1832,8 @@ def _actual_result_summary_lines(
     memory_decisions: list[dict[str, Any]],
     planner_decisions: list[dict[str, Any]],
     knowledge_transactions: list[dict[str, Any]] | None = None,
+    artifact_skill_changes: list[Any] | None = None,
+    artifact_memory_changes: list[Any] | None = None,
 ) -> list[str]:
     created = 0
     patched = 0
@@ -1922,6 +1931,12 @@ def _actual_result_summary_lines(
             note_names(memory_names, memory_values)
             tally_post_validations(result_payload)
     memory_changed = memory_changed_count
+    if not (created or patched or archived) and artifact_skill_changes:
+        patched = sum(1 for name in artifact_skill_changes if str(name or "").strip())
+        note_names(patched_names, artifact_skill_changes)
+    if not memory_changed and artifact_memory_changes:
+        memory_changed = sum(1 for name in artifact_memory_changes if str(name or "").strip())
+        note_names(memory_names, artifact_memory_changes)
     if not memory_changed and not knowledge_transactions:
         memory_changed = sum(1 for item in memory_decisions if isinstance(item, dict) and item.get("decision") == "accepted" and item.get("changed"))
     if not memory_changed:

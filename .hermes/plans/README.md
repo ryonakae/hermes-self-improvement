@@ -2,6 +2,10 @@
 
 ## Current source of truth
 
+### Current planned hardening — 2026-06-17 report accounting / outcome credit
+
+`2026-06-17-report-accounting-and-outcome-credit-hardening.md` is the current implementation plan. Phase 1 is implemented: the 2026-06-17 operational mismatch where immediate `improve` output correctly reported `skill patched 3 / memory 3`, while later `report` / daily artifact rendered `Recent runner artifacts` as `skill patched 0 / memory 3`, was fixed in plugin report rendering/accounting. Verification passed: RED tests confirmed the bug, related suite `63 passed`, full suite `1031 passed, 2 skipped`, report smoke rendered `skill patched 3` and `memory 3`, `py_compile`, `git diff --check`, and `status` passed. Remaining planned work is Phase 2+ only: conservative outcome-credit visibility via unknown breakdowns, bounded episode matching signatures, stricter recurrence matching, and higher-signal runtime eval cases.
+
 ### Latest completed slice — 2026-06-08 placement move/split LLM-owned
 
 `2026-06-08-placement-move-split-llm-owned.md` is implemented through dry-run dogfood. It keeps both `placement_move` and `placement_split` as Planner/Knowledge Editor semantic decisions, changes split actionability from pairwise `source_replacement` + one `destination_content` to canonical `fragments[]`, and executes built-in USER/MEMORY split fragments with add-before-source-replace ordering. The executor remains limited to exact-source, target-store, official-tool, and partial-failure guards; skill fragments are fail-closed for this slice with `split_skill_fragment_execution_unsupported`. Verification: focused related suite `171 passed`, full `pytest -q` → `1028 passed, 2 skipped`, `py_compile`, `git diff --check`, and source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260608T023405Z.json` with `dry_run=true`, `target_changed=false`, `semantic_override_count=0`, no route leaks, `apply=7 / defer=9 / skip=66 / block=0`, and live `placement_split` applies carrying `fragments[]`. No mutating replay was executed.
