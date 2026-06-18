@@ -44,7 +44,7 @@ Verification:
 - `hermes self-improvement status`: passed; runtime initialized and recent telemetry visible.
 - Full suite: `1031 passed, 2 skipped`.
 
-Next implementation slice: Phase 5, end-to-end verification and dogfood. Phase 4 is committed separately before Phase 5 starts.
+Implementation complete through Phase 5. Next work is scheduled observation/dogfood only; do not claim outcome quality is proven until later comparable usage moves conservative `unknown` outcomes into stronger evidence buckets.
 
 ### Phase 2 — implemented 2026-06-18 JST
 
@@ -105,6 +105,21 @@ Verification:
 - `hermes self-improvement status`: passed; runtime initialized, latest run visible at `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260617T190248Z.json`.
 - `hermes self-improvement report --since-hours 24` read-only smoke passed and rendered the new `unknown breakdown` line from the latest artifact.
 - Source-directed runtime eval smoke ran against the current runtime config and returned `case_count 0`, which is expected when no eligible recent runtime eval cases are present.
+
+### Phase 5 — implemented 2026-06-18 JST
+
+Completed end-to-end verification and dry-run dogfood for the report/outcome-credit hardening plan:
+
+- Focused suite from Task 15 passed: `tests/test_cli_surface.py tests/test_report_integration.py tests/test_episode_ledger.py tests/test_runtime_eval_cases.py` → `91 passed`.
+- Full static/runtime verification passed: `py_compile`, `git diff --check`, `hermes self-improvement status`, and full suite `1037 passed, 2 skipped`.
+- Read-only report smoke wrote `/tmp/self-improvement-report-after.md` and confirmed `Actual results:`, `unknown breakdown:`, and `unproven changes remain under observation` are present.
+- Dry-run improve smoke wrote `/tmp/self-improvement-dry-run-after.json` and runtime artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260618T043401Z.json` with `dry_run=True` and `target_changed=False`.
+- Existing/new episode signature inspection found bounded signature artifact `/Users/ryo.nakae/.hermes/self-improvement/episodes/2026-06-18/20260618T043401684385Z-episode-a29e98ee0274f34f.json`; the serialized signature was bounded and did not contain raw `stdout` / `stderr`.
+
+Remaining follow-up:
+
+- Outcome quality is not proven yet; scheduled observation still needs later comparable usage to move many `unknown` outcomes out of `no_later_comparable_observation`.
+- Current latest report still shows conservative status: `proven improved: 0`, `recurring: 13`, `unknown: 923`, `insufficient window: 64`, with `unknown breakdown: no later comparable observation 918, weak usage only 5`.
 
 ---
 
