@@ -151,6 +151,8 @@ def test_runtime_eval_cases_emit_evaluator_outcome_status_review_for_recurring_a
         executed=True,
         changed=True,
         post_validation_status="passed",
+        matching_signature_hash="sha256:recurring-signature",
+        matching_signature_matchable=True,
     )
     regressed_episode = episode_payload(
         "episode-regressed",
@@ -169,7 +171,7 @@ def test_runtime_eval_cases_emit_evaluator_outcome_status_review_for_recurring_a
         "episode_id": "episode-recurring",
         "observed_at": "2026-05-03T01:00:00+00:00",
         "window": "immediate",
-        "signals": {"same_failure_cluster_recurrence": True, "repeat_fix_needed": True},
+        "signals": {"same_failure_cluster_recurrence": True, "tool_error_cluster_reappeared": True, "repeat_fix_needed": True},
         "outcome_score": -0.7,
         "confidence": 0.7,
         "source": {"kind": "automatic_observation", "signal": "same_failure_cluster_recurrence"},
@@ -187,14 +189,22 @@ def test_runtime_eval_cases_emit_evaluator_outcome_status_review_for_recurring_a
     })
 
     cases = build_role_runtime_eval_cases(config=config, limit=100)
-    case_types = {case.get("case_type") for case in cases}
+    case_types = [case.get("case_type") for case in cases]
 
     assert "evaluator_recurring_outcome_review" in case_types
     assert "evaluator_regressed_outcome_review" in case_types
+    assert case_types.index("evaluator_recurring_outcome_review") < case_types.index("planner_weak_only_skip")
     for case in cases:
         if case.get("case_type") == "evaluator_recurring_outcome_review":
             assert case["role"] == "evaluator"
             assert case["expected"]["outcome_status"] == "recurring"
+            assert case["source_episode_id"] == "episode-recurring"
+            assert case["source_matching_signature_hash"] == "sha256:recurring-signature"
+            assert case["outcome_status"] == "recurring"
+            assert case["outcome_components"] == ["cluster_reappeared_penalty", "repeat_fix_penalty"]
+            assert case["credit_window"] == "immediate"
+            assert case["source"]["matching_signature_hash"] == "sha256:recurring-signature"
+            assert case["input"]["source_matching_signature_hash"] == "sha256:recurring-signature"
         if case.get("case_type") == "evaluator_regressed_outcome_review":
             assert case["role"] == "evaluator"
             assert case["expected"]["outcome_status"] == "regressed"

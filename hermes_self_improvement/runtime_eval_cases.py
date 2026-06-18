@@ -6,6 +6,7 @@ from typing import Any
 
 from .episodes import load_recent_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
+from .outcome_scoring import load_outcome_observations, score_episode_outcomes
 
 UNSAFE_TARGET_MARKERS = (
     "ambiguous",
@@ -49,6 +50,65 @@ def _unsafe_target(reason: str) -> bool:
     return any(marker in lowered for marker in UNSAFE_TARGET_MARKERS)
 
 
+def _source_without_path(source: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in source.items() if key != "path"}
+
+
+def _refresh_case_identity(case: dict[str, Any], *, seed_keys: tuple[str, ...], id_prefix: str) -> None:
+    seed = {key: case[key] for key in seed_keys}
+    seed["source"] = _source_without_path(case["source"])
+    case["case_hash"] = "sha256:" + _sha256_text(_stable_json(seed))
+    case["id"] = f"{id_prefix}-{case['case_hash'].split(':', 1)[1][:12]}"
+
+
+def _matching_signature_hash(episode: dict[str, Any]) -> str | None:
+    value = str(episode.get("matching_signature_hash") or "").strip()
+    return value or None
+
+
+def _annotate_episode_source(case: dict[str, Any], episode: dict[str, Any]) -> None:
+    episode_id = episode.get("episode_id")
+    case["source_episode_id"] = episode_id
+    signature_hash = _matching_signature_hash(episode)
+    if signature_hash:
+        case["source_matching_signature_hash"] = signature_hash
+        case.setdefault("source", {})["matching_signature_hash"] = signature_hash
+        case.setdefault("input", {})["source_matching_signature_hash"] = signature_hash
+
+
+def _scored_component_names(scored: dict[str, Any] | None) -> list[str]:
+    component_payload = scored.get("components") if isinstance(scored, dict) else None
+    components: dict[str, Any] = component_payload if isinstance(component_payload, dict) else {}
+    return sorted(
+        str(key)
+        for key, value in components.items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and float(value) != 0.0
+    )
+
+
+def _first_credit_window(scored: dict[str, Any] | None) -> str | None:
+    window_payload = scored.get("windows") if isinstance(scored, dict) else None
+    windows: dict[str, Any] = window_payload if isinstance(window_payload, dict) else {}
+    for window in ("immediate", "short", "medium", "long"):
+        item = windows.get(window)
+        data = item if isinstance(item, dict) else {}
+        if data.get("score") is not None:
+            return window
+    return None
+
+
+def _annotate_outcome_metadata(case: dict[str, Any], *, status: str, scored: dict[str, Any] | None) -> None:
+    case["outcome_status"] = status
+    case["outcome_components"] = _scored_component_names(scored)
+    window = _first_credit_window(scored)
+    if window:
+        case["credit_window"] = window
+    case.setdefault("input", {})["outcome_status"] = status
+    case["input"]["outcome_components"] = list(case["outcome_components"])
+    if window:
+        case["input"]["credit_window"] = window
+
+
 def _base_case(episode: dict[str, Any], *, case_type: str, role: str, expected: dict[str, Any]) -> dict[str, Any]:
     evidence_ids = episode.get("evidence_ids") if isinstance(episode.get("evidence_ids"), list) else []
     case = {
@@ -78,11 +138,8 @@ def _base_case(episode: dict[str, Any], *, case_type: str, role: str, expected: 
         },
         "expected": expected,
     }
-    seed_source = {key: value for key, value in case["source"].items() if key != "path"}
-    seed = {key: case[key] for key in ("case_family", "case_type", "role", "input", "expected")}
-    seed["source"] = seed_source
-    case["case_hash"] = "sha256:" + _sha256_text(_stable_json(seed))
-    case["id"] = f"{case_type}-{case['case_hash'].split(':', 1)[1][:12]}"
+    _annotate_episode_source(case, episode)
+    _refresh_case_identity(case, seed_keys=("case_family", "case_type", "role", "input", "expected"), id_prefix=case_type)
     return case
 
 
@@ -140,11 +197,8 @@ def _overlay_case(episode: dict[str, Any], *, target: str, role: str, expected: 
         "input": _overlay_input(episode),
         "expected": expected,
     }
-    seed_source = {key: value for key, value in case["source"].items() if key != "path"}
-    seed = {key: case[key] for key in ("case_family", "case_type", "target", "role", "input", "expected")}
-    seed["source"] = seed_source
-    case["case_hash"] = "sha256:" + _sha256_text(_stable_json(seed))
-    case["id"] = f"{target}-{case['case_hash'].split(':', 1)[1][:12]}"
+    _annotate_episode_source(case, episode)
+    _refresh_case_identity(case, seed_keys=("case_family", "case_type", "target", "role", "input", "expected"), id_prefix=target)
     return case
 
 
@@ -258,28 +312,22 @@ def _skill_quality_case_from_episode(episode: dict[str, Any]) -> dict[str, Any] 
     }
     case["input"]["target_operation"] = str(episode.get("action") or "")
     case["input"]["skill_excerpt"] = str(episode.get("target_id") or "")
-    seed = {key: case[key] for key in ("case_family", "case_type", "role", "input", "expected")}
-    seed["source"] = {key: value for key, value in case["source"].items() if key != "path"}
-    case["case_hash"] = "sha256:" + _sha256_text(_stable_json(seed))
-    case["id"] = f"{case['case_type']}-{case['case_hash'].split(':', 1)[1][:12]}"
+    _refresh_case_identity(case, seed_keys=("case_family", "case_type", "role", "input", "expected"), id_prefix=str(case["case_type"]))
     return case
 
 
 _OUTCOME_STATUS_CASE_LIMIT = 30
 
 
-def _outcome_status_case_from_episode(episode: dict[str, Any], *, status: str) -> dict[str, Any]:
+def _outcome_status_case_from_episode(episode: dict[str, Any], *, status: str, scored: dict[str, Any] | None = None) -> dict[str, Any]:
     case = _base_case(
         episode,
         case_type=f"evaluator_{status}_outcome_review",
         role="evaluator",
         expected={"outcome_status": status},
     )
-    case["input"]["outcome_status"] = status
-    seed = {key: case[key] for key in ("case_family", "case_type", "role", "input", "expected")}
-    seed["source"] = {key: value for key, value in case["source"].items() if key != "path"}
-    case["case_hash"] = "sha256:" + _sha256_text(_stable_json(seed))
-    case["id"] = f"{case['case_type']}-{case['case_hash'].split(':', 1)[1][:12]}"
+    _annotate_outcome_metadata(case, status=status, scored=scored)
+    _refresh_case_identity(case, seed_keys=("case_family", "case_type", "role", "input", "expected"), id_prefix=str(case["case_type"]))
     return case
 
 
@@ -298,6 +346,11 @@ def _outcome_status_cases_from_credit_aggregate(config: dict[str, Any], episodes
     if not recurring_ids and not regressed_ids:
         return []
     episode_by_id = {str(ep.get("episode_id") or ""): ep for ep in episodes if isinstance(ep, dict)}
+    observations = load_outcome_observations(config=config, limit=len(episodes) or 1000)
+    scored_by_id = {
+        episode_id: score_episode_outcomes(ep, observations)
+        for episode_id, ep in episode_by_id.items()
+    }
     eligible_ids = {
         episode_id
         for episode_id, ep in episode_by_id.items()
@@ -307,7 +360,7 @@ def _outcome_status_cases_from_credit_aggregate(config: dict[str, Any], episodes
     for episode_id in sorted(recurring_ids & eligible_ids):
         episode = episode_by_id.get(str(episode_id))
         if episode is not None:
-            out.append(_outcome_status_case_from_episode(episode, status="recurring"))
+            out.append(_outcome_status_case_from_episode(episode, status="recurring", scored=scored_by_id.get(str(episode_id))))
         if len(out) >= _OUTCOME_STATUS_CASE_LIMIT:
             break
     for episode_id in sorted(regressed_ids & eligible_ids):
@@ -315,8 +368,36 @@ def _outcome_status_cases_from_credit_aggregate(config: dict[str, Any], episodes
             break
         episode = episode_by_id.get(str(episode_id))
         if episode is not None:
-            out.append(_outcome_status_case_from_episode(episode, status="regressed"))
+            out.append(_outcome_status_case_from_episode(episode, status="regressed", scored=scored_by_id.get(str(episode_id))))
     return out
+
+
+def _runtime_case_priority(case: dict[str, Any]) -> tuple[int, str]:
+    status = str(case.get("outcome_status") or "")
+    component_payload = case.get("outcome_components")
+    components = [str(item) for item in component_payload] if isinstance(component_payload, list) else []
+    case_type = str(case.get("case_type") or "")
+    if "user_correction_penalty" in components:
+        return (0, case_type)
+    if status == "recurring":
+        return (1, case_type)
+    if status == "regressed":
+        return (2, case_type)
+    if case_type.startswith("evaluator_skill_quality_"):
+        return (3, case_type)
+    if case_type in {"planner_exact_evidence_mutate_skill", "editor_target_mismatch_skip", "planner_ambiguous_target_defer"}:
+        return (4, case_type)
+    if case_type == "planner_weak_only_skip":
+        return (8, case_type)
+    return (6, case_type)
+
+
+def _runtime_case_dedupe_key(case: dict[str, Any]) -> str:
+    signature_hash = str(case.get("source_matching_signature_hash") or "").strip()
+    case_type = str(case.get("case_type") or case.get("id") or "")
+    if signature_hash and case_type:
+        return f"signature:{case_type}:{signature_hash}"
+    return str(case.get("case_hash") or case.get("id"))
 
 
 def build_role_runtime_eval_cases(*, config: dict[str, Any], limit: int = 1000) -> list[dict[str, Any]]:
@@ -331,9 +412,9 @@ def build_role_runtime_eval_cases(*, config: dict[str, Any], limit: int = 1000) 
             cases.append(quality_case)
     cases.extend(_outcome_status_cases_from_credit_aggregate(config, episodes))
     deduped: dict[str, dict[str, Any]] = {}
-    for case in cases:
-        deduped[str(case.get("case_hash") or case.get("id"))] = case
-    return list(deduped.values())
+    for case in sorted(cases, key=_runtime_case_priority):
+        deduped.setdefault(_runtime_case_dedupe_key(case), case)
+    return list(deduped.values())[: int(limit)]
 
 
 def _bootstrap_overlay_case(*, cluster_id: str, count: int, target: str, role: str, expected: dict[str, Any], source_path: str | None) -> dict[str, Any]:

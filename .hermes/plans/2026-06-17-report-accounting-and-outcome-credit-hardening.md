@@ -44,7 +44,7 @@ Verification:
 - `hermes self-improvement status`: passed; runtime initialized and recent telemetry visible.
 - Full suite: `1031 passed, 2 skipped`.
 
-Next implementation slice: Phase 4, runtime eval case quality. Phase 3 is committed separately before Phase 4 starts.
+Next implementation slice: Phase 5, end-to-end verification and dogfood. Phase 4 is committed separately before Phase 5 starts.
 
 ### Phase 2 — implemented 2026-06-18 JST
 
@@ -84,6 +84,27 @@ Verification:
 - `git diff --check`: passed.
 - Full suite: `1037 passed, 2 skipped`.
 - `hermes self-improvement report --since-hours 24` read-only smoke passed and kept the conservative outcome headline; the latest saved artifact predates signature fields.
+
+### Phase 4 — implemented 2026-06-18 JST
+
+Implemented higher-signal runtime eval case metadata and selection behavior:
+
+- Runtime eval cases now include `source_episode_id` and, when available, `source_matching_signature_hash` in top-level/source/input fields.
+- Outcome-status eval cases now include `outcome_status`, bounded `outcome_components`, and `credit_window` metadata derived from scored outcome observations.
+- Case identity now includes signature metadata, and role-case dedupe prefers `case_type + source_matching_signature_hash` when available.
+- Runtime role eval case output now orders user-correction/recurring/regressed outcome cases ahead of weak-usage cases, keeping weak-only cases last rather than treating them as high-signal proof.
+
+Verification:
+
+- RED confirmed first: runtime eval test failed for missing source/outcome metadata, then for low-signal ordering.
+- Focused runtime eval suite: `tests/test_runtime_eval_cases.py` → `16 passed`.
+- Related suite: `tests/test_runtime_eval_cases.py tests/test_credit_assignment.py tests/test_outcome_scoring.py tests/test_outcome_matching.py` → `34 passed`.
+- `py_compile`: passed.
+- `git diff --check`: passed.
+- Full suite: `1037 passed, 2 skipped`.
+- `hermes self-improvement status`: passed; runtime initialized, latest run visible at `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260617T190248Z.json`.
+- `hermes self-improvement report --since-hours 24` read-only smoke passed and rendered the new `unknown breakdown` line from the latest artifact.
+- Source-directed runtime eval smoke ran against the current runtime config and returned `case_count 0`, which is expected when no eligible recent runtime eval cases are present.
 
 ---
 
