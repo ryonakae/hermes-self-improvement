@@ -158,8 +158,10 @@ def test_run_pipeline_report_includes_runner_and_calibration_summaries(tmp_path)
     assert "- validation: post-validated 1, rejected 1, unknown 0" in report
     assert "Outcomes:" in report
     assert "- tracked: 4, proven improved: 1, recurring: 1, regressed: 0, unknown: 1, insufficient window: 1" in report
-    assert "- quality under observation: 1" in report
-    assert "- skill usage under observation: 1" in report
+    assert "Outcome signals:" in report
+    assert "- strict proven improved: 1" in report
+    assert "- early positive: weak skill usage 1" in report
+    assert "- needs stronger attribution:" in report
     assert "Skill quality:" in report
     assert "- reviewed: 1" in report
     assert "- good: 0, needs patch: 1, duplicate: 0, too generic: 0, unsafe: 0" in report

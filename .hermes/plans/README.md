@@ -2,6 +2,10 @@
 
 ## Current source of truth
 
+### Current planned hardening — 2026-06-23 outcome signal reporting
+
+`2026-06-23-outcome-signal-reporting.md` is implemented. It keeps strict `proven improved` credit assignment conservative for calibration/GEPA while adding report-only `Outcome signals` so daily reports can show weak/medium positive evidence such as skill usage without correction, quiet observation windows, and attribution gaps. This responds to scheduled dogfood where `proven improved` stayed `0` while the loop continued to run and mutate safely, making the report too binary for operator use. Implementation adds display-only `outcomes.early_positive` counts, keeps `_outcome_status()` unchanged, and renders strict proof separately from early positive / attribution-needed signals.
+
 ### Current planned hardening — 2026-06-17 report accounting / outcome credit
 
 `2026-06-17-report-accounting-and-outcome-credit-hardening.md` is implemented through Phase 5. Phase 1 fixed the 2026-06-17 operational mismatch where immediate `improve` output correctly reported `skill patched 3 / memory 3`, while later `report` / daily artifact rendered `Recent runner artifacts` as `skill patched 0 / memory 3`. Phase 2 added conservative `unknown_reasons` / `unknown breakdown` reporting without counting silence as success. Phase 3 added bounded matching signatures to new episodes/outcome observations and kept broad generic recurrence clusters diagnostic-only. Phase 4 added source signature/outcome metadata and high-signal ordering for runtime eval cases. Phase 5 completed end-to-end verification and dry-run dogfood: focused suite `91 passed`, full suite `1037 passed, 2 skipped`, `py_compile`, `git diff --check`, status/report smoke, dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260618T043401Z.json` with `dry_run=True` / `target_changed=False`, and bounded signature inspection passed. Remaining work is scheduled observation only; outcome quality is not proven until later comparable usage moves conservative unknowns into stronger evidence buckets.

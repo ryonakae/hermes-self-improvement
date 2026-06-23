@@ -462,7 +462,7 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
                 lines.extend(actual_lines[:6])
             outcome_lines = _outcome_summary_lines(latest_run.get("credit_assignment") if isinstance(latest_run.get("credit_assignment"), dict) else {})
             if outcome_lines:
-                lines.extend(outcome_lines[:6])
+                lines.extend(outcome_lines)
             planner_decisions = (skill_step.get("planner") or {}).get("decisions") if isinstance(skill_step.get("planner"), dict) and isinstance((skill_step.get("planner") or {}).get("decisions"), list) else []
             skill_quality_lines = _skill_quality_summary_lines(
                 skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else [],
@@ -2027,6 +2027,10 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
     duplicate_noop_credited = int(outcomes.get("duplicate_noop_credited") or 0)
     skill_usage_under_observation = int(outcomes.get("skill_usage_under_observation") or 0)
     missing_evidence_under_observation = int(outcomes.get("missing_evidence_under_observation") or 0)
+    early_positive_raw = outcomes.get("early_positive")
+    early_positive_payload: dict[str, Any] = early_positive_raw if isinstance(early_positive_raw, dict) else {}
+    memory_retrieved_useful = int(early_positive_payload.get("memory_retrieved_useful") or 0)
+    quiet_window = int(early_positive_payload.get("quiet_window") or 0)
     lines = [
         "Outcomes:",
         f"- tracked: {tracked}, proven improved: {improved}, recurring: {recurring}, regressed: {regressed}, unknown: {unknown}, insufficient window: {insufficient}",
@@ -2034,6 +2038,7 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
     if unknown or insufficient:
         lines.append("- unproven changes remain under observation")
     unknown_reasons = outcomes.get("unknown_reasons") if isinstance(outcomes.get("unknown_reasons"), dict) else {}
+    reason_parts: list[str] = []
     if unknown_reasons:
         reason_parts = [
             f"{_format_unknown_reason(str(reason))} {int(count or 0)}"
@@ -2042,6 +2047,29 @@ def _outcome_summary_lines(credit_assignment: dict[str, Any]) -> list[str]:
         ]
         if reason_parts:
             lines.append("- unknown breakdown: " + ", ".join(reason_parts))
+    early_parts: list[str] = []
+    if skill_usage_under_observation:
+        early_parts.append(f"weak skill usage {skill_usage_under_observation}")
+    if memory_retrieved_useful:
+        early_parts.append(f"medium memory useful {memory_retrieved_useful}")
+    if quiet_window:
+        early_parts.append(f"quiet window {quiet_window}")
+    attribution_parts = list(reason_parts) if unknown_reasons else []
+    if insufficient:
+        attribution_parts.append(f"insufficient window {insufficient}")
+    if quality_under_observation:
+        attribution_parts.append(f"quality under observation {quality_under_observation}")
+    if missing_evidence_under_observation:
+        attribution_parts.append(f"missing evidence {missing_evidence_under_observation}")
+    if early_parts or attribution_parts or improved or recurring:
+        lines.append("Outcome signals:")
+        lines.append(f"- strict proven improved: {improved}")
+        if early_parts:
+            lines.append("- early positive: " + ", ".join(early_parts))
+        if recurring:
+            lines.append(f"- still recurring: {recurring}")
+        if attribution_parts:
+            lines.append("- needs stronger attribution: " + ", ".join(attribution_parts))
     credit_windows = outcomes.get("credit_windows") if isinstance(outcomes.get("credit_windows"), dict) else {}
     if any(int(credit_windows.get(window) or 0) for window in ("immediate", "short", "medium", "long")):
         window_parts = [

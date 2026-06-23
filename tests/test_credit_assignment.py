@@ -96,7 +96,7 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert aggregate["credit_windows"]["short"] == 1
     assert "episode-1" in aggregate["related_episode_ids"]["improved"]
     compact = compact_credit_assignment_summary(aggregate)
-    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0, "unknown_reasons": {}, "credit_windows": {"immediate": 1, "short": 1, "medium": 0, "long": 0}}
+    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0, "early_positive": {"memory_retrieved_useful": 0, "quiet_window": 0}, "unknown_reasons": {}, "credit_windows": {"immediate": 1, "short": 1, "medium": 0, "long": 0}}
     assert compact["overlay_generations"]["tracked"] == 2
     assert compact["overlay_generations"]["best"]["overlay_generation_id"] == "overlay-set-good"
     assert compact["overlay_generations"]["worst"]["overlay_generation_id"] == "overlay-set-risky"
@@ -220,6 +220,39 @@ def test_credit_assignment_keeps_skill_usage_only_under_observation(tmp_path):
     assert aggregate["outcome_status_counts"]["unknown"] == 1
     assert aggregate["quality_outcomes"]["skill_usage_under_observation"] == 1
     assert compact["outcomes"]["skill_usage_under_observation"] == 1
+
+
+def test_credit_assignment_counts_report_only_early_positive_components(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    write_json(root / "episodes" / "2026-05-03" / "memory-useful.json", episode_payload("memory-useful", target_kind="memory", target_id="memory:known"))
+    write_json(root / "episodes" / "2026-05-03" / "quiet-window.json", episode_payload("quiet-window"))
+    write_json(root / "episodes" / "2026-05-03" / "quality-only.json", episode_payload("quality-only"))
+    write_json(root / "outcomes" / "2026-05-03" / "memory-useful-outcome.json", outcome_payload(
+        "memory-useful",
+        "short",
+        {"memory_retrieved_and_useful": True},
+        confidence=0.45,
+    ))
+    write_json(root / "outcomes" / "2026-05-03" / "quiet-window-outcome.json", outcome_payload(
+        "quiet-window",
+        "short",
+        {"tool_error_cluster_reappeared": False},
+        confidence=0.4,
+    ))
+    write_json(root / "outcomes" / "2026-05-03" / "quality-only-outcome.json", outcome_payload(
+        "quality-only",
+        "immediate",
+        {"validation_passed": True, "skill_quality_needs_patch": True},
+        confidence=0.65,
+    ))
+
+    aggregate = build_credit_assignment_aggregate(config=config, limit=100)
+    compact = compact_credit_assignment_summary(aggregate)
+
+    assert aggregate["quality_outcomes"]["early_positive"] == {"memory_retrieved_useful": 1, "quiet_window": 1}
+    assert compact["outcomes"]["early_positive"] == {"memory_retrieved_useful": 1, "quiet_window": 1}
+    assert compact["outcomes"]["quality_under_observation"] == 1
 
 
 def test_credit_assignment_keeps_thin_skill_validation_under_observation(tmp_path):

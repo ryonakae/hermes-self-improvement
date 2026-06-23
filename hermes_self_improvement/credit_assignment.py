@@ -159,7 +159,14 @@ def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int],
     counts = {"improved": 0, "recurring": 0, "regressed": 0, "unknown": 0, "insufficient_window": 0}
     credit_windows = {window: 0 for window in WINDOWS}
     related: dict[str, list[str]] = {key: [] for key in counts}
-    quality: dict[str, Any] = {"quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0, "unknown_reasons": {}}
+    quality: dict[str, Any] = {
+        "quality_under_observation": 0,
+        "duplicate_noop_credited": 0,
+        "skill_usage_under_observation": 0,
+        "missing_evidence_under_observation": 0,
+        "early_positive": {"memory_retrieved_useful": 0, "quiet_window": 0},
+        "unknown_reasons": {},
+    }
     for row in rows:
         status = _outcome_status(row)
         counts[status] = counts.get(status, 0) + 1
@@ -178,6 +185,12 @@ def _outcome_status_summary(rows: list[dict[str, Any]]) -> tuple[dict[str, int],
             quality["missing_evidence_under_observation"] += 1
         if status == "unknown" and _has_only_weak_usage_positive(components):
             quality["skill_usage_under_observation"] += 1
+        early_positive_payload = quality.get("early_positive")
+        early_positive: dict[str, int] = early_positive_payload if isinstance(early_positive_payload, dict) else {}
+        if components.get("memory_retrieved_useful") is not None:
+            early_positive["memory_retrieved_useful"] = int(early_positive.get("memory_retrieved_useful") or 0) + 1
+        if components.get("cluster_absent") is not None:
+            early_positive["quiet_window"] = int(early_positive.get("quiet_window") or 0) + 1
         if components.get("duplicate_noop_prevented") is not None:
             quality["duplicate_noop_credited"] += 1
         episode_id = str(row.get("episode_id") or "")
@@ -313,6 +326,7 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
             "duplicate_noop_credited": int(quality_outcomes.get("duplicate_noop_credited") or 0),
             "skill_usage_under_observation": int(quality_outcomes.get("skill_usage_under_observation") or 0),
             "missing_evidence_under_observation": int(quality_outcomes.get("missing_evidence_under_observation") or 0),
+            "early_positive": _int_count_map(quality_outcomes.get("early_positive")),
             "unknown_reasons": _int_count_map(quality_outcomes.get("unknown_reasons")),
             "credit_windows": {
                 window: int((aggregate.get("credit_windows") or {}).get(window) or 0)

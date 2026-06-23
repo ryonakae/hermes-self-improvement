@@ -908,6 +908,39 @@ def test_outcome_summary_renders_unknown_breakdown_without_success_language():
     assert "successful by silence" not in text
 
 
+def test_outcome_summary_renders_report_only_outcome_signals():
+    cli = load_cli_module()
+    lines = cli._outcome_summary_lines({
+        "outcomes": {
+            "tracked": 7,
+            "improved": 0,
+            "recurring": 2,
+            "regressed": 0,
+            "unknown": 3,
+            "insufficient_window": 1,
+            "skill_usage_under_observation": 1,
+            "quality_under_observation": 1,
+            "missing_evidence_under_observation": 1,
+            "early_positive": {"memory_retrieved_useful": 1, "quiet_window": 1},
+            "unknown_reasons": {
+                "no_later_comparable_observation": 2,
+                "weak_usage_only": 1,
+            },
+            "credit_windows": {"immediate": 1, "short": 1, "medium": 0, "long": 0},
+        },
+    })
+    text = "\n".join(lines)
+
+    assert "- tracked: 7, proven improved: 0, recurring: 2, regressed: 0, unknown: 3, insufficient window: 1" in text
+    assert "Outcome signals:" in text
+    assert "- strict proven improved: 0" in text
+    assert "- early positive: weak skill usage 1, medium memory useful 1, quiet window 1" in text
+    assert "- still recurring: 2" in text
+    assert "- needs stronger attribution: no later comparable observation 2, weak usage only 1, insufficient window 1, quality under observation 1, missing evidence 1" in text
+    assert "likely helped" not in text
+    assert "quality helped" not in text
+
+
 def test_improve_summary_shows_overlay_generation_performance_when_tracked():
     cli = load_cli_module()
     text = cli._render_improve_summary({
