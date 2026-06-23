@@ -72,6 +72,13 @@ self_improvement_improve
 self_improvement_calibrate
 ```
 
+## Cron / no-agent 運用
+
+- `self-improvement-autonomous-maintenance` は `10 */3 * * *`。`self-improvement-maintenance.sh` で `status`, `improve`, `report --since-hours 24` を実行する。
+- `self-improvement-calibrate` は `0 3 * * *`。DSPy/GEPA 系の重い `calibrate` は maintenance script に戻さない。
+- 08:00 の `daily-ops-digest` は直近24時間の maintenance 出力を最大8回分読み、個別ログではなく、実行回数・実変更・候補・defer/skip/block の傾向を統括する。
+- cron output は local 保存前提。script stdout は短い要約と artifact path に留める。
+
 ## 変更時の進め方
 
 1. `README.md`, `AGENTS.md`, 関連 reference、該当 repo-tracked plan を読む。

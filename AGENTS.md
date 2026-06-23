@@ -34,6 +34,8 @@ primary surface は `improve / calibrate / report / status` の 4 つだけ。`s
 
 cron / no-agent 運用メモ:
 - `self-improvement-calibrate` と `self-improvement-autonomous-maintenance` は分離して扱う。重い `calibrate` を maintenance script に戻さない。
+- 現在の実運用は `self-improvement-autonomous-maintenance` が `10 */3 * * *`、`self-improvement-calibrate` が `0 3 * * *`。maintenance は `improve + report`、calibrate は DSPy/GEPA 系として扱う。
+- 08:00 の `daily-ops-digest` は直近24時間の maintenance 出力を最大8回分まとめる。個別ログを羅列せず、実行回数・実変更・候補・defer/skip/block の傾向だけを書く。
 - 現在の Hermes cron global `script_timeout_seconds` は `1200`。manual dogfood では maintenance は収まり、calibrate は旧 600s budget を超えた。
 - cron / timeout の判断材料や最新運用判断は `.hermes/plans/` と `README.md` を先に確認する。
 

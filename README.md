@@ -107,6 +107,8 @@ hermes self-improvement report --since-hours 24
 
 cron job はこの script を `--no-agent` で登録します。manual dogfood では `improve + report` の maintenance は正常終了し、別実行の `calibrate` は旧 600 秒 budget を超えました。いまは `calibrate` を別 job に分離し、Hermes cron の global `script_timeout_seconds` は 1200 秒にしてあります。stdout がそのまま local output に保存されるため、script 側の出力は短い要約とアーティファクトのパスだけにしてください。
 
+現在の実運用は、軽い `improve + report` maintenance を3時間おき、重い DSPy/GEPA 系の `calibrate` を1日1回に分けています。08:00 の `daily-ops-digest` は、直近24時間の maintenance 出力を最大8回分読み、個別ログを羅列せず、実行回数・実変更・候補・defer/skip/block の傾向だけを統括して Slack に出します。
+
 `calibrate` 用には別 script を置きます。
 
 ```bash
@@ -126,8 +128,8 @@ hermes cron create '0 3 * * *' \
   --script self-improvement-calibrate.sh \
   --no-agent
 
-hermes cron create '0 4 * * *' \
-  --name self-improvement-maintenance \
+hermes cron create '10 */3 * * *' \
+  --name self-improvement-autonomous-maintenance \
   --deliver local \
   --script self-improvement-maintenance.sh \
   --no-agent
