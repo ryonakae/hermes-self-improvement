@@ -2,6 +2,10 @@
 
 ## Current source of truth
 
+### Current planned hardening — 2026-07-04 memory placement review ledger
+
+`2026-07-04-memory-placement-review-ledger.md` is planned and not yet implemented. It addresses recent USER/MEMORY placement churn by adding a simple LLM-owned review ledger before Planner placement candidates are rendered: cache stable judgments by `normalized_text_hash + store`, skip `valid_current_store/high`, retry `unclear` once before `deferred_stable`, send only actionable medium/high review rows to Planner with `allowed_operations` rather than move/split templates, stabilize repeated Planner defers, and block recent reverse USER↔MEMORY moves by text hash. The plan intentionally avoids lineage IDs, new config, approval queues, or deterministic canonical-store heuristics.
+
 ### Current planned hardening — 2026-06-23 outcome signal reporting
 
 `2026-06-23-outcome-signal-reporting.md` is implemented. It keeps strict `proven improved` credit assignment conservative for calibration/GEPA while adding report-only `Outcome signals` so daily reports can show weak/medium positive evidence such as skill usage without correction, quiet observation windows, and attribution gaps. This responds to scheduled dogfood where `proven improved` stayed `0` while the loop continued to run and mutate safely, making the report too binary for operator use. Implementation adds display-only `outcomes.early_positive` counts, keeps `_outcome_status()` unchanged, and renders strict proof separately from early positive / attribution-needed signals.
