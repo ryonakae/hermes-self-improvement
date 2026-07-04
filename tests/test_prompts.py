@@ -42,3 +42,38 @@ def test_render_editor_instructions_applies_runtime_overlay_addendum():
     assert rendered["prompt_source"]["overlay_active"] is True
     assert "Prefer skipped when evidence is stale." in rendered["instructions"]
     assert "You are the Hermes self-improvement editor." in rendered["instructions"]
+
+
+def test_render_planner_memory_placement_uses_review_results_without_operation_templates():
+    rendered = render_planner_messages(
+        digest={
+            "skill_candidates": [],
+            "memory_placement_candidates": {
+                "candidate_count": 1,
+                "omitted_count": 0,
+                "candidates": [
+                    {
+                        "evidence_id": "memory_place_review_abc_user",
+                        "entry_key": "abc:user",
+                        "current_store": "user",
+                        "judgment": "wrong_store",
+                        "canonical_store": "memory",
+                        "confidence": "high",
+                        "reason_code": "agent_runtime_or_environment",
+                        "reason": "Runtime fact belongs in MEMORY.",
+                        "allowed_operations": ["placement_move"],
+                        "old_text": "Hermes runtime root is ~/.hermes.",
+                    }
+                ],
+            },
+        }
+    )
+    content = rendered["messages"][1]["content"]
+
+    assert "allowed_operations=[placement_move]" in content
+    assert "judgment=wrong_store" in content
+    assert "canonical_store=memory" in content
+    assert "reason_code=agent_runtime_or_environment" in content
+    assert "move template:" not in content
+    assert "split template" not in content
+    assert "memory_to_skill template" not in content

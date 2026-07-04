@@ -320,6 +320,110 @@ def merge_review_updates_into_ledger(ledger: dict[str, Any], review_result: dict
     return out
 
 
+def _move_direction(transaction: dict[str, Any]) -> tuple[str, str] | None:
+    if str(transaction.get("transaction_kind") or "") != "placement_move":
+        return None
+    source = _normalize_store(transaction.get("source_store"))
+    target = _normalize_store(transaction.get("target_store"))
+    if source in {"user", "memory"} and target in {"user", "memory"} and source != target:
+        return source, target
+    operation = str(transaction.get("operation") or "")
+    if operation == "move_user_to_memory":
+        return "user", "memory"
+    if operation == "move_memory_to_user":
+        return "memory", "user"
+    return None
+
+
+def _transaction_outcome(transaction: dict[str, Any]) -> str:
+    result = transaction.get("transaction_result") if isinstance(transaction.get("transaction_result"), dict) else transaction.get("result")
+    if isinstance(result, dict):
+        return str(result.get("outcome") or "")
+    return ""
+
+
+def _run_files(config: dict[str, Any] | None, *, max_runs: int) -> list[Path]:
+    runs = _self_improvement_root(config or {}) / "runs"
+    if not runs.exists():
+        return []
+    return sorted(runs.glob("run-*.json"), key=lambda path: path.name, reverse=True)[:max_runs]
+
+
+def recent_reversal_text_hashes(config: dict[str, Any] | None = None, *, max_runs: int = 8) -> set[str]:
+    by_hash: dict[str, set[tuple[str, str]]] = {}
+    for path in _run_files(config, max_runs=max_runs):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        transactions = payload.get("knowledge_transactions") if isinstance(payload, dict) else []
+        for transaction in transactions or []:
+            if not isinstance(transaction, dict):
+                continue
+            direction = _move_direction(transaction)
+            if direction is None:
+                continue
+            outcome = _transaction_outcome(transaction)
+            if outcome and outcome not in {"applied", "preview"}:
+                continue
+            text_hash = str(transaction.get("text_hash") or "").strip()
+            if not text_hash:
+                old_text = str(transaction.get("source_old_text") or transaction.get("old_text") or transaction.get("content") or "")
+                if not old_text:
+                    continue
+                text_hash = placement_text_hash(old_text)
+            by_hash.setdefault(text_hash, set()).add(direction)
+    return {
+        text_hash
+        for text_hash, directions in by_hash.items()
+        if ("user", "memory") in directions and ("memory", "user") in directions
+    }
+
+
+def apply_recent_reversal_guard(candidates: list[dict[str, Any]], reversal_hashes: set[str]) -> tuple[list[dict[str, Any]], int]:
+    kept: list[dict[str, Any]] = []
+    blocked = 0
+    for candidate in candidates or []:
+        text_hash = str(candidate.get("text_hash") or "").strip()
+        if text_hash and text_hash in reversal_hashes:
+            blocked += 1
+            continue
+        kept.append(candidate)
+    return kept, blocked
+
+
+def update_ledger_from_planner_results(ledger: dict[str, Any], transactions: list[dict[str, Any]], results: list[dict[str, Any]]) -> dict[str, Any]:
+    out = dict(ledger or {})
+    entries = dict(_ledger_entries(out))
+    for index, transaction in enumerate(transactions or []):
+        if not isinstance(transaction, dict):
+            continue
+        key = str(transaction.get("entry_key") or "").strip()
+        if not key or key not in entries or not isinstance(entries.get(key), dict):
+            continue
+        row = dict(entries[key])
+        result = results[index] if index < len(results) and isinstance(results[index], dict) else {}
+        decision = str(transaction.get("decision") or "")
+        outcome = str(result.get("outcome") or "")
+        reason = str(transaction.get("reason") or result.get("reason") or "").strip() or "planner_deferred"
+        if decision == "defer" or outcome == "deferred":
+            previous_reason = str(row.get("planner_defer_reason") or "")
+            current_count = int(row.get("planner_defer_count") or 0) if previous_reason == reason else 0
+            row["planner_defer_count"] = current_count + 1
+            row["planner_defer_reason"] = reason
+            row["planner_deferred_at"] = _now()
+            if row["planner_defer_count"] >= 2:
+                row["status"] = "planner_deferred_stable"
+        elif decision == "apply" or outcome in {"preview", "applied"}:
+            row["planner_defer_count"] = 0
+            row.pop("planner_defer_reason", None)
+            if row.get("status") == "planner_deferred_stable":
+                row.pop("status", None)
+        entries[key] = row
+    out["entries"] = entries
+    return out
+
+
 def actionable_placement_candidates_from_ledger(current_entries: list[dict[str, Any]], ledger: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, int]]:
     ledger_entries = _ledger_entries(ledger)
     candidates: list[dict[str, Any]] = []

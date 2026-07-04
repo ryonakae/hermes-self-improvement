@@ -1093,6 +1093,72 @@ def test_run_knowledge_improvement_step_dry_run_returns_canonical_transactions(m
     assert result["editor_validation"]["summary"]["skipped"] == 1
 
 
+def test_run_knowledge_improvement_step_uses_placement_review_ledger_for_planner_candidates(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_review(review_input, *, config=None):
+        assert [item["old_text"] for item in review_input["entries"]] == [
+            "Hermes runtime root is ~/.hermes.",
+        ]
+        return {
+            "status": "completed",
+            "reviewed_count": 1,
+            "ledger_updates": {
+                review_input["entries"][0]["entry_key"]: {
+                    "entry_key": review_input["entries"][0]["entry_key"],
+                    "current_store": "user",
+                    "judgment": "wrong_store",
+                    "canonical_store": "memory",
+                    "confidence": "medium",
+                    "reason_code": "agent_runtime_or_environment",
+                    "reason": "Runtime fact belongs in MEMORY.",
+                }
+            },
+            "repair_attempted": False,
+        }
+
+    def fake_planner(*, digest, config):
+        captured["memory_placement_candidates"] = digest["memory_placement_candidates"]
+        return {"status": "completed", "knowledge_transactions": []}
+
+    from hermes_self_improvement.memory_placement_ledger import placement_entry_key, save_placement_ledger
+
+    root = tmp_path / "self-improvement"
+    valid_key = placement_entry_key("Ryo prefers concise reports.", "memory")
+    save_placement_ledger({"_self_improvement_root": str(root)}, {
+        "entries": {
+            valid_key: {
+                "judgment": "valid_current_store",
+                "canonical_store": "memory",
+                "confidence": "high",
+                "reason_code": "user_preference_or_profile",
+                "reason": "Already stable.",
+            }
+        }
+    })
+
+    result = run_knowledge_improvement_step(
+        evidence_pack=evidence_pack_for("demo-skill"),
+        config={
+            "_self_improvement_root": str(root),
+            "_planner_runtime_func": fake_planner,
+            "_placement_review_func": fake_review,
+            "_memory_current_entries": [
+                {"target": "memory", "old_text": "Ryo prefers concise reports."},
+                {"target": "user", "old_text": "Hermes runtime root is ~/.hermes."},
+            ],
+        },
+        mutate=False,
+    )
+
+    placement = captured["memory_placement_candidates"]
+    assert placement["candidate_count"] == 1
+    assert placement["candidates"][0]["old_text"] == "Hermes runtime root is ~/.hermes."
+    assert placement["candidates"][0]["allowed_operations"] == ["placement_move"]
+    assert result["placement_review"]["valid_cached_count"] == 1
+    assert result["placement_review"]["actionable_to_planner_count"] == 1
+
+
 def test_run_knowledge_improvement_step_dry_run_validates_malformed_placement_move_apply(monkeypatch, tmp_path):
     import hermes_self_improvement.runner_steps as runner_steps
 

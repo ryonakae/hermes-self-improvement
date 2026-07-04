@@ -302,6 +302,12 @@ def _canonicalize(raw: dict[str, Any]) -> dict[str, Any]:
         "evidence_ids": evidence_ids,
         "reason": str(raw.get("reason") or raw.get("rationale") or ""),
     }
+    if raw.get("entry_key") is not None:
+        transaction["entry_key"] = str(raw.get("entry_key") or "")
+    if raw.get("text_hash") is not None:
+        transaction["text_hash"] = str(raw.get("text_hash") or "")
+    if raw.get("review_judgment") is not None:
+        transaction["review_judgment"] = str(raw.get("review_judgment") or "")
     if raw.get("mixed_entry") is not None:
         transaction["mixed_entry"] = raw.get("mixed_entry")
     if raw.get("whole_entry_move_allowed") is not None:

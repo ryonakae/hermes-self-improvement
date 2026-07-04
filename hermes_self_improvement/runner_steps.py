@@ -13,6 +13,17 @@ from .mutation_policy import build_memory_mutation_context, normalize_memory_pro
 from .mutation_worker import execute_memory_provider_tool_operation, execute_memory_tool_operation, execute_skill_archive_operation
 from .editor import build_editor_prompt, run_editor_task
 from .memory_context import build_related_memory_lookup_context
+from .memory_placement_ledger import (
+    actionable_placement_candidates_from_ledger,
+    build_placement_review_input,
+    load_placement_ledger,
+    merge_review_updates_into_ledger,
+    run_memory_placement_review,
+    save_placement_ledger,
+    update_ledger_from_planner_results,
+    recent_reversal_text_hashes,
+    apply_recent_reversal_guard,
+)
 from .observer import _redact_text
 from .planner_runtime import build_planner_runtime_digest, build_planner_runtime_quality_report, run_planner_runtime
 from .prompt_overlays import load_active_prompt_overlay
@@ -250,6 +261,41 @@ def _unresolved_target_resolutions(target_resolutions: dict[str, Any]) -> list[d
     return rows
 
 
+def _run_placement_review_for_current_entries(
+    current_entries: list[dict[str, Any]],
+    *,
+    config: dict[str, Any] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    cfg = config or {}
+    ledger = load_placement_ledger(cfg)
+    review_input = build_placement_review_input(current_entries, ledger)
+    review_func = cfg.get("_placement_review_func")
+    if review_func is not None:
+        review_result = review_func(review_input, config=cfg)
+    elif cfg.get("_planner_runtime_func") is not None and cfg.get("_placement_review_backend") is None:
+        review_result = {"status": "skipped_test_planner_backend", "reviewed_count": 0, "ledger_updates": {}, "repair_attempted": False}
+    else:
+        review_result = run_memory_placement_review(review_input, config=cfg)
+    if review_result.get("status") == "completed":
+        ledger = merge_review_updates_into_ledger(ledger, review_result, current_entries)
+        save_placement_ledger(cfg, ledger)
+    candidates, counts = actionable_placement_candidates_from_ledger(current_entries, ledger)
+    reversal_hashes = recent_reversal_text_hashes(cfg, max_runs=8)
+    candidates, reversal_blocked = apply_recent_reversal_guard(candidates, reversal_hashes)
+    counts["actionable_to_planner_count"] = len(candidates)
+    counts["reversal_blocked_count"] = reversal_blocked
+    summary = dict(review_input.get("summary") if isinstance(review_input.get("summary"), dict) else {})
+    summary.update(counts)
+    summary.update({
+        "status": review_result.get("status") or "unknown",
+        "reviewed_count": int(review_result.get("reviewed_count") or 0),
+        "repair_attempted": bool(review_result.get("repair_attempted")),
+    })
+    if review_result.get("invalid_reason"):
+        summary["invalid_reason"] = str(review_result.get("invalid_reason"))
+    return candidates, summary
+
+
 def build_knowledge_planner_digest(
     evidence_pack: dict[str, Any],
     *,
@@ -258,8 +304,15 @@ def build_knowledge_planner_digest(
     turn_traces: list[dict[str, Any]] | None = None,
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    raw_entries = (config or {}).get("_memory_current_entries")
+    compact_entries, omitted_entries = _compact_current_entries_for_memory_editor(raw_entries if isinstance(raw_entries, list) else [])
+    current_entries = [entry for entry in (_knowledge_current_entry(item) for item in compact_entries) if entry is not None]
+    placement_candidates, placement_review = _run_placement_review_for_current_entries(current_entries, config=config)
+    planner_evidence_pack = dict(evidence_pack)
+    planner_evidence_pack["placement_review_candidates"] = placement_candidates
+    planner_evidence_pack["placement_review"] = placement_review
     skill_digest = build_planner_runtime_digest(
-        evidence_pack,
+        planner_evidence_pack,
         cluster_summary=cluster_summary,
         evidence_index=evidence_index,
         turn_traces=turn_traces,
@@ -273,10 +326,8 @@ def build_knowledge_planner_digest(
         candidate = _knowledge_memory_candidate_from_evidence(item)
         if candidate is not None:
             memory_candidates.append(candidate)
+    memory_candidates.extend(placement_candidates)
     memory_candidates.sort(key=lambda item: (str(item.get("candidate_id") or ""), str(item.get("candidate_kind") or "")))
-    raw_entries = (config or {}).get("_memory_current_entries")
-    compact_entries, omitted_entries = _compact_current_entries_for_memory_editor(raw_entries if isinstance(raw_entries, list) else [])
-    current_entries = [entry for entry in (_knowledge_current_entry(item) for item in compact_entries) if entry is not None]
     raw_target_resolutions = evidence_pack.get("target_resolutions")
     target_resolutions: dict[str, Any] = raw_target_resolutions if isinstance(raw_target_resolutions, dict) else {}
     unresolved = list(skill_digest.get("unresolved_observations") or [])
@@ -293,6 +344,7 @@ def build_knowledge_planner_digest(
         "memory_candidate_count": len(memory_candidates),
         "current_entries": current_entries,
         "current_entries_omitted_count": omitted_entries,
+        "placement_review": placement_review,
         "target_resolutions": target_resolutions,
         "unresolved_observations": unresolved[:20],
     }
@@ -1892,6 +1944,7 @@ def run_knowledge_improvement_step(
     if isinstance(planner.get("prompt_source"), dict) and isinstance(planner["prompt_source"].get("planner"), dict):
         prompt_sources["planner"] = planner["prompt_source"]["planner"]
     if planner.get("status") != "completed":
+        placement_review = digest.get("placement_review") if isinstance(digest.get("placement_review"), dict) else {}
         return {
             "status": "planner_error",
             "planner": planner,
@@ -1906,6 +1959,7 @@ def run_knowledge_improvement_step(
             "cluster_evidence": digest.get("cluster_evidence") if isinstance(digest.get("cluster_evidence"), dict) else {},
             "prompt_sources": prompt_sources,
             "memory_capacity_followups": memory_capacity_followups,
+            "placement_review": placement_review,
         }
     transactions = [
         normalize_knowledge_transaction(item)
@@ -1944,6 +1998,11 @@ def run_knowledge_improvement_step(
         changed_memories.extend(str(item) for item in (result.get("changed_memories") or []) if str(item))
         changed_memories.extend(str(item) for item in (result.get("removed_memories") or []) if str(item))
     memory_capacity_followups = build_memory_capacity_followups(transactions)
+    placement_review = digest.get("placement_review") if isinstance(digest.get("placement_review"), dict) else {}
+    if any(isinstance(item, dict) and item.get("entry_key") for item in transactions):
+        ledger = load_placement_ledger(config or {})
+        ledger = update_ledger_from_planner_results(ledger, transactions, transaction_results)
+        save_placement_ledger(config or {}, ledger)
     return {
         "status": "completed",
         "planner": planner,
@@ -1966,6 +2025,7 @@ def run_knowledge_improvement_step(
         "cluster_evidence": digest.get("cluster_evidence") if isinstance(digest.get("cluster_evidence"), dict) else {},
         "prompt_sources": prompt_sources,
         "memory_capacity_followups": memory_capacity_followups,
+        "placement_review": placement_review,
     }
 
 

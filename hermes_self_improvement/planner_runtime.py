@@ -323,6 +323,37 @@ def _candidate_target_skills_for_memory_text(text: str, editable_skills: list[di
 
 
 def _memory_placement_candidates_digest(evidence_pack: dict[str, Any], editable_skills: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    reviewed_candidates = [
+        item for item in (evidence_pack.get("placement_review_candidates") or [])
+        if isinstance(item, dict)
+    ]
+    if reviewed_candidates:
+        candidates: list[dict[str, Any]] = []
+        omitted = 0
+        for item in reviewed_candidates:
+            if len(candidates) >= 40:
+                omitted += 1
+                continue
+            old_text = str(item.get("old_text") or "")
+            target_skills = _candidate_target_skills_for_memory_text(old_text, editable_skills or [])
+            candidate = {
+                "evidence_id": str(item.get("candidate_id") or item.get("entry_key") or ""),
+                "entry_key": str(item.get("entry_key") or ""),
+                "text_hash": str(item.get("text_hash") or ""),
+                "current_store": str(item.get("current_store") or ""),
+                "judgment": str(item.get("judgment") or ""),
+                "canonical_store": str(item.get("canonical_store") or ""),
+                "confidence": str(item.get("confidence") or ""),
+                "reason_code": str(item.get("reason_code") or ""),
+                "reason": _redacted_preview(item.get("reason"), max_chars=220),
+                "allowed_operations": [str(value) for value in (item.get("allowed_operations") or []) if str(value)],
+                "old_text": _redacted_preview(old_text, max_chars=260),
+            }
+            if target_skills:
+                candidate["candidate_target_skills"] = target_skills
+            candidates.append(candidate)
+        return {"candidate_count": len(candidates), "omitted_count": omitted, "candidates": candidates}
+
     raw_evidence = evidence_pack.get("evidence")
     evidence = raw_evidence if isinstance(raw_evidence, list) else []
     candidates: list[dict[str, Any]] = []

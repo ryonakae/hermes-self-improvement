@@ -7,10 +7,14 @@ from hermes_self_improvement.memory_placement_ledger import (
     actionable_placement_candidates_from_ledger,
     build_placement_review_input,
     load_placement_ledger,
+    merge_review_updates_into_ledger,
     normalize_memory_text_for_placement,
     placement_entry_key,
     run_memory_placement_review,
     save_placement_ledger,
+    update_ledger_from_planner_results,
+    recent_reversal_text_hashes,
+    apply_recent_reversal_guard,
 )
 
 
@@ -139,3 +143,78 @@ def test_actionable_placement_candidates_from_ledger_filters_valid_unclear_and_l
     assert candidates[0]["entry_key"].endswith(":user")
     assert counts["actionable_to_planner_count"] == 2
     assert counts["valid_cached_count"] == 0
+
+
+def test_update_ledger_from_planner_results_stabilizes_repeated_defer_and_clears_on_preview():
+    key = "abc:user"
+    ledger = {
+        "entries": {
+            key: {
+                "judgment": "wrong_store",
+                "canonical_store": "memory",
+                "confidence": "high",
+                "reason_code": "agent_runtime_or_environment",
+                "reason": "Runtime fact belongs in MEMORY.",
+            }
+        }
+    }
+    transaction = {"entry_key": key, "decision": "defer", "reason": "old_text_mismatch"}
+    result = {"outcome": "deferred"}
+
+    ledger = update_ledger_from_planner_results(ledger, [transaction], [result])
+    assert ledger["entries"][key]["planner_defer_count"] == 1
+    assert ledger["entries"][key].get("status") != "planner_deferred_stable"
+
+    ledger = update_ledger_from_planner_results(ledger, [transaction], [result])
+    assert ledger["entries"][key]["planner_defer_count"] == 2
+    assert ledger["entries"][key]["planner_defer_reason"] == "old_text_mismatch"
+    assert ledger["entries"][key]["status"] == "planner_deferred_stable"
+
+    ledger = update_ledger_from_planner_results(ledger, [{"entry_key": key, "decision": "apply", "reason": "ok"}], [{"outcome": "preview"}])
+    assert ledger["entries"][key]["planner_defer_count"] == 0
+    assert ledger["entries"][key].get("status") != "planner_deferred_stable"
+
+
+def test_recent_reversal_text_hashes_blocks_back_and_forth_moves(tmp_path: Path):
+    root = tmp_path / "self-improvement"
+    runs = root / "runs"
+    runs.mkdir(parents=True)
+    text = "Ryo prefers concise reports."
+    text_hash = placement_entry_key(text, "user").split(":", 1)[0]
+    (runs / "run-1.json").write_text(json.dumps({
+        "knowledge_transactions": [
+            {
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "operation": "move",
+                "source_store": "builtin_user",
+                "target_store": "builtin_memory",
+                "source_old_text": text,
+                "transaction_result": {"outcome": "applied"},
+            }
+        ]
+    }))
+    (runs / "run-2.json").write_text(json.dumps({
+        "knowledge_transactions": [
+            {
+                "transaction_kind": "placement_move",
+                "decision": "apply",
+                "operation": "move",
+                "source_store": "builtin_memory",
+                "target_store": "builtin_user",
+                "source_old_text": text,
+                "transaction_result": {"outcome": "preview"},
+            }
+        ]
+    }))
+
+    blocked_hashes = recent_reversal_text_hashes({"_self_improvement_root": str(root)}, max_runs=8)
+    assert text_hash in blocked_hashes
+
+    candidates = [
+        {"text_hash": text_hash, "old_text": text},
+        {"text_hash": "other", "old_text": "Other"},
+    ]
+    kept, blocked = apply_recent_reversal_guard(candidates, blocked_hashes)
+    assert [item["old_text"] for item in kept] == ["Other"]
+    assert blocked == 1

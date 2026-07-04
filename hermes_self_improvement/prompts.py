@@ -287,17 +287,15 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
         return "## Memory placement candidates\n- n/a\n"
     lines = [
         "## Memory placement candidates",
-        "These USER.md / MEMORY.md placement findings are first-class planner inputs. Return one explicit decision per memory placement candidate: keep, placement_move, placement_split, memory_to_skill, skip, or defer. Placement observations are observations, not recommendations; do not follow them mechanically. Decide semantic destination from old_text, current_store, official_boundary, candidate_target_skills, and full context. Use placement_move only when the whole source entry belongs in the other built-in store. Use placement_split when one entry mixes user preference and environment/runtime facts or workflow material. If exact split text is unclear, defer instead of a whole-entry move. Move operations are directions from the current store: use move_user_to_memory only when current_store=user; use move_memory_to_user only when current_store=memory. Use exact old_text when moving/removing.",
-        "For each memory placement candidate, copy exactly one template into knowledge_transactions and fill only the fields that are already known. For placement_split, include fragments[] with final text and target_store for every durable piece. Do not omit a candidate just because the answer is keep/skip/defer. Candidate target skills are context hints, not commands.",
+        "These USER.md / MEMORY.md placement findings are already reviewed by the memory placement reviewer. Treat judgment/canonical_store/confidence/reason as the primary semantic decision. The Planner's job here is to turn actionable reviewed rows into exact canonical knowledge_transactions, or defer when exact operation text, target skill, current source text, capacity, or review consistency is unsafe.",
+        "Do not reclassify entries as valid or choose the opposite placement. Do not invent an operation outside allowed_operations. If exact split text or target skill is unclear, emit defer with an execution-specific reason such as exact_split_text_unclear, target_skill_unclear, old_text_mismatch, capacity_or_store_state_unclear, or review_judgment_conflict_needs_recheck.",
     ]
-    ordered_candidates = sorted(candidates, key=lambda item: str(item.get("evidence_id") or ""))
+    ordered_candidates = sorted(candidates, key=lambda item: str(item.get("evidence_id") or item.get("entry_key") or ""))
     for item in ordered_candidates[:40]:
-        evidence_id = _clip(item.get("evidence_id"), max_chars=80)
+        evidence_id = _clip(item.get("evidence_id") or item.get("entry_key"), max_chars=80)
         old_text = _clip(item.get("old_text"), max_chars=260)
-        observations = item.get("placement_observations") if isinstance(item.get("placement_observations"), list) else []
-        observations_str = ",".join(str(observation) for observation in observations[:6]) if observations else "no_obvious_surface_signal"
-        decisions = item.get("allowed_decisions") if isinstance(item.get("allowed_decisions"), list) else []
-        decisions_str = ",".join(str(decision) for decision in decisions[:8]) if decisions else "keep,move_user_to_memory,move_memory_to_user,memory_to_skill,skip,defer"
+        raw_operations = item.get("allowed_operations") if isinstance(item.get("allowed_operations"), list) else []
+        operations_str = ",".join(str(operation) for operation in raw_operations[:8]) or "none"
         raw_target_skills = item.get("candidate_target_skills")
         target_skills: list[Any] = raw_target_skills if isinstance(raw_target_skills, list) else []
         target_skill_bits = []
@@ -308,55 +306,8 @@ def _render_memory_placement_candidates_section(digest: dict[str, Any]) -> str:
                 f"{_clip(skill.get('skill'), max_chars=80)}({_clip(skill.get('match_reason'), max_chars=60)})"
             )
         target_skill_str = ",".join(target_skill_bits) or "none"
-        official_boundary = _clip(item.get("official_boundary"), max_chars=360)
-        boundary_part = f"; official_boundary={official_boundary}" if official_boundary else ""
         lines.append(
-            f"- evidence_id={evidence_id}; current_store={_clip(item.get('current_store'), max_chars=40)}; placement_observations=[{observations_str}]; allowed_decisions=[{decisions_str}]; candidate_target_skills=[{target_skill_str}]{boundary_part}; old_text={old_text}"
-        )
-        template_base = {"source_evidence_id": evidence_id, "source_old_text": old_text}
-        move_operation = placement_move_operation_for_current_store(str(item.get("current_store") or ""))
-        if move_operation:
-            lines.append(
-                "  - move template: "
-                + json.dumps({"operation": move_operation, **template_base, "reason": "placement_boundary"}, ensure_ascii=False, separators=(",", ":"))
-            )
-        split_template = {
-            "transaction_kind": "placement_split",
-            "decision": "apply",
-            "operation": "split",
-            "source_store": "builtin_user" if str(item.get("current_store") or "") == "user" else "builtin_memory",
-            **template_base,
-            "fragments": [
-                {"target_store": "builtin_user", "text": "<exact final USER.md fragment or omit this fragment>"},
-                {"target_store": "builtin_memory", "text": "<exact final MEMORY.md fragment or omit this fragment>"},
-            ],
-            "reason": "mixed_user_preference_and_environment_runtime_facts",
-        }
-        lines.append(
-            "  - split template when one entry mixes user preference and environment/runtime facts: "
-            + json.dumps(split_template, ensure_ascii=False, separators=(",", ":"))
-        )
-        if target_skill_bits:
-            lines.append(
-                "  - memory_to_skill template when target_skill is known: "
-                + json.dumps({
-                    "transaction_kind": "memory_to_skill",
-                    "decision": "apply",
-                    "source_evidence_id": evidence_id,
-                    "source_store": "builtin_memory",
-                    "target_store": "skill",
-                    "target_skill": "<existing-editable-skill-name>",
-                    "source_old_text": old_text,
-                    "reason": "procedural_memory_belongs_in_skill",
-                }, ensure_ascii=False, separators=(",", ":"))
-            )
-        lines.append(
-            "  - keep/skip template: "
-            + json.dumps({"decision": "skip", "target_store": "none", "operation": "none", "evidence_ids": [evidence_id], "reason": "keep_current_store"}, ensure_ascii=False, separators=(",", ":"))
-        )
-        lines.append(
-            "  - defer template: "
-            + json.dumps({"decision": "defer", "target_store": "unresolved", "operation": "none", "evidence_ids": [evidence_id], "reason": "placement_unclear"}, ensure_ascii=False, separators=(",", ":"))
+            f"- evidence_id={evidence_id}; entry_key={_clip(item.get('entry_key'), max_chars=80)}; current_store={_clip(item.get('current_store'), max_chars=40)}; judgment={_clip(item.get('judgment'), max_chars=60)}; canonical_store={_clip(item.get('canonical_store'), max_chars=40)}; confidence={_clip(item.get('confidence'), max_chars=20)}; reason_code={_clip(item.get('reason_code'), max_chars=80)}; allowed_operations=[{operations_str}]; candidate_target_skills=[{target_skill_str}]; reason={_clip(item.get('reason'), max_chars=220)}; old_text={old_text}"
         )
     if int(placement.get("omitted_count") or 0):
         lines.append(f"- omitted memory placement candidates: {int(placement.get('omitted_count') or 0)}")
