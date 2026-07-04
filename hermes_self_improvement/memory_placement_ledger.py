@@ -231,12 +231,20 @@ def _validate_review_payload(payload: dict[str, Any], allowed_keys: set[str]) ->
 
 def _default_review_backend(prompt: str, task: dict[str, Any], config: dict[str, Any] | None = None) -> Any:
     try:
-        from .constrained_agent import run_constrained_role_agent
+        from .constrained_agent import run_tool_free_role_agent
     except Exception as exc:  # pragma: no cover - import failure depends on runtime
         raise RuntimeError(f"placement_review_backend_unavailable:{exc}") from exc
-    result = run_constrained_role_agent("memory_extractor", prompt, task, config=config or {})
-    if isinstance(result, dict) and result.get("response") is not None:
-        return result.get("response")
+    result = run_tool_free_role_agent(
+        role="memory_extractor",
+        system_message=prompt,
+        user_message=json.dumps(task, ensure_ascii=False),
+        config=config or {},
+    )
+    if isinstance(result, dict):
+        if result.get("final_response") is not None:
+            return result.get("final_response")
+        if result.get("response") is not None:
+            return result.get("response")
     return result
 
 
@@ -247,7 +255,11 @@ def _review_prompt(*, repair_error: str | None = None) -> str:
     return (
         "Review USER.md / MEMORY.md entries for placement. Return JSON only with a top-level reviews list. "
         "Validate semantics yourself; do not use deterministic route hints. "
-        "Required fields per review: entry_key, current_store, judgment, canonical_store, confidence, reason_code, reason."
+        "Required fields per review: entry_key, current_store, judgment, canonical_store, confidence, reason_code, reason. "
+        "Allowed judgment values: valid_current_store|wrong_store|mixed_entry|procedural_belongs_in_skill|duplicate_or_overlap|unclear. "
+        "Allowed store values for current_store and canonical_store: user|memory|skill|none|unresolved. "
+        "Allowed confidence values: low|medium|high. "
+        "Allowed reason_code values: user_preference_or_profile|agent_runtime_or_environment|project_or_tool_convention|procedural_belongs_in_skill|mixed_user_and_runtime|duplicate_or_overlap|unclear_boundary|recent_history_conflict|other."
         + suffix
     )
 

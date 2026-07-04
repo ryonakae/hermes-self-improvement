@@ -1,6 +1,8 @@
 # Memory Placement Review Ledger Implementation Plan
 
-> **For Hermes:** Use subagent-driven-development skill to implement this plan task-by-task.
+> **Status:** implemented and dogfooded on 2026-07-04. Final source-directed dry-run artifact: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260704T234643Z.json` with `placement_review.status=completed`, `reviewed_count=16`, `valid_cached_count=9`, `actionable_to_planner_count=5`, `memory_changes=0`, `skill_changes=0`. Report smoke shows the compact `Memory placement review` counts line.
+>
+> **For Hermes:** This plan is complete. Use it as historical design context, not as an active task list.
 
 **Goal:** Stop USER.md / MEMORY.md placement churn by adding a simple LLM-owned placement review ledger before the existing Planner sees memory placement candidates.
 

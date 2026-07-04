@@ -1296,6 +1296,15 @@ def test_operational_report_sections_include_runner_artifact_summary():
         "recent_runs": [{
             "path": "/tmp/run.json",
             "summary": {"skill_changes": 1},
+            "placement_review": {
+                "status": "completed",
+                "reviewed_count": 2,
+                "valid_cached_count": 10,
+                "actionable_to_planner_count": 1,
+                "deferred_stable_count": 1,
+                "planner_deferred_stable_count": 0,
+                "reversal_blocked_count": 1,
+            },
             "skill_lifecycle": {
                 "archive_skill_count": 2,
                 "would_archive": 1,
@@ -1315,6 +1324,7 @@ def test_operational_report_sections_include_runner_artifact_summary():
     assert "runs: 1 recent artifacts" in text
     assert "latest evidence 2, ignored 3" in text
     assert "runtime-private eval cases: 4" in text
+    assert "Memory placement review: status completed, reviewed 2, valid cached 10, actionable 1, deferred stable 1, planner-deferred stable 0, reversal blocked 1" in text
     assert "Skill lifecycle" in text
     assert "archive candidates 2, would archive 1, archived 0, references rewritten 3, deferred references 1, blocked 1" in text
     assert "archive_blocked_by_active_reference: 1" in text
@@ -1336,6 +1346,7 @@ def test_recent_run_rows_preserve_top_level_mutation_changes(tmp_path):
         ],
         "memory_changes": ["memory_a", "memory_b", "memory_c"],
         "action_summary": {"apply": 7, "defer": 21, "skip": 95, "block": 0},
+        "placement_review": {"status": "completed", "actionable_to_planner_count": 1},
     }), encoding="utf-8")
 
     rows = cli._recent_json_files(runs_dir, limit=1)
@@ -1347,6 +1358,7 @@ def test_recent_run_rows_preserve_top_level_mutation_changes(tmp_path):
     ]
     assert rows[0]["memory_changes"] == ["memory_a", "memory_b", "memory_c"]
     assert rows[0]["action_summary"] == {"apply": 7, "defer": 21, "skip": 95, "block": 0}
+    assert rows[0]["placement_review"] == {"status": "completed", "actionable_to_planner_count": 1}
 
 
 def test_operational_report_sections_fallback_to_top_level_skill_changes():

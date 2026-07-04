@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 from hermes_self_improvement import cli
 
@@ -59,7 +61,7 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     (memories / "MEMORY.md").write_text("Hermes runtime root は `~/.hermes`。\n", encoding="utf-8")
     artifact_path = tmp_path / "run.json"
     evidence_path = tmp_path / "evidence.json"
-    captured: dict[str, object] = {}
+    captured: dict[str, Any] = {}
 
     monkeypatch.setattr(cli, "get_hermes_home", lambda: hermes_home)
     monkeypatch.setattr(cli, "build_autonomous_operation_policy", lambda config: {})
@@ -89,7 +91,25 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     monkeypatch.setattr(cli, "run_pipeline", lambda config, *, since_hours, write_report: {"proposals": []})
     def fake_knowledge_step(*, evidence_pack, config, mutate, **kwargs):
         captured["current_entries"] = config.get("_memory_current_entries")
-        return {"status": "completed", "knowledge_transactions": [], "transaction_results": [], "changed_skills": [], "changed_memories": [], "editor_validation": {"summary": {}}, "prompt_sources": {}, "planner_digest": {}}
+        return {
+            "status": "completed",
+            "knowledge_transactions": [],
+            "transaction_results": [],
+            "changed_skills": [],
+            "changed_memories": [],
+            "editor_validation": {"summary": {}},
+            "prompt_sources": {},
+            "planner_digest": {},
+            "placement_review": {
+                "status": "completed",
+                "reviewed_count": 2,
+                "valid_cached_count": 0,
+                "actionable_to_planner_count": 1,
+                "deferred_stable_count": 0,
+                "planner_deferred_stable_count": 0,
+                "reversal_blocked_count": 0,
+            },
+        }
 
     monkeypatch.setattr(cli, "run_knowledge_improvement_step", fake_knowledge_step)
     monkeypatch.setattr(cli, "_write_run_artifact", lambda payload, config: artifact_path)
@@ -110,6 +130,15 @@ def test_run_improve_passes_builtin_memory_entries_to_editor(tmp_path, monkeypat
     )
 
     assert result["summary"]["memory_changes"] == 0
+    assert result["placement_review"] == {
+        "status": "completed",
+        "reviewed_count": 2,
+        "valid_cached_count": 0,
+        "actionable_to_planner_count": 1,
+        "deferred_stable_count": 0,
+        "planner_deferred_stable_count": 0,
+        "reversal_blocked_count": 0,
+    }
     entries = captured["current_entries"]
     assert {entry["target"] for entry in entries} == {"memory", "user"}
     assert all(entry["old_text"] == entry["text"] for entry in entries)
@@ -171,3 +200,92 @@ def test_run_improve_uses_canonical_knowledge_step_not_split_entry_points(tmp_pa
     assert result["step_decisions"]["knowledge_transactions"]["total"] == 0
     assert result["summary"]["skill_changes"] == 0
     assert result["summary"]["memory_changes"] == 0
+
+
+def test_run_improve_dry_run_persists_real_placement_review_summary(tmp_path, monkeypatch):
+    hermes_home = tmp_path / "hermes-home"
+    memories = hermes_home / "memories"
+    memories.mkdir(parents=True)
+    (memories / "USER.md").write_text("Hermes runtime root is ~/.hermes.\n", encoding="utf-8")
+    (memories / "MEMORY.md").write_text("Hermes writes short Slack reports.\n", encoding="utf-8")
+    evidence_path = tmp_path / "evidence.json"
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(cli, "get_hermes_home", lambda: hermes_home)
+    monkeypatch.setattr(cli, "build_autonomous_operation_policy", lambda config: {})
+    monkeypatch.setattr(cli, "summarize_autonomous_operation_policy", lambda policy: {})
+    monkeypatch.setattr(cli, "preview_curator_lifecycle", lambda *, config, mutate: {"status": "dry_run"})
+    monkeypatch.setattr(cli, "load_curator_telemetry", lambda config: {})
+    monkeypatch.setattr(cli, "_event_path", lambda config: tmp_path / "events.jsonl")
+    monkeypatch.setattr(cli, "_load_events", lambda path, *, since: [])
+    monkeypatch.setattr(
+        cli,
+        "build_evidence_pack",
+        lambda events, since, until, *, curator_telemetry, memory_paths, config=None: {
+            "views": {"memory": [], "skill": [], "evaluator": []},
+            "evidence": [],
+            "summary": {},
+            "skill_candidates": [],
+        },
+    )
+    monkeypatch.setattr(cli, "build_planner_windows", lambda events: [])
+    monkeypatch.setattr(cli, "build_planner_digest", lambda windows, *, existing_memories, recent_candidates: {})
+    monkeypatch.setattr(cli, "run_planner", lambda digest, *, config: {"candidates": []})
+    monkeypatch.setattr(cli, "build_active_skill_references", lambda config, *, candidate_names: {})
+    monkeypatch.setattr(cli, "attach_active_skill_references", lambda evidence_pack, active_references: evidence_pack)
+    monkeypatch.setattr(cli, "write_evidence_pack", lambda evidence_pack, reports_dir: evidence_path)
+    monkeypatch.setattr(cli, "_reports_dir", lambda config: tmp_path)
+    monkeypatch.setattr(cli, "run_pipeline", lambda config, *, since_hours, write_report: {"proposals": []})
+    monkeypatch.setattr(cli, "record_run_episodes", lambda *, config, run_result: {"recorded": 0})
+    monkeypatch.setattr(cli, "build_credit_assignment_aggregate", lambda *, config, limit: {})
+    monkeypatch.setattr(cli, "compact_credit_assignment_summary", lambda aggregate: {})
+
+    def fake_review(review_input, *, config):
+        updates = {}
+        for entry in review_input["entries"]:
+            judgment = "wrong_store" if entry["current_store"] == "user" else "valid_current_store"
+            canonical_store = "memory" if entry["current_store"] == "user" else entry["current_store"]
+            updates[entry["entry_key"]] = {
+                "entry_key": entry["entry_key"],
+                "current_store": entry["current_store"],
+                "judgment": judgment,
+                "canonical_store": canonical_store,
+                "confidence": "high",
+                "reason_code": "agent_runtime_or_environment",
+                "reason": "Runtime environment belongs in MEMORY.",
+            }
+        return {
+            "status": "completed",
+            "reviewed_count": len(updates),
+            "ledger_updates": updates,
+            "repair_attempted": False,
+        }
+
+    def fake_planner_runtime(*, digest, config):
+        captured["placement_review"] = digest["placement_review"]
+        captured["memory_candidates"] = digest["memory_candidates"]
+        return {"status": "completed", "knowledge_transactions": []}
+
+    result = cli.run_improve(
+        config={
+            "_self_improvement_root": str(tmp_path / "self-improvement"),
+            "_placement_review_func": fake_review,
+            "_planner_runtime_func": fake_planner_runtime,
+            "memory_inventory_paths": {
+                "memory": str(memories / "MEMORY.md"),
+                "user": str(memories / "USER.md"),
+            },
+        },
+        since_hours=24,
+        dry_run=True,
+    )
+
+    assert captured["placement_review"]["status"] == "completed"
+    assert captured["placement_review"]["reviewed_count"] == 2
+    assert captured["placement_review"]["actionable_to_planner_count"] == 1
+    assert len(captured["memory_candidates"]) == 1
+    assert result["placement_review"]["actionable_to_planner_count"] == 1
+    artifact = json.loads(Path(result["artifact_path"]).read_text(encoding="utf-8"))
+    assert artifact["placement_review"] == result["placement_review"]
+    assert artifact["placement_review"]["reviewed_count"] == 2
+    assert artifact["placement_review"]["valid_cached_count"] == 1

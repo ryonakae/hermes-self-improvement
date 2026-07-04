@@ -301,7 +301,7 @@ def test_planner_digest_exposes_memory_placement_target_skill_hints_as_context()
         {"skill": "hermes-gateway-and-sessions", "match_reason": "name_token_overlap"}
     ]
     assert "candidate_target_skills=[hermes-gateway-and-sessions(name_token_overlap)]" in user_content
-    assert "Candidate target skills are context hints, not commands" in user_content
+    assert "already reviewed by the memory placement reviewer" in user_content
 
 
 def test_render_planner_messages_exposes_memory_placement_candidates():
@@ -323,10 +323,10 @@ def test_render_planner_messages_exposes_memory_placement_candidates():
     user_content = rendered["messages"][1]["content"]
 
     assert "## Memory placement candidates" in user_content
-    assert "one explicit decision per memory placement candidate" in user_content
+    assert "already reviewed by the memory placement reviewer" in user_content
     assert "evidence_id=memory-place-user-runtime" in user_content
     assert "current_store=user" in user_content
-    assert "placement_observations=[mentions_tool_or_runtime_term]" in user_content
+    assert "old_text=Gmail observer=~/.hermes/automations/gmail-purchase-observer." in user_content
     assert "suggested_route" not in user_content
     assert "route_reasons" not in user_content
     assert "Gmail observer=~/.hermes/automations/gmail-purchase-observer." in user_content
@@ -360,16 +360,12 @@ def test_render_planner_messages_includes_memory_placement_transaction_templates
     rendered = render_planner_messages(digest=digest)
     user_content = rendered["messages"][1]["content"]
 
-    assert "For each memory placement candidate, copy exactly one template into knowledge_transactions" in user_content
-    assert "Use placement_move only when the whole source entry belongs in the other built-in store" in user_content
-    assert "Use placement_split when one entry mixes user preference and environment/runtime facts" in user_content
-    assert "fragments" in user_content
-    assert '"operation":"move_user_to_memory"' in user_content
-    assert '"transaction_kind":"placement_split"' in user_content
-    assert '"source_evidence_id":"memory-place-user-runtime"' in user_content
-    assert '"source_old_text":"Gmail observer=~/.hermes/automations/gmail-purchase-observer."' in user_content
-    assert '"target_store":"none"' in user_content
-    assert '"reason":"keep_current_store"' in user_content
+    assert "already reviewed by the memory placement reviewer" in user_content
+    assert "Do not reclassify entries as valid or choose the opposite placement" in user_content
+    assert "evidence_id=memory-place-user-runtime" in user_content
+    assert "old_text=Gmail observer=~/.hermes/automations/gmail-purchase-observer." in user_content
+    assert "For each memory placement candidate, copy exactly one template into knowledge_transactions" not in user_content
+    assert "move template" not in user_content
 
 
 def test_render_planner_messages_only_shows_store_valid_memory_placement_move_templates():
@@ -399,15 +395,11 @@ def test_render_planner_messages_only_shows_store_valid_memory_placement_move_te
 
     rendered = render_planner_messages(digest=digest)
     content = rendered["messages"][1]["content"]
-    user_move_lines = [line for line in content.splitlines() if '"source_evidence_id":"memory-place-user"' in line and "move template" in line]
-    memory_move_lines = [line for line in content.splitlines() if '"source_evidence_id":"memory-place-memory"' in line and "move template" in line]
-
-    assert len(user_move_lines) == 1
-    assert '"operation":"move_user_to_memory"' in user_move_lines[0]
-    assert '"operation":"move_memory_to_user"' not in user_move_lines[0]
-    assert len(memory_move_lines) == 1
-    assert '"operation":"move_memory_to_user"' in memory_move_lines[0]
-    assert '"operation":"move_user_to_memory"' not in memory_move_lines[0]
+    assert "evidence_id=memory-place-user" in content
+    assert "evidence_id=memory-place-memory" in content
+    assert "move template" not in content
+    assert '"operation":"move_user_to_memory"' not in content
+    assert '"operation":"move_memory_to_user"' not in content
 
 
 def test_render_planner_messages_renders_apply_template_for_cross_store_duplicate_cleanup():
@@ -592,7 +584,7 @@ def test_render_planner_messages_does_not_prioritize_by_memory_placement_route()
     assert "Priority placement candidates requiring semantic judgment" not in user_content
     assert "suggested_route" not in user_content
     assert "likely_memory_to_skill" not in user_content
-    assert "Placement observations are observations, not recommendations" in user_content
+    assert "already reviewed by the memory placement reviewer" in user_content
     main_section = user_content.split("## Memory placement candidates", 1)[1]
     assert main_section.index("evidence_id=memory-place-keep") < main_section.index("evidence_id=memory-place-procedure")
 

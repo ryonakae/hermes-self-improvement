@@ -134,6 +134,40 @@ def _normalize_agent_result(result: Any, *, allowed_tool_names: set[str] | froze
     return {"final_response": str(result)}
 
 
+def run_tool_free_role_agent(
+    *,
+    role: str,
+    user_message: str,
+    system_message: str,
+    config: dict[str, Any],
+    max_iterations: int = 1,
+) -> dict[str, Any]:
+    spec = ROLE_TOOL_PERMISSIONS[role]
+    if not spec.tool_free:
+        raise ValueError(f"{role} is not a tool-free role; use run_constrained_role_agent")
+    role_config = _role_model_config(config, role)
+    routing = _role_agent_routing(role_config)
+    max_tokens = _coerce_int(role_config.get("max_tokens"), default=2200)
+    agent_cls = _agent_class()
+    agent = agent_cls(
+        provider=routing["provider"],
+        model=routing["model"],
+        api_mode=routing["api_mode"],
+        base_url=routing["base_url"],
+        api_key=routing["api_key"],
+        max_tokens=max_tokens,
+        max_iterations=max_iterations,
+        enabled_toolsets=[],
+        quiet_mode=True,
+        skip_memory=True,
+        skip_context_files=True,
+        save_trajectories=False,
+    )
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        result = agent.run_conversation(user_message=user_message, system_message=system_message)
+    return _normalize_agent_result(result, allowed_tool_names=set())
+
+
 def run_constrained_role_agent(
     *,
     role: str,

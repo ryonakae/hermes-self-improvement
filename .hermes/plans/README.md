@@ -2,9 +2,9 @@
 
 ## Current source of truth
 
-### Current planned hardening — 2026-07-04 memory placement review ledger
+### Latest completed hardening — 2026-07-04 memory placement review ledger
 
-`2026-07-04-memory-placement-review-ledger.md` is planned and not yet implemented. It addresses recent USER/MEMORY placement churn by adding a simple LLM-owned review ledger before Planner placement candidates are rendered: cache stable judgments by `normalized_text_hash + store`, skip `valid_current_store/high`, retry `unclear` once before `deferred_stable`, send only actionable medium/high review rows to Planner with `allowed_operations` rather than move/split templates, stabilize repeated Planner defers, and block recent reverse USER↔MEMORY moves by text hash. The plan intentionally avoids lineage IDs, new config, approval queues, or deterministic canonical-store heuristics.
+`2026-07-04-memory-placement-review-ledger.md` is implemented and dogfooded. It addresses recent USER/MEMORY placement churn by adding an LLM-owned review ledger before Planner placement candidates are rendered: cache stable judgments by `normalized_text_hash + store`, skip `valid_current_store/high`, retry `unclear` once before `deferred_stable`, send only actionable medium/high review rows to Planner with `allowed_operations` rather than move/split templates, stabilize repeated Planner defers, and block recent reverse USER↔MEMORY moves by text hash. Verification: `py_compile`, full `pytest tests -q` → `1050 passed, 2 skipped`, `git diff --check`, source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260704T234643Z.json` with `placement_review.status=completed`, `reviewed_count=16`, `valid_cached_count=9`, `actionable_to_planner_count=5`, `memory_changes=0`, `skill_changes=0`, and report smoke showing compact `Memory placement review` counts. No mutating run was executed.
 
 ### Current planned hardening — 2026-06-23 outcome signal reporting
 

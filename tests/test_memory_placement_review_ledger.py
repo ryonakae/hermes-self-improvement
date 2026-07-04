@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from hermes_self_improvement.memory_placement_ledger import (
+    _default_review_backend,
     actionable_placement_candidates_from_ledger,
     build_placement_review_input,
     load_placement_ledger,
@@ -63,6 +64,28 @@ def test_build_placement_review_input_skips_stable_rows_and_retries_unclear_once
     assert review_input["summary"]["deferred_stable_count"] == 1
 
 
+def test_default_review_backend_uses_tool_free_role_agent(monkeypatch):
+    import hermes_self_improvement.constrained_agent as constrained_agent
+
+    calls = []
+
+    def fake_tool_free_agent(**kwargs):
+        calls.append(kwargs)
+        return {"final_response": "{\"reviews\": []}"}
+
+    monkeypatch.setattr(constrained_agent, "run_tool_free_role_agent", fake_tool_free_agent, raising=False)
+
+    result = _default_review_backend("review prompt", {"placement_review": {"entries": []}}, config={"x": 1})
+
+    assert result == "{\"reviews\": []}"
+    assert calls == [{
+        "role": "memory_extractor",
+        "system_message": "review prompt",
+        "user_message": '{"placement_review": {"entries": []}}',
+        "config": {"x": 1},
+    }]
+
+
 def test_run_memory_placement_review_repairs_invalid_json_and_accepts_enum_valid_weird_combinations():
     calls = []
 
@@ -93,6 +116,8 @@ def test_run_memory_placement_review_repairs_invalid_json_and_accepts_enum_valid
     assert result["reviewed_count"] == 1
     assert result["repair_attempted"] is True
     assert len(calls) == 2
+    assert "valid_current_store|wrong_store|mixed_entry|procedural_belongs_in_skill|duplicate_or_overlap|unclear" in calls[0]["prompt"]
+    assert "user_preference_or_profile|agent_runtime_or_environment|project_or_tool_convention|procedural_belongs_in_skill|mixed_user_and_runtime|duplicate_or_overlap|unclear_boundary|recent_history_conflict|other" in calls[0]["prompt"]
     assert result["ledger_updates"]["k:user"]["reason_code"] == "unclear_boundary"
 
 

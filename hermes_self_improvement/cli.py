@@ -383,6 +383,8 @@ def _recent_json_files(root: Path, pattern: str = "*.json", limit: int = 5) -> l
                 row[key] = payload.get(key)
         if isinstance(payload.get("action_summary"), dict):
             row["action_summary"] = payload.get("action_summary")
+        if isinstance(payload.get("placement_review"), dict):
+            row["placement_review"] = payload.get("placement_review")
         lifecycle = _summarize_run_skill_lifecycle(payload)
         if lifecycle:
             row["skill_lifecycle"] = lifecycle
@@ -433,6 +435,22 @@ def _operational_grouped_signal_lines(signal_strength: dict[str, Any]) -> list[s
     return lines
 
 
+def _placement_review_summary_line(placement_review: dict[str, Any]) -> str | None:
+    if not isinstance(placement_review, dict) or not placement_review:
+        return None
+    status = str(placement_review.get("status") or "unknown")
+    return (
+        "- Memory placement review: "
+        f"status {status}, "
+        f"reviewed {int(placement_review.get('reviewed_count') or 0)}, "
+        f"valid cached {int(placement_review.get('valid_cached_count') or 0)}, "
+        f"actionable {int(placement_review.get('actionable_to_planner_count') or 0)}, "
+        f"deferred stable {int(placement_review.get('deferred_stable_count') or 0)}, "
+        f"planner-deferred stable {int(placement_review.get('planner_deferred_stable_count') or 0)}, "
+        f"reversal blocked {int(placement_review.get('reversal_blocked_count') or 0)}"
+    )
+
+
 def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list[str]:
     if not isinstance(payloads, dict):
         return []
@@ -463,6 +481,9 @@ def _render_operational_report_sections(payloads: dict[str, Any] | None) -> list
             outcome_lines = _outcome_summary_lines(latest_run.get("credit_assignment") if isinstance(latest_run.get("credit_assignment"), dict) else {})
             if outcome_lines:
                 lines.extend(outcome_lines)
+            placement_review_line = _placement_review_summary_line(latest_run.get("placement_review") if isinstance(latest_run.get("placement_review"), dict) else {})
+            if placement_review_line:
+                lines.append(placement_review_line)
             planner_decisions = (skill_step.get("planner") or {}).get("decisions") if isinstance(skill_step.get("planner"), dict) and isinstance((skill_step.get("planner") or {}).get("decisions"), list) else []
             skill_quality_lines = _skill_quality_summary_lines(
                 skill_step.get("decisions") if isinstance(skill_step.get("decisions"), list) else [],
@@ -1184,6 +1205,7 @@ def run_improve(
     }
     action_summary = _action_summary_from_result({"knowledge_transactions": knowledge_transactions}, step_decisions_payload)
     raw_memory_capacity_followups = knowledge_step.get("memory_capacity_followups")
+    placement_review = knowledge_step.get("placement_review") if isinstance(knowledge_step.get("placement_review"), dict) else {}
     output_memory_capacity_followups = raw_memory_capacity_followups if isinstance(raw_memory_capacity_followups, dict) else {}
     if not (output_memory_capacity_followups.get("blocked_count") or output_memory_capacity_followups.get("items")) and not auto_capacity_followup_source:
         output_memory_capacity_followups = memory_capacity_followups
@@ -1225,6 +1247,7 @@ def run_improve(
         **({"source_report": source_report_context} if source_report_context else {}),
         **({"source_memory_capacity_followups": {"artifact_path": capacity_followup_source_path, "blocked_count": int(memory_capacity_followups.get("blocked_count") or 0)}} if capacity_followup_source_path else {}),
         "memory_capacity_followups": output_memory_capacity_followups,
+        "placement_review": placement_review,
         "knowledge_transactions": knowledge_transactions,
         "step_decisions": step_decisions_payload,
         "action_summary": action_summary,

@@ -3,7 +3,7 @@ from pathlib import Path
 from hermes_self_improvement.role_tool_permissions import ROLE_TOOL_PERMISSIONS
 
 
-ACTIVE_ROLES = {"planner", "editor", "evaluator", "calibrator"}
+ACTIVE_ROLES = {"planner", "editor", "evaluator", "calibrator", "memory_extractor"}
 
 
 def test_role_tool_permissions_matrix_is_minimal():
@@ -12,6 +12,7 @@ def test_role_tool_permissions_matrix_is_minimal():
     assert ROLE_TOOL_PERMISSIONS["editor"].allowed_tool_names == frozenset({"skills_list", "skill_view", "skill_manage", "memory"})
     assert ROLE_TOOL_PERMISSIONS["evaluator"].allowed_tool_names == frozenset()
     assert ROLE_TOOL_PERMISSIONS["calibrator"].allowed_tool_names == frozenset()
+    assert ROLE_TOOL_PERMISSIONS["memory_extractor"].allowed_tool_names == frozenset()
 
 
 def test_only_editor_role_can_have_mutation_tools():
@@ -22,7 +23,7 @@ def test_only_editor_role_can_have_mutation_tools():
 
 
 def test_tool_free_roles_have_no_enabled_toolsets():
-    for role in ["evaluator", "calibrator"]:
+    for role in ["evaluator", "calibrator", "memory_extractor"]:
         spec = ROLE_TOOL_PERMISSIONS[role]
         assert spec.tool_free is True
         assert spec.enabled_toolsets == ()
