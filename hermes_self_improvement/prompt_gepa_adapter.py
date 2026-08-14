@@ -35,8 +35,14 @@ def require_dspy() -> Any:
 
 
 def _model_config(config: dict[str, Any]) -> dict[str, Any]:
-    model_cfg = config.get("model") if isinstance(config.get("model"), dict) else {}
-    return model_cfg.get("evaluator") if isinstance(model_cfg.get("evaluator"), dict) else {}
+    raw_model_cfg = config.get("model")
+    model_cfg = raw_model_cfg if isinstance(raw_model_cfg, dict) else {}
+    raw_calibrator = model_cfg.get("calibrator")
+    calibrator = raw_calibrator if isinstance(raw_calibrator, dict) else {}
+    if calibrator:
+        return calibrator
+    evaluator = model_cfg.get("evaluator")
+    return evaluator if isinstance(evaluator, dict) else {}
 
 
 def _build_reflection_lm(config: dict[str, Any], dspy: Any) -> Any | None:

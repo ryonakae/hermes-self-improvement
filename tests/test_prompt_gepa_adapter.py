@@ -69,7 +69,7 @@ class FakeDspy:
 
     class BaseLM:
         def __init__(self, *args, **kwargs):
-            pass
+            self.model = args[0] if args else kwargs.get("model")
 
     class Signature:
         pass
@@ -202,6 +202,10 @@ def test_optimize_overlay_candidate_set_calls_dspy_gepa_and_returns_candidate_ta
     FakeGEPA.calls.clear()
     config = {
         "_self_improvement_root": str(tmp_path / "self-improvement"),
+        "model": {
+            "evaluator": {"provider": "codex", "model": "gpt-evaluator"},
+            "calibrator": {"provider": "codex", "model": "gpt-calibrator"},
+        },
         "gepa_evaluator": {"enabled": True, "max_full_evals": 2, "num_threads": 2, "track_stats": True},
     }
     cases = [overlay_case("planner_overlay"), overlay_case("editor_overlay"), overlay_case("evaluator_overlay")]
@@ -218,6 +222,8 @@ def test_optimize_overlay_candidate_set_calls_dspy_gepa_and_returns_candidate_ta
     assert Path(result["artifact_path"]).exists()
     assert FakeGEPA.calls
     assert FakeGEPA.calls[0]["kwargs"]["max_full_evals"] == 2
+    assert FakeGEPA.calls[0]["kwargs"]["reflection_lm"].model == "gpt-calibrator"
+    assert FakeGEPA.calls[0]["student"].lm.model == "gpt-calibrator"
     assert len(FakeGEPA.calls[0]["trainset"]) == 3
     assert FakeGEPA.calls[0]["trainset"][0]["inputs"] == ("evidence_markdown", "evidence_json", "cases_json", "current_overlays_json")
     assert "# Calibration context" in FakeGEPA.calls[0]["trainset"][0]["evidence_markdown"]

@@ -288,6 +288,7 @@ def optimize_gepa(
 
     program_module = _load_dspy_program_module()
     evaluator_model_config = _model_config(config, "evaluator")
+    calibrator_model_config = _model_config(config, "calibrator") or evaluator_model_config
     student = program_module.build_dspy_program(lm_config=evaluator_model_config or gepa_config, dspy_module=dspy)
     metric_module = _load_dspy_metric_module()
     metric = getattr(metric_module, "gepa_feedback_metric")
@@ -297,9 +298,9 @@ def optimize_gepa(
         "max_full_evals": budget,
         "track_stats": bool(gepa_config.get("track_stats", True)),
     }
-    if evaluator_model_config and hasattr(dspy, "BaseLM") and hasattr(program_module, "build_hermes_auxiliary_lm"):
+    if calibrator_model_config and hasattr(dspy, "BaseLM") and hasattr(program_module, "build_hermes_auxiliary_lm"):
         optimizer_kwargs["reflection_lm"] = program_module.build_hermes_auxiliary_lm(
-            lm_config=evaluator_model_config,
+            lm_config=calibrator_model_config,
             dspy_module=dspy,
         )
     if gepa_config.get("num_threads") is not None:

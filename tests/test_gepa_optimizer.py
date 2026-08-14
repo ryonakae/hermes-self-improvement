@@ -148,7 +148,7 @@ def test_optimize_gepa_calls_dspy_gepa_compile_and_writes_artifact(tmp_path):
     assert call["trainset"][0]["inputs"] == ("proposal", "findings", "rubric")
 
 
-def test_optimize_gepa_uses_model_evaluator_for_student_and_reflection_lm(tmp_path):
+def test_optimize_gepa_uses_evaluator_for_student_and_calibrator_for_reflection_lm(tmp_path):
     adapter = load_module(GEPA_ADAPTER, "hermes_self_improvement_gepa_adapter_optimize_model_config")
     FakeGEPA.calls.clear()
     config = {
@@ -156,10 +156,16 @@ def test_optimize_gepa_uses_model_evaluator_for_student_and_reflection_lm(tmp_pa
         "model": {
             "evaluator": {
                 "provider": "codex",
-                "model": "gpt-gepa",
+                "model": "gpt-evaluator",
                 "timeout": 99,
                 "max_tokens": 321,
-            }
+            },
+            "calibrator": {
+                "provider": "codex",
+                "model": "gpt-calibrator",
+                "timeout": 120,
+                "max_tokens": 654,
+            },
         },
         "gepa_evaluator": {"enabled": True, "mode": "dspy_program_eval", "max_full_evals": 2},
     }
@@ -167,9 +173,10 @@ def test_optimize_gepa_uses_model_evaluator_for_student_and_reflection_lm(tmp_pa
     payload = adapter.optimize_gepa(config=config, max_full_evals=2, dspy_module=FakeDspy)
 
     call = FakeGEPA.calls[0]
-    assert call["kwargs"]["reflection_lm"].model == "gpt-gepa"
-    assert call["student"].lm.model == "gpt-gepa"
-    assert payload["config_summary"]["model"]["evaluator"]["model"] == "gpt-gepa"
+    assert call["kwargs"]["reflection_lm"].model == "gpt-calibrator"
+    assert call["student"].lm.model == "gpt-evaluator"
+    assert payload["config_summary"]["model"]["evaluator"]["model"] == "gpt-evaluator"
+    assert payload["config_summary"]["model"]["calibrator"]["model"] == "gpt-calibrator"
 
 
 def test_optimize_gepa_fails_closed_for_zero_budget(tmp_path):
