@@ -1,6 +1,6 @@
 import pytest
 
-from hermes_self_improvement.constrained_agent import run_constrained_role_agent
+from hermes_self_improvement.constrained_agent import run_constrained_role_agent, run_tool_free_role_agent
 
 
 def test_constrained_agent_uses_role_toolsets_and_whitelist(monkeypatch):
@@ -28,17 +28,59 @@ def test_constrained_agent_uses_role_toolsets_and_whitelist(monkeypatch):
         role="planner",
         user_message="{}",
         system_message="resolver",
-        config={"model": {"planner": {"provider": "openrouter", "model": "fake", "max_tokens": 123}}},
+        config={
+            "model": {
+                "planner": {
+                    "provider": "openrouter",
+                    "model": "fake",
+                    "max_tokens": 123,
+                    "extra_body": {"reasoning": {"enabled": True, "effort": "high"}},
+                }
+            }
+        },
     )
 
     assert calls["agent_kwargs"]["enabled_toolsets"] == ["skills"]
     assert calls["agent_kwargs"]["provider"] == "openrouter"
     assert calls["agent_kwargs"]["model"] == "fake"
     assert calls["agent_kwargs"]["max_tokens"] == 123
+    assert calls["agent_kwargs"]["reasoning_config"] == {"enabled": True, "effort": "high"}
     assert calls["allowed"] == {"skills_list", "skill_view"}
     assert calls["cleared"] is True
     assert calls["run_kwargs"]["user_message"] == "{}"
     assert calls["run_kwargs"]["system_message"] == "resolver"
+    assert result["final_response"] == '{"ok": true}'
+
+
+def test_tool_free_agent_uses_role_reasoning_config(monkeypatch):
+    calls = {}
+
+    class FakeAgent:
+        def __init__(self, **kwargs):
+            calls["agent_kwargs"] = kwargs
+
+        def run_conversation(self, **kwargs):
+            return {"final_response": '{"ok": true}'}
+
+    monkeypatch.setattr("hermes_self_improvement.constrained_agent.AIAgent", FakeAgent)
+
+    result = run_tool_free_role_agent(
+        role="evaluator",
+        user_message="{}",
+        system_message="evaluator",
+        config={
+            "model": {
+                "evaluator": {
+                    "provider": "openrouter",
+                    "model": "fake",
+                    "extra_body": {"reasoning": {"enabled": True, "effort": "high"}},
+                }
+            }
+        },
+    )
+
+    assert calls["agent_kwargs"]["enabled_toolsets"] == []
+    assert calls["agent_kwargs"]["reasoning_config"] == {"enabled": True, "effort": "high"}
     assert result["final_response"] == '{"ok": true}'
 
 

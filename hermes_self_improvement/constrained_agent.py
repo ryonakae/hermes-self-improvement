@@ -45,6 +45,14 @@ def _role_model_config(config: dict[str, Any], role: str) -> dict[str, Any]:
     return raw_role_config if isinstance(raw_role_config, dict) else {}
 
 
+def _role_reasoning_config(role_config: dict[str, Any]) -> dict[str, Any] | None:
+    extra_body = role_config.get("extra_body")
+    if not isinstance(extra_body, dict):
+        return None
+    reasoning = extra_body.get("reasoning")
+    return dict(reasoning) if isinstance(reasoning, dict) else None
+
+
 def _clean_str(value: Any) -> str:
     return str(value or "").strip()
 
@@ -156,6 +164,7 @@ def run_tool_free_role_agent(
         base_url=routing["base_url"],
         api_key=routing["api_key"],
         max_tokens=max_tokens,
+        reasoning_config=_role_reasoning_config(role_config),
         max_iterations=max_iterations,
         enabled_toolsets=[],
         quiet_mode=True,
@@ -191,6 +200,7 @@ def run_constrained_role_agent(
         base_url=routing["base_url"],
         api_key=routing["api_key"],
         max_tokens=max_tokens,
+        reasoning_config=_role_reasoning_config(role_config),
         max_iterations=max_iterations,
         enabled_toolsets=list(spec.enabled_toolsets),
         quiet_mode=True,
