@@ -23,7 +23,7 @@ from .config import (
     normalize_calibration_config,
 )
 PLUGIN_NAME = "hermes-self-improvement"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "1.0.0"
 UTC = timezone.utc
 
 from .schemas import SELF_IMPROVEMENT_TOOL_SPECS

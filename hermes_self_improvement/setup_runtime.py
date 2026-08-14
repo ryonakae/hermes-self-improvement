@@ -12,7 +12,7 @@ from .prompt_overlays import DEFAULT_PROMPT_SEED_ROLES, active_prompts_path, loa
 from .prompts import base_prompt_hash
 
 PLUGIN_NAME = "hermes-self-improvement"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "1.0.0"
 UTC = timezone.utc
 PACKAGE_DIR = Path(__file__).resolve().parent
 PLUGIN_DIR = PACKAGE_DIR.parent

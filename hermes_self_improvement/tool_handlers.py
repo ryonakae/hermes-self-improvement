@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover - standalone unit tests outside Hermes run
         return json.dumps(data if data is not None else kwargs, ensure_ascii=False)
 
 PLUGIN_NAME = "hermes-self-improvement"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "1.0.0"
 
 
 def _config_from_args(args: dict[str, Any] | None) -> dict[str, Any]:

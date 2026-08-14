@@ -19,7 +19,7 @@ from .prompt_overlays import promote_overlay_candidate_set
 from .runtime_eval_cases import build_overlay_set_runtime_eval_cases, build_role_runtime_eval_cases
 from .setup_runtime import check_runtime_setup, runtime_layout
 PLUGIN_NAME = "hermes-self-improvement"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "1.0.0"
 UTC = timezone.utc
 
 

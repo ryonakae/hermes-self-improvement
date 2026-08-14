@@ -1,7 +1,11 @@
 # Python caches
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
+.venv/
+build/
+dist/
 
 # Local/runtime noise
 .DS_Store

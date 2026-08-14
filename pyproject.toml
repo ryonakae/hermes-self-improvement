@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-self-improvement"
-version = "0.1.0"
+version = "1.0.0"
 description = "Hermes user plugin for observing runtime events and generating guarded self-improvement proposals."
+readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [

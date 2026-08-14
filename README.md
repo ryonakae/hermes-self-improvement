@@ -1,115 +1,202 @@
 # hermes-self-improvement
 
-[Hermes Agent](https://hermes-agent.nousresearch.com/) の実行時イベントを観測し、スキルとメモリを自己改善する user plugin です。
-改善判断のプロンプト自体も [DSPy / GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) でチューニングします。
+Observe Hermes Agent runtime signals and turn them into evidence-backed improvements for skills, memory, and evaluator prompts.
 
-## 何を解決するか
+<!-- README-I18N:START -->
 
-Hermes Agent の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) はスキル利用状況とライフサイクルを追跡します。
-ただし、会話中のツール失敗、ユーザーの訂正、メモリ操作の不整合といった細かい信号は拾いません。
+**English** | [日本語](./README.ja.md)
 
-このプラグインは runtime hook で次の信号を記録します。
+<!-- README-I18N:END -->
 
-- ツール失敗時の文脈
-- メモリ操作と失敗
-- ユーザーからの訂正
-- セッションと subagent の結果
-- LLM / API 失敗のメタデータ
+`hermes-self-improvement` is a user plugin for [Hermes Agent](https://hermes-agent.nousresearch.com/). It records lightweight runtime events, builds evidence packs, plans guarded knowledge changes, applies approved mutations through Hermes tools, and tunes its planner, editor, and evaluator prompt overlays with [DSPy / GEPA](https://dspy.ai/api/optimizers/GEPA/overview/).
 
-hook は記録だけを行います。実際の変更は `improve` と `calibrate` の 2 つの runner が担当します。
+## Contents
 
-## 動作の流れ
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Safety model](#safety-model)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Commands](#commands)
+- [Configuration](#configuration)
+- [Automation](#automation)
+- [Runtime state](#runtime-state)
+- [Development](#development)
+- [License](#license)
+
+<a id="features"></a>
+## Features
+
+- **Runtime observation:** Captures tool failures, memory operations, user corrections, session outcomes, subagent outcomes, and LLM/API failure metadata.
+- **Evidence-first planning:** Groups observations into evidence packs before a planner selects a target and knowledge transaction.
+- **Tool-mediated editing:** Uses constrained Hermes agents and official `skill_manage` and memory tools instead of direct file or provider-database edits.
+- **Outcome accounting:** Stores run artifacts, episodes, ledgers, and post-change signals for later review.
+- **Prompt calibration:** Uses DSPy / GEPA to optimize runtime-private prompt overlays for planner, editor, and evaluator roles.
+- **Read-only previews:** Supports `--dry-run` for both improvement and calibration workflows.
+
+<a id="how-it-works"></a>
+## How it works
 
 ```text
-[1] Hermes 実行
+[1] Hermes runtime
       ↓
-[2] hook がイベントを state/events.jsonl に記録
+[2] Observation hooks append events to state/events.jsonl
       ↓
-[3] 観測を証拠パックにまとめる
+[3] Evidence builder creates indexes, detail packs, and diagnostics
       ↓
-[4] planner が target 解決と改善方針を選ぶ
+[4] Planner resolves targets and proposes knowledge transactions
       ↓
-[5] editor が skill / memory / user profile の変更を実行
+[5] Editor applies skill, memory, or user-profile changes through Hermes tools
       ↓
-[6] evaluator が結果を episode / outcome に保存
+[6] Evaluator records episodes, outcomes, and credit-assignment signals
       ↓
-[7] calibrator が planner / editor / evaluator の overlay prompt を調整
+[7] Calibrator optimizes planner/editor/evaluator prompt overlays with DSPy / GEPA
       │
-      └─→ 次回の Hermes 実行へ
+      └─→ Future Hermes runs provide new evidence
 ```
 
-`improve` が [3] から [6]、`calibrate` が [7] を回します。
+The primary surface is `improve / calibrate / report / status`. `setup` is a CLI-only bootstrap command.
 
-### 改善対象
+The plugin complements Hermes [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator). Curator lifecycle and review outcome data can become future evidence, but advisory feedback does not grant auto-apply permission.
 
-| 対象 | 範囲 |
-|---|---|
-| skill | Hermes が作成した local mutable skill。built-in / hub / plugin-bundled / external は対象外 |
-| memory | 公式 memory tool または provider-native memory tool 経由 |
-| evaluator | runtime-private な prompt overlay と eval case |
+<a id="safety-model"></a>
+## Safety model
 
-skill の新規作成は、durable な手順不足が観測から見えて、既存 skill に受け皿がないときだけ `skill_manage(action="create")` で行います。
-memory の配置は Hermes の境界に従います。`USER` は好み・会話スタイル・期待値、`MEMORY` は環境事実・規約・学んだこと、`Skill` は手順・workflow です。
+- Hooks are observation-only. They do not call an LLM, mutate knowledge, or run heavy aggregation inside the request path.
+- `improve` and `calibrate` are default mutation-capable commands. Use `--dry-run` before enabling scheduled execution.
+- Skill changes are limited to local mutable skills. Built-in, hub-installed, plugin-bundled, external, pinned, archived, or ambiguous skills are excluded from mutation targets.
+- Skill mutation goes through official Hermes tools such as `skill_manage`; the plugin does not use direct filesystem writes for skill changes.
+- Memory mutation goes through the Hermes memory tool or an explicit provider-native memory tool. The plugin does not directly edit built-in memory files or provider databases.
+- Hermes core, this plugin's source tree, configuration, plans, and bundled skills are not self-improvement targets.
+- Rollback is not a primary feature. Failed or weak changes become future evidence for a later corrective improvement run.
 
-## 導入
+<a id="requirements"></a>
+## Requirements
 
-### 1. プラグインを配置する
+- Hermes Agent with user-plugin loading enabled
+- Python 3.11 or later
+- Git
+- A configured Hermes LLM provider for planner, editor, evaluator, and calibrator calls
 
-Hermes が読むディレクトリにリポジトリを置き、Python パッケージとして install します。
+The package declares `dspy>=3.1,<4` and installs it with the plugin.
+
+A source checkout under `~/.hermes/plugins` is required. Installing the Python wheel alone does not register this standalone plugin or install its manifest and runtime assets.
+
+<a id="installation"></a>
+## Installation
+
+Clone the plugin into the Hermes plugin directory and install it in the Python environment used by Hermes:
 
 ```bash
 mkdir -p ~/.hermes/plugins
-git clone git@github.com:ryonakae/hermes-self-improvement.git \
+git clone https://github.com/ryonakae/hermes-self-improvement.git \
   ~/.hermes/plugins/hermes-self-improvement
 cd ~/.hermes/plugins/hermes-self-improvement
 python3 -m pip install -e .
 ```
 
-Hermes gateway や CLI を起動中なら、新しいセッションを開くか gateway を再起動してください。
-
-### 2. 実行時ディレクトリを初期化する
+Initialize runtime state and verify discovery:
 
 ```bash
 hermes self-improvement setup
 hermes self-improvement status
 ```
 
-書き込まずに状態を見るときは `setup --check` と `report --since-hours 24` を使います。
+If a Hermes CLI or gateway process was already running, start a new CLI session or restart the gateway after installation.
 
-### 3. Curator を pause する
+<a id="quick-start"></a>
+## Quick start
 
-`improve` は Curator のスキル利用状況とライフサイクル状態を判断材料に使います。
-`disabled` にするとこの情報が弱くなります。バックグラウンドレビューだけ止めたい場合は `pause` を使ってください。
+Inspect the current state without writing:
 
 ```bash
-hermes curator pause
-hermes curator status
+hermes self-improvement status
+hermes self-improvement report --since-hours 24
 ```
 
-### 4. cron で自動化する (任意)
+Preview an improvement run:
 
-最初は `--dry-run` で動作を確認してから cron に入れます。
-日次 maintenance は LLM agent を挟まず、`--no-agent` の script-only job として `hermes self-improvement ...` を直接実行するのが安定です。
+```bash
+hermes self-improvement improve --dry-run
+```
 
-`~/.hermes/scripts/self-improvement-maintenance.sh` に薄い wrapper を置きます。重い `calibrate` は maintenance と分離し、別の script/job にしておく方が運用しやすいです。
+Apply an improvement run after reviewing the preview:
 
-`~/.hermes/scripts/self-improvement-maintenance.sh`
+```bash
+hermes self-improvement improve
+```
+
+Preview prompt calibration separately:
+
+```bash
+hermes self-improvement calibrate --dry-run
+```
+
+<a id="commands"></a>
+## Commands
+
+| Command | Purpose | Mutates by default |
+|---|---|---:|
+| `setup` | Initialize runtime directories and seed files | Yes |
+| `status` | Show observer, runtime, and evaluator state | No |
+| `report` | Summarize recent observations and run outcomes | No |
+| `improve` | Plan and apply skill or memory improvements | Yes |
+| `calibrate` | Optimize and promote prompt-overlay candidates when gates pass | Yes |
+
+All commands accept `--config PATH`. Add `--json` for machine-readable output. `improve` and `calibrate` accept `--dry-run`; `setup --check` verifies runtime setup without writing.
+
+<a id="configuration"></a>
+## Configuration
+
+Defaults live in `hermes_self_improvement/config.py`. Create a local override only when needed:
+
+```bash
+cp config.example.yaml config.local.yaml
+```
+
+Configuration precedence is:
+
+1. An explicit `--config PATH`
+2. `HERMES_SELF_IMPROVE_CONFIG`
+3. `config.local.yaml`
+4. `config.yaml`
+5. Built-in defaults
+
+Do not commit API keys or provider secrets. Use environment-variable references in local configuration.
+
+The four model roles are intentionally separate:
+
+| Key | Responsibility | Tool access |
+|---|---|---|
+| `model.planner` | Read evidence and produce knowledge transactions | Read-only skill inspection |
+| `model.editor` | Apply planner-approved skill and memory changes | Official skill and memory tools only |
+| `model.evaluator` | Evaluate plans, mutations, candidates, and outcomes | Tool-free |
+| `model.calibrator` | Generate candidates and reflection feedback during GEPA optimization | Tool-free |
+
+Role configs support `extra_body.reasoning`. The plugin forwards that reasoning configuration to both constrained and tool-free Hermes agents.
+
+Internal memory-placement reviews use tool-free Hermes auto routing; `memory_extractor` is not a separate model configuration key.
+
+See [`config.example.yaml`](./config.example.yaml) for model and calibration overrides.
+
+<a id="automation"></a>
+## Automation
+
+Run `improve` and `calibrate` as separate jobs: improvement is relatively lightweight, while DSPy / GEPA calibration can take longer. Use script-only Hermes cron jobs rather than placing an LLM agent around these commands.
+
+Example maintenance script:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
 cd "$HOME/.hermes/plugins/hermes-self-improvement"
-hermes self-improvement status >/dev/null
 hermes self-improvement improve
 hermes self-improvement report --since-hours 24
 ```
 
-cron job はこの script を `--no-agent` で登録します。manual dogfood では `improve + report` の maintenance は正常終了し、別実行の `calibrate` は旧 600 秒 budget を超えました。いまは `calibrate` を別 job に分離し、Hermes cron の global `script_timeout_seconds` は 1200 秒にしてあります。stdout がそのまま local output に保存されるため、script 側の出力は短い要約とアーティファクトのパスだけにしてください。
-
-現在の実運用は、軽い `improve + report` maintenance を3時間おき、重い DSPy/GEPA 系の `calibrate` を1日1回に分けています。08:00 の `daily-ops-digest` は、直近24時間の maintenance 出力を最大8回分読み、個別ログを羅列せず、実行回数・実変更・候補・defer/skip/block の傾向だけを統括して Slack に出します。
-
-`calibrate` 用には別 script を置きます。
+Example calibration script:
 
 ```bash
 #!/usr/bin/env bash
@@ -119,100 +206,50 @@ cd "$HOME/.hermes/plugins/hermes-self-improvement"
 hermes self-improvement calibrate
 ```
 
-```bash
-hermes config set cron.script_timeout_seconds 1200
+Start with `--dry-run`, inspect the generated artifacts, and only then schedule mutation-capable runs.
 
-hermes cron create '0 3 * * *' \
-  --name self-improvement-calibrate \
-  --deliver local \
-  --script self-improvement-calibrate.sh \
-  --no-agent
+<a id="runtime-state"></a>
+## Runtime state
 
-hermes cron create '10 */3 * * *' \
-  --name self-improvement-autonomous-maintenance \
-  --deliver local \
-  --script self-improvement-maintenance.sh \
-  --no-agent
-```
-
-監視だけ欲しいなら `status` と `report --since-hours 24` だけを実行する別 script / job にしてかまいません。
-
-## コマンド
-
-| コマンド | 役割 | 変更するか |
-|---|---|---|
-| `status` | 実行時ディレクトリ、観測、評価器の状態を表示 | しない |
-| `report` | 直近の観測を要約 | しない |
-| `improve` | 観測から skill / memory の改善案を選び実行 | する |
-| `calibrate` | 改善判断に使う evaluator / overlay を調整 | する |
-
-`improve` と `calibrate` は既定で変更可能です。プレビューしたいときは `--dry-run` を付けます。
-`improve` の判断は `apply / defer / skip / block` の 4 つに集約します。`apply` した変更は ledger と artifact に常に残します。
-
-## 設定
-
-既定値は `hermes_self_improvement/config.py` にあります。ローカル上書きが必要なときだけ YAML を置きます。
-
-```bash
-cp config.example.yaml config.yaml
-# またはローカル上書き
-$EDITOR config.local.yaml
-```
-
-API key や provider secret は commit しないでください。
-
-モデルは 4 つの role に振り分けます。`provider: auto` かつ空の `model` は、プラグインが concrete model を pin せず Hermes の通常 auto/main routing に任せる指定です。
-
-| key | 用途 | LLM tool access |
-|---|---|---|
-| `model.planner` | evidence index/detail を読んで target 解決と transaction plan を作成 | Hermes constrained agent。`skills_list` / `skill_view` の read-only skill inspection のみ |
-| `model.editor` | skill / memory / user profile の変更を planner transaction の範囲で実行 | Hermes constrained agent。公式 skill / memory tools に限定 |
-| `model.evaluator` | planner/editor の判断・実行結果・候補を評価 | tool-free |
-| `model.calibrator` | GEPA による planner / editor / evaluator prompt overlay 調整 | tool-free。optimizer policy 自体は自動自己改善しない |
-
-calibration の evidence しきい値 (window 日数、最少イベント数など) も YAML から調整できます。
-具体的なキーは `config.example.yaml` を参照してください。
-
-## 実行時ファイル
-
-`setup` は `${HERMES_HOME:-~/.hermes}/self-improvement/` 配下を作ります。
+`setup` creates `${HERMES_HOME:-~/.hermes}/self-improvement/`:
 
 ```text
 ${HERMES_HOME}/self-improvement/
-  state/events.jsonl              # hook イベント + 自身の LLM 呼び出し計測
+  state/events.jsonl
   state/install.json
   daily/
-  runs/                           # 実行アーティファクト
-  evidence/                       # 証拠パック
+  runs/
+  evidence/
   outcomes/
   ledgers/
   evaluator/
-    active.json                   # active evaluator pointer
-    active-prompts.json           # active prompt overlay pointer
-    prompt-candidates/            # role 別の overlay candidate
-    prompt-candidate-sets/        # GEPA が生成した候補セット
-    runtime-eval-cases/           # ユーザー固有の評価ケース
-  cache/dspy/                     # DSPy / GEPA キャッシュ
+    active.json
+    active-prompts.json
+    prompt-candidates/
+    prompt-candidate-sets/
+    runtime-eval-cases/
+  cache/dspy/
 ```
 
-full prompt の本文は runtime artifact と `--json` 出力だけに残します。
-compact なツール結果には source / hash / path だけを返します。
+Full prompts and detailed evidence remain in runtime artifacts and `--json` output. Agent-facing tool responses return compact summaries and artifact paths.
 
-## 開発
+<a id="development"></a>
+## Development
 
-着手手順、安全境界、検証コマンドは [`AGENTS.md`](AGENTS.md) にまとめてあります。
-設計と運用上の制約は [`skills/operations/SKILL.md`](skills/operations/SKILL.md) を参照してください。
-
-最低限の確認手順:
+Read [`AGENTS.md`](./AGENTS.md) for contribution rules and [`skills/operations/SKILL.md`](./skills/operations/SKILL.md) for architecture and safety boundaries.
 
 ```bash
 git status --short
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e . 'pytest>=9,<10'
+python -m py_compile __init__.py hermes_self_improvement/*.py
+python -m pytest tests -q
 hermes self-improvement status
-
-PY=${PYTHON:-.venv/bin/python}
-$PY -m pytest tests -q
+git diff --check
 ```
 
-## ライセンス
+<a id="license"></a>
+## License
 
-MIT License.
+[MIT License](./LICENSE) © 2026 Ryo Nakae.

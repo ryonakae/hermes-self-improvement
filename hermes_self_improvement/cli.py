@@ -60,7 +60,7 @@ from .scoring import score_proposals_impl
 from .setup_runtime import check_runtime_setup, run_setup, runtime_layout
 from .verification import merge_verifier_status
 PLUGIN_NAME = "hermes-self-improvement"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "1.0.0"
 UTC = timezone.utc
 
 
