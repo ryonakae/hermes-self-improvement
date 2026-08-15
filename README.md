@@ -8,7 +8,7 @@ Observe Hermes Agent runtime signals and turn them into evidence-backed improvem
 
 <!-- README-I18N:END -->
 
-`hermes-self-improvement` is a user plugin for [Hermes Agent](https://hermes-agent.nousresearch.com/). While Hermes runs, lightweight hooks record what actually happened: tool failures, memory operations, user corrections, and how sessions turned out. Later, on its own schedule, the plugin assembles that history into evidence, plans a small set of knowledge changes, and applies the approved ones through official Hermes tools. It also uses [DSPy / GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) to tune the prompt overlays behind its planner, editor, and evaluator roles.
+An agent tends to repeat its mistakes: the same tool fails the same way across sessions, and the agent forgets a correction you gave last week. `hermes-self-improvement` is a user plugin for [Hermes Agent](https://hermes-agent.nousresearch.com/) that turns those repeated failures into fixes. Lightweight hooks record what actually happened during each session, such as tool failures, memory operations, user corrections, and session outcomes. Later, on its own schedule, the plugin assembles that history into evidence, plans a small set of changes to your skills and memory, and applies the approved ones through official Hermes tools. It also uses [DSPy / GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) to tune the prompts that drive its own internal roles.
 
 ## Contents
 
@@ -29,10 +29,10 @@ Observe Hermes Agent runtime signals and turn them into evidence-backed improvem
 ## Features
 
 - **Runtime observation:** Hooks capture tool failures, memory operations, user corrections, session and subagent outcomes, and LLM/API failure metadata.
-- **Evidence-first planning:** Observations are grouped into evidence packs first; the planner then picks a target and proposes a knowledge transaction based on that evidence.
+- **Evidence-first planning:** Observations are first grouped into evidence packs, deduplicated bundles of related events. The planner then picks a target and proposes a knowledge transaction: a planned change together with its target, edit instructions, and rationale.
 - **Tool-mediated editing:** All changes go through constrained Hermes agents and the official `skill_manage` and memory tools, rather than direct file or provider-database writes.
 - **Outcome accounting:** Each run leaves behind artifacts, episodes, ledgers, and post-change signals that you can review later.
-- **Prompt calibration:** DSPy / GEPA optimizes the runtime-private prompt overlays for the planner, editor, and evaluator roles.
+- **Prompt calibration:** Each role runs on a fixed base prompt plus a tunable overlay. DSPy / GEPA optimizes the planner, editor, and evaluator overlays.
 - **Read-only previews:** Both `improve` and `calibrate` accept `--dry-run`.
 
 <a id="how-it-works"></a>
@@ -56,6 +56,10 @@ Observe Hermes Agent runtime signals and turn them into evidence-backed improvem
       └─→ Future Hermes runs provide new evidence
 ```
 
+Four internal roles drive this loop: the **planner** reads evidence and decides what to change, the **editor** applies the change through Hermes tools, the **evaluator** scores plans and outcomes, and the **calibrator** tunes the prompts the other roles run on. For every proposed change, the planner settles on one of four decisions: `apply`, `defer`, `skip`, or `block`.
+
+For example, suppose several sessions show a long-running command being retried while the original process is still alive. The hooks record each failure. On the next `improve` run, the evidence builder groups those events into an evidence pack, the planner proposes patching a local `timeout-workflow` skill with a procedure for telling a polling failure apart from a real timeout, and the editor applies the patch through `skill_manage`. The run artifact records that decision as `apply`, next to everything the planner chose to `defer` or `skip`.
+
 Day to day, you interact with four commands: `improve`, `calibrate`, `report`, and `status`. A fifth command, `setup`, bootstraps the runtime state and is only available from the CLI.
 
 The plugin complements Hermes [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator). Curator lifecycle and review outcomes can feed future evidence, but advisory feedback alone does not authorize an automatic apply.
@@ -67,7 +71,7 @@ The plugin complements Hermes [Curator](https://hermes-agent.nousresearch.com/do
 - `improve` and `calibrate` mutate state by default. Run them with `--dry-run` until you trust the output, and always preview before scheduling them.
 - Skill edits target local mutable skills only. Built-in, hub-installed, plugin-bundled, external, pinned, archived, and ambiguous skills are excluded from mutation.
 - Skill edits go through official Hermes tools such as `skill_manage`; the plugin does not write skill files directly.
-- Memory edits go through the Hermes memory tool or an explicitly configured provider-native memory tool; the plugin does not touch built-in memory files or provider databases directly.
+- Memory edits, including edits to the built-in user profile when Hermes has `memory.user_profile_enabled` on, go through the Hermes memory tool or an explicitly configured provider-native memory tool; the plugin does not touch built-in memory files or provider databases directly.
 - Hermes core and the plugin's own source tree, configuration, plans, and bundled skills are not improvement targets.
 - There is no rollback pipeline. A failed or weak change becomes evidence for a later improvement run to correct.
 
@@ -105,10 +109,12 @@ hermes self-improvement status
 
 If a Hermes CLI or gateway process was already running, open a new CLI session or restart the gateway after installation.
 
+Observation needs no further wiring: Hermes registers the plugin's hooks automatically, and every session from then on appends events to the log.
+
 <a id="quick-start"></a>
 ## Quick start
 
-Start with the read-only commands to see what the observer has collected:
+Right after installation the event log is empty, so use Hermes normally for a while before expecting improvement candidates. Start with the read-only commands to see what the observer has collected:
 
 ```bash
 hermes self-improvement status
@@ -138,13 +144,13 @@ hermes self-improvement calibrate --dry-run
 
 | Command | Purpose | Mutates by default |
 |---|---|---:|
-| `setup` | Initialize runtime directories and seed files | Yes |
+| `setup` | Initialize runtime directories and seed files | Yes (runtime directories only) |
 | `status` | Show observer, runtime, and evaluator state | No |
 | `report` | Summarize recent observations and run outcomes | No |
 | `improve` | Plan and apply skill or memory improvements | Yes |
-| `calibrate` | Optimize and promote prompt-overlay candidates when gates pass | Yes |
+| `calibrate` | Optimize prompt-overlay candidates and promote the ones that pass a regression check | Yes |
 
-Every command accepts `--config PATH`, and `--json` switches to machine-readable output. `improve` and `calibrate` support `--dry-run`; `setup --check` verifies the runtime setup without writing anything.
+Every command accepts `--config PATH`, and `--json` switches to machine-readable output. `improve` and `calibrate` support `--dry-run`; `setup --check` verifies the runtime setup without writing anything. `calibrate` promotes a candidate overlay only after it passes a regression evaluation against the stored runtime eval cases; candidates that fail stay on disk as artifacts.
 
 <a id="configuration"></a>
 ## Configuration
@@ -183,7 +189,7 @@ See [`config.example.yaml`](./config.example.yaml) for model and calibration ove
 <a id="automation"></a>
 ## Automation
 
-Schedule `improve` and `calibrate` as separate jobs: improvement runs are relatively light, while DSPy / GEPA calibration can take much longer. Run both as script-only Hermes cron jobs; these commands do not need an LLM agent wrapped around them.
+Schedule `improve` and `calibrate` as separate jobs. An `improve` run makes a limited number of planner, editor, and evaluator LLM calls and usually finishes within minutes; `calibrate` drives a DSPy / GEPA optimization loop and makes many more LLM calls, so give it a generous timeout. Run both as script-only Hermes cron jobs; these commands do not need an LLM agent wrapped around them.
 
 Example maintenance script:
 
