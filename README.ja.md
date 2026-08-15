@@ -1,6 +1,6 @@
 # hermes-self-improvement
 
-Hermes Agentの実行時シグナルを観測し、スキル・メモリ・評価プロンプトの改善へつなげます。
+Hermes Agent の実行時シグナルを観測し、根拠に基づいてスキル・メモリ・評価プロンプトを改善します。
 
 <!-- README-I18N:START -->
 
@@ -8,7 +8,7 @@ Hermes Agentの実行時シグナルを観測し、スキル・メモリ・評�
 
 <!-- README-I18N:END -->
 
-`hermes-self-improvement`は、[Hermes Agent](https://hermes-agent.nousresearch.com/)のユーザープラグインです。軽量な実行時イベントを記録し、証拠パックを作成して、安全性を考慮した知識変更を計画します。変更はHermes公式ツールを介して適用し、planner・editor・evaluatorのプロンプトオーバーレイを[DSPy / GEPA](https://dspy.ai/api/optimizers/GEPA/overview/)で調整します。
+`hermes-self-improvement` は [Hermes Agent](https://hermes-agent.nousresearch.com/) のユーザープラグインです。Hermes の実行中は、軽量なフックがツールの失敗、メモリ操作、ユーザーによる訂正、セッションの結果といった出来事を記録します。プラグインはあとから別のタイミングでこの記録を証拠としてまとめ、必要な知識変更を計画し、承認されたものだけを Hermes 公式ツール経由で適用します。さらに、planner・editor・evaluator の各ロールが使うプロンプトオーバーレイを [DSPy / GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) で調整します。
 
 ## 目次
 
@@ -28,12 +28,12 @@ Hermes Agentの実行時シグナルを観測し、スキル・メモリ・評�
 <a id="features"></a>
 ## 機能
 
-- **実行時の観測:** ツール失敗、メモリ操作、ユーザーの訂正、セッション結果、サブエージェント結果、LLM／API失敗のメタデータを取得します。
-- **証拠を先に集める計画:** 観測結果を証拠パックへまとめてから、plannerが対象と知識トランザクションを選びます。
-- **ツールを介した編集:** 制約付きHermesエージェントと公式の`skill_manage`／メモリツールを使い、ファイルやプロバイダーのデータベースを直接編集しません。
-- **結果の記録:** 実行アーティファクト、エピソード、台帳、変更後のシグナルを保存し、後から確認できます。
-- **プロンプト調整:** DSPy / GEPAを使い、planner・editor・evaluatorの実行時専用プロンプトオーバーレイを最適化します。
-- **読み取り専用プレビュー:** 改善と調整の両方で`--dry-run`を利用できます。
+- **実行時の観測:** フックが、ツールの失敗、メモリ操作、ユーザーによる訂正、セッションとサブエージェントの結果、LLM / API 失敗のメタデータを記録します。
+- **証拠に基づく計画:** 観測結果をまず証拠パックにまとめ、planner はその証拠をもとに対象を選び、知識トランザクションを提案します。
+- **ツール経由の編集:** 変更はすべて、制約付き Hermes エージェントと公式の `skill_manage`・メモリツールを通して行います。ファイルやプロバイダーのデータベースを直接書き換えることはありません。
+- **結果の記録:** 実行ごとにアーティファクト、エピソード、台帳、変更後のシグナルが残り、あとから見返せます。
+- **プロンプト調整:** planner・editor・evaluator の実行時専用プロンプトオーバーレイを DSPy / GEPA で最適化します。
+- **読み取り専用プレビュー:** `improve` と `calibrate` のどちらでも `--dry-run` を使えます。
 
 <a id="how-it-works"></a>
 ## 動作の流れ
@@ -56,37 +56,37 @@ Hermes Agentの実行時シグナルを観測し、スキル・メモリ・評�
       └─→ Future Hermes runs provide new evidence
 ```
 
-主な操作は`improve / calibrate / report / status`です。`setup`はCLI専用の初期化コマンドです。
+ふだん使うコマンドは `improve`・`calibrate`・`report`・`status` の 4 つです。もうひとつの `setup` は実行時状態を初期化するコマンドで、CLI からだけ使えます。
 
-このプラグインはHermesの[Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator)を補完します。Curatorのライフサイクル情報やレビュー結果は将来の証拠になりますが、助言的なフィードバックだけで自動適用を許可することはありません。
+このプラグインは Hermes の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) を補完します。Curator のライフサイクル情報やレビュー結果は将来の証拠として使えますが、助言的なフィードバックだけを根拠に自動適用することはありません。
 
 <a id="safety-model"></a>
 ## 安全性
 
-- フックは観測専用です。リクエスト処理中にLLMを呼び出したり、知識を変更したり、重い集計を実行したりしません。
-- `improve`と`calibrate`は既定で変更を行います。定期実行の前に`--dry-run`を使ってください。
-- スキル変更の対象は、ローカルで変更可能なスキルに限定します。組み込み・ハブから導入したもの・プラグイン同梱・外部・固定・アーカイブ済み・対象が曖昧なスキルは除外します。
-- スキル変更には`skill_manage`などのHermes公式ツールを使い、スキルを直接ファイル編集しません。
-- メモリ変更にはHermesのメモリツール、または明示されたプロバイダー固有のメモリツールを使います。組み込みメモリファイルやプロバイダーDBを直接編集しません。
-- Hermes本体、このプラグイン自身のソース・設定・計画・同梱スキルは自己改善の対象外です。
-- ロールバックは主要機能ではありません。失敗した変更や効果の弱い変更は将来の証拠となり、後続の改善実行で修正します。
+- フックは観測しかしません。LLM 呼び出し、知識の変更、重い集計はすべて、リクエスト処理の外にある `improve` / `calibrate` の実行側で行います。
+- `improve` と `calibrate` は既定で変更を適用します。出力に納得できるまでは `--dry-run` を使い、定期実行を組む前には必ずプレビューしてください。
+- スキル編集の対象は、ローカルの変更可能なスキルだけです。組み込み、ハブから導入したもの、プラグイン同梱、外部ディレクトリ、固定済み、アーカイブ済み、判別が曖昧なスキルは対象から外します。
+- スキル編集は `skill_manage` などの Hermes 公式ツール経由で行い、スキルファイルを直接書き換えません。
+- メモリ編集は Hermes のメモリツール、または明示的に設定したプロバイダー固有のメモリツール経由で行い、組み込みメモリファイルやプロバイダーのデータベースには直接触れません。
+- Hermes 本体と、このプラグイン自身のソース・設定・計画・同梱スキルは改善の対象外です。
+- ロールバックの仕組みは持ちません。失敗した変更や効果の薄い変更は証拠として残り、後続の改善実行で修正します。
 
 <a id="requirements"></a>
 ## 要件
 
-- ユーザープラグインを読み込めるHermes Agent
-- Python 3.11以降
+- ユーザープラグインを読み込める Hermes Agent
+- Python 3.11 以降
 - Git
-- planner・editor・evaluator・calibratorで使うLLMプロバイダーのHermes設定
+- planner・editor・evaluator・calibrator の各ロールで使う LLM プロバイダーの Hermes 設定
 
-パッケージは`dspy>=3.1,<4`を依存関係として宣言しており、プラグインと一緒にインストールされます。
+パッケージは `dspy>=3.1,<4` に依存しており、プラグインと一緒にインストールされます。
 
-`~/.hermes/plugins`配下にソース一式をチェックアウトする必要があります。Python wheelだけをインストールしても、この単体プラグインの登録やマニフェスト・実行時アセットの配置は行われません。
+プラグインは `~/.hermes/plugins` 配下にソースをチェックアウトした状態で使います。Hermes はチェックアウト内のマニフェストと実行時アセットからプラグインを認識するため、Python wheel だけをインストールしても動きません。
 
 <a id="installation"></a>
 ## インストール
 
-Hermesのプラグインディレクトリへクローンし、Hermesが使うPython環境へインストールします。
+Hermes のプラグインディレクトリへクローンし、Hermes が使う Python 環境にインストールします。
 
 ```bash
 mkdir -p ~/.hermes/plugins
@@ -96,38 +96,38 @@ cd ~/.hermes/plugins/hermes-self-improvement
 python3 -m pip install -e .
 ```
 
-実行時ディレクトリを初期化し、読み込み状態を確認します。
+続けて実行時状態を初期化し、プラグインが認識されているか確認します。
 
 ```bash
 hermes self-improvement setup
 hermes self-improvement status
 ```
 
-Hermes CLIやゲートウェイがすでに動いている場合は、インストール後にCLIの新しいセッションを開くか、ゲートウェイを再起動してください。
+Hermes CLI やゲートウェイがすでに動いている場合は、インストール後に新しい CLI セッションを開くか、ゲートウェイを再起動してください。
 
 <a id="quick-start"></a>
 ## クイックスタート
 
-書き込まずに現在の状態を確認します。
+まずは読み取り専用のコマンドで、観測がどこまで溜まっているかを確認します。
 
 ```bash
 hermes self-improvement status
 hermes self-improvement report --since-hours 24
 ```
 
-改善処理をプレビューします。
+改善実行が何を変えようとするかをプレビューします。
 
 ```bash
 hermes self-improvement improve --dry-run
 ```
 
-プレビューの確認後、改善を適用します。
+プレビューの内容に問題がなければ、そのまま適用します。
 
 ```bash
 hermes self-improvement improve
 ```
 
-プロンプト調整は別にプレビューできます。
+プロンプト調整のプレビューは別コマンドです。
 
 ```bash
 hermes self-improvement calibrate --dry-run
@@ -136,7 +136,7 @@ hermes self-improvement calibrate --dry-run
 <a id="commands"></a>
 ## コマンド
 
-| コマンド | 役割 | デフォルトで変更するか |
+| コマンド | 役割 | 既定で変更するか |
 |---|---|---:|
 | `setup` | 実行時ディレクトリと初期ファイルを作成 | はい |
 | `status` | 観測・実行時状態・評価器の状態を表示 | いいえ |
@@ -144,46 +144,46 @@ hermes self-improvement calibrate --dry-run
 | `improve` | スキル／メモリの改善を計画・適用 | はい |
 | `calibrate` | 条件を満たしたプロンプトオーバーレイ候補を最適化・反映 | はい |
 
-すべてのコマンドで`--config PATH`を使えます。機械処理しやすい出力には`--json`を付けます。`improve`と`calibrate`は`--dry-run`に対応し、`setup --check`は書き込まずに初期化状態を確認します。
+どのコマンドも `--config PATH` を受け付け、`--json` を付けると機械処理向けの出力になります。`improve` と `calibrate` は `--dry-run` に対応し、`setup --check` は何も書き込まずに初期化状態を確認します。
 
 <a id="configuration"></a>
 ## 設定
 
-デフォルト値は`hermes_self_improvement/config.py`にあります。上書きが必要な場合だけローカル設定を作成します。
+デフォルト値は `hermes_self_improvement/config.py` にあります。変えたい項目があるときだけローカル設定を作ります。
 
 ```bash
 cp config.example.yaml config.local.yaml
 ```
 
-設定の優先順位は次のとおりです。
+設定は次の順に探し、最初に見つかったものを使います。
 
-1. 明示的な`--config PATH`
+1. 明示的な `--config PATH`
 2. `HERMES_SELF_IMPROVE_CONFIG`
 3. `config.local.yaml`
 4. `config.yaml`
 5. 組み込みデフォルト
 
-APIキーやプロバイダーのシークレットをコミットしないでください。ローカル設定では環境変数参照を使います。
+API キーやプロバイダーのシークレットはコミットせず、ローカル設定から環境変数を参照してください。
 
-4つのモデルロールは分離されています。
+プラグインは LLM を 4 つのロールに分けて使います。それぞれにモデル設定キーとツールアクセス範囲があります。
 
 | キー | 役割 | ツールアクセス |
 |---|---|---|
 | `model.planner` | 証拠を読み、知識トランザクションを作成 | 読み取り専用のスキル確認 |
-| `model.editor` | plannerが承認したスキル／メモリ変更を適用 | 公式スキル／メモリツールのみ |
+| `model.editor` | planner が承認したスキル／メモリ変更を適用 | 公式スキル／メモリツールのみ |
 | `model.evaluator` | 計画・変更・候補・結果を評価 | ツールなし |
-| `model.calibrator` | GEPA最適化中の候補生成と振り返り用フィードバックを担当 | ツールなし |
+| `model.calibrator` | GEPA 最適化中の候補生成と振り返り用フィードバックを担当 | ツールなし |
 
-各ロールは`extra_body.reasoning`を設定できます。プラグインは制約付きエージェントとツールなしエージェントの両方へ、この推論設定を渡します。
+各ロールには `extra_body.reasoning` を設定でき、プラグインはこの推論設定を制約付きエージェントとツールなしエージェントの両方へ渡します。
 
-内部のメモリ配置レビューには、ツールなしのHermes自動ルーティングを使います。`memory_extractor`は独立したモデル設定キーではありません。
+内部のメモリ配置レビューはツールなしの Hermes 自動ルーティングで動くため、`memory_extractor` という独立したモデル設定キーはありません。
 
-モデルと調整条件の上書き例は[`config.example.yaml`](./config.example.yaml)を参照してください。
+モデルや調整条件の上書き例は [`config.example.yaml`](./config.example.yaml) を参照してください。
 
 <a id="automation"></a>
 ## 自動実行
 
-`improve`と`calibrate`は別のジョブにしてください。改善処理は比較的軽量ですが、DSPy / GEPAの調整には時間がかかる場合があります。これらのコマンドをLLMエージェントで包まず、エージェントを使わないHermesのスクリプト専用cronジョブとして実行します。
+`improve` と `calibrate` は別々のジョブとして動かしてください。改善実行は比較的軽い一方、DSPy / GEPA による調整は長くかかることがあります。どちらもスクリプト専用の Hermes cron ジョブとして実行すれば十分で、LLM エージェントで包む必要はありません。
 
 メンテナンススクリプトの例:
 
@@ -206,12 +206,12 @@ cd "$HOME/.hermes/plugins/hermes-self-improvement"
 hermes self-improvement calibrate
 ```
 
-最初は`--dry-run`で実行し、生成されたアーティファクトを確認してから変更可能な定期実行を有効にしてください。
+最初は `--dry-run` で動かし、実行ごとに生成されるアーティファクトを確認してから、変更を伴う定期実行を有効にしてください。
 
 <a id="runtime-state"></a>
 ## 実行時の状態
 
-`setup`は`${HERMES_HOME:-~/.hermes}/self-improvement/`を作成します。
+`setup` は `${HERMES_HOME:-~/.hermes}/self-improvement/` を作成します。
 
 ```text
 ${HERMES_HOME}/self-improvement/
@@ -231,12 +231,12 @@ ${HERMES_HOME}/self-improvement/
   cache/dspy/
 ```
 
-完全なプロンプトや詳細な証拠は、実行時アーティファクトと`--json`出力にだけ保存します。エージェント向けのツール結果には、短い要約とアーティファクトのパスを返します。
+完全なプロンプトや詳細な証拠は、実行時アーティファクトと `--json` 出力にだけ残ります。エージェントに返るツール結果には、短い要約とアーティファクトのパスだけが含まれます。
 
 <a id="development"></a>
 ## 開発
 
-開発ルールは[`AGENTS.md`](./AGENTS.md)、構成と安全境界は[`skills/operations/SKILL.md`](./skills/operations/SKILL.md)を参照してください。
+開発ルールは [`AGENTS.md`](./AGENTS.md)、アーキテクチャと安全境界は [`skills/operations/SKILL.md`](./skills/operations/SKILL.md) を参照してください。
 
 ```bash
 git status --short

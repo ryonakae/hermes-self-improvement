@@ -8,7 +8,7 @@ Observe Hermes Agent runtime signals and turn them into evidence-backed improvem
 
 <!-- README-I18N:END -->
 
-`hermes-self-improvement` is a user plugin for [Hermes Agent](https://hermes-agent.nousresearch.com/). It records lightweight runtime events, builds evidence packs, plans guarded knowledge changes, applies approved mutations through Hermes tools, and tunes its planner, editor, and evaluator prompt overlays with [DSPy / GEPA](https://dspy.ai/api/optimizers/GEPA/overview/).
+`hermes-self-improvement` is a user plugin for [Hermes Agent](https://hermes-agent.nousresearch.com/). While Hermes runs, lightweight hooks record what actually happened: tool failures, memory operations, user corrections, and how sessions turned out. Later, on its own schedule, the plugin assembles that history into evidence, plans a small set of knowledge changes, and applies the approved ones through official Hermes tools. It also uses [DSPy / GEPA](https://dspy.ai/api/optimizers/GEPA/overview/) to tune the prompt overlays behind its planner, editor, and evaluator roles.
 
 ## Contents
 
@@ -28,12 +28,12 @@ Observe Hermes Agent runtime signals and turn them into evidence-backed improvem
 <a id="features"></a>
 ## Features
 
-- **Runtime observation:** Captures tool failures, memory operations, user corrections, session outcomes, subagent outcomes, and LLM/API failure metadata.
-- **Evidence-first planning:** Groups observations into evidence packs before a planner selects a target and knowledge transaction.
-- **Tool-mediated editing:** Uses constrained Hermes agents and official `skill_manage` and memory tools instead of direct file or provider-database edits.
-- **Outcome accounting:** Stores run artifacts, episodes, ledgers, and post-change signals for later review.
-- **Prompt calibration:** Uses DSPy / GEPA to optimize runtime-private prompt overlays for planner, editor, and evaluator roles.
-- **Read-only previews:** Supports `--dry-run` for both improvement and calibration workflows.
+- **Runtime observation:** Hooks capture tool failures, memory operations, user corrections, session and subagent outcomes, and LLM/API failure metadata.
+- **Evidence-first planning:** Observations are grouped into evidence packs first; the planner then picks a target and proposes a knowledge transaction based on that evidence.
+- **Tool-mediated editing:** All changes go through constrained Hermes agents and the official `skill_manage` and memory tools, rather than direct file or provider-database writes.
+- **Outcome accounting:** Each run leaves behind artifacts, episodes, ledgers, and post-change signals that you can review later.
+- **Prompt calibration:** DSPy / GEPA optimizes the runtime-private prompt overlays for the planner, editor, and evaluator roles.
+- **Read-only previews:** Both `improve` and `calibrate` accept `--dry-run`.
 
 <a id="how-it-works"></a>
 ## How it works
@@ -56,20 +56,20 @@ Observe Hermes Agent runtime signals and turn them into evidence-backed improvem
       └─→ Future Hermes runs provide new evidence
 ```
 
-The primary surface is `improve / calibrate / report / status`. `setup` is a CLI-only bootstrap command.
+Day to day, you interact with four commands: `improve`, `calibrate`, `report`, and `status`. A fifth command, `setup`, bootstraps the runtime state and is only available from the CLI.
 
-The plugin complements Hermes [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator). Curator lifecycle and review outcome data can become future evidence, but advisory feedback does not grant auto-apply permission.
+The plugin complements Hermes [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator). Curator lifecycle and review outcomes can feed future evidence, but advisory feedback alone does not authorize an automatic apply.
 
 <a id="safety-model"></a>
 ## Safety model
 
-- Hooks are observation-only. They do not call an LLM, mutate knowledge, or run heavy aggregation inside the request path.
-- `improve` and `calibrate` are default mutation-capable commands. Use `--dry-run` before enabling scheduled execution.
-- Skill changes are limited to local mutable skills. Built-in, hub-installed, plugin-bundled, external, pinned, archived, or ambiguous skills are excluded from mutation targets.
-- Skill mutation goes through official Hermes tools such as `skill_manage`; the plugin does not use direct filesystem writes for skill changes.
-- Memory mutation goes through the Hermes memory tool or an explicit provider-native memory tool. The plugin does not directly edit built-in memory files or provider databases.
-- Hermes core, this plugin's source tree, configuration, plans, and bundled skills are not self-improvement targets.
-- Rollback is not a primary feature. Failed or weak changes become future evidence for a later corrective improvement run.
+- Hooks only observe. LLM calls, knowledge mutation, and heavy aggregation all happen later in the `improve` and `calibrate` runners, outside the request path.
+- `improve` and `calibrate` mutate state by default. Run them with `--dry-run` until you trust the output, and always preview before scheduling them.
+- Skill edits target local mutable skills only. Built-in, hub-installed, plugin-bundled, external, pinned, archived, and ambiguous skills are excluded from mutation.
+- Skill edits go through official Hermes tools such as `skill_manage`; the plugin does not write skill files directly.
+- Memory edits go through the Hermes memory tool or an explicitly configured provider-native memory tool; the plugin does not touch built-in memory files or provider databases directly.
+- Hermes core and the plugin's own source tree, configuration, plans, and bundled skills are not improvement targets.
+- There is no rollback pipeline. A failed or weak change becomes evidence for a later improvement run to correct.
 
 <a id="requirements"></a>
 ## Requirements
@@ -77,16 +77,16 @@ The plugin complements Hermes [Curator](https://hermes-agent.nousresearch.com/do
 - Hermes Agent with user-plugin loading enabled
 - Python 3.11 or later
 - Git
-- A configured Hermes LLM provider for planner, editor, evaluator, and calibrator calls
+- A Hermes LLM provider configured for the planner, editor, evaluator, and calibrator roles
 
-The package declares `dspy>=3.1,<4` and installs it with the plugin.
+The package depends on `dspy>=3.1,<4`, which installs together with the plugin.
 
-A source checkout under `~/.hermes/plugins` is required. Installing the Python wheel alone does not register this standalone plugin or install its manifest and runtime assets.
+The plugin must live as a source checkout under `~/.hermes/plugins`. Installing only the Python wheel is not enough, because Hermes discovers the plugin through the manifest and runtime assets in the checkout.
 
 <a id="installation"></a>
 ## Installation
 
-Clone the plugin into the Hermes plugin directory and install it in the Python environment used by Hermes:
+Clone the plugin into the Hermes plugin directory and install it into the Python environment that Hermes uses:
 
 ```bash
 mkdir -p ~/.hermes/plugins
@@ -96,38 +96,38 @@ cd ~/.hermes/plugins/hermes-self-improvement
 python3 -m pip install -e .
 ```
 
-Initialize runtime state and verify discovery:
+Then initialize the runtime state and confirm that Hermes discovers the plugin:
 
 ```bash
 hermes self-improvement setup
 hermes self-improvement status
 ```
 
-If a Hermes CLI or gateway process was already running, start a new CLI session or restart the gateway after installation.
+If a Hermes CLI or gateway process was already running, open a new CLI session or restart the gateway after installation.
 
 <a id="quick-start"></a>
 ## Quick start
 
-Inspect the current state without writing:
+Start with the read-only commands to see what the observer has collected:
 
 ```bash
 hermes self-improvement status
 hermes self-improvement report --since-hours 24
 ```
 
-Preview an improvement run:
+Preview what an improvement run would change:
 
 ```bash
 hermes self-improvement improve --dry-run
 ```
 
-Apply an improvement run after reviewing the preview:
+Once the preview looks reasonable, apply the changes:
 
 ```bash
 hermes self-improvement improve
 ```
 
-Preview prompt calibration separately:
+Prompt calibration has its own preview:
 
 ```bash
 hermes self-improvement calibrate --dry-run
@@ -144,18 +144,18 @@ hermes self-improvement calibrate --dry-run
 | `improve` | Plan and apply skill or memory improvements | Yes |
 | `calibrate` | Optimize and promote prompt-overlay candidates when gates pass | Yes |
 
-All commands accept `--config PATH`. Add `--json` for machine-readable output. `improve` and `calibrate` accept `--dry-run`; `setup --check` verifies runtime setup without writing.
+Every command accepts `--config PATH`, and `--json` switches to machine-readable output. `improve` and `calibrate` support `--dry-run`; `setup --check` verifies the runtime setup without writing anything.
 
 <a id="configuration"></a>
 ## Configuration
 
-Defaults live in `hermes_self_improvement/config.py`. Create a local override only when needed:
+Defaults live in `hermes_self_improvement/config.py`, so you only need a local override when you want to change something:
 
 ```bash
 cp config.example.yaml config.local.yaml
 ```
 
-Configuration precedence is:
+The plugin looks for configuration in this order and uses the first match:
 
 1. An explicit `--config PATH`
 2. `HERMES_SELF_IMPROVE_CONFIG`
@@ -163,9 +163,9 @@ Configuration precedence is:
 4. `config.yaml`
 5. Built-in defaults
 
-Do not commit API keys or provider secrets. Use environment-variable references in local configuration.
+Keep API keys and provider secrets out of the repository; reference environment variables from your local configuration instead.
 
-The four model roles are intentionally separate:
+The plugin splits its LLM usage across four roles, each with its own model key and tool access:
 
 | Key | Responsibility | Tool access |
 |---|---|---|
@@ -174,16 +174,16 @@ The four model roles are intentionally separate:
 | `model.evaluator` | Evaluate plans, mutations, candidates, and outcomes | Tool-free |
 | `model.calibrator` | Generate candidates and reflection feedback during GEPA optimization | Tool-free |
 
-Role configs support `extra_body.reasoning`. The plugin forwards that reasoning configuration to both constrained and tool-free Hermes agents.
+Each role accepts `extra_body.reasoning`, and the plugin forwards that reasoning configuration to both constrained and tool-free Hermes agents.
 
-Internal memory-placement reviews use tool-free Hermes auto routing; `memory_extractor` is not a separate model configuration key.
+Internal memory-placement reviews run on tool-free Hermes auto routing, so there is no separate `memory_extractor` model key.
 
 See [`config.example.yaml`](./config.example.yaml) for model and calibration overrides.
 
 <a id="automation"></a>
 ## Automation
 
-Run `improve` and `calibrate` as separate jobs: improvement is relatively lightweight, while DSPy / GEPA calibration can take longer. Use script-only Hermes cron jobs rather than placing an LLM agent around these commands.
+Schedule `improve` and `calibrate` as separate jobs: improvement runs are relatively light, while DSPy / GEPA calibration can take much longer. Run both as script-only Hermes cron jobs; these commands do not need an LLM agent wrapped around them.
 
 Example maintenance script:
 
@@ -206,7 +206,7 @@ cd "$HOME/.hermes/plugins/hermes-self-improvement"
 hermes self-improvement calibrate
 ```
 
-Start with `--dry-run`, inspect the generated artifacts, and only then schedule mutation-capable runs.
+Start with `--dry-run`, read the artifacts each run produces, and only then enable the mutation-capable schedule.
 
 <a id="runtime-state"></a>
 ## Runtime state
@@ -231,7 +231,7 @@ ${HERMES_HOME}/self-improvement/
   cache/dspy/
 ```
 
-Full prompts and detailed evidence remain in runtime artifacts and `--json` output. Agent-facing tool responses return compact summaries and artifact paths.
+Full prompts and detailed evidence stay in the runtime artifacts and `--json` output. Tool responses returned to agents carry only a compact summary and the artifact paths.
 
 <a id="development"></a>
 ## Development
