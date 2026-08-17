@@ -66,24 +66,24 @@ Hermes Agent の実行時シグナルを観測し、根拠に基づいてスキ�
 <a id="curator-integration"></a>
 ## Curator との関係
 
-Hermes の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) と、このプラグインは役割が異なります。Curator はスキルの使用履歴、固定状態、`active → stale → archived` のライフサイクルを管理し、設定に応じて重複スキルの統合も行います。`hermes-self-improvement` はツール失敗、ユーザーによる訂正、メモリ操作、実行結果など、より広い観測情報から改善候補を作り、planner・editor・evaluator を通してスキル、メモリ、ユーザープロファイル、評価プロンプトを改善します。
+このプラグインは Hermes の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) を置き換えるものではなく、補完する関係にあります。Curator が受け持つのはスキルライブラリそのものの管理です。スキルの使用履歴、固定状態、`active → stale → archived` のライフサイクルを追跡し、設定によっては重複するスキルの統合も行います。一方このプラグインは、ツールの失敗、ユーザーによる訂正、メモリ操作、実行結果といった、より広い実行時の観測から出発し、その証拠をもとにスキル、メモリ、ユーザープロファイル、評価プロンプトを改善します。
 
-このプラグインは Curator の代替ではありません。Curator / Hermes が記録したスキルの使用履歴、固定状態、アーカイブ状態を正本として読み、同じ情報を独自フックで重複収集しません。実変更を伴う `improve` では、候補を読む前に Curator と同じ自動ライフサイクル判定を実行することがあります。
+スキルに関する情報は Curator 側が正本です。プラグインのフックがスキルの使用履歴を独自に集めることはなく、Curator / Hermes がすでに持っている使用履歴・固定状態・アーカイブ状態をそのまま読みます。また、変更を伴う `improve` は、スキル候補を選ぶ直前に、Curator と同じ自動ライフサイクル判定を実行することがあります。
 
-両方が同じスキル群を別々のタイミングで自動変更しないように、self-improvement を定期運用するときは Curator を一時停止してください。Curator 自体は無効にしません。
+self-improvement を定期実行するなら、2 つの自動メンテナーが同じスキルライブラリを別々のタイミングで書き換えないように、Curator を一時停止してください。
 
 ```bash
 hermes curator pause
 hermes curator status
 ```
 
-`pause` は Curator の定期実行だけを止め、設定、使用履歴、固定状態、ライフサイクル情報、CLI の管理機能を残します。`curator.enabled: false` にすると「一時的に実行を止める」という運用意図が失われるため、このプラグインとの併用方法としては推奨しません。self-improvement の定期運用をやめて Curator 単独の自動管理へ戻す場合は、次のコマンドで再開できます。
+一時停止で止まるのは Curator の定期実行だけです。設定、使用履歴、固定状態やライフサイクルの情報、CLI からの管理機能はそのまま使えます。ここで `curator.enabled: false` にするのは避けてください。サブシステムごと無効にしてしまうと、「いまは一時的に止めているだけ」という意図が設定から読み取れなくなります。self-improvement の定期実行をやめてスキル管理を Curator に戻すときは、再開します。
 
 ```bash
 hermes curator resume
 ```
 
-Curator のレビュー結果は改善の証拠にできますが、助言だけを根拠に変更を自動適用することはありません。プラグイン側の planner 判断と安全確認を通します。
+Curator のレビュー結果も改善の証拠として使えますが、あくまで助言扱いです。実際に変更が適用されるのは、プラグイン自身の planner の判断と安全確認を通ったときだけです。
 
 <a id="safety-model"></a>
 ## 安全性

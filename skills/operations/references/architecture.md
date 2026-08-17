@@ -39,11 +39,11 @@ Hook callbacks should stay lightweight and observation-only. Expensive analysis 
 
 ## Curator integration
 
-Curator owns skill usage telemetry, pin state, the `active → stale → archived` lifecycle, and its optional consolidation pass. Self-improvement owns evidence-driven planning and editing across skills, memory, the user profile, and evaluator prompts. It reuses Curator / Hermes telemetry as the source of truth instead of duplicating skill lifecycle events in plugin hooks.
+Curator owns skill usage telemetry, pin state, the `active → stale → archived` lifecycle, and its optional consolidation pass. Self-improvement owns evidence-driven planning and editing across skills, memory, the user profile, and evaluator prompts. Plugin hooks never duplicate skill lifecycle events; the plugin reads Curator / Hermes telemetry as the source of truth.
 
-When self-improvement runs on a schedule, keep Curator enabled but pause its scheduled background runs with `hermes curator pause`. This prevents two autonomous maintainers from changing the same skill library independently while preserving Curator configuration, telemetry, lifecycle state, and management commands. `curator.enabled: false` is not the integration mode. Use `hermes curator resume` when returning to Curator-only automatic maintenance.
+When self-improvement runs on a schedule, pause Curator's scheduled runs with `hermes curator pause` rather than setting `curator.enabled: false`. Pausing keeps Curator enabled — its configuration, telemetry, pin and lifecycle state, and management commands stay available — while ensuring two autonomous maintainers do not edit the same skill library independently. Use `hermes curator resume` when returning to Curator-only automatic maintenance.
 
-A mutating `improve` run calls Curator's `apply_automatic_transitions()` before loading skill candidates when that helper is available. Pausing Curator therefore suppresses Curator's own scheduled run; it does not make Curator data or lifecycle semantics unavailable to self-improvement. Curator review output is advisory evidence and still requires a planner decision plus normal safety checks before any plugin mutation.
+A mutating `improve` run calls Curator's `apply_automatic_transitions()` before loading skill candidates when that helper is available, so pausing Curator only suppresses Curator's own scheduled run; Curator data and lifecycle semantics stay available to self-improvement. Curator review output is advisory evidence and still requires a planner decision plus the normal safety checks before any plugin mutation.
 
 ## Analysis and proposal generation
 
