@@ -14,6 +14,7 @@ Hermes Agent の実行時シグナルを観測し、根拠に基づいてスキ�
 
 - [機能](#features)
 - [動作の流れ](#how-it-works)
+- [Curator との関係](#curator-integration)
 - [安全性](#safety-model)
 - [要件](#requirements)
 - [インストール](#installation)
@@ -62,7 +63,27 @@ Hermes Agent の実行時シグナルを観測し、根拠に基づいてスキ�
 
 ふだん使うコマンドは `improve`・`calibrate`・`report`・`status` の 4 つです。もうひとつの `setup` は実行時状態を初期化するコマンドで、CLI からだけ使えます。
 
-このプラグインは Hermes の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) を補完します。Curator のライフサイクル情報やレビュー結果は将来の証拠として使えますが、助言的なフィードバックだけを根拠に自動適用することはありません。
+<a id="curator-integration"></a>
+## Curator との関係
+
+Hermes の [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) と、このプラグインは役割が異なります。Curator はスキルの使用履歴、固定状態、`active → stale → archived` のライフサイクルを管理し、設定に応じて重複スキルの統合も行います。`hermes-self-improvement` はツール失敗、ユーザーによる訂正、メモリ操作、実行結果など、より広い観測情報から改善候補を作り、planner・editor・evaluator を通してスキル、メモリ、ユーザープロファイル、評価プロンプトを改善します。
+
+このプラグインは Curator の代替ではありません。Curator / Hermes が記録したスキルの使用履歴、固定状態、アーカイブ状態を正本として読み、同じ情報を独自フックで重複収集しません。実変更を伴う `improve` では、候補を読む前に Curator と同じ自動ライフサイクル判定を実行することがあります。
+
+両方が同じスキル群を別々のタイミングで自動変更しないように、self-improvement を定期運用するときは Curator を一時停止してください。Curator 自体は無効にしません。
+
+```bash
+hermes curator pause
+hermes curator status
+```
+
+`pause` は Curator の定期実行だけを止め、設定、使用履歴、固定状態、ライフサイクル情報、CLI の管理機能を残します。`curator.enabled: false` にすると「一時的に実行を止める」という運用意図が失われるため、このプラグインとの併用方法としては推奨しません。self-improvement の定期運用をやめて Curator 単独の自動管理へ戻す場合は、次のコマンドで再開できます。
+
+```bash
+hermes curator resume
+```
+
+Curator のレビュー結果は改善の証拠にできますが、助言だけを根拠に変更を自動適用することはありません。プラグイン側の planner 判断と安全確認を通します。
 
 <a id="safety-model"></a>
 ## 安全性

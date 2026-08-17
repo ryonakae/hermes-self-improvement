@@ -25,3 +25,22 @@ def test_operations_docs_define_current_llm_model_routing_contract():
     assert "editor" in docs
     assert "tool-free" in docs or "no tools" in docs
     assert "constrained" in docs
+
+
+def test_curator_integration_docs_preserve_pause_not_disable_contract():
+    readmes = [
+        (ROOT / "README.md").read_text(encoding="utf-8"),
+        (ROOT / "README.ja.md").read_text(encoding="utf-8"),
+    ]
+    for readme in readmes:
+        assert "hermes curator pause" in readme
+        assert "hermes curator resume" in readme
+        assert "curator.enabled: false" in readme
+
+    operations = (ROOT / "skills/operations/SKILL.md").read_text(encoding="utf-8")
+    architecture = (ROOT / "skills/operations/references/architecture.md").read_text(encoding="utf-8")
+
+    assert "hermes curator pause" in operations
+    assert "apply_automatic_transitions()" in operations
+    assert "hermes curator pause" in architecture
+    assert "apply_automatic_transitions()" in architecture

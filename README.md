@@ -14,6 +14,7 @@ An agent tends to repeat its mistakes: the same tool fails the same way across s
 
 - [Features](#features)
 - [How it works](#how-it-works)
+- [Relationship with Curator](#curator-integration)
 - [Safety model](#safety-model)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -62,7 +63,27 @@ For example, suppose several sessions show a long-running command being retried 
 
 Day to day, you interact with four commands: `improve`, `calibrate`, `report`, and `status`. A fifth command, `setup`, bootstraps the runtime state and is only available from the CLI.
 
-The plugin complements Hermes [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator). Curator lifecycle and review outcomes can feed future evidence, but advisory feedback alone does not authorize an automatic apply.
+<a id="curator-integration"></a>
+## Relationship with Curator
+
+Hermes [Curator](https://hermes-agent.nousresearch.com/docs/user-guide/features/curator) and this plugin have different responsibilities. Curator owns skill usage telemetry, pinning, the `active → stale → archived` lifecycle, and optional consolidation of overlapping skills. `hermes-self-improvement` starts from a wider set of observations, including tool failures, user corrections, memory operations, and run outcomes. Its planner, editor, and evaluator use that evidence to improve skills, memory, the user profile, and evaluator prompts.
+
+The plugin does not replace Curator. It reads Curator and Hermes skill usage, pin, and archive state as the source of truth instead of collecting duplicate telemetry in its hooks. A mutating `improve` run may also apply the same automatic lifecycle transitions as Curator before it loads skill candidates.
+
+When self-improvement runs on a schedule, pause Curator so that two autonomous maintainers do not change the same skill library at different times. Keep Curator enabled.
+
+```bash
+hermes curator pause
+hermes curator status
+```
+
+Pausing stops Curator's scheduled runs while preserving its configuration, telemetry, pin and lifecycle state, and management commands. Setting `curator.enabled: false` loses the operational distinction between a temporary pause and disabling the subsystem, so it is not the recommended integration mode. If you later stop scheduled self-improvement and return to Curator-only automatic maintenance, resume it with:
+
+```bash
+hermes curator resume
+```
+
+Curator review outcomes may become improvement evidence, but advisory feedback alone never authorizes a change. The plugin still requires its own planner decision and safety checks.
 
 <a id="safety-model"></a>
 ## Safety model
