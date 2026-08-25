@@ -2,6 +2,10 @@
 
 ## Current source of truth
 
+### Current priority — 2026-08-26 execution / promotion / credit hardening
+
+`2026-08-26-execution-promotion-credit-hardening.md` is planned and not implemented. Recent artifact review found three concrete contract failures: memory replacement text exists as `replacement_content` but the executor reads only `content`; overlay promotion accepts GEPA `selected` candidates without requiring `candidate_score > baseline_score`; and audit-only `inventory_not_selected_by_planner` episodes enter outcome/credit/runtime-eval consumers despite providing no learning signal. The plan fixes these in three bounded TDD slices without adding actors, config thresholds, approval lanes, or a new scoring system. Strict `proven improved` semantics remain unchanged.
+
 ### Latest completed hardening — 2026-07-04 memory placement review ledger
 
 `2026-07-04-memory-placement-review-ledger.md` is implemented and dogfooded. It addresses recent USER/MEMORY placement churn by adding an LLM-owned review ledger before Planner placement candidates are rendered: cache stable judgments by `normalized_text_hash + store`, skip `valid_current_store/high`, retry `unclear` once before `deferred_stable`, send only actionable medium/high review rows to Planner with `allowed_operations` rather than move/split templates, stabilize repeated Planner defers, and block recent reverse USER↔MEMORY moves by text hash. Verification: `py_compile`, full `pytest tests -q` → `1050 passed, 2 skipped`, `git diff --check`, source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260704T234643Z.json` with `placement_review.status=completed`, `reviewed_count=16`, `valid_cached_count=9`, `actionable_to_planner_count=5`, `memory_changes=0`, `skill_changes=0`, and report smoke showing compact `Memory placement review` counts. No mutating run was executed.
