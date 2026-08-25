@@ -494,8 +494,17 @@ def _validate_apply_transaction(transaction: dict[str, Any]) -> dict[str, Any]:
         return _blocked(transaction, "planner_task_whole_move_not_allowed_for_mixed_entry")
     if transaction_kind == "memory_to_skill" and not isinstance(transaction.get("editor_task"), dict):
         return _blocked(transaction, "memory_to_skill_missing_editor_task")
-    if transaction_kind == "memory_rewrite" and not str(transaction.get("replacement_content") or transaction.get("content") or "").strip():
-        return _blocked(transaction, "planner_task_missing_replacement_content")
+    if transaction_kind == "memory_rewrite" or operation == "memory_replace":
+        raw_task = transaction.get("editor_task")
+        task: dict[str, Any] = raw_task if isinstance(raw_task, dict) else {}
+        replacement_content = (
+            transaction.get("content")
+            or transaction.get("replacement_content")
+            or task.get("content")
+            or task.get("replacement_content")
+        )
+        if not str(replacement_content or "").strip():
+            return _blocked(transaction, "planner_task_missing_replacement_content")
     if transaction_kind == "placement_split":
         fragments = transaction.get("fragments") if isinstance(transaction.get("fragments"), list) else []
         if not fragments:

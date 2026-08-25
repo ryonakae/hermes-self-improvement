@@ -62,11 +62,13 @@ def test_normalize_knowledge_transaction_maps_legacy_actions_to_canonical_contra
         "source_store": "builtin_memory",
         "source_id": "m1",
         "source_old_text": "old durable fact",
+        "replacement_content": "current durable fact",
     })
     assert memory["decision"] == "apply"
     assert memory["transaction_kind"] == "memory"
     assert memory["target_store"] == "builtin_memory"
     assert memory["operation"] == "memory_replace"
+    assert memory["replacement_content"] == "current durable fact"
 
     move = normalize_knowledge_transaction({
         "transaction_kind": "memory_to_skill",
@@ -665,6 +667,32 @@ def test_normalize_memory_rewrite_apply_requires_exact_replacement_content():
     assert normalized["decision"] == "block"
     assert normalized["operation"] == "none"
     assert normalized["reason"] == "planner_task_missing_replacement_content"
+
+
+def test_normalize_memory_replace_apply_requires_exact_replacement_content():
+    base = {
+        "transaction_kind": "memory",
+        "decision": "apply",
+        "operation": "memory_replace",
+        "source_store": "builtin_memory",
+        "source_id": "memory_place_verbose",
+        "source_old_text": "old verbose durable fact",
+        "target_store": "builtin_memory",
+        "target_id": "memory",
+    }
+
+    missing = normalize_knowledge_transaction(base)
+    executable = normalize_knowledge_transaction({
+        **base,
+        "replacement_content": "current compact durable fact",
+    })
+
+    assert missing["decision"] == "block"
+    assert missing["operation"] == "none"
+    assert missing["reason"] == "planner_task_missing_replacement_content"
+    assert executable["decision"] == "apply"
+    assert executable["operation"] == "memory_replace"
+    assert executable["replacement_content"] == "current compact durable fact"
 
 
 def test_normalize_placement_move_apply_requires_whole_entry_move_allowed_for_explicit_false():

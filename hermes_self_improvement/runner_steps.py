@@ -2132,8 +2132,17 @@ def _knowledge_transaction_skill_target(transaction: dict[str, Any]) -> str:
 
 
 def _knowledge_transaction_content(transaction: dict[str, Any]) -> str:
-    task = transaction.get("editor_task") if isinstance(transaction.get("editor_task"), dict) else {}
-    return str(transaction.get("content") or task.get("content") or transaction.get("current_claim") or "").strip()
+    raw_task = transaction.get("editor_task")
+    task: dict[str, Any] = raw_task if isinstance(raw_task, dict) else {}
+    replacement_content = transaction.get("replacement_content") or task.get("replacement_content")
+    content = transaction.get("content") or task.get("content") or transaction.get("current_claim")
+    if transaction.get("transaction_kind") == "memory_rewrite" or transaction.get("operation") == "memory_replace":
+        return str(replacement_content or content or "").strip()
+    return str(
+        content
+        or replacement_content
+        or ""
+    ).strip()
 
 
 def _knowledge_transaction_memory_operation(transaction: dict[str, Any]) -> dict[str, Any]:
@@ -2332,7 +2341,7 @@ def _execute_placement_move_transaction(transaction: dict[str, Any], *, config: 
 def _execute_memory_rewrite_transaction(transaction: dict[str, Any], *, config: dict[str, Any], result: dict[str, Any], mutate: bool) -> dict[str, Any]:
     target_store = str(transaction.get("target_store") or "builtin_memory").strip()
     source_old_text = str(transaction.get("source_old_text") or "").strip()
-    replacement_content = str(transaction.get("replacement_content") or "").strip()
+    replacement_content = _knowledge_transaction_content(transaction)
     if not source_old_text or not replacement_content:
         return {**result, "success": False, "outcome": "blocked", "reason": "knowledge_transaction_missing_required_fields"}
     if not mutate:

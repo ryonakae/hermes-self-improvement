@@ -1179,6 +1179,84 @@ def test_execute_knowledge_transaction_memory_and_memory_to_skill_results_includ
     assert any("Use these exact steps for live context cleanup." in hint for hint in mts_result["rollback_hints"])
 
 
+def test_execute_knowledge_transaction_memory_replace_uses_top_level_replacement_content():
+    memory_calls = []
+
+    def fake_memory(**args):
+        memory_calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "operation": "memory_replace",
+            "source_old_text": "Old durable fact.",
+            "replacement_content": "Current durable fact.",
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert memory_calls[0]["action"] == "replace"
+    assert memory_calls[0]["old_text"] == "Old durable fact."
+    assert memory_calls[0]["content"] == "Current durable fact."
+
+
+def test_execute_knowledge_transaction_memory_replace_uses_editor_task_replacement_content():
+    memory_calls = []
+
+    def fake_memory(**args):
+        memory_calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "operation": "memory_replace",
+            "source_old_text": "Old durable fact.",
+            "editor_task": {"replacement_content": "Current durable fact."},
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert memory_calls[0]["content"] == "Current durable fact."
+
+
+def test_execute_knowledge_transaction_memory_replace_prefers_replacement_content():
+    memory_calls = []
+
+    def fake_memory(**args):
+        memory_calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "target_store": "builtin_memory",
+            "target_id": "memory",
+            "operation": "memory_replace",
+            "source_old_text": "Old durable fact.",
+            "content": "Stale legacy replacement.",
+            "replacement_content": "Current durable fact.",
+        },
+        config={"_memory_tool_fn": fake_memory},
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert memory_calls[0]["content"] == "Current durable fact."
+
+
 # --- Phase 5: memory_rewrite execution ---
 
 def test_execute_knowledge_transaction_memory_rewrite_replaces_memory_entry():
@@ -1209,6 +1287,32 @@ def test_execute_knowledge_transaction_memory_rewrite_replaces_memory_entry():
     assert len(replaced) == 1
     assert replaced[0]["old_text"] == "Hermes root is /opt/data."
     assert result["executed_steps"] == [{"step": "memory_replace", "status": "applied", "target": "builtin_memory"}]
+
+
+def test_execute_knowledge_transaction_memory_rewrite_uses_editor_task_replacement_content():
+    memory_calls = []
+
+    def fake_memory(**args):
+        memory_calls.append(args)
+        return {"success": True}
+
+    result = execute_knowledge_transaction(
+        {
+            "transaction_kind": "memory_rewrite",
+            "decision": "apply",
+            "target_store": "builtin_memory",
+            "source_old_text": "Hermes root is /opt/data.",
+            "editor_task": {"replacement_content": "Hermes runtime root is ~/.hermes."},
+        },
+        config={
+            "_memory_tool_fn": fake_memory,
+            "_memory_current_entries": [{"target": "memory", "old_text": "Hermes root is /opt/data.", "text": "Hermes root is /opt/data."}],
+        },
+        mutate=True,
+    )
+
+    assert result["success"] is True
+    assert memory_calls[0]["content"] == "Hermes runtime root is ~/.hermes."
 
 
 def test_execute_knowledge_transaction_memory_rewrite_dry_run_shows_preview():
