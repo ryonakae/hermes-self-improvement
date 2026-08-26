@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
-from hermes_self_improvement.credit_assignment import build_credit_assignment_aggregate, compact_credit_assignment_summary
+import hermes_self_improvement.credit_assignment as credit_assignment
+import hermes_self_improvement.outcome_observer as outcome_observer
+import hermes_self_improvement.runtime_eval_cases as runtime_eval_cases
+from hermes_self_improvement.credit_assignment import _score_rows, build_credit_assignment_aggregate, compact_credit_assignment_summary
 
 
 def write_json(path: Path, payload: dict) -> None:
@@ -107,6 +111,40 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
     assert compact["overlay_generations"]["tracked"] == 1
     assert compact["overlay_generations"]["best"]["overlay_generation_id"] == "overlay-set-good"
     assert compact["overlay_generations"]["worst"]["overlay_generation_id"] == "overlay-set-good"
+
+
+def test_score_rows_preserves_schema_1_1_canonical_eligibility_without_learnable(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    episode = episode_payload(
+        "episode-schema-1-1",
+        schema_version="1.1",
+        application_status="applied",
+        learning_eligible=True,
+        outcome_eligible=True,
+    )
+    episode.pop("learnable", None)
+    write_json(root / "episodes" / "2026-05-03" / "schema-1-1.json", episode)
+
+    rows = _score_rows(config=config, limit=100)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert "learnable" not in row
+    assert row["learning_eligible"] is True
+    assert row["outcome_eligible"] is True
+
+
+def test_runtime_credit_and_outcome_modules_do_not_read_legacy_learnable_directly():
+    direct_learnable_get = re.compile(r"episode\s*\.\s*get\s*\(\s*(['\"])learnable\1")
+    modules = [runtime_eval_cases, credit_assignment, outcome_observer]
+
+    offenders = {
+        Path(module.__file__).name: direct_learnable_get.findall(Path(module.__file__).read_text(encoding="utf-8"))
+        for module in modules
+    }
+
+    assert {name: matches for name, matches in offenders.items() if matches} == {}
 
 
 def test_credit_assignment_excludes_unexecuted_ambiguous_episode(tmp_path):

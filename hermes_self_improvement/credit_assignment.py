@@ -4,7 +4,7 @@ from collections import defaultdict
 from statistics import mean
 from typing import Any
 
-from .episodes import is_outcome_eligible_episode, load_recent_episodes
+from .episodes import is_learning_eligible_episode, is_outcome_eligible_episode, load_recent_episodes
 from .observer import _sha256_text, _stable_json
 from .outcome_scoring import load_outcome_observations, score_episode_outcomes
 
@@ -28,7 +28,8 @@ def _score_rows(*, config: dict[str, Any], limit: int) -> list[dict[str, Any]]:
             "decision": episode.get("decision"),
             "action": episode.get("action"),
             "executed": bool(episode.get("executed")),
-            "learnable": bool(episode.get("learnable")),
+            "learning_eligible": is_learning_eligible_episode(episode),
+            "outcome_eligible": is_outcome_eligible_episode(episode),
             "changed": bool(episode.get("changed")),
             "reason": episode.get("reason"),
             "evidence_ids": episode.get("evidence_ids") if isinstance(episode.get("evidence_ids"), list) else [],

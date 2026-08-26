@@ -7,6 +7,7 @@ from pathlib import Path
 from hermes_self_improvement.credit_assignment import build_credit_assignment_aggregate
 from hermes_self_improvement.episodes import episodes_from_run_result
 from hermes_self_improvement.outcome_observer import (
+    _coverage_episode_for_cluster,
     _unmatched_summary,
     collect_duplicate_noop_observations,
     collect_failure_cluster_recurrence_observations,
@@ -480,6 +481,38 @@ def test_collect_failure_cluster_recurrence_observations_matches_coverage_skill_
     assert candidates[0]["source"]["target_id"] == "timeout-workflow"
     assert candidates[0]["confidence"] == 0.35
     assert candidates[0]["matching_signature_hash"].startswith("sha256:")
+
+
+def test_coverage_episode_for_cluster_skips_outcome_ineligible_learning_episode_without_learnable():
+    event_time = datetime(2026, 5, 5, 12, 0, tzinfo=timezone.utc)
+    earlier_eligible = episode_payload(
+        "episode-earlier-eligible",
+        created_at="2026-05-05T09:00:00+00:00",
+        target_id="timeout-workflow",
+        schema_version="1.1",
+        application_status="applied",
+        learning_eligible=True,
+        outcome_eligible=True,
+    )
+    later_learning_only = episode_payload(
+        "episode-later-learning-only",
+        created_at="2026-05-05T11:00:00+00:00",
+        target_id="timeout-workflow",
+        schema_version="1.1",
+        application_status="applied",
+        learning_eligible=True,
+        outcome_eligible=False,
+    )
+    earlier_eligible.pop("learnable", None)
+    later_learning_only.pop("learnable", None)
+
+    matched = _coverage_episode_for_cluster(
+        episodes=[earlier_eligible, later_learning_only],
+        cluster_id="tool_error:terminal:interrupted_timeout",
+        event_time=event_time,
+    )
+
+    assert matched is earlier_eligible
 
 
 def test_collect_failure_cluster_recurrence_observations_keeps_generic_terminal_timeout_diagnostic_only(tmp_path):

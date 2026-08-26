@@ -101,6 +101,9 @@ def test_status_tool_reports_memory_rollback_readiness(tmp_path):
     assert payload["autonomous_policy"]["calibrate_requires"] == "autonomous_evaluator_promote"
     assert payload["autonomous_policy"]["improve_skill_targets"] == ["local_mutable_active", "local_mutable_stale"]
     assert payload["autonomous_policy"]["defer_executes_mutation"] is False
+    assert payload["autonomous_policy"]["defer_records_episode"] is True
+    assert payload["autonomous_policy"]["defer_learning_eligible"] is False
+    assert payload["autonomous_policy"]["defer_outcome_eligible"] is False
 
 
 def test_calibrate_tool_dry_run_does_not_promote(tmp_path):

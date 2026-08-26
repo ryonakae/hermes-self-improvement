@@ -24,7 +24,12 @@ def test_default_autonomous_policy_matches_closed_loop_boundaries():
         "tool_mediated_lifecycle_transition",
     ]
     assert policy["improve"]["allowed_memory_operations"] == ["builtin_user", "builtin_memory", "external_memory"]
-    assert policy["defer"]["records_episode"] is True
+    assert policy["defer"] == {
+        "executes_mutation": False,
+        "records_episode": True,
+        "learning_eligible": False,
+        "outcome_eligible": False,
+    }
 
 
 def test_legacy_automation_policy_is_ignored_by_config_normalization(tmp_path):
@@ -65,4 +70,7 @@ def test_policy_summary_is_compact_and_contains_no_prompt_text():
         "improve_skill_targets": ["local_mutable_active", "local_mutable_stale"],
         "improve_skill_lifecycle_actions": ["archive"],
         "defer_executes_mutation": False,
+        "defer_records_episode": True,
+        "defer_learning_eligible": False,
+        "defer_outcome_eligible": False,
     }

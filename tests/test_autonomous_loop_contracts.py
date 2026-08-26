@@ -13,6 +13,69 @@ from hermes_self_improvement.autonomous_loop import (
 )
 
 
+def episode_payload(**overrides):
+    payload = {
+        "schema_name": "self_improvement_episode",
+        "schema_version": "1.0",
+        "episode_id": "episode-1",
+        "episode_kind": "executed_mutation",
+        "target_kind": "skill",
+        "target_id": "demo-skill",
+        "decision": "mutate_skill",
+        "action": "skill_patch",
+        "executed": True,
+        "learnable": True,
+        "changed": True,
+        "created_at": "2026-05-03T00:00:00+00:00",
+        "application_status": "applied",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
+        "evaluator_hash": "sha256:evaluator",
+        "learning_eligible": True,
+        "outcome_eligible": True,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_episode_schema_1_1_accepts_canonical_eligibility_without_learnable():
+    payload = episode_payload(schema_version="1.1")
+    payload.pop("learnable")
+
+    validated = validate_episode(payload)
+
+    assert validated["learning_eligible"] is True
+    assert validated["outcome_eligible"] is True
+    assert "learnable" not in validated
+
+
+@pytest.mark.parametrize("missing_field", ["learning_eligible", "outcome_eligible"])
+def test_episode_schema_1_1_requires_each_canonical_eligibility_field(missing_field):
+    payload = episode_payload(schema_version="1.1")
+    payload.pop("learnable")
+    payload.pop(missing_field)
+
+    with pytest.raises(ValueError, match=f"{missing_field}_missing"):
+        validate_episode(payload)
+
+
+@pytest.mark.parametrize("field", ["learning_eligible", "outcome_eligible"])
+def test_episode_schema_1_1_rejects_string_canonical_eligibility(field):
+    payload = episode_payload(schema_version="1.1")
+    payload.pop("learnable")
+    payload[field] = "true"
+
+    with pytest.raises(ValueError, match=f"{field}_missing"):
+        validate_episode(payload)
+
+
+def test_episode_schema_1_1_rejects_mixed_legacy_learnable_field():
+    payload = episode_payload(schema_version="1.1")
+
+    with pytest.raises(ValueError):
+        validate_episode(payload)
+
+
 def test_episode_schema_requires_id_and_source_hashes_for_mutating_actions():
     payload = {
         "schema_name": "self_improvement_episode",
@@ -190,8 +253,27 @@ def test_compact_summaries_exclude_large_prompt_fields():
         "decision": "mutate_skill",
         "action": "skill_patch",
         "executed": True,
-        "learnable": True,
         "changed": True,
+        "application_status": "applied",
+        "learning_eligible": True,
+        "outcome_eligible": True,
         "artifact_path": "/tmp/run.json",
     }
     assert compact_outcome_summary(outcome)["window"] == "immediate"
+
+
+def test_compact_episode_summary_rechecks_structural_eligibility():
+    episode = episode_payload(
+        schema_version="1.1",
+        executed=False,
+        changed=False,
+        application_status="preview",
+        learning_eligible=True,
+        outcome_eligible=True,
+    )
+    episode.pop("learnable")
+
+    summary = compact_episode_summary(episode)
+
+    assert summary["learning_eligible"] is False
+    assert summary["outcome_eligible"] is False

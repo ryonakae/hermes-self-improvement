@@ -45,7 +45,8 @@ def build_autonomous_operation_policy(config: dict[str, Any] | None = None) -> d
         "defer": {
             "executes_mutation": False,
             "records_episode": True,
-            "used_as_learning_signal": True,
+            "learning_eligible": False,
+            "outcome_eligible": False,
         },
         "non_goals": [
             "runtime_config_mutation",
@@ -70,4 +71,7 @@ def summarize_autonomous_operation_policy(policy: dict[str, Any]) -> dict[str, A
         "improve_skill_targets": improve.get("allowed_skill_targets") if isinstance(improve.get("allowed_skill_targets"), list) else [],
         "improve_skill_lifecycle_actions": improve.get("allowed_skill_lifecycle_actions") if isinstance(improve.get("allowed_skill_lifecycle_actions"), list) else [],
         "defer_executes_mutation": bool(defer.get("executes_mutation")),
+        "defer_records_episode": bool(defer.get("records_episode")),
+        "defer_learning_eligible": bool(defer.get("learning_eligible")),
+        "defer_outcome_eligible": bool(defer.get("outcome_eligible")),
     }

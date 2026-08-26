@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from hermes_self_improvement.autonomous_loop import validate_episode
 from hermes_self_improvement.episodes import (
     calibration_episodes_from_result,
     episode_root,
@@ -12,6 +15,108 @@ from hermes_self_improvement.episodes import (
     record_run_episodes,
 )
 from hermes_self_improvement.prompts import base_prompt_hash
+
+
+def legacy_episode(**overrides):
+    payload = {
+        "schema_name": "self_improvement_episode",
+        "schema_version": "1.0",
+        "episode_id": "episode-legacy",
+        "episode_kind": "executed_mutation",
+        "target_kind": "skill",
+        "target_id": "legacy-skill",
+        "decision": "mutate_skill",
+        "action": "skill_patch",
+        "executed": True,
+        "changed": True,
+        "application_status": "applied",
+        "created_at": "2026-05-03T00:00:00+00:00",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
+        "evaluator_hash": "sha256:evaluator",
+        "learnable": True,
+        "learning_eligible": True,
+        "outcome_eligible": True,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_legacy_applied_mutation_remains_valid_and_eligible():
+    payload = legacy_episode()
+    payload.pop("learning_eligible")
+    payload.pop("outcome_eligible")
+
+    validated = validate_episode(payload)
+
+    assert is_learning_eligible_episode(validated) is True
+    assert is_outcome_eligible_episode(validated) is True
+
+
+def test_legacy_complete_canonical_pair_without_learnable_is_valid_and_eligible():
+    payload = legacy_episode()
+    payload.pop("learnable")
+
+    validated = validate_episode(payload)
+
+    assert is_learning_eligible_episode(validated) is True
+    assert is_outcome_eligible_episode(validated) is True
+
+
+def test_legacy_learnable_false_is_ineligible():
+    payload = legacy_episode(learnable=False)
+    payload.pop("learning_eligible")
+    payload.pop("outcome_eligible")
+
+    validated = validate_episode(payload)
+
+    assert is_learning_eligible_episode(validated) is False
+    assert is_outcome_eligible_episode(validated) is False
+
+
+def test_canonical_eligibility_false_overrides_legacy_learnable_true():
+    payload = legacy_episode(learning_eligible=False, outcome_eligible=True)
+
+    validated = validate_episode(payload)
+
+    assert is_learning_eligible_episode(validated) is False
+    assert is_outcome_eligible_episode(validated) is False
+
+
+def test_canonical_eligibility_allows_learning_without_outcome():
+    payload = legacy_episode(learnable=False, learning_eligible=True, outcome_eligible=False)
+
+    validated = validate_episode(payload)
+
+    assert is_learning_eligible_episode(validated) is True
+    assert is_outcome_eligible_episode(validated) is False
+
+
+@pytest.mark.parametrize("partial_field", ["learning_eligible", "outcome_eligible"])
+def test_legacy_partial_canonical_eligibility_pair_fails_validation(partial_field):
+    payload = legacy_episode()
+    payload.pop(partial_field)
+
+    with pytest.raises(ValueError, match="canonical_eligibility"):
+        validate_episode(payload)
+
+
+@pytest.mark.parametrize("field", ["learning_eligible", "outcome_eligible"])
+def test_legacy_malformed_canonical_eligibility_does_not_fallback_to_learnable(field):
+    payload = legacy_episode(**{field: "true"})
+
+    with pytest.raises(ValueError, match=f"{field}_missing"):
+        validate_episode(payload)
+
+    assert is_learning_eligible_episode(payload) is False
+    assert is_outcome_eligible_episode(payload) is False
+
+
+def test_legacy_canonical_pair_rejects_malformed_present_learnable():
+    payload = legacy_episode(learnable="true")
+
+    with pytest.raises(ValueError, match="learnable_missing"):
+        validate_episode(payload)
 
 
 def sample_run_result(tmp_path):
@@ -115,6 +220,13 @@ def canonical_run_result(tmp_path):
     }
 
 
+def assert_schema_1_1_canonical_eligibility(episode, *, learning, outcome):
+    assert episode["schema_version"] == "1.1"
+    assert "learnable" not in episode
+    assert episode["learning_eligible"] is learning
+    assert episode["outcome_eligible"] is outcome
+
+
 def test_record_run_episodes_uses_canonical_knowledge_transactions_without_split_steps(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = canonical_run_result(tmp_path)
@@ -206,6 +318,49 @@ def test_record_run_episodes_maps_canonical_apply_operations_to_episode_metadata
     assert by_txn["txn-memory-remove"]["application_status"] == "applied"
     assert by_txn["txn-memory-remove"]["learning_eligible"] is True
     assert by_txn["txn-memory-remove"]["outcome_eligible"] is True
+
+
+def test_schema_1_1_canonical_eligibility_for_applied_canonical_knowledge_transactions(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = canonical_run_result(tmp_path)
+    result["dry_run"] = False
+    result["execute"] = True
+    result["knowledge_transactions"] = [
+        {
+            "transaction_id": "txn-skill-create",
+            "transaction_kind": "skill",
+            "decision": "apply",
+            "operation": "create_skill",
+            "target_store": "skill",
+            "target_id": "new-canonical-skill",
+            "transaction_result": {"success": True, "outcome": "applied", "created_skills": ["new-canonical-skill"]},
+        },
+        {
+            "transaction_id": "txn-skill-apply",
+            "transaction_kind": "skill",
+            "decision": "apply",
+            "operation": "mutate_skill",
+            "target_store": "skill",
+            "target_id": "canonical-skill",
+            "transaction_result": {"success": True, "outcome": "applied", "changed_skills": ["canonical-skill"]},
+        },
+        {
+            "transaction_id": "txn-memory-apply",
+            "transaction_kind": "memory",
+            "decision": "apply",
+            "operation": "memory_add",
+            "target_store": "builtin_memory",
+            "source_evidence_id": "canonical-memory",
+            "transaction_result": {"success": True, "outcome": "applied", "changed_memories": ["memory:canonical-memory"]},
+        },
+    ]
+
+    record_run_episodes(config=config, run_result=result)
+
+    by_txn = {item["transaction_id"]: item for item in load_recent_episodes(config=config, limit=10)}
+    assert_schema_1_1_canonical_eligibility(by_txn["txn-skill-create"], learning=True, outcome=True)
+    assert_schema_1_1_canonical_eligibility(by_txn["txn-skill-apply"], learning=True, outcome=True)
+    assert_schema_1_1_canonical_eligibility(by_txn["txn-memory-apply"], learning=True, outcome=True)
 
 
 def test_episode_eligibility_is_fail_closed_but_accepts_proven_legacy_mutations():
@@ -335,6 +490,47 @@ def test_record_run_episodes_writes_append_only_skill_and_memory_episodes(tmp_pa
     assert "Do not store in episode" not in serialized
 
 
+def test_schema_1_1_canonical_eligibility_for_legacy_preview_defer_skip_episodes(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = sample_run_result(tmp_path)
+    result["step_decisions"]["skill"]["decisions"].append({
+        "skill": "skipped-skill",
+        "decision": "skip",
+        "reason": "create_skill_covered_by_existing_skill",
+        "changed": False,
+    })
+
+    record_run_episodes(config=config, run_result=result)
+
+    by_target = {item["target_id"]: item for item in load_recent_episodes(config=config, limit=10)}
+    assert_schema_1_1_canonical_eligibility(by_target["demo-skill"], learning=False, outcome=False)
+    assert_schema_1_1_canonical_eligibility(by_target["other-skill"], learning=False, outcome=False)
+    assert_schema_1_1_canonical_eligibility(by_target["skipped-skill"], learning=False, outcome=False)
+    assert_schema_1_1_canonical_eligibility(by_target["memory:mem1"], learning=False, outcome=False)
+
+
+def test_schema_1_1_canonical_eligibility_for_legacy_applied_skill_and_memory(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = sample_run_result(tmp_path)
+    result["dry_run"] = False
+    result["execute"] = True
+    result["step_decisions"]["skill"]["decisions"] = [
+        {"skill": "known-skill", "decision": "accepted", "changed": True, "result": {"changed_skills": ["known-skill"]}},
+    ]
+    result["step_decisions"]["memory"]["decisions"] = [
+        {"evidence_id": "mem1", "decision": "accepted", "changed": True, "operation": {"operation": "memory_add", "target": "memory"}},
+    ]
+
+    record_run_episodes(config=config, run_result=result)
+
+    by_target = {item["target_id"]: item for item in load_recent_episodes(config=config, limit=10)}
+    assert by_target["known-skill"]["action"] == "skill_patch"
+    assert by_target["known-skill"]["changed"] is True
+    assert by_target["memory:mem1"]["changed"] is True
+    assert_schema_1_1_canonical_eligibility(by_target["known-skill"], learning=True, outcome=True)
+    assert_schema_1_1_canonical_eligibility(by_target["memory:mem1"], learning=True, outcome=True)
+
+
 def test_record_run_episodes_preserves_duplicate_noop_metadata(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = sample_run_result(tmp_path)
@@ -419,6 +615,43 @@ def test_calibration_episode_records_prompt_candidate_and_promotion(tmp_path):
     assert planner_episode["overlay_generation_id"] == "overlay-set-001"
     assert by_promoted_kind["editor_prompt"]["overlay_generation_id"] == "overlay-set-001"
     assert by_promoted_kind["evaluator"]["overlay_generation_id"] == "overlay-set-001"
+
+
+def test_schema_1_1_canonical_eligibility_for_calibration_candidate_and_promotion(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    result = {
+        "schema_name": "self_improvement_calibration_result",
+        "current_status": "would_update",
+        "active_changed": False,
+        "overlay_candidate_set": {"overlay_generation_id": "overlay-set-preview", "candidate_set_id": "overlay-set-preview"},
+        "prompt_overlays": {
+            "planner": {"candidate": True, "promoted": False, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-preview"},
+        },
+        "candidate": {"candidate_hash": "sha256:evaluator-candidate"},
+    }
+
+    preview = calibration_episodes_from_result(result, created_at="2026-05-03T00:00:00+00:00")
+    assert preview
+    for episode in preview:
+        assert_schema_1_1_canonical_eligibility(episode, learning=False, outcome=False)
+
+    promoted = dict(result)
+    promoted["active_changed"] = True
+    promoted["active_evaluator_hash"] = "sha256:active-evaluator"
+    promoted["prompt_overlays"] = {
+        "planner": {"candidate": True, "promoted": True, "candidate_hash": "sha256:planner-candidate", "candidate_set_id": "overlay-set-preview"},
+    }
+    promoted_episodes = calibration_episodes_from_result(promoted, created_at="2026-05-03T00:00:00+00:00")
+    assert promoted_episodes
+    assert any(episode["action"] == "prompt_overlay_promote" for episode in promoted_episodes)
+    for episode in promoted_episodes:
+        assert_schema_1_1_canonical_eligibility(episode, learning=True, outcome=True)
+
+    record_calibration_episodes(config=config, calibration_result=result)
+    recorded = load_recent_episodes(config=config, limit=10)
+    assert recorded
+    for episode in recorded:
+        assert_schema_1_1_canonical_eligibility(episode, learning=False, outcome=False)
 
 
 def test_record_run_episodes_records_overlay_generation_and_hashes(tmp_path):

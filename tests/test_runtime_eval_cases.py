@@ -68,6 +68,40 @@ def test_runtime_eval_cases_convert_exact_mutable_skill_evidence_to_mutate_skill
     assert cases[0]["expected"]["requires_evidence_ids"] is True
 
 
+def test_runtime_eval_cases_convert_schema_1_1_canonical_skill_patch_without_learnable(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    episode = episode_payload(
+        "episode-schema-1-1-exact",
+        schema_version="1.1",
+        episode_kind="executed_mutation",
+        decision="mutate_skill",
+        action="skill_patch",
+        executed=True,
+        changed=True,
+        application_status="applied",
+        learning_eligible=True,
+        outcome_eligible=True,
+        evidence_ids=["ev-exact"],
+        evidence_strength="strong",
+        reason="exact mutable local skill evidence",
+    )
+    episode.pop("learnable", None)
+    write_json(root / "episodes" / "2026-05-03" / "schema-1-1-exact.json", episode)
+
+    cases = build_role_runtime_eval_cases(config=config, limit=100)
+
+    assert len(cases) == 1
+    case = cases[0]
+    assert case["case_type"] == "planner_exact_evidence_mutate_skill"
+    assert case["source_episode_id"] == "episode-schema-1-1-exact"
+    assert case["source"]["episode_id"] == "episode-schema-1-1-exact"
+    assert case["expected"] == {"decision": "mutate_skill", "requires_evidence_ids": True}
+    assert case["input"]["evidence_ids"] == ["ev-exact"]
+    assert case["input"]["evidence_strength"] == "strong"
+    assert case["input"]["reason"] == "exact mutable local skill evidence"
+
+
 def test_runtime_eval_cases_exclude_unexecuted_unsafe_provenance_defer(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])

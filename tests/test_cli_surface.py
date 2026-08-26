@@ -984,6 +984,9 @@ def test_render_status_summary_shows_calibration_thresholds():
             "improve_mutation_capable": True,
             "improve_skill_targets": ["local_mutable_active"],
             "defer_executes_mutation": False,
+            "defer_records_episode": True,
+            "defer_learning_eligible": False,
+            "defer_outcome_eligible": False,
         },
         "calibration_thresholds": {
             "min_evidence_events": 20,
@@ -998,6 +1001,10 @@ def test_render_status_summary_shows_calibration_thresholds():
     assert "min_disagreements: 5" in text
     assert "min_bad_outcomes: 2" in text
     assert "window_days: 30" in text
+    assert "- defer executes mutation: False" in text
+    assert "- defer records episode: True" in text
+    assert "- defer learning eligible: False" in text
+    assert "- defer outcome eligible: False" in text
 
 
 def test_prompt_overlay_set_component_renders_generation_id_and_regression_status():

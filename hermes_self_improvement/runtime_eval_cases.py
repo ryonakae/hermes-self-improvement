@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .episodes import load_learning_eligible_episodes
+from .episodes import is_learning_eligible_episode, load_learning_eligible_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import load_outcome_observations, score_episode_outcomes
 
@@ -38,11 +38,11 @@ def _reason(episode: dict[str, Any]) -> str:
 
 
 def _is_learnable_episode(episode: dict[str, Any]) -> bool:
-    return bool(episode.get("learnable")) and str(episode.get("target_kind") or "") == "skill"
+    return is_learning_eligible_episode(episode) and str(episode.get("target_kind") or "") == "skill"
 
 
 def _is_overlay_episode(episode: dict[str, Any]) -> bool:
-    return bool(episode.get("learnable")) and str(episode.get("target_kind") or "") in {"skill", "memory"}
+    return is_learning_eligible_episode(episode) and str(episode.get("target_kind") or "") in {"skill", "memory"}
 
 
 def _unsafe_target(reason: str) -> bool:

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .autonomous_loop import validate_outcome_observation
-from .episodes import load_outcome_eligible_episodes
+from .episodes import is_outcome_eligible_episode, load_outcome_eligible_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_matching import build_matching_signature
 from .outcome_scoring import load_outcome_observations, outcome_root
@@ -536,7 +536,7 @@ def _coverage_episode_for_cluster(*, episodes: list[dict[str, Any]], cluster_id:
             continue
         if str(episode.get("target_id") or "") not in target_ids:
             continue
-        if not bool(episode.get("learnable", True)):
+        if not is_outcome_eligible_episode(episode):
             continue
         episode_time = _parse_time(episode.get("created_at"))
         if episode_time is None or episode_time >= event_time:

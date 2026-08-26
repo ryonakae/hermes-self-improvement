@@ -7,6 +7,8 @@ EPISODE_SCHEMA_NAME = "self_improvement_episode"
 OUTCOME_OBSERVATION_SCHEMA_NAME = "self_improvement_outcome_observation"
 AUTONOMOUS_EVALUATOR_RESULT_SCHEMA_NAME = "self_improvement_autonomous_evaluator_result"
 SCHEMA_VERSION = "1.0"
+EPISODE_SCHEMA_VERSION = "1.1"
+LEGACY_EPISODE_SCHEMA_VERSION = "1.0"
 
 EPISODE_KINDS = {
     "preview_decision",
@@ -126,10 +128,11 @@ def validate_episode(payload: dict[str, Any]) -> dict[str, Any]:
     data = _require_object(payload, "episode")
     _reject_forbidden_large_context_fields(data)
     data.setdefault("schema_name", EPISODE_SCHEMA_NAME)
-    data.setdefault("schema_version", SCHEMA_VERSION)
+    data.setdefault("schema_version", EPISODE_SCHEMA_VERSION)
     if data.get("schema_name") != EPISODE_SCHEMA_NAME:
         raise ValueError("episode_schema_name_invalid")
-    if data.get("schema_version") != SCHEMA_VERSION:
+    schema_version = data.get("schema_version")
+    if schema_version not in {LEGACY_EPISODE_SCHEMA_VERSION, EPISODE_SCHEMA_VERSION}:
         raise ValueError("episode_schema_version_invalid")
     _require_nonempty_string(data, "episode_id", "episode_id_missing")
     episode_kind = _require_nonempty_string(data, "episode_kind")
@@ -150,8 +153,24 @@ def validate_episode(payload: dict[str, Any]) -> dict[str, Any]:
     if action not in ACTIONS:
         raise ValueError("action_invalid")
     _require_bool(data, "executed")
-    _require_bool(data, "learnable")
     _require_bool(data, "changed")
+    has_learning_eligible = "learning_eligible" in data
+    has_outcome_eligible = "outcome_eligible" in data
+    if schema_version == EPISODE_SCHEMA_VERSION:
+        if "learnable" in data:
+            raise ValueError("learnable_forbidden")
+        _require_bool(data, "learning_eligible")
+        _require_bool(data, "outcome_eligible")
+    else:
+        if has_learning_eligible != has_outcome_eligible:
+            raise ValueError("canonical_eligibility_missing")
+        if "learnable" in data:
+            _require_bool(data, "learnable")
+        if has_learning_eligible and has_outcome_eligible:
+            _require_bool(data, "learning_eligible")
+            _require_bool(data, "outcome_eligible")
+        else:
+            _require_bool(data, "learnable")
     _require_nonempty_string(data, "created_at")
     if bool(data.get("executed")) or action in MUTATION_CAPABLE_ACTIONS:
         for key in PROMPT_SOURCE_HASH_FIELDS:
@@ -207,6 +226,18 @@ def validate_autonomous_evaluator_result(payload: dict[str, Any]) -> dict[str, A
 
 def compact_episode_summary(episode: dict[str, Any]) -> dict[str, Any]:
     data = validate_episode(episode)
+    application_status = data.get("application_status")
+    if not isinstance(application_status, str) or not application_status.strip():
+        applied = (
+            data.get("executed") is True
+            and data.get("changed") is True
+            and data.get("action") in MUTATION_CAPABLE_ACTIONS
+        )
+        application_status = "applied" if applied else "no_change" if data.get("executed") is True else "preview"
+    from .episodes import is_learning_eligible_episode, is_outcome_eligible_episode
+
+    learning_eligible = is_learning_eligible_episode(data)
+    outcome_eligible = is_outcome_eligible_episode(data)
     out = {
         "episode_id": data.get("episode_id"),
         "episode_kind": data.get("episode_kind"),
@@ -215,8 +246,10 @@ def compact_episode_summary(episode: dict[str, Any]) -> dict[str, Any]:
         "decision": data.get("decision"),
         "action": data.get("action"),
         "executed": bool(data.get("executed")),
-        "learnable": bool(data.get("learnable")),
         "changed": bool(data.get("changed")),
+        "application_status": application_status,
+        "learning_eligible": learning_eligible,
+        "outcome_eligible": outcome_eligible,
         "artifact_path": data.get("artifact_path"),
     }
     if data.get("original_decision"):

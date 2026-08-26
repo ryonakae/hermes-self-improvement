@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .autonomous_loop import ACTIONS, validate_episode
+from .autonomous_loop import ACTIONS, EPISODE_SCHEMA_VERSION, validate_episode
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_matching import build_matching_signature
 from .prompt_overlays import DEFAULT_PROMPT_SEED_ROLES
@@ -140,14 +140,22 @@ def _add_matching_signature(payload: dict[str, Any], *, evidence_ids: list[Any] 
 def _application_fields(
     *,
     executed: bool,
-    learnable: bool,
     changed: bool,
     action: str,
+    decision: str | None = None,
+    episode_kind: str | None = None,
     application_status: str | None = None,
 ) -> dict[str, Any]:
-    structurally_eligible = bool(learnable and executed and changed and action in ACTIONS and action != "no_op")
+    structurally_eligible = bool(executed and changed and action in ELIGIBLE_MUTATION_ACTIONS)
     status = str(application_status or ("applied" if structurally_eligible else "no_change" if executed else "preview"))
-    eligible = structurally_eligible and status == "applied"
+    eligible = _structurally_learning_eligible({
+        "executed": bool(executed),
+        "changed": bool(changed),
+        "action": action,
+        "decision": decision,
+        "episode_kind": episode_kind,
+        "application_status": status,
+    })
     return {
         "application_status": status,
         "learning_eligible": eligible,
@@ -174,38 +182,64 @@ ELIGIBLE_MUTATION_ACTIONS = frozenset(ACTIONS - {"no_op"})
 INELIGIBLE_EPISODE_KINDS = frozenset({"preview_decision", "prompt_candidate"})
 
 
-def is_learning_eligible_episode(episode: dict[str, Any]) -> bool:
+def _canonical_eligibility_pair(episode: dict[str, Any]) -> tuple[bool, bool] | None:
+    has_learning = "learning_eligible" in episode
+    has_outcome = "outcome_eligible" in episode
+    if not has_learning and not has_outcome:
+        return None
+    if not isinstance(episode.get("learning_eligible"), bool) or not isinstance(episode.get("outcome_eligible"), bool):
+        return None
+    return episode["learning_eligible"], episode["outcome_eligible"]
+
+
+def _has_canonical_eligibility(episode: dict[str, Any]) -> bool:
+    return "learning_eligible" in episode or "outcome_eligible" in episode
+
+
+def _structurally_learning_eligible(episode: dict[str, Any]) -> bool:
     raw_decision = episode.get("decision")
     raw_episode_kind = episode.get("episode_kind")
     action = episode.get("action")
+    status = episode.get("application_status")
     if raw_decision is not None and not isinstance(raw_decision, str):
         return False
     if raw_episode_kind is not None and not isinstance(raw_episode_kind, str):
         return False
     if not isinstance(action, str):
         return False
+    if episode.get("executed") is not True or episode.get("changed") is not True:
+        return False
+    if action not in ELIGIBLE_MUTATION_ACTIONS:
+        return False
     decision = str(raw_decision or "").strip().lower()
     episode_kind = str(raw_episode_kind or "").strip().lower()
-    structurally_eligible = bool(
-        episode.get("learnable") is True
-        and episode.get("executed") is True
-        and episode.get("changed") is True
-        and action in ELIGIBLE_MUTATION_ACTIONS
-        and decision not in INELIGIBLE_EPISODE_DECISIONS
-        and episode_kind not in INELIGIBLE_EPISODE_KINDS
-    )
-    if not structurally_eligible:
+    if decision in INELIGIBLE_EPISODE_DECISIONS or episode_kind in INELIGIBLE_EPISODE_KINDS:
         return False
-    status = episode.get("application_status")
     if status is not None and (not isinstance(status, str) or status != "applied"):
         return False
-    return "learning_eligible" not in episode or episode.get("learning_eligible") is True
+    return True
+
+
+def is_learning_eligible_episode(episode: dict[str, Any]) -> bool:
+    if not _structurally_learning_eligible(episode):
+        return False
+    canonical = _canonical_eligibility_pair(episode)
+    if canonical is not None:
+        return canonical[0] is True
+    if _has_canonical_eligibility(episode):
+        return False
+    return episode.get("learnable") is True
 
 
 def is_outcome_eligible_episode(episode: dict[str, Any]) -> bool:
     if not is_learning_eligible_episode(episode):
         return False
-    return "outcome_eligible" not in episode or episode.get("outcome_eligible") is True
+    canonical = _canonical_eligibility_pair(episode)
+    if canonical is not None:
+        return canonical[1] is True
+    if _has_canonical_eligibility(episode):
+        return False
+    return episode.get("learnable") is True
 
 
 def _base_episode(
@@ -218,14 +252,13 @@ def _base_episode(
     decision: str,
     action: str,
     executed: bool,
-    learnable: bool,
     changed: bool,
     step: dict[str, Any] | None = None,
     seed: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = {
         "schema_name": "self_improvement_episode",
-        "schema_version": "1.0",
+        "schema_version": EPISODE_SCHEMA_VERSION,
         "episode_id": _episode_id(seed or {}, created_at),
         "episode_kind": episode_kind,
         "target_kind": target_kind,
@@ -233,16 +266,16 @@ def _base_episode(
         "decision": decision,
         "action": action,
         "executed": bool(executed),
-        "learnable": bool(learnable),
         "changed": bool(changed),
         "created_at": created_at,
         "run_id": run_result.get("run_id"),
         "artifact_path": run_result.get("artifact_path"),
         **_application_fields(
             executed=executed,
-            learnable=learnable,
             changed=changed,
             action=action,
+            decision=decision,
+            episode_kind=episode_kind,
         ),
     }
     if target_kind in {"skill", "memory"}:
@@ -294,7 +327,6 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
         decision=normalized_decision,
         action=action,
         executed=executed,
-        learnable=True,
         changed=changed,
         step=step,
         seed=seed,
@@ -404,7 +436,6 @@ def _memory_episode(run_result: dict[str, Any], step: dict[str, Any], decision: 
         decision=normalized_decision,
         action=action,
         executed=executed,
-        learnable=True,
         changed=changed,
         step=step,
         seed=seed,
@@ -478,7 +509,6 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
         decision=normalized_decision,
         action=action,
         executed=executed,
-        learnable=True,
         changed=changed,
         step=None,
         seed=seed,
@@ -487,9 +517,10 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
     if transaction_outcome:
         episode.update(_application_fields(
             executed=executed,
-            learnable=True,
             changed=changed,
             action=action,
+            decision=normalized_decision,
+            episode_kind=episode.get("episode_kind"),
             application_status=transaction_outcome,
         ))
     for key in ("transaction_id", "transaction_kind", "source_store", "target_store", "source_evidence_id"):
@@ -596,7 +627,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
         seed = {"kind": "calibration", "role": role, "candidate_hash": item.get("candidate_hash"), "created_at": stamp}
         episode = {
             "schema_name": "self_improvement_episode",
-            "schema_version": "1.0",
+            "schema_version": EPISODE_SCHEMA_VERSION,
             "episode_id": _episode_id(seed, stamp),
             "episode_kind": "prompt_promotion" if promoted else "prompt_candidate",
             "target_kind": target_kind,
@@ -604,13 +635,12 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "decision": "calibrate_evaluator",
             "action": action,
             "executed": promoted,
-            "learnable": True,
             "changed": promoted,
             "created_at": stamp,
             "artifact_path": result.get("ledger_path") or result.get("artifact_path"),
             "candidate_hash": item.get("candidate_hash"),
             **source_hashes,
-            **_application_fields(executed=promoted, learnable=True, changed=promoted, action=action),
+            **_application_fields(executed=promoted, changed=promoted, action=action, decision="calibrate_evaluator", episode_kind="prompt_promotion" if promoted else "prompt_candidate"),
         }
         generation_id = _calibration_overlay_generation_id(result, item)
         if generation_id:
@@ -622,7 +652,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
         seed = {"kind": "calibration", "role": "overlay_candidate_set", "candidate_hash": overlay_set.get("candidate_set_id") or generation_id, "created_at": stamp}
         episode = {
             "schema_name": "self_improvement_episode",
-            "schema_version": "1.0",
+            "schema_version": EPISODE_SCHEMA_VERSION,
             "episode_id": _episode_id(seed, stamp),
             "episode_kind": "prompt_promotion" if bool(result.get("active_changed")) else "prompt_candidate",
             "target_kind": "overlay_candidate_set",
@@ -630,16 +660,16 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "decision": "calibrate_evaluator",
             "action": "prompt_overlay_promote" if bool(result.get("active_changed")) else "no_op",
             "executed": bool(result.get("active_changed")),
-            "learnable": True,
             "changed": bool(result.get("active_changed")),
             "created_at": stamp,
             "artifact_path": result.get("ledger_path") or result.get("artifact_path"),
             **source_hashes,
             **_application_fields(
                 executed=bool(result.get("active_changed")),
-                learnable=True,
                 changed=bool(result.get("active_changed")),
                 action="prompt_overlay_promote" if bool(result.get("active_changed")) else "no_op",
+                decision="calibrate_evaluator",
+                episode_kind="prompt_promotion" if bool(result.get("active_changed")) else "prompt_candidate",
             ),
         }
         if generation_id:
@@ -652,7 +682,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
         seed = {"kind": "calibration", "role": "evaluator", "candidate_hash": candidate.get("candidate_hash"), "created_at": stamp}
         episode = {
             "schema_name": "self_improvement_episode",
-            "schema_version": "1.0",
+            "schema_version": EPISODE_SCHEMA_VERSION,
             "episode_id": _episode_id(seed, stamp),
             "episode_kind": "calibration_update" if promoted else "prompt_candidate",
             "target_kind": "evaluator",
@@ -660,13 +690,12 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "decision": "calibrate_evaluator",
             "action": action,
             "executed": promoted,
-            "learnable": True,
             "changed": promoted,
             "created_at": stamp,
             "artifact_path": result.get("ledger_path") or result.get("artifact_path"),
             "candidate_hash": candidate.get("candidate_hash"),
             **source_hashes,
-            **_application_fields(executed=promoted, learnable=True, changed=promoted, action=action),
+            **_application_fields(executed=promoted, changed=promoted, action=action, decision="calibrate_evaluator", episode_kind="calibration_update" if promoted else "prompt_candidate"),
         }
         generation_id = _calibration_overlay_generation_id(result, candidate)
         if generation_id:

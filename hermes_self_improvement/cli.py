@@ -1495,6 +1495,9 @@ def _render_status_summary(payload: dict[str, Any]) -> str:
         f"- calibrate: {'mutation-capable' if policy.get('calibrate_mutation_capable') else 'read-only'}, requires {policy.get('calibrate_requires') or 'unknown'}",
         f"- improve: {'mutation-capable' if policy.get('improve_mutation_capable') else 'read-only'}, skill targets {', '.join(policy.get('improve_skill_targets') or []) or 'none'}",
         f"- defer executes mutation: {bool(policy.get('defer_executes_mutation'))}",
+        f"- defer records episode: {bool(policy.get('defer_records_episode'))}",
+        f"- defer learning eligible: {bool(policy.get('defer_learning_eligible'))}",
+        f"- defer outcome eligible: {bool(policy.get('defer_outcome_eligible'))}",
     ]
     thresholds = payload.get("calibration_thresholds") if isinstance(payload.get("calibration_thresholds"), dict) else {}
     if thresholds:
