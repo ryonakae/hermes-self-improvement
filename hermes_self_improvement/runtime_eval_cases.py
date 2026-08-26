@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .episodes import load_recent_episodes
+from .episodes import load_learning_eligible_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_scoring import load_outcome_observations, score_episode_outcomes
 
@@ -402,7 +402,7 @@ def _runtime_case_dedupe_key(case: dict[str, Any]) -> str:
 
 def build_role_runtime_eval_cases(*, config: dict[str, Any], limit: int = 1000) -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
-    episodes = list(load_recent_episodes(config=config, limit=limit))
+    episodes = list(load_learning_eligible_episodes(config=config, limit=limit))
     for episode in episodes:
         case = _case_from_episode(episode)
         if case is not None:
@@ -569,7 +569,7 @@ def _recurring_unmatched_overlay_cases(config: dict[str, Any], *, limit: int) ->
 
 def build_overlay_set_runtime_eval_cases(*, config: dict[str, Any], limit: int = 1000) -> list[dict[str, Any]]:
     cases: list[dict[str, Any]] = []
-    for episode in load_recent_episodes(config=config, limit=limit):
+    for episode in load_learning_eligible_episodes(config=config, limit=limit):
         cases.extend(_overlay_cases_from_episode(episode))
     cases.extend(_recurring_unmatched_overlay_cases(config, limit=limit))
     cases.extend(_improve_run_overlay_cases(config, limit=limit))

@@ -2,9 +2,9 @@
 
 ## Current source of truth
 
-### Current priority — 2026-08-26 execution / promotion / credit hardening
+### Latest completed hardening — 2026-08-26 execution / promotion / credit hardening
 
-`2026-08-26-execution-promotion-credit-hardening.md` is planned and not implemented. Recent artifact review found three concrete contract failures: memory replacement text exists as `replacement_content` but the executor reads only `content`; overlay promotion accepts GEPA `selected` candidates without requiring `candidate_score > baseline_score`; and audit-only `inventory_not_selected_by_planner` episodes enter outcome/credit/runtime-eval consumers despite providing no learning signal. The plan fixes these in three bounded TDD slices without adding actors, config thresholds, approval lanes, or a new scoring system. Strict `proven improved` semantics remain unchanged.
+`2026-08-26-execution-promotion-credit-hardening.md` is implemented and verified. Memory replacement now preserves Planner `replacement_content` through the official memory tool contract; overlay promotion requires a finite numeric `candidate_score > baseline_score`; and append-only audit episodes enter outcome/credit/runtime-eval/episode-derived GEPA consumers only after a fail-closed applied-mutation eligibility check. Verification: full suite `1075 passed, 2 skipped`, `py_compile`, `git diff --check`, pointer preview/restore tests, source-directed dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260826T002947Z.json` with `dry_run=true`, `target_changed=false`, `apply 0 / defer 10 / skip 65 / block 0`, and final read-only review PASS. Latest 1,000-episode accounting is `eligible 8 / excluded 992 / scored 0`; strict `proven improved` remains 0 because all 8 eligible episodes are still inside the observation window. No mutating dogfood or production cron/config change was made.
 
 ### Latest completed hardening — 2026-07-04 memory placement review ledger
 

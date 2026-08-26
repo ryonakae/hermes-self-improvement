@@ -147,7 +147,7 @@ def test_fake_optimizer_can_produce_overlay_candidate_set(tmp_path):
     episode = {
         "schema_name": "self_improvement_episode",
         "episode_id": "episode-overlay-set",
-        "episode_kind": "preview_decision",
+        "episode_kind": "executed_mutation",
         "target_kind": "skill",
         "target_id": "demo-skill",
         "decision": "mutate_skill",

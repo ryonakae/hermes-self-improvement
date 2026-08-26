@@ -4,7 +4,7 @@ from collections import defaultdict
 from statistics import mean
 from typing import Any
 
-from .episodes import load_recent_episodes
+from .episodes import is_outcome_eligible_episode, load_recent_episodes
 from .observer import _sha256_text, _stable_json
 from .outcome_scoring import load_outcome_observations, score_episode_outcomes
 
@@ -12,7 +12,11 @@ WINDOWS = ("immediate", "short", "medium", "long")
 
 
 def _score_rows(*, config: dict[str, Any], limit: int) -> list[dict[str, Any]]:
-    episodes = load_recent_episodes(config=config, limit=limit)
+    episodes = [
+        episode
+        for episode in load_recent_episodes(config=config, limit=limit)
+        if is_outcome_eligible_episode(episode)
+    ]
     observations = load_outcome_observations(config=config, limit=limit)
     rows: list[dict[str, Any]] = []
     for episode in episodes:
@@ -261,6 +265,7 @@ def _hash_payload(payload: Any) -> str:
 
 
 def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 1000) -> dict[str, Any]:
+    all_episodes = load_recent_episodes(config=config, limit=limit)
     rows = _score_rows(config=config, limit=limit)
     scored = [row for row in rows if row.get("score") is not None]
     window_buckets = _window_rows(rows)
@@ -270,6 +275,9 @@ def build_credit_assignment_aggregate(*, config: dict[str, Any], limit: int = 10
         "schema_name": "self_improvement_credit_assignment_aggregate",
         "schema_version": "1.0",
         "episode_count": len(rows),
+        "total_episode_count": len(all_episodes),
+        "eligible_episode_count": len(rows),
+        "excluded_episode_count": len(all_episodes) - len(rows),
         "scored_episode_count": len(scored),
         "overall": _bucket_summary(rows),
         "by_planner_prompt_hash": _group(rows, lambda row: row.get("planner_prompt_hash")),
@@ -306,6 +314,9 @@ def compact_credit_assignment_summary(aggregate: dict[str, Any]) -> dict[str, An
     by_generation = aggregate.get("by_overlay_generation_id") if isinstance(aggregate.get("by_overlay_generation_id"), dict) else {}
     return {
         "episode_count": int(aggregate.get("episode_count") or 0),
+        "total_episode_count": int(aggregate.get("total_episode_count") or 0),
+        "eligible_episode_count": int(aggregate.get("eligible_episode_count") or 0),
+        "excluded_episode_count": int(aggregate.get("excluded_episode_count") or 0),
         "scored_episode_count": int(aggregate.get("scored_episode_count") or 0),
         "overall": {
             "mean_outcome_score": overall.get("mean_outcome_score"),

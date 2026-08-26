@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .autonomous_loop import validate_episode
+from .autonomous_loop import ACTIONS, validate_episode
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_matching import build_matching_signature
 from .prompt_overlays import DEFAULT_PROMPT_SEED_ROLES
@@ -136,6 +137,77 @@ def _add_matching_signature(payload: dict[str, Any], *, evidence_ids: list[Any] 
     return payload
 
 
+def _application_fields(
+    *,
+    executed: bool,
+    learnable: bool,
+    changed: bool,
+    action: str,
+    application_status: str | None = None,
+) -> dict[str, Any]:
+    structurally_eligible = bool(learnable and executed and changed and action in ACTIONS and action != "no_op")
+    status = str(application_status or ("applied" if structurally_eligible else "no_change" if executed else "preview"))
+    eligible = structurally_eligible and status == "applied"
+    return {
+        "application_status": status,
+        "learning_eligible": eligible,
+        "outcome_eligible": eligible,
+    }
+
+
+INELIGIBLE_EPISODE_DECISIONS = frozenset({
+    "block",
+    "blocked",
+    "defer",
+    "deferred",
+    "error",
+    "failed",
+    "no_op",
+    "none",
+    "preview",
+    "reject",
+    "rejected",
+    "skip",
+    "skipped",
+})
+ELIGIBLE_MUTATION_ACTIONS = frozenset(ACTIONS - {"no_op"})
+INELIGIBLE_EPISODE_KINDS = frozenset({"preview_decision", "prompt_candidate"})
+
+
+def is_learning_eligible_episode(episode: dict[str, Any]) -> bool:
+    raw_decision = episode.get("decision")
+    raw_episode_kind = episode.get("episode_kind")
+    action = episode.get("action")
+    if raw_decision is not None and not isinstance(raw_decision, str):
+        return False
+    if raw_episode_kind is not None and not isinstance(raw_episode_kind, str):
+        return False
+    if not isinstance(action, str):
+        return False
+    decision = str(raw_decision or "").strip().lower()
+    episode_kind = str(raw_episode_kind or "").strip().lower()
+    structurally_eligible = bool(
+        episode.get("learnable") is True
+        and episode.get("executed") is True
+        and episode.get("changed") is True
+        and action in ELIGIBLE_MUTATION_ACTIONS
+        and decision not in INELIGIBLE_EPISODE_DECISIONS
+        and episode_kind not in INELIGIBLE_EPISODE_KINDS
+    )
+    if not structurally_eligible:
+        return False
+    status = episode.get("application_status")
+    if status is not None and (not isinstance(status, str) or status != "applied"):
+        return False
+    return "learning_eligible" not in episode or episode.get("learning_eligible") is True
+
+
+def is_outcome_eligible_episode(episode: dict[str, Any]) -> bool:
+    if not is_learning_eligible_episode(episode):
+        return False
+    return "outcome_eligible" not in episode or episode.get("outcome_eligible") is True
+
+
 def _base_episode(
     *,
     run_result: dict[str, Any],
@@ -166,6 +238,12 @@ def _base_episode(
         "created_at": created_at,
         "run_id": run_result.get("run_id"),
         "artifact_path": run_result.get("artifact_path"),
+        **_application_fields(
+            executed=executed,
+            learnable=learnable,
+            changed=changed,
+            action=action,
+        ),
     }
     if target_kind in {"skill", "memory"}:
         payload.update(_source_hashes(run_result, step))
@@ -405,6 +483,15 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
         step=None,
         seed=seed,
     )
+    transaction_outcome = str(transaction_result.get("outcome") or "").strip()
+    if transaction_outcome:
+        episode.update(_application_fields(
+            executed=executed,
+            learnable=True,
+            changed=changed,
+            action=action,
+            application_status=transaction_outcome,
+        ))
     for key in ("transaction_id", "transaction_kind", "source_store", "target_store", "source_evidence_id"):
         value = transaction.get(key)
         if isinstance(value, str) and value.strip():
@@ -523,6 +610,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "artifact_path": result.get("ledger_path") or result.get("artifact_path"),
             "candidate_hash": item.get("candidate_hash"),
             **source_hashes,
+            **_application_fields(executed=promoted, learnable=True, changed=promoted, action=action),
         }
         generation_id = _calibration_overlay_generation_id(result, item)
         if generation_id:
@@ -547,6 +635,12 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "created_at": stamp,
             "artifact_path": result.get("ledger_path") or result.get("artifact_path"),
             **source_hashes,
+            **_application_fields(
+                executed=bool(result.get("active_changed")),
+                learnable=True,
+                changed=bool(result.get("active_changed")),
+                action="prompt_overlay_promote" if bool(result.get("active_changed")) else "no_op",
+            ),
         }
         if generation_id:
             episode["overlay_generation_id"] = generation_id
@@ -572,6 +666,7 @@ def calibration_episodes_from_result(result: dict[str, Any], *, created_at: str 
             "artifact_path": result.get("ledger_path") or result.get("artifact_path"),
             "candidate_hash": candidate.get("candidate_hash"),
             **source_hashes,
+            **_application_fields(executed=promoted, learnable=True, changed=promoted, action=action),
         }
         generation_id = _calibration_overlay_generation_id(result, candidate)
         if generation_id:
@@ -586,7 +681,12 @@ def record_calibration_episodes(*, config: dict[str, Any], calibration_result: d
     return _write_episodes(config, episodes, created)
 
 
-def load_recent_episodes(*, config: dict[str, Any], limit: int = 100) -> list[dict[str, Any]]:
+def _load_recent_episodes(
+    *,
+    config: dict[str, Any],
+    limit: int,
+    predicate: Callable[[dict[str, Any]], bool] | None = None,
+) -> list[dict[str, Any]]:
     root = episode_root(config)
     if not root.exists():
         return []
@@ -596,9 +696,25 @@ def load_recent_episodes(*, config: dict[str, Any], limit: int = 100) -> list[di
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             continue
-        if isinstance(payload, dict) and payload.get("schema_name") == "self_improvement_episode":
+        if (
+            isinstance(payload, dict)
+            and payload.get("schema_name") == "self_improvement_episode"
+            and (predicate is None or predicate(payload))
+        ):
             payload["path"] = str(path)
             rows.append(payload)
         if len(rows) >= int(limit):
             break
     return rows
+
+
+def load_recent_episodes(*, config: dict[str, Any], limit: int = 100) -> list[dict[str, Any]]:
+    return _load_recent_episodes(config=config, limit=limit)
+
+
+def load_learning_eligible_episodes(*, config: dict[str, Any], limit: int = 100) -> list[dict[str, Any]]:
+    return _load_recent_episodes(config=config, limit=limit, predicate=is_learning_eligible_episode)
+
+
+def load_outcome_eligible_episodes(*, config: dict[str, Any], limit: int = 100) -> list[dict[str, Any]]:
+    return _load_recent_episodes(config=config, limit=limit, predicate=is_outcome_eligible_episode)

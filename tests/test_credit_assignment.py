@@ -78,31 +78,38 @@ def test_credit_assignment_groups_scores_by_prompt_decision_target_and_window(tm
 
     aggregate = build_credit_assignment_aggregate(config=config, limit=100)
 
-    assert aggregate["episode_count"] == 2
-    assert aggregate["scored_episode_count"] == 2
+    assert aggregate["episode_count"] == 1
+    assert aggregate["total_episode_count"] == 2
+    assert aggregate["eligible_episode_count"] == 1
+    assert aggregate["excluded_episode_count"] == 1
+    assert aggregate["scored_episode_count"] == 1
     assert aggregate["by_planner_prompt_hash"]["sha256:planner-a"]["mean_outcome_score"] > 0
-    assert aggregate["by_editor_prompt_hash"]["sha256:editor-a"]["episodes"] == 2
-    assert aggregate["by_planner_prompt_hash"]["sha256:planner-b"]["mean_outcome_score"] < 0
-    assert aggregate["by_decision"]["mutate_skill"]["episodes"] == 2
-    assert aggregate["by_target_kind"]["skill"]["episodes"] == 2
+    assert aggregate["by_editor_prompt_hash"]["sha256:editor-a"]["episodes"] == 1
+    assert "sha256:planner-b" not in aggregate["by_planner_prompt_hash"]
+    assert aggregate["by_decision"]["mutate_skill"]["episodes"] == 1
+    assert aggregate["by_target_kind"]["skill"]["episodes"] == 1
     assert aggregate["by_overlay_generation_id"]["overlay-set-good"]["mean_outcome_score"] > 0
-    assert aggregate["by_overlay_generation_id"]["overlay-set-risky"]["mean_outcome_score"] < 0
-    assert aggregate["by_evidence_strength"]["weak"]["weak_only_selected_rate"] == 1.0
+    assert "overlay-set-risky" not in aggregate["by_overlay_generation_id"]
+    assert "weak" not in aggregate["by_evidence_strength"]
     assert aggregate["by_window"]["immediate"]["mean_outcome_score"] > 0
-    assert aggregate["by_window"]["short"]["mean_outcome_score"] < 0
+    assert aggregate["by_window"]["short"]["mean_outcome_score"] is None
     assert aggregate["outcome_status_counts"]["improved"] == 1
-    assert aggregate["outcome_status_counts"]["recurring"] == 1
+    assert aggregate["outcome_status_counts"]["recurring"] == 0
     assert aggregate["credit_windows"]["immediate"] == 1
-    assert aggregate["credit_windows"]["short"] == 1
+    assert aggregate["credit_windows"]["short"] == 0
     assert "episode-1" in aggregate["related_episode_ids"]["improved"]
     compact = compact_credit_assignment_summary(aggregate)
-    assert compact["outcomes"] == {"tracked": 2, "improved": 1, "recurring": 1, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0, "early_positive": {"memory_retrieved_useful": 0, "quiet_window": 0}, "unknown_reasons": {}, "credit_windows": {"immediate": 1, "short": 1, "medium": 0, "long": 0}}
-    assert compact["overlay_generations"]["tracked"] == 2
+    assert compact["episode_count"] == 1
+    assert compact["total_episode_count"] == 2
+    assert compact["eligible_episode_count"] == 1
+    assert compact["excluded_episode_count"] == 1
+    assert compact["outcomes"] == {"tracked": 1, "improved": 1, "recurring": 0, "regressed": 0, "unknown": 0, "insufficient_window": 0, "quality_under_observation": 0, "duplicate_noop_credited": 0, "skill_usage_under_observation": 0, "missing_evidence_under_observation": 0, "early_positive": {"memory_retrieved_useful": 0, "quiet_window": 0}, "unknown_reasons": {}, "credit_windows": {"immediate": 1, "short": 0, "medium": 0, "long": 0}}
+    assert compact["overlay_generations"]["tracked"] == 1
     assert compact["overlay_generations"]["best"]["overlay_generation_id"] == "overlay-set-good"
-    assert compact["overlay_generations"]["worst"]["overlay_generation_id"] == "overlay-set-risky"
+    assert compact["overlay_generations"]["worst"]["overlay_generation_id"] == "overlay-set-good"
 
 
-def test_credit_assignment_keeps_unobserved_and_ambiguous_links_low_confidence(tmp_path):
+def test_credit_assignment_excludes_unexecuted_ambiguous_episode(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "e1.json", episode_payload(
@@ -118,13 +125,15 @@ def test_credit_assignment_keeps_unobserved_and_ambiguous_links_low_confidence(t
 
     aggregate = build_credit_assignment_aggregate(config=config, limit=100)
 
-    assert aggregate["episode_count"] == 1
+    assert aggregate["episode_count"] == 0
+    assert aggregate["total_episode_count"] == 1
+    assert aggregate["eligible_episode_count"] == 0
+    assert aggregate["excluded_episode_count"] == 1
     assert aggregate["scored_episode_count"] == 0
-    assert aggregate["by_planner_prompt_hash"]["sha256:planner-a"]["mean_outcome_score"] is None
-    assert aggregate["by_planner_prompt_hash"]["sha256:planner-a"]["confidence"] == 0.0
-    assert aggregate["by_decision"]["defer"]["episodes"] == 1
-    assert aggregate["by_evidence_strength"]["unknown"]["episodes"] == 1
-    assert aggregate["quality_outcomes"]["unknown_reasons"] == {"no_later_comparable_observation": 1}
+    assert aggregate["by_planner_prompt_hash"] == {}
+    assert aggregate["by_decision"] == {}
+    assert aggregate["by_evidence_strength"] == {}
+    assert aggregate["quality_outcomes"]["unknown_reasons"] == {}
 
 
 def test_credit_assignment_splits_unknown_reasons_without_positive_credit(tmp_path):
@@ -176,7 +185,7 @@ def test_credit_assignment_splits_unknown_reasons_without_positive_credit(tmp_pa
     assert compact["outcomes"]["improved"] == 0
 
 
-def test_credit_assignment_counts_duplicate_noop_credit_separately(tmp_path):
+def test_credit_assignment_excludes_duplicate_noop_from_outcome_credit(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "noop.json", episode_payload(
@@ -198,8 +207,11 @@ def test_credit_assignment_counts_duplicate_noop_credit_separately(tmp_path):
     aggregate = build_credit_assignment_aggregate(config=config, limit=100)
     compact = compact_credit_assignment_summary(aggregate)
 
-    assert aggregate["quality_outcomes"]["duplicate_noop_credited"] == 1
-    assert compact["outcomes"]["duplicate_noop_credited"] == 1
+    assert aggregate["episode_count"] == 0
+    assert aggregate["total_episode_count"] == 1
+    assert aggregate["excluded_episode_count"] == 1
+    assert aggregate["quality_outcomes"]["duplicate_noop_credited"] == 0
+    assert compact["outcomes"]["duplicate_noop_credited"] == 0
 
 
 def test_credit_assignment_keeps_skill_usage_only_under_observation(tmp_path):

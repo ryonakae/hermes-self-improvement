@@ -1085,10 +1085,13 @@ def test_run_knowledge_improvement_step_dry_run_returns_canonical_transactions(m
     result_by_id = {item["transaction_id"]: item for item in result["transaction_results"]}
     assert result_by_id[transactions[0]["transaction_id"]]["outcome"] == "preview"
     assert result_by_id[transactions[1]["transaction_id"]]["outcome"] == "preview"
+    assert result_by_id[transactions[2]["transaction_id"]]["outcome"] == "blocked"
+    assert result_by_id[transactions[2]["transaction_id"]]["reason"] == "planner_task_missing_replacement_content"
     assert result_by_id[transactions[4]["transaction_id"]]["outcome"] == "preview"
     assert result_by_id[transactions[5]["transaction_id"]]["outcome"] == "deferred"
     assert result_by_id[transactions[6]["transaction_id"]]["outcome"] == "skipped"
-    assert result["editor_validation"]["summary"]["preview"] == 5
+    assert result["editor_validation"]["summary"]["preview"] == 4
+    assert result["editor_validation"]["summary"]["blocked"] == 1
     assert result["editor_validation"]["summary"]["deferred"] == 1
     assert result["editor_validation"]["summary"]["skipped"] == 1
 

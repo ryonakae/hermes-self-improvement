@@ -5,6 +5,8 @@ import json
 from hermes_self_improvement.episodes import (
     calibration_episodes_from_result,
     episode_root,
+    is_learning_eligible_episode,
+    is_outcome_eligible_episode,
     load_recent_episodes,
     record_calibration_episodes,
     record_run_episodes,
@@ -192,12 +194,84 @@ def test_record_run_episodes_maps_canonical_apply_operations_to_episode_metadata
     assert by_txn["txn-skill-apply"]["decision"] == "mutate_skill"
     assert by_txn["txn-skill-apply"]["action"] == "skill_patch"
     assert by_txn["txn-skill-apply"]["changed"] is True
+    assert by_txn["txn-skill-apply"]["application_status"] == "applied"
+    assert by_txn["txn-skill-apply"]["learning_eligible"] is True
+    assert by_txn["txn-skill-apply"]["outcome_eligible"] is True
     assert by_txn["txn-skill-apply"]["operation"] == "mutate_skill"
     assert by_txn["txn-skill-apply"]["post_validation_status"] == "passed"
     assert by_txn["txn-memory-remove"]["target_id"] == "memory:canonical-memory"
     assert by_txn["txn-memory-remove"]["decision"] == "mutate_memory"
     assert by_txn["txn-memory-remove"]["action"] == "memory_remove"
     assert by_txn["txn-memory-remove"]["operation"] == "memory_remove"
+    assert by_txn["txn-memory-remove"]["application_status"] == "applied"
+    assert by_txn["txn-memory-remove"]["learning_eligible"] is True
+    assert by_txn["txn-memory-remove"]["outcome_eligible"] is True
+
+
+def test_episode_eligibility_is_fail_closed_but_accepts_proven_legacy_mutations():
+    proven_legacy = {
+        "learnable": True,
+        "executed": True,
+        "changed": True,
+        "action": "skill_patch",
+    }
+    explicit_preview = {
+        **proven_legacy,
+        "executed": False,
+        "changed": False,
+        "learning_eligible": True,
+        "outcome_eligible": True,
+    }
+    blocked_mutation = {
+        **proven_legacy,
+        "application_status": "blocked",
+        "learning_eligible": True,
+        "outcome_eligible": True,
+    }
+    contradictory_defer = {
+        **proven_legacy,
+        "decision": "defer",
+    }
+    malformed_metadata = {
+        **proven_legacy,
+        "application_status": 1,
+        "learning_eligible": "true",
+        "outcome_eligible": "true",
+    }
+    unknown_action = {
+        **proven_legacy,
+        "action": "custom_action",
+        "learning_eligible": True,
+        "outcome_eligible": True,
+    }
+    malformed_structure = {
+        **proven_legacy,
+        "learnable": "true",
+        "executed": 1,
+        "decision": [],
+        "action": [],
+    }
+    contradictory_preview_kind = {
+        **proven_legacy,
+        "episode_kind": "preview_decision",
+    }
+
+    assert is_learning_eligible_episode(proven_legacy) is True
+    assert is_outcome_eligible_episode(proven_legacy) is True
+    assert is_learning_eligible_episode(explicit_preview) is False
+    assert is_outcome_eligible_episode(explicit_preview) is False
+    assert is_learning_eligible_episode(blocked_mutation) is False
+    assert is_outcome_eligible_episode(blocked_mutation) is False
+    assert is_learning_eligible_episode(contradictory_defer) is False
+    assert is_outcome_eligible_episode(contradictory_defer) is False
+    assert is_learning_eligible_episode(malformed_metadata) is False
+    assert is_outcome_eligible_episode(malformed_metadata) is False
+    assert is_learning_eligible_episode(unknown_action) is False
+    assert is_outcome_eligible_episode(unknown_action) is False
+    assert is_learning_eligible_episode(malformed_structure) is False
+    assert is_outcome_eligible_episode(malformed_structure) is False
+    assert is_learning_eligible_episode(contradictory_preview_kind) is False
+    assert is_outcome_eligible_episode(contradictory_preview_kind) is False
 
 
 

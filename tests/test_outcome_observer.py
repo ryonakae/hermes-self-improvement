@@ -4,6 +4,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from hermes_self_improvement.credit_assignment import build_credit_assignment_aggregate
+from hermes_self_improvement.episodes import episodes_from_run_result
 from hermes_self_improvement.outcome_observer import (
     _unmatched_summary,
     collect_duplicate_noop_observations,
@@ -64,6 +66,65 @@ def episode_payload(
 def write_episode(root: Path, payload: dict, name: str | None = None) -> None:
     date = str(payload["created_at"])[:10]
     write_json(root / "episodes" / date / (name or f"{payload['episode_id']}.json"), payload)
+
+
+def test_applied_changed_episode_reaches_improved_credit_while_preview_stays_audit_only(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    root = Path(config["_self_improvement_root"])
+    run_result = {
+        "schema_name": "self_improvement_run_result",
+        "run_id": "run-outcome-integration",
+        "execute": True,
+        "artifact_path": str(root / "runs" / "run-outcome-integration.json"),
+        "prompt_sources": {
+            "planner": {"base_hash": "sha256:planner"},
+            "editor": {"base_hash": "sha256:editor"},
+        },
+        "calibration": {"active_evaluator_hash": "sha256:evaluator"},
+        "knowledge_transactions": [
+            {
+                "transaction_id": "txn-applied",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "operation": "mutate_skill",
+                "target_store": "skill",
+                "target_id": "applied-skill",
+                "transaction_result": {
+                    "success": True,
+                    "outcome": "applied",
+                    "post_validation": {"status": "passed"},
+                },
+            },
+            {
+                "transaction_id": "txn-preview",
+                "transaction_kind": "skill",
+                "decision": "apply",
+                "operation": "mutate_skill",
+                "target_store": "skill",
+                "target_id": "preview-skill",
+            },
+        ],
+    }
+    episodes = episodes_from_run_result(run_result, created_at="2026-05-05T09:00:00+00:00")
+    by_transaction = {episode["transaction_id"]: episode for episode in episodes}
+    by_transaction["txn-preview"]["post_validation_status"] = "passed"
+    for episode in episodes:
+        write_episode(root, episode)
+
+    prepass = run_outcome_prepass(
+        config=config,
+        now=datetime(2026, 5, 5, 10, 0, tzinfo=timezone.utc),
+    )
+    aggregate = build_credit_assignment_aggregate(config=config, limit=100)
+
+    assert prepass["episode_count"] == 1
+    assert prepass["written_observation_count"] == 1
+    assert aggregate["total_episode_count"] == 2
+    assert aggregate["eligible_episode_count"] == 1
+    assert aggregate["excluded_episode_count"] == 1
+    assert aggregate["outcome_status_counts"]["improved"] == 1
+    assert aggregate["related_episode_ids"]["improved"] == [by_transaction["txn-applied"]["episode_id"]]
+    assert by_transaction["txn-preview"]["episode_id"] not in aggregate["related_episode_ids"]["improved"]
 
 
 def test_collection_window_uses_rolling_30_days_even_with_previous_calibrate(tmp_path):

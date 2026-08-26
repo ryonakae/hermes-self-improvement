@@ -105,6 +105,9 @@ def collect_calibration_evidence(config: dict[str, Any], *, now: datetime | None
     credit_assignment = build_credit_assignment_aggregate(config=config, limit=1000)
     summary["outcome_scores"] = {
         "episode_count": int(outcome_scores.get("episode_count") or 0),
+        "total_episode_count": int(outcome_scores.get("total_episode_count") or 0),
+        "eligible_episode_count": int(outcome_scores.get("eligible_episode_count") or 0),
+        "excluded_episode_count": int(outcome_scores.get("excluded_episode_count") or 0),
         "observation_count": int(outcome_scores.get("observation_count") or 0),
         "scored_episode_count": int(outcome_scores.get("scored_episode_count") or 0),
         "overall": outcome_scores.get("overall") if isinstance(outcome_scores.get("overall"), dict) else {},

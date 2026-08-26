@@ -43,15 +43,7 @@ def test_runtime_eval_cases_convert_weak_only_evidence_to_skip_or_defer(tmp_path
 
     cases = build_role_runtime_eval_cases(config=config, limit=100)
 
-    assert len(cases) == 1
-    case = cases[0]
-    assert case["case_type"] == "planner_weak_only_skip"
-    assert case["role"] == "planner"
-    assert case["expected"]["decision"] in {"skip", "defer"}
-    assert case["input"]["evidence_strength"] == "weak"
-    serialized = json.dumps(case)
-    assert "candidate_prompt" not in serialized
-    assert "system_addendum" not in serialized
+    assert cases == []
 
 
 def test_runtime_eval_cases_convert_exact_mutable_skill_evidence_to_mutate_skill(tmp_path):
@@ -59,6 +51,7 @@ def test_runtime_eval_cases_convert_exact_mutable_skill_evidence_to_mutate_skill
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "exact.json", episode_payload(
         "episode-exact",
+        episode_kind="executed_mutation",
         decision="mutate_skill",
         action="skill_patch",
         executed=True,
@@ -75,7 +68,7 @@ def test_runtime_eval_cases_convert_exact_mutable_skill_evidence_to_mutate_skill
     assert cases[0]["expected"]["requires_evidence_ids"] is True
 
 
-def test_runtime_eval_cases_convert_unsafe_provenance_to_defer(tmp_path):
+def test_runtime_eval_cases_exclude_unexecuted_unsafe_provenance_defer(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "bundled.json", episode_payload(
@@ -88,10 +81,7 @@ def test_runtime_eval_cases_convert_unsafe_provenance_to_defer(tmp_path):
 
     cases = build_role_runtime_eval_cases(config=config, limit=100)
 
-    assert len(cases) == 1
-    assert cases[0]["case_type"] == "planner_ambiguous_target_defer"
-    assert cases[0]["expected"]["decision"] == "defer"
-    assert cases[0]["expected"]["reason_contains"] == "target_provenance_unsafe"
+    assert cases == []
 
 
 
@@ -121,7 +111,7 @@ def test_runtime_eval_cases_use_canonical_knowledge_quality_for_improve_runs_eve
     assert improve_cases[0]["input"]["unmatched_evidence_count"] != 999
 
 
-def test_runtime_eval_cases_convert_editor_target_mismatch_to_skip(tmp_path):
+def test_runtime_eval_cases_exclude_unexecuted_editor_target_mismatch(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "mismatch.json", episode_payload(
@@ -134,10 +124,7 @@ def test_runtime_eval_cases_convert_editor_target_mismatch_to_skip(tmp_path):
 
     cases = build_role_runtime_eval_cases(config=config, limit=100)
 
-    assert len(cases) == 1
-    assert cases[0]["case_type"] == "editor_target_mismatch_skip"
-    assert cases[0]["role"] == "editor"
-    assert cases[0]["expected"]["mutation"] == "skip"
+    assert cases == []
 
 
 def test_runtime_eval_cases_emit_evaluator_outcome_status_review_for_recurring_and_regressed_episodes(tmp_path):
@@ -306,6 +293,7 @@ def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "overlay.json", episode_payload(
         "episode-overlay",
+        episode_kind="executed_mutation",
         decision="mutate_skill",
         action="skill_patch",
         executed=True,
@@ -339,7 +327,7 @@ def test_overlay_set_eval_cases_preserve_three_targets_from_episode(tmp_path):
     assert "system_addendum" not in serialized
 
 
-def test_runtime_eval_cases_deduplicate_by_case_hash(tmp_path):
+def test_runtime_eval_cases_exclude_duplicate_audit_only_episodes(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     root = Path(config["_self_improvement_root"])
     payload = episode_payload("episode-weak")
@@ -348,7 +336,7 @@ def test_runtime_eval_cases_deduplicate_by_case_hash(tmp_path):
 
     cases = build_role_runtime_eval_cases(config=config, limit=100)
 
-    assert len(cases) == 1
+    assert cases == []
 
 
 def test_overlay_eval_cases_include_recurring_unmatched_failure_cluster(tmp_path):

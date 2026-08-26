@@ -141,12 +141,16 @@ def test_build_outcome_score_aggregate_groups_by_prompt_and_target(tmp_path):
     root = Path(config["_self_improvement_root"])
     write_json(root / "episodes" / "2026-05-03" / "e1.json", episode_payload("episode-1"))
     write_json(root / "episodes" / "2026-05-03" / "e2.json", episode_payload("episode-2", target_id="other-skill", planner_prompt_hash="sha256:planner2"))
+    write_json(root / "episodes" / "2026-05-03" / "preview.json", episode_payload("episode-preview", action="no_op", executed=False, changed=False))
     write_json(root / "outcomes" / "2026-05-03" / "o1.json", outcome_payload("episode-1", signals={"validation_passed": True, "related_failure_delta": -1}, confidence=0.8))
     write_json(root / "outcomes" / "2026-05-03" / "o2.json", outcome_payload("episode-2", signals={"user_correction": True}, confidence=0.9))
 
     aggregate = build_outcome_score_aggregate(config=config, limit=100)
 
     assert aggregate["episode_count"] == 2
+    assert aggregate["total_episode_count"] == 3
+    assert aggregate["eligible_episode_count"] == 2
+    assert aggregate["excluded_episode_count"] == 1
     assert aggregate["observation_count"] == 2
     assert aggregate["scored_episode_count"] == 2
     assert aggregate["overall"]["mean_score"] is not None

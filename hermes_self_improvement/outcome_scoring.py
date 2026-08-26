@@ -7,7 +7,7 @@ from statistics import mean
 from typing import Any
 
 from .autonomous_loop import OUTCOME_WINDOWS, validate_outcome_observation
-from .episodes import load_recent_episodes
+from .episodes import is_outcome_eligible_episode, load_recent_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 
 COMPONENT_WEIGHTS = {
@@ -204,7 +204,8 @@ def _hash_payload(payload: Any) -> str:
 
 
 def build_outcome_score_aggregate(*, config: dict[str, Any], limit: int = 1000) -> dict[str, Any]:
-    episodes = load_recent_episodes(config=config, limit=limit)
+    all_episodes = load_recent_episodes(config=config, limit=limit)
+    episodes = [episode for episode in all_episodes if is_outcome_eligible_episode(episode)]
     observations = load_outcome_observations(config=config, limit=limit)
     scored = [score_episode_outcomes(episode, observations) for episode in episodes]
     scored_with_observations = [row for row in scored if row.get("observation_count")]
@@ -223,6 +224,9 @@ def build_outcome_score_aggregate(*, config: dict[str, Any], limit: int = 1000) 
         "schema_name": "self_improvement_outcome_score_aggregate",
         "schema_version": "1.0",
         "episode_count": len(episodes),
+        "total_episode_count": len(all_episodes),
+        "eligible_episode_count": len(episodes),
+        "excluded_episode_count": len(all_episodes) - len(episodes),
         "observation_count": len(observations),
         "scored_episode_count": len(scored_with_observations),
         "overall": _bucket_summary(scored),

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .autonomous_loop import validate_outcome_observation
-from .episodes import load_recent_episodes
+from .episodes import load_outcome_eligible_episodes
 from .observer import _reports_dir, _sha256_text, _stable_json
 from .outcome_matching import build_matching_signature
 from .outcome_scoring import load_outcome_observations, outcome_root
@@ -850,7 +850,7 @@ def compact_outcome_prepass_summary(prepass: dict[str, Any]) -> dict[str, Any]:
 def run_outcome_prepass(*, config: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
     created = (now or _now()).astimezone(UTC)
     window = determine_collection_window(config=config, now=created)
-    episodes = load_recent_episodes(config=config, limit=1000)
+    episodes = load_outcome_eligible_episodes(config=config, limit=1000)
     collector_results = [
         collect_post_validation_observations(episodes=episodes, window=window),
         collect_duplicate_noop_observations(episodes=episodes, window=window),

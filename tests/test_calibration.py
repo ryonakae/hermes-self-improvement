@@ -768,7 +768,7 @@ def test_build_runtime_eval_cases_uses_episode_cases_not_review_outcome_compat(t
     assert cases == []
 
 
-def test_build_runtime_eval_cases_includes_role_episode_cases(tmp_path):
+def test_build_runtime_eval_cases_excludes_audit_only_role_episode(tmp_path):
     calibration = importlib.import_module("hermes_self_improvement.calibration")
     config = {"_self_improvement_root": str(tmp_path / "self-improvement"), "calibration": {"evidence": {"min_evidence_events": 1, "min_bad_outcomes": 1}}}
     root = Path(config["_self_improvement_root"])
@@ -795,8 +795,7 @@ def test_build_runtime_eval_cases_includes_role_episode_cases(tmp_path):
 
     cases = calibration.build_runtime_eval_cases(config)
 
-    assert {case["case_type"] for case in cases} == {"planner_weak_only_skip"}
-    assert cases[0]["case_family"] == "editor"
+    assert cases == []
 
 
 def write_planner_quality_run(config: dict, payload: dict, name: str = "run.json") -> Path:
@@ -1129,6 +1128,23 @@ def test_collect_calibration_evidence_includes_windowed_outcome_scores(tmp_path)
         "changed": True,
         "created_at": "2026-05-03T00:00:00+00:00",
     })
+    write_json(root / "episodes" / "2026-05-03" / "preview.json", {
+        "schema_name": "self_improvement_episode",
+        "schema_version": "1.0",
+        "episode_id": "episode-preview",
+        "episode_kind": "preview_decision",
+        "target_kind": "skill",
+        "target_id": "preview-skill",
+        "planner_prompt_hash": "sha256:planner",
+        "editor_prompt_hash": "sha256:editor",
+        "evaluator_hash": "sha256:evaluator",
+        "decision": "defer",
+        "action": "no_op",
+        "executed": False,
+        "learnable": True,
+        "changed": False,
+        "created_at": "2026-05-03T00:00:00+00:00",
+    })
     write_json(root / "outcomes" / "2026-05-03" / "observation.json", {
         "schema_name": "self_improvement_outcome_observation",
         "schema_version": "1.0",
@@ -1143,10 +1159,16 @@ def test_collect_calibration_evidence_includes_windowed_outcome_scores(tmp_path)
     evidence = calibration.collect_calibration_evidence(config)
 
     assert evidence["outcome_scores"]["episode_count"] == 1
+    assert evidence["outcome_scores"]["total_episode_count"] == 2
+    assert evidence["outcome_scores"]["eligible_episode_count"] == 1
+    assert evidence["outcome_scores"]["excluded_episode_count"] == 1
     assert evidence["outcome_scores"]["observation_count"] == 1
     assert evidence["outcome_scores"]["scored_episode_count"] == 1
     assert evidence["outcome_scores"]["overall"]["mean_score"] > 0
     assert evidence["credit_assignment"]["episode_count"] == 1
+    assert evidence["credit_assignment"]["total_episode_count"] == 2
+    assert evidence["credit_assignment"]["eligible_episode_count"] == 1
+    assert evidence["credit_assignment"]["excluded_episode_count"] == 1
     assert evidence["credit_assignment"]["scored_episode_count"] == 1
     assert evidence["credit_assignment"]["overall"]["mean_outcome_score"] > 0
 

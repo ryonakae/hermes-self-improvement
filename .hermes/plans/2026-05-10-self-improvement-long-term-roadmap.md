@@ -36,9 +36,11 @@ The key product promise is not “make many changes.” It is:
 
 ---
 
-## Current Position — 2026-05-30
+## Current Position — 2026-08-26
 
 Overall: **runtime-healthy and unified planner/editor execution code-complete; current memory-inventory dogfood is explicit and conservatively labeled.** Structural migration, runtime stabilization, turn-trace persistence, cluster/index/detail artifact generation, planner cluster handoff, decision-quality/readiness classification, scheduled dogfood proof, canonical transaction reporting, unified editor error normalization, final `run_improve` artifact split-lane removal, the unified `run_knowledge_improvement_step` path, source-of-truth cleanup, first-class built-in memory inventory evidence, planner-emitted memory placement/cleanup transaction normalization, cross-surface Knowledge Editor execution, current-memory evidence handoff, grouped memory inventory prompt visibility, and deterministic memory inventory action hints are implemented. Cleanup dry-run artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T032803Z.json` reports canonical knowledge summaries, no split decision lanes, no `planner_skill`, no blank transaction kind, `actionability_loss_count: 0`, and zero unexplained cross-store drops. Approved mutating replay artifact `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260529T091409Z.json` patched `hermes-development-maintenance` via canonical `mutate_skill` with `skill_changes: 1`, `memory_changes: 0`, and no follow-up next actions. The latest memory action-hint dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260530T141932Z.json` exposed action labels for all 3 grouped memory inventory findings and stayed safely no-op because current groups lean defer rather than clear apply.
+
+2026-08-26 hardening closes three later runtime gaps without changing the architecture: canonical memory replacement preserves `replacement_content`; prompt overlay promotion requires a finite strict score gain; and append-only audit episodes are separated from applied-mutation outcome/credit/runtime-eval inputs. Full verification reached `1075 passed, 2 skipped`; dry-run `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260826T002947Z.json` stayed non-mutating with `target_changed=false`. Latest accounting separates `total 1000 / eligible 8 / excluded 992 / scored 0`; strict improvement remains unproven (`improved 0`, `insufficient_window 8`).
 
 ### What changed since the earlier 2026-05-10 snapshot
 

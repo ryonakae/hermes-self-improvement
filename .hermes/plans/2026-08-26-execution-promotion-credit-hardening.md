@@ -44,7 +44,7 @@
 - append-only episode ledgerは維持する。
 - program補完のinventory skipは監査用episodeとして残せるが、outcome prepass、credit assignment、outcome score、runtime eval caseの対象外になる。
 - historical episodeも、既存の`reason=inventory_not_selected_by_planner`からmigrationなしで除外できる。
-- changed/executed mutation、blocked/partial execution、Plannerが根拠付きで選んだapply/defer/skip、calibration promotionは学習対象のまま残る。
+- 実際にappliedとなったchanged/executed mutationとcalibration promotionだけを学習対象にする。blocked/partial、defer/skip、preview/no-opは監査用episodeとして残すが、outcome・credit・runtime eval・episode由来GEPA入力から除外する。
 - deterministic integration testで、changed episode → later comparable observation → strict `improved` creditを証明する。
 - 実artifactで後続比較がまだない場合、reportは`proven improved`を0のまま保ち、改善済みと表現しない。
 - focused tests、全pytest、`py_compile`、`git diff --check`が通る。
@@ -588,7 +588,7 @@ git commit -m "docs(self-improvement): record hardening verification"
 - GEPAの`selected`は「候補として選ばれた」であり、「baselineより改善した」と同義にしない。
 - strict promotionに新しいconfig thresholdは設けない。まず既存scoreの`>`だけを正しく適用する。
 - episode ledgerは監査記録として削らない。学習対象の選別は既存`learnable` contractで行う。
-- `inventory_not_selected_by_planner`以外のskip/deferを一括除外しない。Plannerのsemantic judgmentや安全停止は学習材料になり得る。
+- skip/defer/block/preview/no-opは監査用episodeとして保持し、実行結果の品質改善creditには使わない。semantic judgmentの診断価値はraw ledgerと非episode由来の診断集計で保持する。
 - reportの`proven improved`定義は緩めない。弱い肯定材料は既存`Outcome signals`に残す。
 
 ## 5. Rollback
@@ -597,3 +597,36 @@ git commit -m "docs(self-improvement): record hardening verification"
 - Task 3: promotion gate commitをrevertしてもcandidate artifactは残る。active pointerの変更履歴は既存rollback identityで追跡する。
 - Task 4: eligible-only consumer変更をrevertしてもappend-only ledgerに欠損はない。historical artifact migrationは不要。
 - いずれもruntime artifactを削除・書換えしない。
+
+## 6. 実装・検証結果 — 2026-08-26
+
+**Status:** implemented / verified。production cron・設定は変更していない。
+
+### 実装結果
+
+- Memory replacement contractは`0d68362 fix(self-improvement): preserve memory replacement content`で実装済み。top-levelまたは`editor_task`内の`replacement_content`をofficial memory toolの`content`へ渡し、本文欠落は`planner_task_missing_replacement_content`でblockする。legacy `content`も維持した。
+- Strict overlay promotion gateは`749cdc7 fix(self-improvement): require strict overlay score gains`で実装済み。有限数値の`candidate_score > baseline_score`だけをpromoteし、同点・悪化・欠落・非数値・NaN/Infinity・未知GEPA結果・未知targetはcandidate保持に留める。
+- Episode accountingはappend-only ledgerを維持しつつ、`application_status`、`learning_eligible`、`outcome_eligible`を追加した。consumerはexact boolean、schema-known mutation action、非audit decision/kind、`application_status=applied`を満たすepisodeだけを受け取る。矛盾legacy payload、型不正metadata、未知actionはfail closedになる。
+- Outcome prepass、outcome scoring、credit assignment、role runtime eval、episode由来overlay runtime evalを同じeligibility contractへ統一した。aggregateとcalibration summaryは`total_episode_count`、`eligible_episode_count`、`excluded_episode_count`、`scored_episode_count`を分離する。
+- Deterministic integration testで、canonical applied mutationからpost-validation observationを経てstrict `improved` creditへ到達すること、同じvalidation signalを持つpreview episodeは除外されることを確認した。
+
+### 実行検証
+
+- `python -m py_compile __init__.py hermes_self_improvement/*.py`: PASS
+- `python -m pytest tests -q`: `1075 passed, 2 skipped, 0 failed`
+- Episode/outcome/calibration focused suite: `114 passed`
+- Active pointer preview/restore tests: `3 passed`
+- `git diff --check`: clean
+- Added-line security scan: hardcoded secret、shell execution、dangerous `eval/exec`、unsafe pickleはいずれも検出なし
+- OpenCode read-only final review: `PASS`
+
+### Dogfood artifact
+
+- Source-directed dry-run: `/Users/ryo.nakae/.hermes/self-improvement/runs/run-20260826T002947Z.json`
+- `dry_run=true`、`execute=false`、`target_changed=false`
+- Action summary: `apply 0 / defer 10 / skip 65 / block 0`
+- このrunが書いた62 episodeは`deferred 1 / skipped 61`で、`executed=true 0 / changed=true 0 / learning_eligible=true 0 / outcome_eligible=true 0`。監査には残り、学習・creditには入らない。
+- 最新1,000 episodeのcredit accountingは`eligible 8 / excluded 992 / scored 0`。strict outcomeは`improved 0 / insufficient_window 8`で、品質改善はまだ証明されていない。
+- Existing candidate `/Users/ryo.nakae/.hermes/self-improvement/evaluator/prompt-candidate-sets/20260825T180808Z-bcaf78c47a06.json`は`baseline_score=1.0 / candidate_score=1.0`で`keep_candidate`。active overlayへ昇格しなかった。
+
+Mutating dogfoodは実行していない。次の通常runで自然な低リスクapplyが出ても、実変更と後続outcomeを別々に観測し、後続比較がない限り`proven improved=0`を維持する。
