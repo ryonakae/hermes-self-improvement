@@ -230,6 +230,10 @@ def _apply_overlay_candidate_set_summary(result: dict[str, Any], *, candidate_se
         "candidate_set_path": candidate_set.get("candidate_set_path"),
         "changed_targets": evaluation.get("changed_targets") or [],
         "hard_violations": len(evaluation.get("hard_violations") or []),
+        "baseline_score": evaluation.get("baseline_score"),
+        "candidate_score": evaluation.get("candidate_score"),
+        "score_improved": bool(evaluation.get("score_improved")),
+        "promotion_reason": evaluation.get("promotion_reason"),
         "evaluation_hash": evaluation.get("evaluation_hash"),
     }
     targets = candidate_set.get("targets") if isinstance(candidate_set.get("targets"), dict) else {}

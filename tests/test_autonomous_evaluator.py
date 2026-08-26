@@ -152,12 +152,22 @@ def test_compact_summary_excludes_case_details_and_prompts():
     assert summary["candidate_hash"] == "sha256:candidate"
 
 
-def overlay_candidate_set(tmp_path: Path, *, gepa_result: str = "selected", planner_change: str = "changed", replacement=None) -> dict:
+def overlay_candidate_set(
+    tmp_path: Path,
+    *,
+    gepa_result: str = "selected",
+    planner_change: str = "changed",
+    replacement=None,
+    baseline_score: object = 0.25,
+    candidate_score: object = 0.5,
+) -> dict:
     candidate_set = {
         "schema_name": "self_improvement_overlay_candidate_set",
         "schema_version": "1.0",
         "candidate_set_id": "overlay-set-001",
         "gepa_result": gepa_result,
+        "baseline_score": baseline_score,
+        "candidate_score": candidate_score,
         "targets": {
             "planner_overlay": {
                 "target": "planner_overlay",
@@ -214,6 +224,67 @@ def test_overlay_candidate_set_selected_with_changed_target_promotes(tmp_path):
     assert result["gepa_result"] == "selected"
     assert result["changed_targets"] == ["planner_overlay"]
     assert result["hard_violations"] == []
+    assert result["baseline_score"] == 0.25
+    assert result["candidate_score"] == 0.5
+    assert result["score_improved"] is True
+    assert result["promotion_reason"] == "candidate_strictly_better"
+
+
+def test_overlay_candidate_set_equal_score_keeps_candidate(tmp_path):
+    result = evaluate_overlay_candidate_set(overlay_candidate_set(tmp_path, baseline_score=1.0, candidate_score=1.0))
+
+    assert result["decision"] == "keep_candidate"
+    assert result["score_improved"] is False
+    assert result["promotion_reason"] == "candidate_not_strictly_better"
+
+
+def test_overlay_candidate_set_worse_score_keeps_candidate(tmp_path):
+    result = evaluate_overlay_candidate_set(overlay_candidate_set(tmp_path, baseline_score=1.0, candidate_score=0.75))
+
+    assert result["decision"] == "keep_candidate"
+    assert result["score_improved"] is False
+    assert result["promotion_reason"] == "candidate_not_strictly_better"
+
+
+def test_overlay_candidate_set_missing_score_keeps_candidate(tmp_path):
+    result = evaluate_overlay_candidate_set(overlay_candidate_set(tmp_path, baseline_score=None))
+
+    assert result["decision"] == "keep_candidate"
+    assert result["baseline_score"] is None
+    assert result["promotion_reason"] == "baseline_score_unavailable"
+
+
+def test_overlay_candidate_set_non_numeric_score_keeps_candidate(tmp_path):
+    result = evaluate_overlay_candidate_set(overlay_candidate_set(tmp_path, candidate_score="invalid"))
+
+    assert result["decision"] == "keep_candidate"
+    assert result["candidate_score"] is None
+    assert result["promotion_reason"] == "candidate_score_unavailable"
+
+
+def test_overlay_candidate_set_unknown_gepa_result_rejects_with_matching_reason(tmp_path):
+    result = evaluate_overlay_candidate_set(overlay_candidate_set(tmp_path, gepa_result="unexpected"))
+
+    assert result["decision"] == "reject"
+    assert result["promotion_reason"] == "gepa_unexpected"
+
+
+def test_overlay_candidate_set_unknown_target_is_hard_violation(tmp_path):
+    candidate_set = overlay_candidate_set(tmp_path)
+    candidate_set["targets"]["rogue_overlay"] = {
+        "target": "rogue_overlay",
+        "role": "planner",
+        "candidate_set_id": "overlay-set-001",
+        "change_status": "unchanged",
+        "base_prompt_hash": "sha256:rogue",
+        "candidate_prompt": {"system_addendum": None, "replacement": None},
+    }
+    Path(candidate_set["candidate_set_path"]).write_text(json.dumps(candidate_set), encoding="utf-8")
+
+    result = evaluate_overlay_candidate_set(candidate_set)
+
+    assert result["decision"] == "reject"
+    assert any(item["code"] == "candidate_set_targets_unknown" for item in result["hard_violations"])
 
 
 def test_overlay_candidate_set_no_improvement_keeps_candidate(tmp_path):

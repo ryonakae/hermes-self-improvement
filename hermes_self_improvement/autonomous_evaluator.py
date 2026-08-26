@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from math import isfinite
 from pathlib import Path
 from statistics import mean
 from typing import Any
@@ -269,10 +270,14 @@ def _overlay_acceptance_violations(candidate_set: dict[str, Any], *, max_prompt_
     candidate_set_id = str(candidate_set.get("candidate_set_id") or "")
     if not candidate_set_id:
         violations.append({"severity": "hard", "code": "candidate_set_id_missing"})
-    targets = candidate_set.get("targets") if isinstance(candidate_set.get("targets"), dict) else {}
+    raw_targets = candidate_set.get("targets")
+    targets: dict[str, Any] = raw_targets if isinstance(raw_targets, dict) else {}
     missing = [target for target in OVERLAY_TARGETS if target not in targets]
     if missing:
         violations.append({"severity": "hard", "code": "candidate_set_targets_missing", "targets": missing})
+    unknown = sorted(str(target) for target in targets if target not in OVERLAY_TARGETS)
+    if unknown:
+        violations.append({"severity": "hard", "code": "candidate_set_targets_unknown", "targets": unknown})
     for target_name in OVERLAY_TARGETS:
         target = targets.get(target_name)
         if not isinstance(target, dict):
@@ -294,12 +299,31 @@ def _overlay_acceptance_violations(candidate_set: dict[str, Any], *, max_prompt_
     return violations
 
 
-def _overlay_candidate_decision(*, gepa_result: str, changed_targets: list[str], hard_violations: list[dict[str, Any]]) -> str:
+def _finite_score(value: Any) -> float | None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    score = float(value)
+    return score if isfinite(score) else None
+
+
+def _score_improvement(candidate_set: dict[str, Any]) -> tuple[bool, float | None, float | None, str]:
+    baseline_score = _finite_score(candidate_set.get("baseline_score"))
+    candidate_score = _finite_score(candidate_set.get("candidate_score"))
+    if baseline_score is None:
+        return False, None, candidate_score, "baseline_score_unavailable"
+    if candidate_score is None:
+        return False, baseline_score, None, "candidate_score_unavailable"
+    if candidate_score <= baseline_score:
+        return False, baseline_score, candidate_score, "candidate_not_strictly_better"
+    return True, baseline_score, candidate_score, "candidate_strictly_better"
+
+
+def _overlay_candidate_decision(*, gepa_result: str, changed_targets: list[str], hard_violations: list[dict[str, Any]], score_improved: bool) -> str:
     if hard_violations or gepa_result in GEPA_REJECT_RESULTS:
         return "reject"
-    if gepa_result in GEPA_PROMOTE_RESULTS and changed_targets:
+    if gepa_result in GEPA_PROMOTE_RESULTS and changed_targets and score_improved:
         return "promote"
-    if gepa_result in GEPA_KEEP_RESULTS or not changed_targets:
+    if gepa_result in GEPA_KEEP_RESULTS or not changed_targets or gepa_result in GEPA_PROMOTE_RESULTS:
         return "keep_candidate"
     return "reject"
 
@@ -311,7 +335,25 @@ def evaluate_overlay_candidate_set(candidate_set: dict[str, Any], *, max_prompt_
     targets = loaded.get("targets") if isinstance(loaded.get("targets"), dict) else {}
     changed_targets = [target for target in OVERLAY_TARGETS if isinstance(targets.get(target), dict) and targets[target].get("change_status") == "changed"]
     gepa_result = str(loaded.get("gepa_result") or "failed")
-    decision = _overlay_candidate_decision(gepa_result=gepa_result, changed_targets=changed_targets, hard_violations=hard_violations)
+    score_improved, baseline_score, candidate_score, score_reason = _score_improvement(loaded)
+    decision = _overlay_candidate_decision(
+        gepa_result=gepa_result,
+        changed_targets=changed_targets,
+        hard_violations=hard_violations,
+        score_improved=score_improved,
+    )
+    if hard_violations:
+        promotion_reason = "hard_violation"
+    elif gepa_result in GEPA_REJECT_RESULTS:
+        promotion_reason = f"gepa_{gepa_result}"
+    elif not changed_targets:
+        promotion_reason = "no_changed_targets"
+    elif gepa_result in GEPA_KEEP_RESULTS:
+        promotion_reason = f"gepa_{gepa_result}"
+    elif gepa_result in GEPA_PROMOTE_RESULTS:
+        promotion_reason = score_reason
+    else:
+        promotion_reason = f"gepa_{gepa_result}"
     result = {
         "schema_name": "self_improvement_overlay_candidate_set_evaluation",
         "schema_version": "1.0",
@@ -321,6 +363,10 @@ def evaluate_overlay_candidate_set(candidate_set: dict[str, Any], *, max_prompt_
         "decision": decision,
         "changed_targets": changed_targets,
         "hard_violations": hard_violations,
+        "baseline_score": baseline_score,
+        "candidate_score": candidate_score,
+        "score_improved": score_improved,
+        "promotion_reason": promotion_reason,
     }
     result["evaluation_hash"] = "sha256:" + _sha256_text(_stable_json({key: value for key, value in result.items() if key != "evaluation_hash"}))
     return result

@@ -840,6 +840,10 @@ def test_calibration_dry_run_evaluates_overlay_candidate_set(monkeypatch, tmp_pa
         "gepa_result": "insufficient_data",
         "changed_targets": [],
         "hard_violations": [],
+        "baseline_score": None,
+        "candidate_score": None,
+        "score_improved": False,
+        "promotion_reason": "baseline_score_unavailable",
         "evaluation_hash": "sha256:evaluation",
     })
 
@@ -853,6 +857,10 @@ def test_calibration_dry_run_evaluates_overlay_candidate_set(monkeypatch, tmp_pa
         "candidate_set_path": str(Path(cfg["_self_improvement_root"]) / "evaluator" / "prompt-candidate-sets" / "candidate-set.json"),
         "changed_targets": [],
         "hard_violations": 0,
+        "baseline_score": None,
+        "candidate_score": None,
+        "score_improved": False,
+        "promotion_reason": "baseline_score_unavailable",
         "evaluation_hash": "sha256:evaluation",
     }
 
@@ -864,6 +872,8 @@ def overlay_candidate_set_payload(calibration, tmp_path: Path, *, candidate_set_
         "candidate_set_id": candidate_set_id,
         "candidate_set_path": str(tmp_path / "candidate-set.json"),
         "gepa_result": "selected",
+        "baseline_score": 0.25,
+        "candidate_score": 0.5,
         "targets": {
             "planner_overlay": {
                 "target": "planner_overlay",
@@ -915,11 +925,16 @@ def overlay_candidate_set_payload(calibration, tmp_path: Path, *, candidate_set_
 
 
 def overlay_evaluation(*, decision: str = "promote", gepa_result: str = "selected") -> dict:
+    score_improved = decision == "promote"
     return {
         "decision": decision,
         "gepa_result": gepa_result,
         "changed_targets": ["planner_overlay"] if decision == "promote" else [],
         "hard_violations": [],
+        "baseline_score": 0.25 if score_improved else 1.0,
+        "candidate_score": 0.5 if score_improved else 1.0,
+        "score_improved": score_improved,
+        "promotion_reason": "candidate_strictly_better" if score_improved else "candidate_not_strictly_better",
         "evaluation_hash": "sha256:evaluation",
     }
 

@@ -210,7 +210,7 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
                 "editor": {"candidate": False, "promoted": False, "candidate_hash": None, "candidate_path": None, "regression": None},
             },
             "evaluator_update": {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False},
-            "overlay_candidate_set": {"status": "promoted", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0, "candidate_payload": large_details},
+            "overlay_candidate_set": {"status": "promoted", "decision": "promote", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0, "baseline_score": 0.25, "candidate_score": 0.5, "score_improved": True, "promotion_reason": "candidate_strictly_better", "candidate_payload": large_details},
         }
 
     mod._handle_self_improvement_calibrate_tool.__globals__["run_calibration"] = fake_run_calibration
@@ -232,9 +232,9 @@ def test_calibrate_tool_returns_compact_llm_facing_summary(monkeypatch, tmp_path
     assert payload["evaluator_update"] == {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False}
     assert payload["full_payload"]["path"] == str(tmp_path / "ledger.json")
     assert "prompt_overlays" not in payload
-    assert payload["overlay_candidate_set"] == {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0}
+    assert payload["overlay_candidate_set"] == {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "candidate_set_id": "overlay-set-001", "candidate_set_path": str(tmp_path / "candidate-set.json"), "changed_targets": ["planner_overlay"], "hard_violations": 0, "baseline_score": 0.25, "candidate_score": 0.5, "score_improved": True, "promotion_reason": "candidate_strictly_better"}
     assert payload["components"] == {
-        "prompt_overlay_set": {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": 0},
+        "prompt_overlay_set": {"status": "promoted", "decision": "promote", "action": "promoted", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": 0, "baseline_score": 0.25, "candidate_score": 0.5, "score_improved": True, "promotion_reason": "candidate_strictly_better"},
         "evaluator": {"status": "skipped", "reason": "candidate_not_concrete", "active_changed": False},
     }
     assert large_details not in raw

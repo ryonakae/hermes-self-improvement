@@ -82,6 +82,8 @@ def overlay_candidate_set(tmp_path: Path, *, candidate_set_id: str = "overlay-se
         "source": "gepa",
         "optimizer": "dspy.GEPA",
         "gepa_result": "selected",
+        "baseline_score": 0.25,
+        "candidate_score": 0.5,
         "targets": {
             "planner_overlay": {
                 "target": "planner_overlay",
@@ -124,11 +126,31 @@ def overlay_candidate_set(tmp_path: Path, *, candidate_set_id: str = "overlay-se
 
 
 def promote_eval() -> dict:
-    return {"decision": "promote", "gepa_result": "selected", "changed_targets": ["planner_overlay"], "hard_violations": [], "evaluation_hash": "sha256:evaluation"}
+    return {
+        "decision": "promote",
+        "gepa_result": "selected",
+        "changed_targets": ["planner_overlay"],
+        "hard_violations": [],
+        "baseline_score": 0.25,
+        "candidate_score": 0.5,
+        "score_improved": True,
+        "promotion_reason": "candidate_strictly_better",
+        "evaluation_hash": "sha256:evaluation",
+    }
 
 
 def keep_eval() -> dict:
-    return {"decision": "keep_candidate", "gepa_result": "no_improvement", "changed_targets": [], "hard_violations": [], "evaluation_hash": "sha256:evaluation"}
+    return {
+        "decision": "keep_candidate",
+        "gepa_result": "no_improvement",
+        "changed_targets": [],
+        "hard_violations": [],
+        "baseline_score": 1.0,
+        "candidate_score": 1.0,
+        "score_improved": False,
+        "promotion_reason": "candidate_not_strictly_better",
+        "evaluation_hash": "sha256:evaluation",
+    }
 
 
 def test_full_feedback_loop_promotes_overlay_candidate_set_from_runtime_cases(monkeypatch, tmp_path):
@@ -199,6 +221,10 @@ def test_compact_tool_result_includes_overlay_set_summary_without_payload(monkey
         "candidate_set_path": str(tmp_path / "candidate-set.json"),
         "changed_targets": ["planner_overlay"],
         "hard_violations": 0,
+        "baseline_score": 0.25,
+        "candidate_score": 0.5,
+        "score_improved": True,
+        "promotion_reason": "candidate_strictly_better",
     }
     assert '"targets":' not in serialized
     assert "system_addendum" not in serialized

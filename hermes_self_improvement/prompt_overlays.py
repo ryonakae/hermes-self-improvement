@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from math import isfinite
 from pathlib import Path
 from typing import Any
 
+from .autonomous_evaluator import GEPA_PROMOTE_RESULTS, OVERLAY_TARGETS
 from .config import get_hermes_home
 from .observer import _redact_text, _sha256_text, _stable_json
 
@@ -57,6 +59,13 @@ def _load_json(path: Path) -> dict[str, Any] | None:
 
 def _candidate_hash(payload: dict[str, Any]) -> str:
     return _sha256_text(_stable_json({k: v for k, v in payload.items() if k != "candidate_hash"}))
+
+
+def _finite_score(value: Any) -> float | None:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    score = float(value)
+    return score if isfinite(score) else None
 
 
 def _validate_role(role: str) -> None:
@@ -264,12 +273,46 @@ def materialize_default_prompt_overlays(config: dict[str, Any], *, force: bool =
 
 
 def promote_overlay_candidate_set(config: dict[str, Any], *, candidate_set: dict[str, Any], evaluation: dict[str, Any]) -> dict[str, Any]:
-    if evaluation.get("decision") != "promote":
+    raw_targets = candidate_set.get("targets")
+    targets: dict[str, Any] = raw_targets if isinstance(raw_targets, dict) else {}
+    changed_targets = sorted(
+        target_name
+        for target_name in OVERLAY_TARGETS
+        if isinstance(targets.get(target_name), dict) and targets[target_name].get("change_status") == "changed"
+    )
+    missing_targets = [target for target in OVERLAY_TARGETS if target not in targets]
+    unknown_targets = sorted(str(target) for target in targets if target not in OVERLAY_TARGETS)
+    evaluated_targets = sorted(str(target) for target in evaluation.get("changed_targets") or [])
+    candidate_baseline = _finite_score(candidate_set.get("baseline_score"))
+    candidate_score = _finite_score(candidate_set.get("candidate_score"))
+    evaluation_baseline = _finite_score(evaluation.get("baseline_score"))
+    evaluation_score = _finite_score(evaluation.get("candidate_score"))
+    if (
+        evaluation.get("decision") != "promote"
+        or candidate_set.get("gepa_result") not in GEPA_PROMOTE_RESULTS
+        or evaluation.get("gepa_result") != candidate_set.get("gepa_result")
+        or bool(missing_targets)
+        or bool(unknown_targets)
+        or not changed_targets
+        or evaluated_targets != changed_targets
+        or bool(evaluation.get("hard_violations"))
+        or evaluation.get("score_improved") is not True
+        or candidate_baseline is None
+        or candidate_score is None
+        or evaluation_baseline is None
+        or evaluation_score is None
+    ):
+        raise ValueError("overlay_candidate_set_not_promotable")
+    if (
+        candidate_score <= candidate_baseline
+        or evaluation_score <= evaluation_baseline
+        or candidate_score != evaluation_score
+        or candidate_baseline != evaluation_baseline
+    ):
         raise ValueError("overlay_candidate_set_not_promotable")
     candidate_set_id = str(candidate_set.get("candidate_set_id") or "")
     if not candidate_set_id:
         raise ValueError("candidate_set_id_missing")
-    targets = candidate_set.get("targets") if isinstance(candidate_set.get("targets"), dict) else {}
     promoted_targets: list[str] = []
     candidate_paths: dict[str, str] = {}
     for target_name, target in targets.items():

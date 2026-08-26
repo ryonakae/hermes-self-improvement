@@ -433,6 +433,10 @@ def _compact_overlay_candidate_set(value: Any) -> dict[str, Any]:
         "candidate_set_path": item.get("candidate_set_path"),
         "changed_targets": item.get("changed_targets") if isinstance(item.get("changed_targets"), list) else [],
         "hard_violations": int(item.get("hard_violations") or 0),
+        "baseline_score": item.get("baseline_score"),
+        "candidate_score": item.get("candidate_score"),
+        "score_improved": bool(item.get("score_improved")),
+        "promotion_reason": item.get("promotion_reason"),
     }
     if item.get("source"):
         out["source"] = item.get("source")
@@ -449,6 +453,10 @@ def _compact_calibration_components(*, overlay_candidate_set: dict[str, Any], ev
             "gepa_result": overlay_candidate_set.get("gepa_result"),
             "changed_targets": changed_targets,
             "hard_violations": int(overlay_candidate_set.get("hard_violations") or 0),
+            "baseline_score": overlay_candidate_set.get("baseline_score"),
+            "candidate_score": overlay_candidate_set.get("candidate_score"),
+            "score_improved": bool(overlay_candidate_set.get("score_improved")),
+            "promotion_reason": overlay_candidate_set.get("promotion_reason"),
         },
         "evaluator": {
             "status": evaluator_update.get("status"),
