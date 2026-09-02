@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +32,7 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
 
 
-def _write_episodes(config: dict[str, Any], episodes: list[dict[str, Any]], created: datetime) -> dict[str, Any]:
+def _write_episodes(config: dict[str, Any], episodes: list[dict[str, Any]], created: datetime, *, suppressed_count: int = 0, suppressed_reasons: dict[str, int] | None = None) -> dict[str, Any]:
     out_dir = _date_dir(config, created)
     paths: list[str] = []
     for episode in episodes:
@@ -46,6 +46,8 @@ def _write_episodes(config: dict[str, Any], episodes: list[dict[str, Any]], crea
         "count": len(paths),
         "path": str(episode_root(config)),
         "files": paths,
+        "suppressed_count": int(suppressed_count),
+        "suppressed_reasons": dict(suppressed_reasons or {}),
     }
 
 
@@ -122,6 +124,69 @@ def _source_hashes(run_result: dict[str, Any], step: dict[str, Any] | None = Non
     return hashes
 
 
+def _add_planner_evaluator_state_hashes(episode: dict[str, Any], *sources: dict[str, Any] | None) -> dict[str, Any]:
+    for role in ("planner", "evaluator"):
+        for state_name in ("state", "quality", "decision"):
+            field = f"{role}_{state_name}"
+            for source in sources:
+                if not isinstance(source, dict) or field not in source or source.get(field) is None:
+                    continue
+                value = source.get(field)
+                if value == "" or value == [] or value == {}:
+                    continue
+                episode[f"{field}_hash"] = "sha256:" + _sha256_text(_stable_json(value))
+                break
+    return episode
+
+
+def _add_target_inventory_state_hash(
+    episode: dict[str, Any], run_result: dict[str, Any]
+) -> dict[str, Any]:
+    raw_evidence_pack = run_result.get("evidence_pack")
+    evidence_pack: dict[str, Any] = (
+        raw_evidence_pack if isinstance(raw_evidence_pack, dict) else {}
+    )
+    candidates = evidence_pack.get("skill_candidates")
+    if not isinstance(candidates, list):
+        return episode
+    target_id = str(episode.get("target_id") or "")
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        if str(candidate.get("name") or "") != target_id:
+            continue
+        episode["target_inventory_state_hash"] = (
+            "sha256:" + _sha256_text(_stable_json(candidate))
+        )
+        break
+    return episode
+
+
+def _add_planner_input_state_hash(
+    episode: dict[str, Any], run_result: dict[str, Any]
+) -> dict[str, Any]:
+    raw_step_decisions = run_result.get("step_decisions")
+    step_decisions: dict[str, Any] = (
+        raw_step_decisions if isinstance(raw_step_decisions, dict) else {}
+    )
+    planner_inputs = {
+        key: step_decisions.get(key)
+        for key in (
+            "planner_diagnostics",
+            "planner_capacity",
+            "knowledge_quality",
+            "knowledge_routing",
+            "proposals_considered",
+        )
+        if step_decisions.get(key) not in (None, "", [], {})
+    }
+    if planner_inputs:
+        episode["planner_input_state_hash"] = (
+            "sha256:" + _sha256_text(_stable_json(planner_inputs))
+        )
+    return episode
+
+
 def _episode_id(seed: dict[str, Any], created_at: str) -> str:
     digest = _sha256_text(_stable_json({"created_at": created_at, "seed": seed}))[:16]
     return f"episode-{digest}"
@@ -180,6 +245,143 @@ INELIGIBLE_EPISODE_DECISIONS = frozenset({
 })
 ELIGIBLE_MUTATION_ACTIONS = frozenset(ACTIONS - {"no_op"})
 INELIGIBLE_EPISODE_KINDS = frozenset({"preview_decision", "prompt_candidate"})
+SYNTHETIC_INVENTORY_SKIP_REASON = "inventory_not_selected_by_planner"
+INVENTORY_SKIP_DEDUPE_FIELDS = (
+    "target_kind",
+    "target_id",
+    "target_store",
+    "reason",
+    "overlay_generation_id",
+    "planner_prompt_hash",
+    "planner_overlay_hash",
+    "editor_prompt_hash",
+    "editor_overlay_hash",
+    "evaluator_hash",
+    "evaluator_overlay_hash",
+    "planner_state_hash",
+    "planner_quality_hash",
+    "planner_decision_hash",
+    "evaluator_state_hash",
+    "evaluator_quality_hash",
+    "evaluator_decision_hash",
+    "target_inventory_state_hash",
+    "planner_input_state_hash",
+    "post_validation_status",
+    "post_validation_state_hash",
+    "transaction_result_state_hash",
+)
+
+
+def _has_recorded_outcome(episode: dict[str, Any]) -> bool:
+    if episode.get("outcome_recorded") is True:
+        return True
+    for key in ("outcome", "outcome_id", "outcome_observation_id", "outcome_observation"):
+        value = episode.get(key)
+        if isinstance(value, (dict, list)):
+            if value:
+                return True
+        elif value is not None and str(value).strip():
+            return True
+    status = str(episode.get("application_status") or "").strip().lower()
+    return status not in {"", "preview", "no_change", "skipped"}
+
+
+def _is_synthetic_inventory_skip(episode: dict[str, Any]) -> bool:
+    evidence_ids = episode.get("evidence_ids")
+    if (
+        episode.get("target_kind") != "skill"
+        or episode.get("target_store") != "skill"
+        or episode.get("transaction_kind") not in {None, "skill"}
+        or episode.get("decision") != "skip"
+        or episode.get("action") != "no_op"
+        or episode.get("episode_kind") != "preview_decision"
+        or episode.get("executed") is not False
+        or episode.get("changed") is not False
+        or episode.get("reason") != SYNTHETIC_INVENTORY_SKIP_REASON
+        or (
+            evidence_ids is not None
+            and (
+                not isinstance(evidence_ids, list)
+                or any(str(item).strip() for item in evidence_ids)
+            )
+        )
+        or str(episode.get("operation") or "").strip() not in {"", "none", "no_op"}
+        or _has_recorded_outcome(episode)
+        or is_learning_eligible_episode(episode)
+        or is_outcome_eligible_episode(episode)
+    ):
+        return False
+    return True
+
+
+def _inventory_skip_dedupe_key(episode: dict[str, Any]) -> str | None:
+    if not _is_synthetic_inventory_skip(episode):
+        return None
+    return _sha256_text(_stable_json({field: episode.get(field) for field in INVENTORY_SKIP_DEDUPE_FIELDS}))
+
+
+def _inventory_skip_dedupe_window_days(config: dict[str, Any]) -> int:
+    raw_value = config.get("inventory_skip_dedupe_window_days", 7)
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return 7
+    return min(max(value, 1), 90)
+
+
+def _recent_inventory_skip_keys(config: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    root = episode_root(config)
+    now = _now()
+    window_days = _inventory_skip_dedupe_window_days(config)
+    cutoff = now - timedelta(days=window_days)
+    # The elapsed window can overlap window_days + 1 UTC calendar directories.
+    for day_offset in range(window_days + 1):
+        day_dir = root / (now - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+        if not day_dir.is_dir():
+            continue
+        for path in day_dir.glob("*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            created_at_raw = payload.get("created_at")
+            if not isinstance(created_at_raw, str) or not created_at_raw.strip():
+                continue
+            try:
+                created_at = datetime.fromisoformat(
+                    created_at_raw.strip().replace("Z", "+00:00")
+                )
+            except ValueError:
+                continue
+            if created_at.tzinfo is None or created_at <= cutoff:
+                continue
+            key = _inventory_skip_dedupe_key(payload)
+            if key is not None:
+                keys.add(key)
+    return keys
+
+
+def _suppress_duplicate_inventory_skips(
+    *,
+    config: dict[str, Any],
+    episodes: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    existing_keys = _recent_inventory_skip_keys(config)
+    kept: list[dict[str, Any]] = []
+    suppressed_reasons: dict[str, int] = {}
+    for episode in episodes:
+        key = _inventory_skip_dedupe_key(episode)
+        if key is not None and key in existing_keys:
+            reason = str(episode.get("reason") or SYNTHETIC_INVENTORY_SKIP_REASON)
+            suppressed_reasons[reason] = suppressed_reasons.get(reason, 0) + 1
+            continue
+        if key is not None:
+            existing_keys.add(key)
+        kept.append(episode)
+    return kept, suppressed_reasons
 
 
 def _canonical_eligibility_pair(episode: dict[str, Any]) -> tuple[bool, bool] | None:
@@ -331,6 +533,7 @@ def _skill_episode(run_result: dict[str, Any], step: dict[str, Any], decision: d
         step=step,
         seed=seed,
     )
+    _add_planner_evaluator_state_hashes(episode, decision, planner_decision, step, run_result)
     if decision.get("original_decision"):
         episode["original_decision"] = decision.get("original_decision")
     if decision.get("defer_reason"):
@@ -513,6 +716,9 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
         step=None,
         seed=seed,
     )
+    _add_target_inventory_state_hash(episode, run_result)
+    _add_planner_input_state_hash(episode, run_result)
+    _add_planner_evaluator_state_hashes(episode, transaction, run_result)
     transaction_outcome = str(transaction_result.get("outcome") or "").strip()
     if transaction_outcome:
         episode.update(_application_fields(
@@ -534,6 +740,14 @@ def _knowledge_transaction_episode(run_result: dict[str, Any], transaction: dict
     status = str(post_validation.get("status") or "").strip()
     if status:
         episode["post_validation_status"] = status[:80]
+    if post_validation:
+        episode["post_validation_state_hash"] = _sha256_text(
+            _stable_json(post_validation)
+        )
+    if transaction_result:
+        episode["transaction_result_state_hash"] = _sha256_text(
+            _stable_json(transaction_result)
+        )
     if transaction.get("reason"):
         episode["reason"] = str(transaction.get("reason"))[:240]
     raw_evidence_ids = transaction.get("evidence_ids")
@@ -589,7 +803,14 @@ def record_run_episodes(*, config: dict[str, Any], run_result: dict[str, Any]) -
     created = _now()
     created_at = created.isoformat()
     episodes = episodes_from_run_result(run_result, created_at=created_at)
-    return _write_episodes(config, episodes, created)
+    episodes, suppressed_reasons = _suppress_duplicate_inventory_skips(config=config, episodes=episodes)
+    return _write_episodes(
+        config,
+        episodes,
+        created,
+        suppressed_count=sum(suppressed_reasons.values()),
+        suppressed_reasons=suppressed_reasons,
+    )
 
 
 def _calibration_overlay_generation_id(result: dict[str, Any], item: dict[str, Any] | None = None) -> str | None:

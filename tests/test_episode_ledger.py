@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -551,6 +552,399 @@ def test_record_run_episodes_preserves_duplicate_noop_metadata(tmp_path):
 
 
 
+def test_record_run_episodes_suppresses_duplicate_inventory_skip_by_stable_identity(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+
+    def result(run_id: str, transaction_id: str) -> dict:
+        return {
+            "schema_name": "self_improvement_run_result",
+            "run_id": run_id,
+            "execute": False,
+            "knowledge_transactions": [{
+                "transaction_id": transaction_id,
+                "transaction_kind": "skill",
+                "decision": "skip",
+                "operation": "none",
+                "target_store": "skill",
+                "target_id": "repeated-skill",
+                "reason": "inventory_not_selected_by_planner",
+                "evidence_ids": [],
+                "transaction_result": {"success": True, "outcome": "skipped"},
+            }],
+        }
+
+    first = record_run_episodes(config=config, run_result=result("run-1", "txn-1"))
+    second = record_run_episodes(config=config, run_result=result("run-2", "txn-2"))
+
+    assert first["count"] == 1
+    assert first["suppressed_count"] == 0
+    assert second["count"] == 0
+    assert second["suppressed_count"] == 1
+    assert second["suppressed_reasons"] == {"inventory_not_selected_by_planner": 1}
+    assert len(load_recent_episodes(config=config, limit=10)) == 1
+
+
+def test_inventory_skip_dedupe_allows_periodic_reevaluation_after_window(
+    tmp_path, monkeypatch
+):
+    config = {
+        "_self_improvement_root": str(tmp_path / "self-improvement"),
+        "inventory_skip_dedupe_window_days": 7,
+    }
+    started_at = datetime(2026, 9, 2, 12, tzinfo=UTC)
+
+    def result(run_id: str) -> dict:
+        return {
+            "schema_name": "self_improvement_run_result",
+            "run_id": run_id,
+            "execute": False,
+            "knowledge_transactions": [{
+                "transaction_id": run_id,
+                "transaction_kind": "skill",
+                "decision": "skip",
+                "operation": "none",
+                "target_store": "skill",
+                "target_id": "periodic-skill",
+                "reason": "inventory_not_selected_by_planner",
+                "evidence_ids": [],
+                "transaction_result": {"success": True, "outcome": "skipped"},
+            }],
+        }
+
+    monkeypatch.setattr(
+        "hermes_self_improvement.episodes._now", lambda: started_at
+    )
+    first = record_run_episodes(config=config, run_result=result("run-1"))
+    monkeypatch.setattr(
+        "hermes_self_improvement.episodes._now",
+        lambda: started_at + timedelta(days=6),
+    )
+    within_window = record_run_episodes(config=config, run_result=result("run-2"))
+    monkeypatch.setattr(
+        "hermes_self_improvement.episodes._now",
+        lambda: started_at + timedelta(days=7),
+    )
+    after_window = record_run_episodes(config=config, run_result=result("run-3"))
+
+    assert first["count"] == 1
+    assert within_window["count"] == 0
+    assert within_window["suppressed_count"] == 1
+    assert after_window["count"] == 1
+    assert after_window["suppressed_count"] == 0
+
+
+def test_inventory_skip_dedupe_uses_elapsed_window_across_calendar_dates(
+    tmp_path, monkeypatch
+):
+    config = {
+        "_self_improvement_root": str(tmp_path / "self-improvement"),
+        "inventory_skip_dedupe_window_days": 7,
+    }
+    started_at = datetime(2026, 9, 2, 23, 59, tzinfo=UTC)
+    result = {
+        "schema_name": "self_improvement_run_result",
+        "execute": False,
+        "knowledge_transactions": [{
+            "transaction_kind": "skill",
+            "decision": "skip",
+            "operation": "none",
+            "target_store": "skill",
+            "target_id": "calendar-boundary-skill",
+            "reason": "inventory_not_selected_by_planner",
+            "evidence_ids": [],
+            "transaction_result": {"success": True, "outcome": "skipped"},
+        }],
+    }
+
+    monkeypatch.setattr(
+        "hermes_self_improvement.episodes._now", lambda: started_at
+    )
+    first = record_run_episodes(
+        config=config,
+        run_result={**result, "run_id": "run-1"},
+    )
+    monkeypatch.setattr(
+        "hermes_self_improvement.episodes._now",
+        lambda: datetime(2026, 9, 9, 0, 1, tzinfo=UTC),
+    )
+    still_within_window = record_run_episodes(
+        config=config,
+        run_result={**result, "run_id": "run-2"},
+    )
+
+    assert first["count"] == 1
+    assert still_within_window["count"] == 0
+    assert still_within_window["suppressed_count"] == 1
+
+
+def test_inventory_skip_dedupe_keeps_distinct_overlay_planner_and_target_state(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+
+    def result(
+        run_id: str,
+        *,
+        generation: str,
+        planner_state: str,
+        target_revision: int = 1,
+        evaluator_state: str = "one",
+        planner_input_revision: int = 1,
+    ) -> dict:
+        return {
+            "schema_name": "self_improvement_run_result",
+            "run_id": run_id,
+            "execute": False,
+            "overlay_generation_id": generation,
+            "planner_state": {"digest": planner_state},
+            "prompt_sources": {
+                "planner": {
+                    "base_hash": "planner-base",
+                    "overlay_hash": "planner-overlay",
+                    "overlay_generation_id": generation,
+                },
+                "editor": {"base_hash": "editor-base", "overlay_hash": "editor-overlay"},
+            },
+            "calibration": {"active_evaluator_hash": evaluator_state},
+            "step_decisions": {
+                "planner_diagnostics": {
+                    "raw_decision_count": planner_input_revision,
+                },
+                "proposals_considered": [
+                    {"id": f"proposal-{planner_input_revision}"},
+                ],
+            },
+            "evidence_pack": {
+                "skill_candidates": [{
+                    "name": "repeated-skill",
+                    "path": "/tmp/repeated-skill/SKILL.md",
+                    "state": "active",
+                    "mutable": True,
+                    "usage": {"patch_count": target_revision},
+                }],
+            },
+            "knowledge_transactions": [{
+                "transaction_id": run_id,
+                "transaction_kind": "skill",
+                "decision": "skip",
+                "operation": "none",
+                "target_store": "skill",
+                "target_id": "repeated-skill",
+                "reason": "inventory_not_selected_by_planner",
+                "evidence_ids": [],
+                "transaction_result": {"success": True, "outcome": "skipped"},
+            }],
+        }
+
+    first = record_run_episodes(config=config, run_result=result("run-1", generation="overlay-1", planner_state="one"))
+    same_state = record_run_episodes(config=config, run_result=result("run-2", generation="overlay-1", planner_state="one"))
+    changed_overlay = record_run_episodes(config=config, run_result=result("run-3", generation="overlay-2", planner_state="one"))
+    changed_planner = record_run_episodes(config=config, run_result=result("run-4", generation="overlay-2", planner_state="two"))
+    changed_target = record_run_episodes(
+        config=config,
+        run_result=result(
+            "run-5",
+            generation="overlay-2",
+            planner_state="two",
+            target_revision=2,
+        ),
+    )
+    changed_evaluator = record_run_episodes(
+        config=config,
+        run_result=result(
+            "run-6",
+            generation="overlay-2",
+            planner_state="two",
+            target_revision=2,
+            evaluator_state="two",
+        ),
+    )
+    changed_planner_input = record_run_episodes(
+        config=config,
+        run_result=result(
+            "run-7",
+            generation="overlay-2",
+            planner_state="two",
+            target_revision=2,
+            evaluator_state="two",
+            planner_input_revision=2,
+        ),
+    )
+
+    assert first["count"] == 1
+    assert same_state["suppressed_count"] == 1
+    assert changed_overlay["count"] == 1
+    assert changed_overlay["suppressed_count"] == 0
+    assert changed_planner["count"] == 1
+    assert changed_planner["suppressed_count"] == 0
+    assert changed_target["count"] == 1
+    assert changed_target["suppressed_count"] == 0
+    assert changed_evaluator["count"] == 1
+    assert changed_evaluator["suppressed_count"] == 0
+    assert changed_planner_input["count"] == 1
+    assert changed_planner_input["suppressed_count"] == 0
+    assert len(load_recent_episodes(config=config, limit=10)) == 6
+
+
+def test_inventory_skip_dedupe_keeps_distinct_post_validation_state(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+
+    def result(
+        run_id: str,
+        post_validation_status: str,
+        *,
+        has_verification: bool,
+    ) -> dict:
+        return {
+            "schema_name": "self_improvement_run_result",
+            "run_id": run_id,
+            "execute": False,
+            "knowledge_transactions": [{
+                "transaction_id": run_id,
+                "transaction_kind": "skill",
+                "decision": "skip",
+                "operation": "none",
+                "target_store": "skill",
+                "target_id": "audit-state-skill",
+                "reason": "inventory_not_selected_by_planner",
+                "evidence_ids": [],
+                "transaction_result": {
+                    "success": True,
+                    "outcome": "skipped",
+                    "post_validation": {
+                        "status": post_validation_status,
+                        "has_verification": has_verification,
+                    },
+                },
+            }],
+        }
+
+    first = record_run_episodes(
+        config=config,
+        run_result=result("run-1", "not_run", has_verification=False),
+    )
+    changed_audit_state = record_run_episodes(
+        config=config,
+        run_result=result("run-2", "passed", has_verification=False),
+    )
+    changed_audit_detail = record_run_episodes(
+        config=config,
+        run_result=result("run-3", "passed", has_verification=True),
+    )
+
+    assert first["count"] == 1
+    assert changed_audit_state["count"] == 1
+    assert changed_audit_state["suppressed_count"] == 0
+    assert changed_audit_detail["count"] == 1
+    assert changed_audit_detail["suppressed_count"] == 0
+    assert {
+        item.get("post_validation_status")
+        for item in load_recent_episodes(config=config, limit=10)
+    } == {"not_run", "passed"}
+
+
+def test_inventory_skip_dedupe_keeps_distinct_transaction_result_state(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+
+    def result(run_id: str, success: bool) -> dict:
+        return {
+            "schema_name": "self_improvement_run_result",
+            "run_id": run_id,
+            "execute": False,
+            "knowledge_transactions": [{
+                "transaction_kind": "skill",
+                "decision": "skip",
+                "operation": "none",
+                "target_store": "skill",
+                "target_id": "result-state-skill",
+                "reason": "inventory_not_selected_by_planner",
+                "evidence_ids": [],
+                "transaction_result": {
+                    "success": success,
+                    "outcome": "skipped",
+                },
+            }],
+        }
+
+    first = record_run_episodes(
+        config=config,
+        run_result=result("run-1", True),
+    )
+    changed_result = record_run_episodes(
+        config=config,
+        run_result=result("run-2", False),
+    )
+
+    assert first["count"] == 1
+    assert changed_result["count"] == 1
+    assert changed_result["suppressed_count"] == 0
+
+
+def test_inventory_skip_dedupe_preserves_actionable_or_outcome_backed_state(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+
+    def transaction(**overrides):
+        value = {
+            "transaction_id": "txn",
+            "transaction_kind": "skill",
+            "decision": "skip",
+            "operation": "none",
+            "target_store": "skill",
+            "target_id": "stateful-skill",
+            "reason": "inventory_not_selected_by_planner",
+            "evidence_ids": [],
+            "transaction_result": {"success": True, "outcome": "skipped"},
+        }
+        value.update(overrides)
+        return value
+
+    base = {"schema_name": "self_improvement_run_result", "execute": False}
+    actionable = {
+        **base,
+        "run_id": "run-actionable",
+        "knowledge_transactions": [transaction(operation="mutate_skill")],
+    }
+    outcome_backed = {
+        **base,
+        "run_id": "run-outcome",
+        "knowledge_transactions": [transaction(transaction_result={"success": False, "outcome": "blocked"})],
+    }
+
+    first = record_run_episodes(config=config, run_result=actionable)
+    second = record_run_episodes(config=config, run_result=actionable | {"run_id": "run-actionable-2"})
+    third = record_run_episodes(config=config, run_result=outcome_backed)
+
+    assert first["count"] == 1
+    assert second["count"] == 1
+    assert second["suppressed_count"] == 0
+    assert third["count"] == 1
+    assert third["suppressed_count"] == 0
+
+
+def test_record_run_episodes_does_not_suppress_evidence_backed_or_actionable_decisions(tmp_path):
+    config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
+    base = {
+        "schema_name": "self_improvement_run_result",
+        "execute": False,
+        "knowledge_transactions": [{
+            "transaction_id": "txn-evidence",
+            "transaction_kind": "skill",
+            "decision": "skip",
+            "operation": "none",
+            "target_store": "skill",
+            "target_id": "evidence-backed-skill",
+            "reason": "planner_skip_with_evidence",
+            "evidence_ids": ["ev-1"],
+            "transaction_result": {"success": True, "outcome": "skipped"},
+        }],
+    }
+
+    first = record_run_episodes(config=config, run_result={**base, "run_id": "run-evidence-1"})
+    second = record_run_episodes(config=config, run_result={**base, "run_id": "run-evidence-2"})
+
+    assert first["count"] == 1
+    assert second["count"] == 1
+    assert second["suppressed_count"] == 0
+
+
 def test_record_run_episodes_is_append_only_for_repeated_recording(tmp_path):
     config = {"_self_improvement_root": str(tmp_path / "self-improvement")}
     result = sample_run_result(tmp_path)
@@ -560,6 +954,7 @@ def test_record_run_episodes_is_append_only_for_repeated_recording(tmp_path):
 
     assert first["count"] == 3
     assert second["count"] == 3
+    assert second["suppressed_count"] == 0
     assert len(load_recent_episodes(config=config, limit=10)) == 6
 
 
