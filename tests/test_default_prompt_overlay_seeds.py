@@ -41,11 +41,15 @@ def test_materialize_default_prompt_overlays_creates_active_runtime_seed(tmp_pat
 
     assert result["status"] == "materialized"
     assert set(result["roles"].keys()) == set(DEFAULT_PROMPT_SEED_ROLES)
+    active_path = Path(cfg["_self_improvement_root"]) / "evaluator" / "active-prompts.json"
+    pointer = json.loads(active_path.read_text(encoding="utf-8"))
     for role in DEFAULT_PROMPT_SEED_ROLES:
+        assert pointer["roles"][role]["provenance"]["kind"] == "prompt_candidate"
         overlay = load_active_prompt_overlay(cfg, role=role, base_hash=base_prompt_hash(role))
         assert overlay is not None
         assert overlay["source"] == "default_seed"
         assert overlay["overlay_source"] == "default_seed"
+        assert overlay["provenance"]["kind"] == "prompt_candidate"
         assert overlay["candidate_prompt"]["system_addendum"]
 
 

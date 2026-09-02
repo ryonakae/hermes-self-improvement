@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from hermes_self_improvement.calibration import run_calibration
+from hermes_self_improvement.prompt_overlays import _candidate_set_hash
 from hermes_self_improvement.prompts import base_prompt_hash
 from hermes_self_improvement.tool_handlers import _compact_calibrate_tool_result
 
@@ -74,11 +75,18 @@ def write_planner_cases(config: dict) -> None:
 
 
 def overlay_candidate_set(tmp_path: Path, *, candidate_set_id: str = "overlay-set-001", planner_hash: str = "sha256:planner-candidate") -> dict:
-    return {
+    candidate_set_path = (
+        tmp_path
+        / "self-improvement"
+        / "evaluator"
+        / "prompt-candidate-sets"
+        / f"{candidate_set_id}.json"
+    )
+    payload = {
         "schema_name": "self_improvement_overlay_candidate_set",
         "schema_version": "1.0",
         "candidate_set_id": candidate_set_id,
-        "candidate_set_path": str(tmp_path / "candidate-set.json"),
+        "candidate_set_path": str(candidate_set_path),
         "source": "gepa",
         "optimizer": "dspy.GEPA",
         "gepa_result": "selected",
@@ -123,6 +131,9 @@ def overlay_candidate_set(tmp_path: Path, *, candidate_set_id: str = "overlay-se
             },
         },
     }
+    payload["candidate_set_hash"] = _candidate_set_hash(payload)
+    write_json(candidate_set_path, payload)
+    return payload
 
 
 def promote_eval() -> dict:
@@ -218,7 +229,13 @@ def test_compact_tool_result_includes_overlay_set_summary_without_payload(monkey
         "action": "would_promote",
         "gepa_result": "selected",
         "candidate_set_id": "overlay-set-001",
-        "candidate_set_path": str(tmp_path / "candidate-set.json"),
+        "candidate_set_path": str(
+            tmp_path
+            / "self-improvement"
+            / "evaluator"
+            / "prompt-candidate-sets"
+            / "overlay-set-001.json"
+        ),
         "changed_targets": ["planner_overlay"],
         "hard_violations": 0,
         "baseline_score": 0.25,

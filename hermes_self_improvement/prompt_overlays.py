@@ -57,8 +57,177 @@ def _load_json(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _first_metadata_value(
+    sources: list[dict[str, Any]], key: str
+) -> Any:
+    for source in sources:
+        value = source.get(key)
+        if value not in (None, "", [], {}):
+            return value
+    return None
+
+
+def _matching_overlay_generation(pointer: dict[str, Any]) -> dict[str, Any]:
+    generation_id = pointer.get("overlay_generation_id")
+    generations = pointer.get("overlay_generations")
+    if not isinstance(generations, list):
+        return {}
+    for generation in reversed(generations):
+        if not isinstance(generation, dict):
+            continue
+        if generation.get("overlay_generation_id") == generation_id:
+            return generation
+    return {}
+
+
+def _overlay_provenance(
+    *,
+    runtime_root: Path,
+    pointer: dict[str, Any],
+    entry: dict[str, Any],
+    candidate: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    generation = _matching_overlay_generation(pointer)
+    initial_sources = [entry, candidate, generation, pointer]
+    candidate_set_path = _first_metadata_value(
+        initial_sources, "candidate_set_path"
+    )
+    explicit_candidate_set_id = _first_metadata_value(
+        initial_sources, "candidate_set_id"
+    )
+    declared_source = (
+        _first_metadata_value(initial_sources, "source")
+        or _first_metadata_value(initial_sources, "overlay_source")
+    )
+    artifact_required = bool(
+        candidate_set_path
+        or (
+            explicit_candidate_set_id
+            and declared_source != "default_seed"
+        )
+        or declared_source == "gepa"
+    )
+    declared_candidate_set_id = explicit_candidate_set_id
+    if artifact_required and not declared_candidate_set_id:
+        declared_candidate_set_id = pointer.get("overlay_generation_id")
+    candidate_set: dict[str, Any] = {}
+    if artifact_required:
+        loaded_candidate_set = _load_valid_candidate_set_artifact(
+            runtime_root=runtime_root,
+            candidate_set_path=candidate_set_path,
+            candidate_set_id=declared_candidate_set_id,
+        )
+        if loaded_candidate_set is None:
+            return None
+        if not _candidate_matches_candidate_set(candidate, loaded_candidate_set):
+            return None
+        candidate_set = loaded_candidate_set
+    sources = (
+        [candidate_set, entry, candidate, generation, pointer]
+        if candidate_set
+        else [entry, candidate, generation, pointer]
+    )
+    source = (
+        _first_metadata_value(sources, "source")
+        or _first_metadata_value(sources, "overlay_source")
+        or "manual"
+    )
+    candidate_set_id = _first_metadata_value(sources, "candidate_set_id")
+    metadata: dict[str, Any] = {
+        "source": source,
+        "overlay_source": source,
+    }
+    for key in (
+        "candidate_set_path",
+        "calibration_run_id",
+        "calibration_artifact_path",
+        "calibration_output_path",
+        "evaluation_hash",
+    ):
+        value = _first_metadata_value(sources, key)
+        if value not in (None, "", [], {}):
+            metadata[key] = value
+    if candidate_set_id not in (None, ""):
+        metadata["candidate_set_id"] = candidate_set_id
+    provenance = {
+        "kind": (
+            "overlay_candidate_set"
+            if candidate_set
+            else "prompt_candidate"
+        ),
+        "candidate_path": entry.get("candidate_path"),
+        **metadata,
+    }
+    return metadata, provenance
+
+
 def _candidate_hash(payload: dict[str, Any]) -> str:
     return _sha256_text(_stable_json({k: v for k, v in payload.items() if k != "candidate_hash"}))
+
+
+def _candidate_set_hash(payload: dict[str, Any]) -> str:
+    return _sha256_text(
+        _stable_json(
+            {
+                key: value
+                for key, value in payload.items()
+                if key not in {"candidate_set_hash", "candidate_set_path"}
+            }
+        )
+    )
+
+
+def _load_valid_candidate_set_artifact(
+    *,
+    runtime_root: Path,
+    candidate_set_path: Any,
+    candidate_set_id: Any,
+) -> dict[str, Any] | None:
+    if not isinstance(candidate_set_path, str) or not candidate_set_path.strip():
+        return None
+    path = Path(candidate_set_path).expanduser().resolve()
+    if not _is_within(path, runtime_root):
+        return None
+    candidate_set = _load_json(path)
+    if not isinstance(candidate_set, dict):
+        return None
+    persisted_path = candidate_set.get("candidate_set_path")
+    if not isinstance(persisted_path, str) or not persisted_path.strip():
+        return None
+    if Path(persisted_path).expanduser().resolve() != path:
+        return None
+    if not candidate_set_id or candidate_set.get("candidate_set_id") != candidate_set_id:
+        return None
+    stored_hash = candidate_set.get("candidate_set_hash")
+    if not isinstance(stored_hash, str) or stored_hash != _candidate_set_hash(candidate_set):
+        return None
+    return candidate_set
+
+
+def _candidate_matches_candidate_set(
+    candidate: dict[str, Any], candidate_set: dict[str, Any]
+) -> bool:
+    role = candidate.get("role")
+    candidate_set_id = candidate_set.get("candidate_set_id")
+    targets = candidate_set.get("targets")
+    if not isinstance(targets, dict):
+        return False
+    matches = [
+        target
+        for target in targets.values()
+        if isinstance(target, dict)
+        and target.get("role") == role
+        and target.get("change_status") == "changed"
+        and target.get("candidate_set_id") == candidate_set_id
+    ]
+    if len(matches) != 1:
+        return False
+    target = matches[0]
+    return all(
+        candidate.get(key) == value
+        for key, value in target.items()
+        if key != "candidate_hash"
+    )
 
 
 def _finite_score(value: Any) -> float | None:
@@ -144,6 +313,28 @@ def promote_prompt_candidate(config: dict[str, Any], *, role: str, candidate_pat
     if not isinstance(candidate, dict):
         raise ValueError("prompt_candidate_not_found_or_invalid")
     _validate_candidate(candidate, role=role, runtime_root=runtime_root)
+    if candidate.get("candidate_hash") != _candidate_hash(candidate):
+        raise ValueError("prompt_candidate_hash_mismatch")
+    candidate_source = candidate.get("source") or candidate.get("overlay_source")
+    candidate_set = None
+    artifact_required = bool(
+        candidate.get("candidate_set_path")
+        or (
+            candidate.get("candidate_set_id")
+            and candidate_source != "default_seed"
+        )
+        or candidate_source == "gepa"
+    )
+    if artifact_required:
+        candidate_set = _load_valid_candidate_set_artifact(
+            runtime_root=runtime_root,
+            candidate_set_path=candidate.get("candidate_set_path"),
+            candidate_set_id=candidate.get("candidate_set_id"),
+        )
+        if candidate_set is None:
+            raise ValueError("candidate_set_artifact_invalid")
+        if not _candidate_matches_candidate_set(candidate, candidate_set):
+            raise ValueError("candidate_set_artifact_mismatch")
     if regression.get("status") != "passed":
         raise ValueError("prompt_candidate_regression_not_passed")
     pointer_path = active_prompts_path(config)
@@ -154,12 +345,51 @@ def promote_prompt_candidate(config: dict[str, Any], *, role: str, candidate_pat
         "roles": {},
     }
     roles = pointer.get("roles") if isinstance(pointer.get("roles"), dict) else {}
+    metadata_sources = (
+        [candidate_set, candidate, regression]
+        if candidate_set
+        else [candidate, regression]
+    )
+    source = str(
+        _first_metadata_value(metadata_sources, "source")
+        or _first_metadata_value(metadata_sources, "overlay_source")
+        or "manual"
+    )
+    provenance: dict[str, Any] = {
+        "kind": (
+            "overlay_candidate_set"
+            if candidate_set
+            else "prompt_candidate"
+        ),
+        "source": source,
+        "overlay_source": source,
+        "candidate_path": str(candidate_path),
+    }
+    for key in (
+        "candidate_set_id",
+        "candidate_set_path",
+        "calibration_run_id",
+        "calibration_artifact_path",
+        "calibration_output_path",
+        "evaluation_hash",
+    ):
+        value = _first_metadata_value(metadata_sources, key)
+        if value not in (None, "", [], {}):
+            provenance[key] = value
     roles[role] = {
         "active": True,
         "candidate_path": str(candidate_path),
         "candidate_hash": candidate.get("candidate_hash"),
         "base_prompt_hash": candidate.get("base_prompt_hash"),
         "regression": regression,
+        "source": source,
+        "overlay_source": source,
+        "provenance": provenance,
+        **{
+            key: value
+            for key, value in provenance.items()
+            if key not in {"kind", "candidate_path"}
+        },
     }
     pointer["roles"] = roles
     pointer["updated_at"] = datetime.now(UTC).isoformat()
@@ -174,8 +404,12 @@ def load_active_prompt_overlay(config: dict[str, Any] | None, *, role: str, base
     pointer = _load_json(active_prompts_path(config))
     if not isinstance(pointer, dict):
         return None
-    roles = pointer.get("roles") if isinstance(pointer.get("roles"), dict) else {}
-    entry = roles.get(role) if isinstance(roles.get(role), dict) else None
+    raw_roles = pointer.get("roles")
+    roles: dict[str, Any] = raw_roles if isinstance(raw_roles, dict) else {}
+    raw_entry = roles.get(role)
+    entry: dict[str, Any] | None = (
+        raw_entry if isinstance(raw_entry, dict) else None
+    )
     if not entry or not entry.get("active"):
         return None
     if entry.get("base_prompt_hash") != base_hash:
@@ -192,10 +426,59 @@ def load_active_prompt_overlay(config: dict[str, Any] | None, *, role: str, base
         return None
     if candidate.get("base_prompt_hash") != base_hash:
         return None
+    if candidate.get("candidate_hash") != _candidate_hash(candidate):
+        return None
     if entry.get("candidate_hash") and candidate.get("candidate_hash") != entry.get("candidate_hash"):
         return None
+    provenance_result = _overlay_provenance(
+        runtime_root=runtime_root,
+        pointer=pointer,
+        entry=entry,
+        candidate=candidate,
+    )
+    if provenance_result is None:
+        return None
+    metadata, provenance = provenance_result
+    generation = _matching_overlay_generation(pointer)
+    needs_repair = (
+        pointer.get("schema_name")
+        == "self_improvement_active_prompt_overlays"
+        and pointer.get("schema_version") == "1.0"
+        and not isinstance(entry.get("provenance"), dict)
+        and not entry.get("source")
+        and provenance.get("kind") == "overlay_candidate_set"
+        and bool(generation.get("candidate_set_path"))
+        and generation.get("overlay_generation_id")
+        == pointer.get("overlay_generation_id")
+    )
+    if needs_repair:
+        repaired_entry = dict(entry)
+        repaired_entry.update(metadata)
+        repaired_entry["provenance"] = provenance
+        repaired_pointer = dict(pointer)
+        repaired_roles = dict(roles)
+        repaired_roles[role] = repaired_entry
+        repaired_pointer["roles"] = repaired_roles
+        if provenance.get("kind") == "overlay_candidate_set":
+            for key in ("source", "candidate_set_id", "candidate_set_path"):
+                if metadata.get(key) not in (None, ""):
+                    repaired_pointer[key] = metadata[key]
+        pointer_path = active_prompts_path(config)
+        pointer_path.write_text(
+            json.dumps(
+                repaired_pointer,
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+                default=str,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     candidate["candidate_path"] = str(candidate_path)
     candidate["runtime_private"] = True
+    candidate.update(metadata)
+    candidate["provenance"] = provenance
     generation_id = pointer.get("overlay_generation_id")
     if isinstance(generation_id, str) and generation_id.strip():
         candidate["overlay_generation_id"] = generation_id.strip()
@@ -313,8 +596,28 @@ def promote_overlay_candidate_set(config: dict[str, Any], *, candidate_set: dict
     candidate_set_id = str(candidate_set.get("candidate_set_id") or "")
     if not candidate_set_id:
         raise ValueError("candidate_set_id_missing")
+    raw_candidate_set_path = candidate_set.get("candidate_set_path")
+    if raw_candidate_set_path in (None, ""):
+        raise ValueError("candidate_set_artifact_required")
+    candidate_set_path = Path(str(raw_candidate_set_path)).expanduser().resolve()
+    if not _is_within(candidate_set_path, _runtime_root(config)):
+        raise ValueError("candidate_set_path_outside_runtime")
+    persisted_candidate_set = _load_valid_candidate_set_artifact(
+        runtime_root=_runtime_root(config),
+        candidate_set_path=str(candidate_set_path),
+        candidate_set_id=candidate_set_id,
+    )
+    if persisted_candidate_set is None:
+        raise ValueError("candidate_set_artifact_invalid")
+    if _stable_json(persisted_candidate_set) != _stable_json(candidate_set):
+        raise ValueError("candidate_set_artifact_mismatch")
     promoted_targets: list[str] = []
     candidate_paths: dict[str, str] = {}
+    source = str(
+        candidate_set.get("source")
+        or ("gepa" if candidate_set.get("gepa_result") else "overlay_candidate_set")
+    )
+    prepared_targets: list[tuple[str, str, dict[str, Any]]] = []
     for target_name, target in targets.items():
         if not isinstance(target, dict) or target.get("change_status") != "changed":
             continue
@@ -322,16 +625,50 @@ def promote_overlay_candidate_set(config: dict[str, Any], *, candidate_set: dict
         _validate_role(role)
         if target.get("candidate_set_id") != candidate_set_id:
             raise ValueError("candidate_set_id_mismatch")
-        candidate_path = write_prompt_candidate(config, role=role, candidate=target)
-        promote_prompt_candidate(config, role=role, candidate_path=candidate_path, regression={"status": "passed", "source": "overlay_candidate_set", "candidate_set_id": candidate_set_id})
-        promoted_targets.append(str(target_name))
-        candidate_paths[str(target_name)] = str(candidate_path)
+        candidate = dict(target)
+        candidate.update({
+            "source": source,
+            "overlay_source": source,
+            "candidate_set_id": candidate_set_id,
+            "candidate_set_path": candidate_set.get("candidate_set_path"),
+            "calibration_run_id": candidate_set.get("calibration_run_id"),
+            "calibration_artifact_path": candidate_set.get("calibration_artifact_path"),
+            "calibration_output_path": candidate_set.get("calibration_output_path"),
+            "evaluation_hash": evaluation.get("evaluation_hash"),
+        })
+        _validate_candidate(
+            candidate,
+            role=role,
+            runtime_root=_runtime_root(config),
+        )
+        if not _candidate_matches_candidate_set(candidate, persisted_candidate_set):
+            raise ValueError("candidate_set_artifact_mismatch")
+        prepared_targets.append((str(target_name), role, candidate))
+
+    for target_name, role, candidate in prepared_targets:
+        candidate_path = write_prompt_candidate(config, role=role, candidate=candidate)
+        promote_prompt_candidate(
+            config,
+            role=role,
+            candidate_path=candidate_path,
+            regression={
+                "status": "passed",
+                "source": source,
+                "candidate_set_id": candidate_set_id,
+            },
+        )
+        promoted_targets.append(target_name)
+        candidate_paths[target_name] = str(candidate_path)
     pointer_path = active_prompts_path(config)
     pointer = _load_json(pointer_path) or {"schema_name": "self_improvement_active_prompt_overlays", "schema_version": "1.0", "roles": {}}
     generations = pointer.get("overlay_generations") if isinstance(pointer.get("overlay_generations"), list) else []
     generations.append({
         "overlay_generation_id": candidate_set_id,
+        "source": source,
         "candidate_set_path": candidate_set.get("candidate_set_path"),
+        "calibration_run_id": candidate_set.get("calibration_run_id"),
+        "calibration_artifact_path": candidate_set.get("calibration_artifact_path"),
+        "calibration_output_path": candidate_set.get("calibration_output_path"),
         "evaluation_hash": evaluation.get("evaluation_hash"),
         "promoted_targets": promoted_targets,
         "candidate_paths": candidate_paths,
