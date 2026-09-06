@@ -39,6 +39,12 @@ cron / no-agent 運用メモ:
 - 現在の Hermes cron global `script_timeout_seconds` は `1200`。manual dogfood では maintenance は収まり、calibrate は旧 600s budget を超えた。
 - cron / timeout の判断材料や最新運用判断は `.hermes/plans/` と `README.md` を先に確認する。
 
+## レポートの改善判定
+
+- credit assignment / GEPA の `proven improved` は厳密な判定を維持する。
+- 日次・運用者向けレポートでは、弱い肯定的兆候も別枠で示す。例: `likely helped`、訂正のない弱い使用証拠、`quiet windows`、より強い帰属証拠が必要なケース。これらを改善実証済みと扱わない。
+- この表示方針は cron 側ではなく plugin 側のレポートで管理する。
+
 ## 検証
 
 通常変更後:
